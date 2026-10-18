@@ -50,11 +50,14 @@ for rel, (anchor, replacement) in patches.items():
     updates[file] = contents.replace(anchor, replacement, 1)
 source = root / 'machine/am13e23019.c'
 target = qemu / 'hw/arm/am13e23019.c'
-if target.exists() and target.read_bytes() != source.read_bytes():
-    sys.exit('ERROR: generated machine source unexpectedly changed')
+if target.is_symlink():
+    sys.exit('ERROR: generated machine path is a symlink; refusing overwrite')
+if target.exists() and 'AM13E23019 G0 physical-memory-only machine' not in target.read_text():
+    sys.exit('ERROR: unexpected machine file in QEMU worktree')
 for file, contents in updates.items():
     file.write_text(contents)
-if not target.exists():
+if not target.exists() or target.read_bytes() != source.read_bytes():
+    print('G0: syncing generated Machine source into ignored QEMU worktree')
     target.write_bytes(source.read_bytes())
 print('G0 machine integration: OK')
 PY

@@ -15,7 +15,7 @@
 #include "exec/address-spaces.h"
 #include "qom/object.h"
 
-#define TYPE_AM13E MACHINE_TYPE_NAME("am13e23019")
+#define TYPE_AM13E_MACHINE MACHINE_TYPE_NAME("am13e23019")
 OBJECT_DECLARE_SIMPLE_TYPE(AM13EMachineState, AM13E_MACHINE)
 #define AM13E_SRAM_SIZE (128 * KiB)
 #define AM13E_FLASH_SIZE (512 * KiB)
@@ -84,7 +84,7 @@ static void am13e_class_init(ObjectClass *oc, void *data)
     mc->max_cpus = 1;
 }
 static const TypeInfo am13e_info = {
-    .name = TYPE_AM13E,
+    .name = TYPE_AM13E_MACHINE,
     .parent = TYPE_MACHINE,
     .instance_size = sizeof(AM13EMachineState),
     .class_init = am13e_class_init,
