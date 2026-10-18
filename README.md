@@ -146,3 +146,26 @@ Next: implement the adjacent startup-monitor and HSCLKEN register
 semantics, then a virtual-time oscillator readiness transition only
 after the documented startup interval and actual enable request.
 No hardware, host wall-clock sleeps, or firmware patches are used.
+
+## G2e: SYSCTL.HSCLKEN Control Requests (not oscillator / PLL lock)
+
+G2d's extended trace now reaches `stacked_PC=0x00009272` and a
+precise BusFault at `BFAR=0x400B0108`. TI SDK `hw_sysctl.h` and
+TRM SPRUJF2B §3.14.2.13 identify that address as SYSCTL.HSCLKEN
+(offset `0x1108`). The TRM gives an overall reset value of
+`0000XXXXh`; the documented `USEEXTHFCLK[16]` and
+`SYSPLLEN[8]` fields both reset to 0. For unknown reserved reset
+bits the emulator chooses zero, not a silicon-accurate claim.
+
+G2e makes those two documented bits read/write stateful. All other
+fields are preserved, and attempted changes return `MEMTX_ERROR`.
+`USEEXTHFCLK=1` means request external digital HFCLK_IN as source.
+`SYSPLLEN=1` requests PLL enable, but no PLL-lock/XTAL-good event is
+produced. `CLKSTATUS` remains at its G2a reset snapshot.
+
+`tests/g2_hsclken.py` exercises reset, both control requests, rejected
+reserved writes, and confirms no ready/status changes.
+
+**This is not Clock State Machine acceptance.** G2f still needs
+`HFCLKCLKCFG` startup-time/monitor controls and deterministic QEMU
+virtual-time transitions. No hardware and no firmware changes.

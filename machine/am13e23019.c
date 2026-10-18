@@ -49,6 +49,15 @@ OBJECT_DECLARE_SIMPLE_TYPE(AM13EMachineState, AM13E_MACHINE)
 #define AM13E_SYSCTL_XTALCR_INITIAL 0x00000001U
 #define AM13E_SYSCTL_XTALCR_WRITABLE 0x00000003U
 
+/* TRM SPRUJF2B §3.14.2.13 / TI SDK hw_sysctl.h:
+ * SYSCTL.HSCLKEN reset=0000XXXXh. The documented bits reset to 0;
+ * undefined reserved bits are represented by 0 only in this emulator.
+ * USEEXTHFCLK[16] and SYSPLLEN[8] are control requests, not GOOD status.
+ */
+#define AM13E_SYSCTL_HSCLKEN 0x1108U
+#define AM13E_SYSCTL_HSCLKEN_INITIAL 0x00000000U
+#define AM13E_SYSCTL_HSCLKEN_FIELDS 0x00010100U
+
 /* TI SDK hw_memmap.h / hw_fri.h and TRM SPRUJF2B §13.7.2.1:
  * FRI_BASE=0x40028000; FRDCNTL offset=0x1000, reset=0x02000201.
  * WS0_MODE bit0, RWAIT bits11:8. Preserve the undocumented RW
@@ -69,6 +78,7 @@ struct AM13EMachineState {
     bool sysctl_unmodeled_reported;
     uint32_t sysctl_mclkcfg;
     uint32_t sysctl_xtalcr;
+    uint32_t sysctl_hsclken;
     MemoryRegion fri;
     uint32_t fri_frdcntl;
     bool fri_unmodeled_reported;
@@ -115,6 +125,9 @@ static MemTxResult am13e_sysctl_read(void *opaque, hwaddr offset,
     case AM13E_SYSCTL_XTALCR:
         *value = s->sysctl_xtalcr;
         return MEMTX_OK;
+    case AM13E_SYSCTL_HSCLKEN:
+        *value = s->sysctl_hsclken;
+        return MEMTX_OK;
     default:
         return am13e_sysctl_unmodeled(s, offset, false, size);
     }
@@ -129,6 +142,19 @@ static MemTxResult am13e_sysctl_write(void *opaque, hwaddr offset,
 
     if (size != 4) {
         return am13e_sysctl_unmodeled(s, offset, true, size);
+    }
+    if (offset == AM13E_SYSCTL_HSCLKEN) {
+        next = (uint32_t)value;
+        /* Accept only modeled control bits. These are enable/source
+         * requests, not completion events. Never synthesize HFCLKGOOD
+         * or SYSPLLGOOD in this stage.
+         */
+        if ((next ^ s->sysctl_hsclken) &
+            ~AM13E_SYSCTL_HSCLKEN_FIELDS) {
+            return am13e_sysctl_unmodeled(s, offset, true, size);
+        }
+        s->sysctl_hsclken = next;
+        return MEMTX_OK;
     }
     if (offset == AM13E_SYSCTL_XTALCR) {
         next = (uint32_t)value;
@@ -250,6 +276,7 @@ static void am13e_handoff_reset(void *opaque)
     env->v7m.primask[M_REG_NS] = 1;
     s->sysctl_mclkcfg = AM13E_SYSCTL_MCLKCFG_INITIAL;
     s->sysctl_xtalcr = AM13E_SYSCTL_XTALCR_INITIAL;
+    s->sysctl_hsclken = AM13E_SYSCTL_HSCLKEN_INITIAL;
     s->sysctl_unmodeled_reported = false;
     s->fri_frdcntl = AM13E_FRI_FRDCNTL_RESET;
     s->fri_unmodeled_reported = false;
@@ -280,9 +307,10 @@ static void am13e_init(MachineState *machine)
                              96 * KiB, 32 * KiB);
     memory_region_add_subregion(sysmem, 0x00c18000, &s->bank3_alias);
 
-    /* SYSCTL G2a/G2c/G2d: snapshots, MCLK divider, XTAL control. */
+    /* SYSCTL G2a-G2e: snapshots, divider and oscillator/PLL controls. */
     s->sysctl_mclkcfg = AM13E_SYSCTL_MCLKCFG_INITIAL;
     s->sysctl_xtalcr = AM13E_SYSCTL_XTALCR_INITIAL;
+    s->sysctl_hsclken = AM13E_SYSCTL_HSCLKEN_INITIAL;
     memory_region_init_io(&s->sysctl, NULL, &am13e_sysctl_ops, s,
                           "am13e-sysctl-g2a", AM13E_SYSCTL_SIZE);
     memory_region_add_subregion(sysmem, AM13E_SYSCTL_BASE, &s->sysctl);
@@ -317,7 +345,7 @@ static void am13e_init(MachineState *machine)
 static void am13e_class_init(ObjectClass *oc, void *data)
 {
     MachineClass *mc = MACHINE_CLASS(oc);
-    mc->desc = "AM13E23019 ESCape32 app-handoff / G2a-G2d clock MMIO";
+    mc->desc = "AM13E23019 ESCape32 app-handoff / G2a-G2e clock MMIO";
     mc->init = am13e_init;
     mc->default_cpu_type = ARM_CPU_TYPE_NAME("cortex-m33-am13e");
     mc->default_ram_size = AM13E_SRAM_SIZE;

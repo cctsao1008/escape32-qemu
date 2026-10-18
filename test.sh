@@ -20,6 +20,9 @@ python3 "$ROOT/tests/g2_mclkcfg.py" \
 python3 "$ROOT/tests/g2_xtalcr.py" \
     --qemu "$ROOT/.build/qemu-src/build/qemu-system-arm" \
     --elf "$1"
+python3 "$ROOT/tests/g2_hsclken.py" \
+    --qemu "$ROOT/.build/qemu-src/build/qemu-system-arm" \
+    --elf "$1"
 python3 "$ROOT/tests/g1_handoff.py" \
     --qemu "$ROOT/.build/qemu-src/build/qemu-system-arm" \
     --elf "$1"
