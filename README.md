@@ -613,3 +613,45 @@ belong with the DShot capture and motor plant.
 policy, CTL0 arm, virtual feed deadline, observable expiry,
 sticky reset, and strict-mode rejection. Unsupported WWDT
 registers remain rejected instead of silently enabled.
+
+## G6: TIMG4/DShot timebase and TIMG12 commutation scheduling
+
+After G5 WWDT0 setup, the unmodified ESCape32 ELF faults at
+`BFAR=0x40181008`, `stacked_PC=0xD2EA`:
+`TIMG4.CLKSEL` in TI `hw_gptimer.h`. This is the
+**actual PA26 DShot RX timer**, not unrelated board I/O.
+`command_reply.c` and `command_capture.c` select
+BUSCLK/1, prescale 0 (100MHz expected) and share TIMG4
+CCP0 with DMA0 channel2, while `motor_event_timer.c`
+uses **separate TIMG12** as the commutation one-shot.
+
+G6 maps each timer's TI native control/interrupt/counter
+window (+0x1000..+0x18ff), without swallowing unknown
+registers. CLKSEL, CLKDIV, CCLKCTL, CPS, LOAD,
+CTR/CTRCTL, capture-compare configs, CPU_INT,
+GEN_EVENT0/1 and ancillary documented fields use
+separate per-timer state. BUSCLK=100MHz is an
+**ESC-SIM functional assumption**, not proof of real
+silicon clock calibration. Counter readings follow
+QEMU virtual time, zero events occur at timer deadlines,
+and masked CPU zero-interrupts reach ARM NVIC IRQ44
+(TIMG4) / IRQ45 (TIMG12). STOP cancels the pending
+event; one-shot stops after the zero, periodic re-arms.
+GPRCM reset clears the timer's pending event and state.
+
+**Critically not yet implemented:** PA26 input rising/falling
+edge injection, CC0 latching from real pin events,
+DMA0 Channel2 source-34 transfers to firmware SRAM,
+TIMG4 bidirectional TX DMA, and MCPWM power-stage
+waveforms. Merely programming capture configuration
+will never create fabricated DShot frames or watchdog
+feeds. Those are the next direct hardware-to-plant
+interfaces, together with TIMG12 commutation tests
+against the unchanged firmware ISR.
+
+`tests/g6_timers.py` verifies SDK clock configuration,
+TIMG4 periodic 16-bit rollover and no invented capture,
+TIMG12 delayed one-shot zero interrupt/clear,
+peripheral isolation, reset, and default strict
+failure. This is timer/IRQ infrastructure, **not yet
+a functional DShot or motor control SITL PASS**.

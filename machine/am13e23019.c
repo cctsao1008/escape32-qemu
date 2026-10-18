@@ -167,6 +167,18 @@ OBJECT_DECLARE_SIMPLE_TYPE(AM13EMachineState, AM13E_MACHINE)
 #define AM13E_SIM_ADC_INT1_ENABLE (1U << 7)
 #define AM13E_SIM_WWDT_BASE 0x400D0000U
 #define AM13E_SIM_GPRCM_COUNT 6U
+
+/* TIMG4 DShot capture-clock / TIMG12 motor commutation timer.
+ * TI hw_gptimer.h: +0x1000 control and +0x1800 counter windows.
+ * Only dedicated peripheral GPRCM +0x800 belongs to the
+ * existing shared GPRCM model, not to this register window.
+ */
+#define AM13E_SIM_TIMER_COUNT 2U
+#define AM13E_SIM_TIMER_REG_START 0x1000U
+#define AM13E_SIM_TIMER_REG_SIZE 0x900U
+#define AM13E_SIM_TIMER_HZ 100000000U
+#define AM13E_SIM_TIMER_ZERO 1U
+
 #define AM13E_SIM_GPRCM_OFFSET 0x0800U
 #define AM13E_SIM_GPRCM_SIZE 0x20U
 #define AM13E_SIM_GPRCM_PWREN 0x000U
@@ -177,6 +189,8 @@ OBJECT_DECLARE_SIMPLE_TYPE(AM13EMachineState, AM13E_MACHINE)
 #define AM13E_SIM_GPRCM_RESET_KEY 0xb1000000U
 typedef struct AM13ESimADC AM13ESimADC;
 typedef struct AM13ESimWWDT AM13ESimWWDT;
+typedef struct AM13ESimTimer AM13ESimTimer;
+static void am13e_sim_timer_reset(AM13ESimTimer *t);
 static void am13e_sim_wwdt_reset(AM13ESimWWDT *w);
 static void am13e_sim_wwdt_stop(AM13ESimWWDT *w);
 static void am13e_sim_adc_reset(AM13ESimADC *adc);
@@ -191,6 +205,7 @@ typedef struct AM13EPeripheralGPRCM {
     bool esc_sim;
     AM13ESimADC *adc; /* Optional ADC datapath reset owner. */
     AM13ESimWWDT *wwdt; /* WWDT0 power/reset hook. */
+    AM13ESimTimer *gtimer; /* Timer 4/12 power/reset owner. */
 } AM13EPeripheralGPRCM;
 
 struct AM13ESimADC {
@@ -209,6 +224,23 @@ struct AM13ESimADC {
     uint32_t interrupt_flags;
     uint32_t interrupt_overflow;
     bool unmodeled_reported;
+};
+
+struct AM13ESimTimer {
+    MemoryRegion mmio;
+    QEMUTimer *zero_timer;
+    qemu_irq irq;
+    AM13EPeripheralGPRCM *gprcm;
+    const char *name;
+    uint32_t base;
+    bool esc_sim;
+    bool running;
+    bool unmodeled_reported;
+    int64_t epoch_ns;
+    uint32_t epoch_count;
+    uint32_t reg[AM13E_SIM_TIMER_REG_SIZE / 4U];
+    uint32_t irq_mask[3];
+    uint32_t irq_raw[3];
 };
 
 struct AM13ESimWWDT {
@@ -273,6 +305,7 @@ struct AM13EMachineState {
     MemoryRegion sysctl;
     uint32_t sysctl_systemcfg;
     AM13ESimWWDT wwdt;
+    AM13ESimTimer gtimer[AM13E_SIM_TIMER_COUNT];
     MemoryRegion iomux;
     uint32_t pincm[AM13E_IOMUX_PIN_COUNT];
     bool iomux_unmodeled_reported;
@@ -480,6 +513,317 @@ static MemTxResult am13e_sim_wwdt_write(void *opaque, hwaddr off,
 static const MemoryRegionOps am13e_sim_wwdt_ops = {
     .read_with_attrs = am13e_sim_wwdt_read,
     .write_with_attrs = am13e_sim_wwdt_write,
+    .endianness = DEVICE_LITTLE_ENDIAN,
+    .valid = { .min_access_size = 4, .max_access_size = 4 },
+};
+
+/*
+ * G6: QEMU virtual-time GPTIMER for TIMG4 / TIMG12.
+ *
+ * Frequency is a declared ESC-SIM BUSCLK assumption (100MHz), not
+ * a measurement of AM13E silicon. TIMG4 can run 16-bit capture
+ * carrier timing; actual PA26 capture edges / DMA0 beats are NOT
+ * invented here. TIMG12 one-shot ZERO events drive its NVIC IRQ.
+ * Both counter and IRQ register banks share exact SDK offsets.
+ */
+static uint32_t am13e_timer_hz(const AM13ESimTimer *t)
+{
+    const uint32_t *regs = t->reg;
+    uint32_t clksel = regs[0x008U / 4U];
+    uint32_t clkdiv = (regs[0x000U / 4U] & 7U) + 1U;
+    uint32_t cps = (regs[0x10cU / 4U] & 0xffU) + 1U;
+
+    if (clksel != 8U || !(regs[0x108U / 4U] & 1U) ||
+        !t->gprcm->powered) {
+        return 0U;
+    }
+    return AM13E_SIM_TIMER_HZ / clkdiv / cps;
+}
+
+static uint64_t am13e_timer_elapsed_ticks(const AM13ESimTimer *t)
+{
+    int64_t elapsed = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) - t->epoch_ns;
+    uint32_t hz = am13e_timer_hz(t);
+    if (!t->running || elapsed <= 0 || !hz) {
+        return 0U;
+    }
+    return (uint64_t)(elapsed / INT64_C(1000000000)) * hz +
+           (uint64_t)(elapsed % INT64_C(1000000000)) * hz /
+           UINT64_C(1000000000);
+}
+
+static uint32_t am13e_timer_count(AM13ESimTimer *t)
+{
+    uint32_t ctrctl = t->reg[0x804U / 4U];
+    uint32_t load = t->reg[0x808U / 4U];
+    uint64_t delta = am13e_timer_elapsed_ticks(t);
+    uint64_t modulus = (uint64_t)load + 1U;
+    uint64_t phase = (uint64_t)t->epoch_count;
+
+    if (!t->running || !modulus) {
+        return t->epoch_count;
+    }
+    if (ctrctl & 0x20U) { /* Count-up */
+        return (uint32_t)((phase + delta) % modulus);
+    }
+    return (uint32_t)((phase + modulus - (delta % modulus)) % modulus);
+}
+
+static void am13e_timer_irq_update(AM13ESimTimer *t)
+{
+    if (t->irq) {
+        qemu_set_irq(t->irq,
+                     !!(t->irq_raw[0] & t->irq_mask[0]));
+    }
+}
+
+static void am13e_timer_rearm(AM13ESimTimer *t)
+{
+    uint32_t hz = am13e_timer_hz(t);
+    uint32_t load = t->reg[0x808U / 4U];
+    uint32_t mode = t->reg[0x804U / 4U];
+    uint64_t until_zero;
+
+    timer_del(t->zero_timer);
+    if (!t->running || !hz) {
+        return;
+    }
+    if (mode & 0x20U) {
+        until_zero = (uint64_t)load + 1U - t->epoch_count;
+    } else {
+        until_zero = (uint64_t)t->epoch_count + 1U;
+    }
+    if (!until_zero) {
+        until_zero = 1U;
+    }
+    uint64_t ns = (until_zero * UINT64_C(1000000000) + hz - 1U) / hz;
+    timer_mod(t->zero_timer, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) +
+              (int64_t)MAX(ns, UINT64_C(1)));
+}
+
+static void am13e_timer_zero_event(void *opaque)
+{
+    AM13ESimTimer *t = opaque;
+    uint32_t ctrctl = t->reg[0x804U / 4U];
+    uint32_t load = t->reg[0x808U / 4U];
+
+    if (!t->running || !am13e_timer_hz(t)) {
+        return;
+    }
+    for (unsigned group = 0; group < 3U; ++group) {
+        t->irq_raw[group] |= AM13E_SIM_TIMER_ZERO;
+    }
+    am13e_timer_irq_update(t);
+    if (!(ctrctl & 0x0eU)) {
+        t->running = false;
+        t->reg[0x804U / 4U] &= ~1U;
+        t->epoch_count = (ctrctl & 0x20U) ? load : 0U;
+        return;
+    }
+    t->epoch_ns = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
+    t->epoch_count = (ctrctl & 0x20U) ? 0U : load;
+    am13e_timer_rearm(t);
+}
+
+static void am13e_sim_timer_reset(AM13ESimTimer *t)
+{
+    if (t->zero_timer) {
+        timer_del(t->zero_timer);
+    }
+    t->running = false;
+    t->unmodeled_reported = false;
+    t->epoch_ns = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
+    t->epoch_count = 0U;
+    memset(t->reg, 0, sizeof(t->reg));
+    memset(t->irq_mask, 0, sizeof(t->irq_mask));
+    memset(t->irq_raw, 0, sizeof(t->irq_raw));
+    am13e_timer_irq_update(t);
+}
+
+static MemTxResult am13e_timer_invalid(AM13ESimTimer *t, hwaddr off,
+                                      bool wr, unsigned size)
+{
+    if (!t->unmodeled_reported) {
+        error_report("G6_UNMODELED_%s %s 0x%08" PRIx64
+                     " size=%u rejected",
+                     t->name, wr ? "write" : "read",
+                     (uint64_t)(t->base + AM13E_SIM_TIMER_REG_START + off),
+                     size);
+        t->unmodeled_reported = true;
+    }
+    return MEMTX_ERROR;
+}
+
+static int am13e_timer_event_group(hwaddr off, uint32_t *field)
+{
+    static const uint32_t groups[3] = {0x020U, 0x050U, 0x080U};
+    for (unsigned i = 0; i < 3U; ++i) {
+        if (off >= groups[i] && off <= groups[i] + 0x28U &&
+            ((off - groups[i]) % 8U) == 0U) {
+            *field = (uint32_t)off - groups[i];
+            return (int)i;
+        }
+    }
+    return -1;
+}
+
+static bool am13e_timer_register(hwaddr off)
+{
+    switch (off) {
+    case 0x000U: case 0x008U: case 0x018U: /* CLOCK/DEBUG */
+    case 0x0e0U: case 0x0fcU: /* EVENTMODE/DESC */
+    case 0x100U: case 0x104U: case 0x108U: case 0x10cU:
+    case 0x110U: case 0x114U: case 0x11cU: case 0x120U:
+    case 0x124U: /* COMMONREGS */
+    case 0x800U: case 0x804U: case 0x808U: /* COUNTER */
+    case 0x8a0U: case 0x8a4U: case 0x8b0U: case 0x8b4U:
+    case 0x8b8U: case 0x8bcU: case 0x8d0U: case 0x8d4U:
+        return true;
+    default:
+        break;
+    }
+    return (off >= 0x810U && off <= 0x824U && !(off & 3U)) ||
+           (off >= 0x830U && off <= 0x844U && !(off & 3U)) ||
+           (off >= 0x850U && off <= 0x85cU && !(off & 3U)) ||
+           (off >= 0x870U && off <= 0x88cU && !(off & 3U));
+}
+
+static MemTxResult am13e_timer_read(void *opaque, hwaddr off,
+                                   uint64_t *value, unsigned size,
+                                   MemTxAttrs attrs)
+{
+    AM13ESimTimer *t = opaque;
+    uint32_t field;
+    int group;
+    if (!t->esc_sim || size != 4 || (off & 3U)) {
+        return am13e_timer_invalid(t, off, false, size);
+    }
+    group = am13e_timer_event_group(off, &field);
+    if (group >= 0) {
+        uint32_t masked = t->irq_raw[group] & t->irq_mask[group];
+        switch (field) {
+        case 0x00U:
+            *value = masked ? __builtin_ctz(masked) + 1U : 0U;
+            return MEMTX_OK;
+        case 0x08U:
+            *value = t->irq_mask[group];
+            return MEMTX_OK;
+        case 0x10U:
+            *value = t->irq_raw[group];
+            return MEMTX_OK;
+        case 0x18U:
+            *value = masked;
+            return MEMTX_OK;
+        default:
+            return am13e_timer_invalid(t, off, false, size);
+        }
+    }
+    if (!am13e_timer_register(off)) {
+        return am13e_timer_invalid(t, off, false, size);
+    }
+    if (off == 0x800U) {
+        *value = am13e_timer_count(t);
+    } else if (off == 0x110U || off == 0x0fcU || off == 0x8b4U ||
+               off == 0x8bcU) {
+        *value = 0U; /* No fake counter-divider/revision/fault inputs */
+    } else if (off == 0x11cU) {
+        *value = 0U; /* Software trigger strobe is write-only */
+    } else {
+        *value = t->reg[off / 4U];
+    }
+    return MEMTX_OK;
+}
+
+static MemTxResult am13e_timer_write(void *opaque, hwaddr off,
+                                    uint64_t value, unsigned size,
+                                    MemTxAttrs attrs)
+{
+    AM13ESimTimer *t = opaque;
+    uint32_t data = (uint32_t)value;
+    uint32_t field;
+    int group;
+    if (!t->esc_sim || size != 4 || (off & 3U) ||
+        !t->gprcm->powered) {
+        return am13e_timer_invalid(t, off, true, size);
+    }
+    group = am13e_timer_event_group(off, &field);
+    if (group >= 0) {
+        switch (field) {
+        case 0x08U:
+            t->irq_mask[group] = data;
+            break;
+        case 0x20U:
+            t->irq_raw[group] |= data;
+            break;
+        case 0x28U:
+            t->irq_raw[group] &= ~data;
+            break;
+        default:
+            return am13e_timer_invalid(t, off, true, size);
+        }
+        if (group == 0) {
+            am13e_timer_irq_update(t);
+        }
+        return MEMTX_OK;
+    }
+    if (!am13e_timer_register(off) || off == 0x0fcU ||
+        off == 0x110U || off == 0x8b4U || off == 0x8bcU) {
+        return am13e_timer_invalid(t, off, true, size);
+    }
+    if (off == 0x008U && data != 8U && data != 0U && data != 2U) {
+        return am13e_timer_invalid(t, off, true, size);
+    }
+    if (off == 0x000U && (data & ~7U)) {
+        return am13e_timer_invalid(t, off, true, size);
+    }
+    if (off == 0x108U && (data & ~1U)) {
+        return am13e_timer_invalid(t, off, true, size);
+    }
+    if (off == 0x800U) {
+        if (t->running) {
+            return am13e_timer_invalid(t, off, true, size);
+        }
+        t->epoch_count = data;
+        t->epoch_ns = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
+    } else if (off == 0x804U) {
+        uint32_t prior = t->reg[off / 4U];
+        bool was_running = t->running;
+        if (was_running && !(data & 1U)) {
+            t->epoch_count = am13e_timer_count(t);
+            t->running = false;
+            timer_del(t->zero_timer);
+        }
+        t->reg[off / 4U] = data;
+        if (!was_running && (data & 1U)) {
+            if (!am13e_timer_hz(t)) {
+                t->reg[off / 4U] = prior;
+                return am13e_timer_invalid(t, off, true, size);
+            }
+            if ((data & 0x30000000U) == 0x20000000U) {
+                t->epoch_count = 0U;
+            } else if ((data & 0x30000000U) == 0U) {
+                t->epoch_count = t->reg[0x808U / 4U];
+            }
+            t->epoch_ns = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
+            t->running = true;
+            am13e_timer_rearm(t);
+        }
+        return MEMTX_OK;
+    } else if (off == 0x11cU) {
+        /* No external TIMG trigger source wired; do not invent one. */
+        if (data) {
+            return am13e_timer_invalid(t, off, true, size);
+        }
+        return MEMTX_OK;
+    } else {
+        t->reg[off / 4U] = data;
+    }
+    return MEMTX_OK;
+}
+
+static const MemoryRegionOps am13e_timer_ops = {
+    .read_with_attrs = am13e_timer_read,
+    .write_with_attrs = am13e_timer_write,
     .endianness = DEVICE_LITTLE_ENDIAN,
     .valid = { .min_access_size = 4, .max_access_size = 4 },
 };
@@ -1363,6 +1707,9 @@ static MemTxResult am13e_gprcm_write(void *opaque, hwaddr offset,
         if (!g->powered && g->wwdt) {
             am13e_sim_wwdt_stop(g->wwdt);
         }
+        if (!g->powered && g->gtimer) {
+            am13e_sim_timer_reset(g->gtimer);
+        }
         return MEMTX_OK;
     case AM13E_SIM_GPRCM_RSTCTL:
         if ((data & 0xff000000U) != AM13E_SIM_GPRCM_RESET_KEY ||
@@ -1376,6 +1723,9 @@ static MemTxResult am13e_gprcm_write(void *opaque, hwaddr offset,
             }
             if (g->wwdt) {
                 am13e_sim_wwdt_reset(g->wwdt);
+            }
+            if (g->gtimer) {
+                am13e_sim_timer_reset(g->gtimer);
             }
         } else if (data & 2U) {
             g->reset_sticky = false;
@@ -1822,6 +2172,9 @@ static void am13e_handoff_reset(void *opaque)
     s->fri_unmodeled_reported = false;
     s->factory_unmodeled_reported = false;
     am13e_sim_wwdt_reset(&s->wwdt);
+    for (unsigned i = 0; i < AM13E_SIM_TIMER_COUNT; ++i) {
+        am13e_sim_timer_reset(&s->gtimer[i]);
+    }
     for (unsigned i = 0; i < AM13E_SIM_GPRCM_COUNT; ++i) {
         am13e_gprcm_reset(&s->peripheral_gprcm[i]);
     }
@@ -1934,6 +2287,30 @@ static void am13e_init(MachineState *machine)
                                 AM13E_SIM_WWDT_BASE + 0x1100U,
                                 &s->wwdt.ctrl_mmio);
 
+    /* TIMG4/TIMG12 counters use distinct virtual clocks/IRQ states. */
+    static const uint32_t gt_base[AM13E_SIM_TIMER_COUNT] = {
+        0x40180000U, 0x40188000U
+    };
+    static const char *const gt_name[AM13E_SIM_TIMER_COUNT] = {
+        "TIMG4", "TIMG12"
+    };
+    for (unsigned i = 0; i < AM13E_SIM_TIMER_COUNT; ++i) {
+        AM13ESimTimer *t = &s->gtimer[i];
+        t->base = gt_base[i];
+        t->name = gt_name[i];
+        t->esc_sim = s->esc_sim;
+        t->gprcm = &s->peripheral_gprcm[3U + i];
+        t->gprcm->gtimer = t;
+        t->zero_timer = timer_new_ns(QEMU_CLOCK_VIRTUAL,
+                                      am13e_timer_zero_event, t);
+        am13e_sim_timer_reset(t);
+        memory_region_init_io(&t->mmio, NULL, &am13e_timer_ops, t,
+                              gt_name[i], AM13E_SIM_TIMER_REG_SIZE);
+        memory_region_add_subregion(sysmem,
+                                    gt_base[i] + AM13E_SIM_TIMER_REG_START,
+                                    &t->mmio);
+    }
+
     /* ESC-SIM ADC0/1/2 data and controls: per-channel synthetic
      * fixture codes, software-triggered time, and real NVIC IRQ0..2.
      * ADC1 and ADC2 interrupt numbers are 13 and 18 in TI startup
@@ -2009,6 +2386,10 @@ static void am13e_init(MachineState *machine)
                              OBJECT(sysmem), &error_abort);
     sysbus_realize(SYS_BUS_DEVICE(core), &error_fatal);
     /* Peripheral IRQ numbers verified against TI startup_gcc_arm.c. */
+    static const unsigned timerg_irq[AM13E_SIM_TIMER_COUNT] = {44U, 45U};
+    for (unsigned i = 0; i < AM13E_SIM_TIMER_COUNT; ++i) {
+        s->gtimer[i].irq = qdev_get_gpio_in(core, timerg_irq[i]);
+    }
     static const unsigned adc_irq[AM13E_SIM_ADC_COUNT] = {8U, 13U, 18U};
     for (unsigned i = 0; i < AM13E_SIM_ADC_COUNT; ++i) {
         s->adc[i].irq = qdev_get_gpio_in(core, adc_irq[i]);
@@ -2021,7 +2402,7 @@ static void am13e_init(MachineState *machine)
 static void am13e_class_init(ObjectClass *oc, void *data)
 {
     MachineClass *mc = MACHINE_CLASS(oc);
-        mc->desc = "AM13E23019 ESC-SIM ADC and WWDT0 software watchdog";
+        mc->desc = "AM13E23019 ESC-SIM TIMG4/DShot and TIMG12 commutation timers";
     mc->init = am13e_init;
     mc->default_cpu_type = ARM_CPU_TYPE_NAME("cortex-m33-am13e");
     mc->default_ram_size = AM13E_SRAM_SIZE;
@@ -2069,6 +2450,12 @@ static void am13e_finalize(Object *obj)
     if (s->wwdt.timer) {
         timer_free(s->wwdt.timer);
         s->wwdt.timer = NULL;
+    }
+    for (unsigned i = 0; i < AM13E_SIM_TIMER_COUNT; ++i) {
+        if (s->gtimer[i].zero_timer) {
+            timer_free(s->gtimer[i].zero_timer);
+            s->gtimer[i].zero_timer = NULL;
+        }
     }
     for (unsigned i = 0; i < AM13E_SIM_ADC_COUNT; ++i) {
         if (s->adc[i].timer) {
