@@ -108,6 +108,16 @@ def main():
                 halt = rsp.command("?")
                 if not halt.startswith(("S", "T")):
                     raise RuntimeError(f"Unexpected CPU stop reply: {halt}")
+                # QEMU 6.2 returns an empty reply to 'pN' until the
+                # client requests target XML (gdbstub.c:handle_get_reg).
+                # Fetch one XML byte: this enables XML-aware register reads
+                # without needing a full XML parser or changing the guest.
+                supported = rsp.command("qSupported:qXfer:features:read+")
+                if "qXfer:features:read+" not in supported:
+                    raise RuntimeError("QEMU GDB stub does not support target XML")
+                xml_probe = rsp.command("qXfer:features:read:target.xml:0,1")
+                if not xml_probe.startswith(("m<", "l<")):
+                    raise RuntimeError(f"Unexpected target XML reply: {xml_probe!r}")
                 sp, pc, xpsr = rsp.reg(13), rsp.reg(15), rsp.reg(25)
                 vt = rsp.mem32(0xE000ED08)
                 pfr1 = rsp.mem32(0xE000ED44)
