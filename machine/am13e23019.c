@@ -934,6 +934,18 @@ static MemTxResult am13e_adc_read(void *opaque, hwaddr offset,
     case 0x028U: /* ADCINTOVF */
         *value = adc->interrupt_overflow;
         return MEMTX_OK;
+    case 0x020U: /* ADCINTFLGFRC: W1S register */
+    case 0x024U: /* ADCINTFLGCLR: W1C register */
+    case 0x02cU: /* ADCINTOVFCLR: W1C register */
+    case 0x048U: /* ADCSOCOVFCLR1: W1C register */
+    case 0x0d0U: /* ADCEVTCLR: W1C register */
+        /* TI DriverLib implements these API writes using '|='
+         * (Read-Modify-Write). Return the ESC-SIM empty strobe
+         * latch, NOT the actual ADCINTFLG/OVF status.
+         * Reading a W1C strobe never clears a pending event.
+         */
+        *value = 0;
+        return MEMTX_OK;
     case 0x03cU: /* ADCSOCFLG1 (no queued SOC after conversion) */
     case 0x044U: /* ADCSOCOVF1 */
     case 0x0ccU: /* ADCEVTSTAT */

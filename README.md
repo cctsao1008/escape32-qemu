@@ -553,3 +553,29 @@ With accelerated observation, trace `steps` counts host GDB
 observations, **not all executed guest instructions**. The existing
 `icount shift=10` is diagnostic virtual time only, not physical
 Cortex-M33 cycle timing.
+
+## G4c — SDK ADC interrupt clear Read-Modify-Write
+
+After G4b passes, original ESCape32 Rel17.3 executes two
+verified SDK delay loops and then HardFaults at
+`stacked_PC=0x0000777a`, `BFAR=0x40001024`
+(ADC0.ADCINTFLGCLR). TI AM13E SDK `dl_adc.h`
+`DL_ADC_clearInterruptStatus` uses
+`adc->ADCINTFLGCLR |= mask`, which first **reads** the
+register. The G4b model handled a W1C **write** only.
+
+G4c implements the missing ESC-SIM readable W1S/W1C strobe
+interface for ADCINTFLGFRC, ADCINTFLGCLR, ADCINTOVFCLR,
+ADCSOCOVFCLR1 and ADCEVTCLR across ADC0/1/2. Each read
+returns the simulator's empty strobe latch (zero); pending
+interrupt status remains visible only through ADCINTFLG,
+and only writes change interrupt/overflow flags. The
+SDK uses `|=` on all five of these strobe registers.
+This readback is a functional simulation convention, not
+a silicon readback assertion. Strict Mode is unchanged.
+
+The existing `tests/g4_adc_sequencer.py` QTest now
+verifies the read half of each RMW and tests actual
+conversion → pending flag → RMW clear → force →
+RMW clear for ADC0/1/2, without modifying ELF or
+sensor sampling intervals.

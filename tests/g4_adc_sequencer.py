@@ -72,7 +72,13 @@ def main():
                 assert q.read(base + 0x1000) & 0x80
                 assert q.read(base + 0x101c) == 0
                 assert q.read(RESULTS[i]) == 0
+                # TI dl_adc.h uses |= on these W1S/W1C
+                # registers. Verify the read half of RMW for
+                # all three ADC instances.
+                for ofs in (0x1020, 0x1024, 0x102c, 0x1048, 0x10d0):
+                    assert q.read(base + ofs) == 0, (i, hex(ofs))
             print("G4B_ADC0_1_2_CONFIG_RMW=PASS")
+            print("G4B_ADC_STROBE_RMW_READS_ZERO=PASS")
 
             for base in ADCS:
                 q.write(base + 0x1324, 0xC0000000)
@@ -88,9 +94,22 @@ def main():
                 val = q.read(RESULTS[i])
                 assert (val & 0xffff) == (i + 1) * 1000
                 assert (val >> 16) == (i + 1) * 1000 + 1
-                q.write(base + 0x1024, 1)
+                # SDK DL_ADC_clearInterruptStatus() is '|='
+                # and therefore reads before writing.
+                clear = q.read(base + 0x1024) | 1
+                assert clear == 1
+                assert q.read(base + 0x101c) == 1, (
+                    "W1C read must not clear pending IRQ")
+                q.write(base + 0x1024, clear)
+                assert q.read(base + 0x101c) == 0
+                assert q.read(base + 0x1024) == 0
+                # Force/clear paths both need readable strobe RMW.
+                q.write(base + 0x1020, q.read(base + 0x1020) | 1)
+                assert q.read(base + 0x101c) & 1
+                q.write(base + 0x1024, q.read(base + 0x1024) | 1)
                 assert q.read(base + 0x101c) == 0
                 print(f"G4B_ADC{i}_RESULT={val:#010x} IRQ_CLEAR=PASS")
+            print("PASS_G4B_ADC_DRIVERLIB_W1S_W1C_RMW")
             print("PASS_G4B_NATIVE_ADC_CONVERSION_EVENT_NOT_ANALOG_VALIDATION")
 
         run(qemu, elf, fixture, verify)
