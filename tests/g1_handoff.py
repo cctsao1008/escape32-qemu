@@ -83,6 +83,55 @@ def wait_for_socket(path, process, timeout=15):
     raise TimeoutError(f"QEMU GDB socket did not appear: {path}")
 
 
+def print_fault_snapshot(rsp):
+    """Observe exception state only; never clear status bits or alter CPU."""
+    sp, lr, pc, xpsr = (rsp.reg(n) for n in (13, 14, 15, 25))
+    ipsr = xpsr & 0x1ff
+    print(f"G1_FAULT_CPU SP=0x{sp:08x} LR=0x{lr:08x} "
+          f"PC=0x{pc:08x} XPSR=0x{xpsr:08x} IPSR={ipsr}")
+    regs = (
+        ("ICSR", 0xE000ED04),
+        ("SHCSR", 0xE000ED24),
+        ("CFSR", 0xE000ED28),
+        ("HFSR", 0xE000ED2C),
+        ("DFSR", 0xE000ED30),
+        ("MMFAR", 0xE000ED34),
+        ("BFAR", 0xE000ED38),
+    )
+    values = {}
+    for name, address in regs:
+        try:
+            values[name] = f"0x{rsp.mem32(address):08x}"
+        except (RuntimeError, OSError, ValueError) as exc:
+            values[name] = f"unavailable({type(exc).__name__})"
+    print("G1_FAULT_SCB " + " ".join(f"{key}={value}"
+                                   for key, value in values.items()))
+    if ipsr != 3:
+        print("G1_FAULT_NOTE Handler vector reached, but IPSR is not 3; "
+              "do not infer HardFault exception.")
+        return
+    # We are stopped at vector entry before the Handler prologue.
+    # Inspect a basic hardware frame only when EXC_RETURN indicates MSP
+    # and a basic (non-extended-FP) exception frame.
+    is_exc_return = (lr & 0xffffffe0) == 0xffffffe0
+    using_msp = not (lr & (1 << 2))
+    basic_frame = bool(lr & (1 << 4))
+    if (is_exc_return and using_msp and basic_frame and
+            0x20000000 <= sp <= 0x2001ffe0):
+        try:
+            names = ("R0", "R1", "R2", "R3", "R12", "LR", "PC", "XPSR")
+            words = [rsp.mem32(sp + 4 * i) for i in range(8)]
+            print("G1_FAULT_STACK " + " ".join(
+                f"{name}=0x{value:08x}" for name, value in zip(names, words)))
+            print(f"G1_FAULT_SITE stacked_PC=0x{words[6]:08x} "
+                  f"stacked_LR=0x{words[5]:08x}")
+        except (RuntimeError, OSError, ValueError) as exc:
+            print(f"G1_FAULT_STACK unavailable: {exc}")
+    else:
+        print("G1_FAULT_STACK unavailable: exception return does not "
+              "identify an MSP basic frame")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--qemu", type=Path, required=True)
@@ -182,6 +231,8 @@ def main():
                           f"unique_pcs={len(hot)} current_pc=0x{current:08x}")
                     print(f"G1_TRACE_HOT_PCS {top}")
                     print(f"G1_TRACE_RECENT_PCS {recent}")
+                    if reason == "hardfault-vector":
+                        print_fault_snapshot(rsp)
                     print("TRACE_ONLY: no startup, clock, peripheral or "
                           "safety-readiness verdict from instruction counts.")
         except Exception:
