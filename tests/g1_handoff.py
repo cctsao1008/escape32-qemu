@@ -144,12 +144,12 @@ def main():
     parser.add_argument("--xtal-present", action="store_true",
                         help="Opt in to G2g virtual 25MHz XTAL fixture")
     parser.add_argument("--timed-steps", action="store_true",
-                        help="Use QEMU icount shift=13 and enable GDB timer single-steps (diagnostic only)")
+                        help="Use QEMU 6.2 icount shift=10 and enable GDB timer steps (diagnostic)")
     parser.add_argument("--startup-steps", type=int, default=1,
                         help="Bounded CPU single-step trace; 1 is the original G1 check")
     args = parser.parse_args()
-    if not 1 <= args.startup_steps <= 16384:
-        parser.error("--startup-steps must be between 1 and 16384")
+    if not 1 <= args.startup_steps <= 32768:
+        parser.error("--startup-steps must be between 1 and 32768")
     if args.timed_steps and not args.xtal_present:
         parser.error("--timed-steps requires --xtal-present")
     qemu, elf = args.qemu.resolve(), args.elf.resolve()
@@ -169,9 +169,9 @@ def main():
             "-gdb", "chardev:gdb0",
         ]
         if args.timed_steps:
-            # 8192 virtual ns/instruction. Diagnostic acceleration,
+            # 1024 virtual ns/instruction (max supported QEMU 6.2 icount shift=10).
             # NOT the real AM13E 200MHz instruction/cycle rate.
-            cmd += ["-icount", "shift=13,sleep=off,align=off"]
+            cmd += ["-icount", "shift=10,sleep=off,align=off"]
         process = subprocess.Popen(cmd, stdout=subprocess.DEVNULL,
                                    stderr=subprocess.PIPE, text=True)
         try:
@@ -203,7 +203,7 @@ def main():
                     active = rsp.command("qqemu.sstep")
                     if active != "0x1":
                         raise RuntimeError(f"Timer single-step mode not set: {active!r}")
-                    print("G1_TIMED_STEPS icount_shift=13 ns_per_insn=8192 "
+                    print("G1_TIMED_STEPS icount_shift=10 ns_per_insn=1024 "
                           "qemu_sstep=0x1 DIAGNOSTIC_ONLY")
                 sp, pc, xpsr = rsp.reg(13), rsp.reg(15), rsp.reg(25)
                 vt = rsp.mem32(0xE000ED08)

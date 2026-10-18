@@ -241,17 +241,22 @@ QEMU 6.2 defaults its GDB single-stepping flags to
 clock timer. The optional `--timed-steps` probes
 `qqemu.sstepbits`, explicitly applies `Qqemu.sstep:1`
 to enable timers/IRQs, and starts QEMU with
-`-icount shift=13,sleep=off,align=off`.
+`-icount shift=10,sleep=off,align=off`.
+QEMU v6.2.0 caps the shift at 10 (`softmmu/icount.c`,
+`MAX_ICOUNT_SHIFT=10`); the previous diagnostic-only `shift=13`
+failed at process startup and did not run the ELF.
 
 ```sh
 python3 tests/g1_handoff.py \
   --qemu .build/qemu-src/build/qemu-system-arm \
   --elf ~/github/ESCape32/build-qemu-am13e/AM13E-rev17.3.elf \
-  --xtal-present --timed-steps --startup-steps 16384
+  --xtal-present --timed-steps --startup-steps 32768
 ```
 
-At shift=13, each guest instruction is charged 8192 virtual
-nanoseconds; this **deliberately accelerates** simulated time and
-does **not** model 200MHz CPU cycles. Results show control-flow
+At shift=10, each guest instruction is charged 1024 virtual
+nanoseconds, so 9.984ms nominally requires 9750 guest instructions
+*after the XTAL enable request*. The increased 32768-step bound
+allows observation beyond this deadline. This is deliberately
+accelerated and **does not** model 200MHz CPU cycles. Results show control-flow
 progress only. Use the G2g QTest clock_step cases for actual timer
 boundary validation.
