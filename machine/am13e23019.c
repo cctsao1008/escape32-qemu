@@ -1,5 +1,5 @@
 /*
- * AM13E23019 G0 physical-memory-only machine for QEMU v6.2.0.
+ * AM13E23019 G0/G1 APP-handoff machine for QEMU v6.2.0.
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 #include "qemu/osdep.h"
@@ -14,11 +14,13 @@
 #include "hw/qdev-properties.h"
 #include "exec/address-spaces.h"
 #include "qom/object.h"
+#include "sysemu/reset.h"
 
 #define TYPE_AM13E_MACHINE MACHINE_TYPE_NAME("am13e23019")
 OBJECT_DECLARE_SIMPLE_TYPE(AM13EMachineState, AM13E_MACHINE)
 #define AM13E_SRAM_SIZE (128 * KiB)
 #define AM13E_FLASH_SIZE (512 * KiB)
+#define AM13E_APP_BASE 0x00006000U
 
 struct AM13EMachineState {
     MachineState parent_obj;
@@ -29,6 +31,23 @@ struct AM13EMachineState {
     Clock *refclk;
 };
 
+/*
+ * Model the state at the END of the real ESCape32 Bootloader handoff:
+ * __disable_irq(); quiesce(); VTOR=APP; MSP=vector[0]; BX vector[1].
+ * This is NOT silicon reset and it does NOT emulate Boot validation.
+ * Reset ordering: this callback is registered after armv7m_load_kernel's
+ * CPU reset callback. The application itself owns IRQ release.
+ */
+static void am13e_handoff_reset(void *opaque)
+{
+    AM13EMachineState *s = opaque;
+    CPUARMState *env = &s->armv7m.cpu->env;
+
+    g_assert(!arm_feature(env, ARM_FEATURE_M_SECURITY));
+    g_assert(env->v7m.vecbase[M_REG_NS] == AM13E_APP_BASE);
+    env->v7m.primask[M_REG_NS] = 1;
+}
+
 static void am13e_init(MachineState *machine)
 {
     AM13EMachineState *s = AM13E_MACHINE(machine);
@@ -38,7 +57,7 @@ static void am13e_init(MachineState *machine)
 
     if (machine->ram_size != AM13E_SRAM_SIZE ||
         strcmp(machine->cpu_type, mc->default_cpu_type)) {
-        error_report("am13e23019 requires 128KiB SRAM and cortex-m33");
+        error_report("am13e23019 requires 128KiB SRAM and cortex-m33-am13e");
         exit(EXIT_FAILURE);
     }
     memory_region_init_rom(&s->flash, NULL, "am13e-main-flash",
@@ -64,6 +83,7 @@ static void am13e_init(MachineState *machine)
     core = DEVICE(&s->armv7m);
     qdev_prop_set_string(core, "cpu-type", machine->cpu_type);
     qdev_prop_set_uint32(core, "num-irq", 64);
+    qdev_prop_set_uint32(core, "init-nsvtor", AM13E_APP_BASE);
     qdev_connect_clock_in(core, "cpuclk", s->cpuclk);
     qdev_connect_clock_in(core, "refclk", s->refclk);
     object_property_set_link(OBJECT(&s->armv7m), "memory",
@@ -71,14 +91,15 @@ static void am13e_init(MachineState *machine)
     sysbus_realize(SYS_BUS_DEVICE(core), &error_fatal);
     armv7m_load_kernel(ARM_CPU(first_cpu), machine->kernel_filename,
                        AM13E_FLASH_SIZE);
+    qemu_register_reset(am13e_handoff_reset, s);
 }
 
 static void am13e_class_init(ObjectClass *oc, void *data)
 {
     MachineClass *mc = MACHINE_CLASS(oc);
-    mc->desc = "AM13E23019 QEMU G0 memory-only prototype";
+    mc->desc = "AM13E23019 ESCape32 app-handoff prototype (G1)";
     mc->init = am13e_init;
-    mc->default_cpu_type = ARM_CPU_TYPE_NAME("cortex-m33");
+    mc->default_cpu_type = ARM_CPU_TYPE_NAME("cortex-m33-am13e");
     mc->default_ram_size = AM13E_SRAM_SIZE;
     mc->default_ram_id = "am13e.sram";
     mc->max_cpus = 1;

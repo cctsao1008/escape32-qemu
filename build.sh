@@ -48,11 +48,41 @@ for rel, (anchor, replacement) in patches.items():
     if contents.count(anchor) != 1:
         sys.exit('ERROR: QEMU v6.2.0 integration anchor changed: ' + rel)
     updates[file] = contents.replace(anchor, replacement, 1)
+# Create a Cortex-M33 variant with the Security Extension absent:
+# AM13E's TRM says TrustZone is not enabled. A standard QEMU 6.2
+# cortex-m33 has the M_SECURITY feature and resets in Secure state.
+cpu_file = qemu / 'target/arm/cpu_tcg.c'
+cpu_content = cpu_file.read_text()
+model_start = '''static void cortex_m33_am13e_initfn(Object *obj)
+{
+    ARMCPU *cpu = ARM_CPU(obj);
+
+    cortex_m33_initfn(obj);
+    unset_feature(&cpu->env, ARM_FEATURE_M_SECURITY);
+    cpu->sau_sregion = 0;
+    cpu->isar.id_pfr1 &= ~0x000000f0U; /* Security field: absent */
+}
+
+'''
+entry = '''    { .name = "cortex-m33-am13e", .initfn = cortex_m33_am13e_initfn,
+                              .class_init = arm_v7m_class_init },
+'''
+if model_start not in cpu_content:
+    anchor = 'static void cortex_m55_initfn(Object *obj)\n'
+    if cpu_content.count(anchor) != 1:
+        sys.exit('ERROR: QEMU v6.2.0 CPU model anchor missing')
+    cpu_content = cpu_content.replace(anchor, model_start + anchor, 1)
+if entry not in cpu_content:
+    anchor = '    { .name = "cortex-m55",  .initfn = cortex_m55_initfn,\n'
+    if cpu_content.count(anchor) != 1:
+        sys.exit('ERROR: QEMU v6.2.0 CPU registry anchor missing')
+    cpu_content = cpu_content.replace(anchor, entry + anchor, 1)
+updates[cpu_file] = cpu_content
 source = root / 'machine/am13e23019.c'
 target = qemu / 'hw/arm/am13e23019.c'
 if target.is_symlink():
     sys.exit('ERROR: generated machine path is a symlink; refusing overwrite')
-if target.exists() and 'AM13E23019 G0 physical-memory-only machine' not in target.read_text():
+if target.exists() and 'TYPE_AM13E_MACHINE MACHINE_TYPE_NAME("am13e23019")' not in target.read_text():
     sys.exit('ERROR: unexpected machine file in QEMU worktree')
 for file, contents in updates.items():
     file.write_text(contents)
