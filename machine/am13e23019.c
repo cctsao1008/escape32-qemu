@@ -32,6 +32,7 @@ OBJECT_DECLARE_SIMPLE_TYPE(AM13EMachineState, AM13E_MACHINE)
  */
 #define AM13E_SYSCTL_BASE 0x400AF000U
 #define AM13E_SYSCTL_SIZE 0x4000U
+#define AM13E_SIM_SYSTEMCFG 0x1180U
 #define AM13E_SYSCTL_MCLKCFG 0x1104U
 #define AM13E_SYSCTL_CLKSTATUS 0x1204U
 #define AM13E_SYSCTL_MCLKCFG_INITIAL 0x07000200U
@@ -164,7 +165,8 @@ OBJECT_DECLARE_SIMPLE_TYPE(AM13EMachineState, AM13E_MACHINE)
 #define AM13E_SIM_ADC_SEQ_ENABLE (1U << 31)
 #define AM13E_SIM_ADC_SEQ_SWFRC (1U << 30)
 #define AM13E_SIM_ADC_INT1_ENABLE (1U << 7)
-#define AM13E_SIM_GPRCM_COUNT 5U
+#define AM13E_SIM_WWDT_BASE 0x400D0000U
+#define AM13E_SIM_GPRCM_COUNT 6U
 #define AM13E_SIM_GPRCM_OFFSET 0x0800U
 #define AM13E_SIM_GPRCM_SIZE 0x20U
 #define AM13E_SIM_GPRCM_PWREN 0x000U
@@ -174,6 +176,9 @@ OBJECT_DECLARE_SIMPLE_TYPE(AM13EMachineState, AM13E_MACHINE)
 #define AM13E_SIM_GPRCM_PWREN_KEY 0x26000000U
 #define AM13E_SIM_GPRCM_RESET_KEY 0xb1000000U
 typedef struct AM13ESimADC AM13ESimADC;
+typedef struct AM13ESimWWDT AM13ESimWWDT;
+static void am13e_sim_wwdt_reset(AM13ESimWWDT *w);
+static void am13e_sim_wwdt_stop(AM13ESimWWDT *w);
 static void am13e_sim_adc_reset(AM13ESimADC *adc);
 
 typedef struct AM13EPeripheralGPRCM {
@@ -185,6 +190,7 @@ typedef struct AM13EPeripheralGPRCM {
     bool unmodeled_reported;
     bool esc_sim;
     AM13ESimADC *adc; /* Optional ADC datapath reset owner. */
+    AM13ESimWWDT *wwdt; /* WWDT0 power/reset hook. */
 } AM13EPeripheralGPRCM;
 
 struct AM13ESimADC {
@@ -205,6 +211,18 @@ struct AM13ESimADC {
     bool unmodeled_reported;
 };
 
+struct AM13ESimWWDT {
+    MemoryRegion ctrl_mmio;
+    QEMUTimer *timer;
+    AM13EPeripheralGPRCM *gprcm;
+    bool esc_sim;
+    bool running;
+    bool expired;
+    bool unmodeled_reported;
+    uint32_t ctl0;
+    uint32_t ctl1;
+    uint32_t feed_count;
+};
 #define AM13E_GPIO_PWREN_KEY 0x26000000U
 /* GPIO CPU_INT / GEN_EVENT0 / GEN_EVENT1, from TI hw_gpio.h.
  * ESC-SIM alone supports IRQ register readback and software ISET/ICLR.
@@ -253,6 +271,8 @@ struct AM13EMachineState {
     MemoryRegion flash;
     MemoryRegion bank3_alias;
     MemoryRegion sysctl;
+    uint32_t sysctl_systemcfg;
+    AM13ESimWWDT wwdt;
     MemoryRegion iomux;
     uint32_t pincm[AM13E_IOMUX_PIN_COUNT];
     bool iomux_unmodeled_reported;
@@ -328,6 +348,142 @@ static void am13e_set_esc_sim(Object *obj, bool on, Error **errp)
  *   crystal analog startup physics, clock-frequency verification or IRQs.
  * - With the fixture absent, startup remains unmodeled/off (fail-closed).
  */
+/* WWDT0 is an ESC input-loss watchdog, not a permanently ready fixture.
+ * The selected Rel17 watchdog arms only when the receiver is selected,
+ * and feeds only on valid DShot commands. Expiration is observable,
+ * but BOOTRST and motor shutdown have not yet been modeled.
+ */
+static void am13e_sim_wwdt_stop(AM13ESimWWDT *w)
+{
+    if (w->timer) {
+        timer_del(w->timer);
+    }
+    w->running = false;
+}
+
+static void am13e_sim_wwdt_reset(AM13ESimWWDT *w)
+{
+    am13e_sim_wwdt_stop(w);
+    w->ctl0 = 0;
+    w->ctl1 = 0;
+    w->feed_count = 0;
+    w->expired = false;
+    w->unmodeled_reported = false;
+}
+
+static int64_t am13e_sim_wwdt_period_ns(AM13ESimWWDT *w)
+{
+    static const unsigned periods[8] = {25, 21, 18, 15, 12, 10, 8, 6};
+    unsigned nbits = periods[(w->ctl0 >> 4) & 7U];
+    unsigned div = w->ctl0 & 7U;
+    int64_t ticks = (INT64_C(1) << nbits) << div;
+
+    /* Simulation assumption: nominal LFCLK 32768Hz. */
+    return ticks * INT64_C(1000000000) / INT64_C(32768);
+}
+
+static void am13e_sim_wwdt_schedule(AM13ESimWWDT *w)
+{
+    timer_mod(w->timer, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) +
+              am13e_sim_wwdt_period_ns(w));
+}
+
+static void am13e_sim_wwdt_expired(void *opaque)
+{
+    AM13ESimWWDT *w = opaque;
+    if (!w->running || !w->gprcm->powered) {
+        return;
+    }
+    w->expired = true;
+    w->running = false;
+    error_report("ESC_SIM_WWDT_EXPIRED: command-loss deadline reached; "
+                 "BOOTRST/reset cause/motor output shutdown NOT MODELED");
+}
+
+static MemTxResult am13e_sim_wwdt_unmodeled(AM13ESimWWDT *w, hwaddr off,
+                                            bool write, unsigned size)
+{
+    if (!w->unmodeled_reported) {
+        error_report("G5_UNMODELED_WWDT %s 0x%08" PRIx64
+                     " size=%u (transaction rejected)",
+                     write ? "write" : "read",
+                     (uint64_t)(AM13E_SIM_WWDT_BASE + 0x1100U + off),
+                     size);
+        w->unmodeled_reported = true;
+    }
+    return MEMTX_ERROR;
+}
+
+static MemTxResult am13e_sim_wwdt_read(void *opaque, hwaddr off,
+                                       uint64_t *value, unsigned size,
+                                       MemTxAttrs attrs)
+{
+    AM13ESimWWDT *w = opaque;
+    if (!w->esc_sim || size != 4) {
+        return am13e_sim_wwdt_unmodeled(w, off, false, size);
+    }
+    switch (off) {
+    case 0x00U: /* WWDTCTL0 */
+        *value = w->ctl0;
+        return MEMTX_OK;
+    case 0x04U: /* WWDTCTL1 */
+        *value = w->ctl1;
+        return MEMTX_OK;
+    case 0x0cU: /* WWDTSTAT */
+        *value = w->running ? 1U : 0U;
+        return MEMTX_OK;
+    default:
+        return am13e_sim_wwdt_unmodeled(w, off, false, size);
+    }
+}
+
+static MemTxResult am13e_sim_wwdt_write(void *opaque, hwaddr off,
+                                        uint64_t value, unsigned size,
+                                        MemTxAttrs attrs)
+{
+    AM13ESimWWDT *w = opaque;
+    uint32_t data = (uint32_t)value;
+
+    if (!w->esc_sim || size != 4 || !w->gprcm->powered) {
+        return am13e_sim_wwdt_unmodeled(w, off, true, size);
+    }
+    switch (off) {
+    case 0x00U: /* WWDTCTL0: 0xC9 KEY */
+        if (w->running || (data & 0xff000000U) != 0xc9000000U ||
+            (data & 0x00ffffffU & ~0x00037777U)) {
+            return am13e_sim_wwdt_unmodeled(w, off, true, size);
+        }
+        w->ctl0 = data & 0x00037777U;
+        w->expired = false;
+        w->running = true;
+        am13e_sim_wwdt_schedule(w);
+        return MEMTX_OK;
+    case 0x04U: /* WWDTCTL1: 0xBE KEY */
+        if ((data & 0xff000000U) != 0xbe000000U ||
+            (data & 0x00fffffeU)) {
+            return am13e_sim_wwdt_unmodeled(w, off, true, size);
+        }
+        w->ctl1 = data & 1U;
+        return MEMTX_OK;
+    case 0x08U: /* WWDTCNTRST: 0xA7 feed */
+        if (!w->running || data != 0xA7U) {
+            return am13e_sim_wwdt_unmodeled(w, off, true, size);
+        }
+        w->feed_count++;
+        am13e_sim_wwdt_schedule(w);
+        return MEMTX_OK;
+    default:
+        return am13e_sim_wwdt_unmodeled(w, off, true, size);
+    }
+}
+
+static const MemoryRegionOps am13e_sim_wwdt_ops = {
+    .read_with_attrs = am13e_sim_wwdt_read,
+    .write_with_attrs = am13e_sim_wwdt_write,
+    .endianness = DEVICE_LITTLE_ENDIAN,
+    .valid = { .min_access_size = 4, .max_access_size = 4 },
+};
+
 static void am13e_xtal_ready(void *opaque)
 {
     AM13EMachineState *s = opaque;
@@ -415,6 +571,12 @@ static MemTxResult am13e_sysctl_read(void *opaque, hwaddr offset,
     case AM13E_SYSCTL_CLKSTATUS:
         *value = s->sysctl_clkstatus;
         return MEMTX_OK;
+    case AM13E_SIM_SYSTEMCFG:
+        if (!s->esc_sim) {
+            return am13e_sysctl_unmodeled(s, offset, false, size);
+        }
+        *value = s->sysctl_systemcfg;
+        return MEMTX_OK;
     case AM13E_SYSCTL_XTALCR:
         *value = s->sysctl_xtalcr;
         return MEMTX_OK;
@@ -453,6 +615,15 @@ static MemTxResult am13e_sysctl_write(void *opaque, hwaddr offset,
 
     if (size != 4) {
         return am13e_sysctl_unmodeled(s, offset, true, size);
+    }
+    if (offset == AM13E_SIM_SYSTEMCFG && s->esc_sim) {
+        next = (uint32_t)value;
+        if ((next & 0xff000000U) != 0x1b000000U ||
+            (next & 0x00fffffeU)) {
+            return am13e_sysctl_unmodeled(s, offset, true, size);
+        }
+        s->sysctl_systemcfg = next & 1U;
+        return MEMTX_OK;
     }
     if (offset == AM13E_SYSCTL_SYSPLLPARAM0 ||
         offset == AM13E_SYSCTL_SYSPLLPARAM1) {
@@ -1189,6 +1360,9 @@ static MemTxResult am13e_gprcm_write(void *opaque, hwaddr offset,
             return am13e_gprcm_unmodeled(g, offset, true, size);
         }
         g->powered = (data & 1U) != 0U;
+        if (!g->powered && g->wwdt) {
+            am13e_sim_wwdt_stop(g->wwdt);
+        }
         return MEMTX_OK;
     case AM13E_SIM_GPRCM_RSTCTL:
         if ((data & 0xff000000U) != AM13E_SIM_GPRCM_RESET_KEY ||
@@ -1199,6 +1373,9 @@ static MemTxResult am13e_gprcm_write(void *opaque, hwaddr offset,
             g->reset_sticky = true;
             if (g->adc) {
                 am13e_sim_adc_reset(g->adc);
+            }
+            if (g->wwdt) {
+                am13e_sim_wwdt_reset(g->wwdt);
             }
         } else if (data & 2U) {
             g->reset_sticky = false;
@@ -1628,6 +1805,7 @@ static void am13e_handoff_reset(void *opaque)
     g_assert(env->v7m.vecbase[M_REG_NS] == AM13E_APP_BASE);
     env->v7m.primask[M_REG_NS] = 1;
     s->sysctl_mclkcfg = AM13E_SYSCTL_MCLKCFG_INITIAL;
+    s->sysctl_systemcfg = 0U;
     s->sysctl_xtalcr = AM13E_SYSCTL_XTALCR_INITIAL;
     s->sysctl_hsclken = AM13E_SYSCTL_HSCLKEN_INITIAL;
     s->sysctl_hsclkcfg = 0;
@@ -1643,6 +1821,7 @@ static void am13e_handoff_reset(void *opaque)
     s->fri_frdcntl = AM13E_FRI_FRDCNTL_RESET;
     s->fri_unmodeled_reported = false;
     s->factory_unmodeled_reported = false;
+    am13e_sim_wwdt_reset(&s->wwdt);
     for (unsigned i = 0; i < AM13E_SIM_GPRCM_COUNT; ++i) {
         am13e_gprcm_reset(&s->peripheral_gprcm[i]);
     }
@@ -1683,6 +1862,7 @@ static void am13e_init(MachineState *machine)
 
     /* SYSCTL G2a-G2f: readback and oscillator/PLL configuration only. */
     s->sysctl_mclkcfg = AM13E_SYSCTL_MCLKCFG_INITIAL;
+    s->sysctl_systemcfg = 0U;
     s->sysctl_xtalcr = AM13E_SYSCTL_XTALCR_INITIAL;
     s->sysctl_hsclken = AM13E_SYSCTL_HSCLKEN_INITIAL;
     s->sysctl_hsclkcfg = 0;
@@ -1726,6 +1906,7 @@ static void am13e_init(MachineState *machine)
         { 0x40004000U, "ADC2" },
         { 0x40180000U, "TIMG4" },
         { 0x40188000U, "TIMG12" },
+        { AM13E_SIM_WWDT_BASE, "WWDT0" },
     };
     for (unsigned i = 0; i < AM13E_SIM_GPRCM_COUNT; ++i) {
         AM13EPeripheralGPRCM *g = &s->peripheral_gprcm[i];
@@ -1739,6 +1920,19 @@ static void am13e_init(MachineState *machine)
                                     g->base + AM13E_SIM_GPRCM_OFFSET,
                                     &g->mmio);
     }
+
+    /* WWDT0 virtual counter: GPRCM shared, status/CTL separate. */
+    s->wwdt.gprcm = &s->peripheral_gprcm[5];
+    s->wwdt.gprcm->wwdt = &s->wwdt;
+    s->wwdt.esc_sim = s->esc_sim;
+    s->wwdt.timer = timer_new_ns(QEMU_CLOCK_VIRTUAL,
+                                  am13e_sim_wwdt_expired, &s->wwdt);
+    am13e_sim_wwdt_reset(&s->wwdt);
+    memory_region_init_io(&s->wwdt.ctrl_mmio, NULL, &am13e_sim_wwdt_ops,
+                          &s->wwdt, "am13e-wwdt0-ctl", 0x10U);
+    memory_region_add_subregion(sysmem,
+                                AM13E_SIM_WWDT_BASE + 0x1100U,
+                                &s->wwdt.ctrl_mmio);
 
     /* ESC-SIM ADC0/1/2 data and controls: per-channel synthetic
      * fixture codes, software-triggered time, and real NVIC IRQ0..2.
@@ -1827,7 +2021,7 @@ static void am13e_init(MachineState *machine)
 static void am13e_class_init(ObjectClass *oc, void *data)
 {
     MachineClass *mc = MACHINE_CLASS(oc);
-        mc->desc = "AM13E23019 ESC-SIM ADC sequencer and IRQ input for sensors";
+        mc->desc = "AM13E23019 ESC-SIM ADC and WWDT0 software watchdog";
     mc->init = am13e_init;
     mc->default_cpu_type = ARM_CPU_TYPE_NAME("cortex-m33-am13e");
     mc->default_ram_size = AM13E_SRAM_SIZE;
@@ -1871,6 +2065,10 @@ static void am13e_finalize(Object *obj)
     if (s->sim_pll_timer) {
         timer_free(s->sim_pll_timer);
         s->sim_pll_timer = NULL;
+    }
+    if (s->wwdt.timer) {
+        timer_free(s->wwdt.timer);
+        s->wwdt.timer = NULL;
     }
     for (unsigned i = 0; i < AM13E_SIM_ADC_COUNT; ++i) {
         if (s->adc[i].timer) {

@@ -579,3 +579,37 @@ verifies the read half of each RMW and tests actual
 conversion → pending flag → RMW clear → force →
 RMW clear for ADC0/1/2, without modifying ELF or
 sensor sampling intervals.
+
+## G5: WWDT0 input-loss Watchdog functional timing (ESC-SIM)
+
+The unmodified Rel17.3 ELF advances beyond all ADC0/1/2 setup
+and four TI SDK delay loops, then faults at
+`BFAR=0x400D0800`, `PC=0x0000C222`:
+`WWDT0.GPRCM.PWREN`. Unlike incidental peripheral setup,
+the firmware's `mcu/AM13E/hal/input_watchdog.c` specifically
+uses WWDT0 to detect absence of **valid DShot input**.
+The program requires powered=true and running=false during
+preparation. The watchdog arms only after selecting a receiver
+and is fed only by valid command acceptance.
+
+ESC-SIM adds WWDT0 as sixth participant in the existing keyed
+GPRCM Power/Reset/STAT model, with an independent WWDTCTL0/1,
+WWDTCNTRST and WWDTSTAT implementation. The 0xC9/0xBE keys
+guard configuration; 0xA7 is a valid Feed. A virtual-time
+timer uses nominal 32768Hz LFCLK and the selected
+period/divider: the firmware's 2^15 / 32768 policy is 1s.
+Power on alone never claims RUN=1. SYSCTL.SYSTEMCFG
+(0x400B0180) with 0x1B write key supports the WWDT
+reset/NMI policy selection.
+
+**Safety limitations:** expiration logs `ESC_SIM_WWDT_EXPIRED`
+and clears RUN; the simulator does **not yet implement**
+physical BOOTRST, persistent reset cause, gate shutdown, or
+analogue protection. No result here qualifies a production
+DShot input-loss fail-safe. Those state/event connections
+belong with the DShot capture and motor plant.
+
+`tests/g5_wwdt.py` tests pre-arm state, power key, system
+policy, CTL0 arm, virtual feed deadline, observable expiry,
+sticky reset, and strict-mode rejection. Unsupported WWDT
+registers remain rejected instead of silently enabled.
