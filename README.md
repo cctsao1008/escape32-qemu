@@ -295,3 +295,40 @@ clock frequency, or motor safety. `CLKSTATUS` is unchanged.
 SYSPLLPARAM0/1 and factory calibration remain unimplemented;
 the next blocked MMIO or factory access should be diagnosed
 rather than substituting fictional calibration values.
+
+## G2i: TI Factory ROM, explicit provenance-preserving fixture
+
+The original Rel17 ELF now advances past SYSPLLCFG0/1 and suffers
+a *precise BusFault* with `BFAR=0x60111028`,
+`stacked_PC=0x000091b0`. That is the 8–16MHz SYSPLL factory
+lookup `PLLSTARTUP0_8_16MHZ` in TRM SPRUJF2B §3.16.11 and
+SDK `hw_factoryregion.h`; the companion word is at `0x6011102c`.
+The original ELF copies the pair to SYSPLLPARAM0/1 as opaque values.
+
+G2i maps the FACTORY aperture starting at `0x60111000`.
+By default **every** read/write in this region is rejected with
+`MEMTX_ERROR` and logged `G2_FACTORY_UNAVAILABLE`. The emulator
+never manufactures TI calibration data from reset tables or
+imaginary register values.
+
+To provide a caller-owned 8-byte *little-endian* binary pair from
+a known source, explicitly supply
+`-machine am13e23019,xtal-present=on,factory-pll-file=/absolute/path/to/factory_pll_pair.bin`.
+Only two aligned 32-bit reads are enabled at
+`0x60111028`/`0x6011102c`. Writes and all other FACTORY offsets
+stay unmodeled. Missing or non-exactly-eight-byte files fail QEMU
+initialization, not silently pad or return zero.
+
+**Provenance:** the values are device-programmed factory
+lookup/calibration values. The SDK contains their *addresses*
+and field masks, not an AM13E23019's actual silicon bytes.
+The G2i QTest creates unmistakable synthetic transport sentinels
+only inside its own temporary directory to test readback and ROM
+read-only behavior; these are **not PLL tuning values** and must not
+be reused for clock-lock or frequency qualification.
+
+The GDB helper supports an optional `--factory-pll-file PATH`
+to observe further original ELF execution when separately sourced
+valid data exists. G2i does not implement SYSPLLPARAM0/1,
+analog PLL behavior, or fabricate SYSPLLGOOD. Without source data,
+the same BFAR is the correct fail-closed result.

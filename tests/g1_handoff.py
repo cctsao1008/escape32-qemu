@@ -146,6 +146,8 @@ def main():
     parser.add_argument("--elf", type=Path, required=True)
     parser.add_argument("--xtal-present", action="store_true",
                         help="Opt in to G2g virtual 25MHz XTAL fixture")
+    parser.add_argument("--factory-pll-file", type=Path,
+                        help="Explicit 8-byte little-endian Factory PLL pair (no default)")
     parser.add_argument("--timed-steps", action="store_true",
                         help="Use QEMU 6.2 icount shift=10 and enable GDB timer steps (diagnostic)")
     parser.add_argument("--startup-steps", type=int, default=1,
@@ -159,6 +161,8 @@ def main():
     for file in (qemu, elf):
         if not file.is_file():
             parser.error(f"Missing file: {file}")
+    if args.factory_pll_file is not None and not args.factory_pll_file.is_file():
+        parser.error(f"Missing factory fixture: {args.factory_pll_file}")
     with tempfile.TemporaryDirectory(prefix="am13e-g1-") as tmp:
         socket_path = os.path.join(tmp, "gdb.sock")
         cmd = [
@@ -171,6 +175,10 @@ def main():
             "-chardev", f"socket,path={socket_path},server=on,wait=off,id=gdb0",
             "-gdb", "chardev:gdb0",
         ]
+        if args.factory_pll_file is not None:
+            # Keep the original ELF unaltered; provision only the
+            # physically separate FACTORY window via an explicit fixture.
+            cmd[2] += ",factory-pll-file=" + str(args.factory_pll_file.resolve())
         if args.timed_steps:
             # 1024 virtual ns/instruction (max supported QEMU 6.2 icount shift=10).
             # NOT the real AM13E 200MHz instruction/cycle rate.

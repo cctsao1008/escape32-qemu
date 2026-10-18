@@ -81,6 +81,15 @@ OBJECT_DECLARE_SIMPLE_TYPE(AM13EMachineState, AM13E_MACHINE)
 #define AM13E_SYSCTL_SYSPLLCFG0_FIELDS 0x0000ff31U
 #define AM13E_SYSCTL_SYSPLLCFG1_FIELDS 0x00007f03U
 #define AM13E_SYSPLL_ENABLE (1U << 8)
+
+/* TI hw_factoryregion.h and TRM §3.16: FACTORY FLASH window.
+ * Only the 8–16MHz SYSPLL loop parameter pair is surfaced by G2i.
+ * The two *device-programmed* words are NOT specified by SDK.
+ */
+#define AM13E_FACTORY_BASE 0x60111000U
+#define AM13E_FACTORY_SIZE 0x80U
+#define AM13E_FACTORY_PLL0_OFFSET 0x28U
+#define AM13E_FACTORY_PLL1_OFFSET 0x2cU
 /* Clock readiness is an event, never simply the result of writing XTALCR. */
 #define AM13E_HFCLK_GOOD (1U << 8)
 #define AM13E_HFCLK_OFF (1U << 13)
@@ -114,6 +123,12 @@ struct AM13EMachineState {
     uint32_t sysctl_clkstatus;
     QEMUTimer *xtal_timer;
     bool xtal_present;
+    MemoryRegion factory_rom;
+    char *factory_pll_file;
+    bool factory_pll_loaded;
+    uint32_t factory_pll0;
+    uint32_t factory_pll1;
+    bool factory_unmodeled_reported;
     MemoryRegion fri;
     uint32_t fri_frdcntl;
     bool fri_unmodeled_reported;
@@ -355,6 +370,120 @@ static const MemoryRegionOps am13e_sysctl_ops = {
 };
 
 /*
+ * G2i: the application copies two per-chip PLL startup words from
+ * FACTORY region 0x60111028/2c. There is no universal calibration
+ * value embedded in the SDK or in the original firmware ELF.
+ *
+ * An explicitly supplied, exactly 8-byte little-endian binary pair
+ * enables read-only MMIO transport. Without it the memory read MUST
+ * BusFault, rather than manufacture plausible silicon calibration.
+ * The provenance of any supplied bytes remains the caller's duty;
+ * G2i does not imply physical PLL or board qualification.
+ */
+static MemTxResult am13e_factory_unavailable(AM13EMachineState *s,
+                                             hwaddr offset, bool write,
+                                             unsigned size)
+{
+    if (!s->factory_unmodeled_reported) {
+        error_report("G2_FACTORY_UNAVAILABLE %s 0x%08" PRIx64 " size=%u "
+                     "fixture=%s (transaction rejected)",
+                     write ? "write" : "read",
+                     (uint64_t)(AM13E_FACTORY_BASE + offset), size,
+                     s->factory_pll_loaded ? "provided" : "absent");
+        s->factory_unmodeled_reported = true;
+    }
+    return MEMTX_ERROR;
+}
+
+static MemTxResult am13e_factory_read(void *opaque, hwaddr offset,
+                                     uint64_t *value, unsigned size,
+                                     MemTxAttrs attrs)
+{
+    AM13EMachineState *s = opaque;
+
+    if (size != 4 || !s->factory_pll_loaded) {
+        return am13e_factory_unavailable(s, offset, false, size);
+    }
+    switch (offset) {
+    case AM13E_FACTORY_PLL0_OFFSET:
+        *value = s->factory_pll0;
+        return MEMTX_OK;
+    case AM13E_FACTORY_PLL1_OFFSET:
+        *value = s->factory_pll1;
+        return MEMTX_OK;
+    default:
+        return am13e_factory_unavailable(s, offset, false, size);
+    }
+}
+
+static MemTxResult am13e_factory_write(void *opaque, hwaddr offset,
+                                      uint64_t value, unsigned size,
+                                      MemTxAttrs attrs)
+{
+    AM13EMachineState *s = opaque;
+
+    return am13e_factory_unavailable(s, offset, true, size);
+}
+
+static const MemoryRegionOps am13e_factory_ops = {
+    .read_with_attrs = am13e_factory_read,
+    .write_with_attrs = am13e_factory_write,
+    .endianness = DEVICE_LITTLE_ENDIAN,
+    .valid = {
+        .min_access_size = 4,
+        .max_access_size = 4,
+    },
+};
+
+static void am13e_load_factory_pll_fixture(AM13EMachineState *s)
+{
+    GError *error = NULL;
+    gchar *data = NULL;
+    gsize size = 0;
+    uint32_t word0, word1;
+
+    if (!s->factory_pll_file) {
+        return; /* Remain fail-closed; never invent factory words. */
+    }
+    if (!g_file_get_contents(s->factory_pll_file, &data, &size, &error)) {
+        error_report("G2_FACTORY_FILE_ERROR '%s': %s",
+                     s->factory_pll_file, error->message);
+        g_clear_error(&error);
+        exit(EXIT_FAILURE);
+    }
+    if (size != 8) {
+        error_report("G2_FACTORY_FILE_INVALID '%s': expected exactly "
+                     "8 bytes, got %" G_GSIZE_FORMAT,
+                     s->factory_pll_file, size);
+        g_free(data);
+        exit(EXIT_FAILURE);
+    }
+    memcpy(&word0, data, sizeof(word0));
+    memcpy(&word1, data + 4, sizeof(word1));
+    s->factory_pll0 = GUINT32_FROM_LE(word0);
+    s->factory_pll1 = GUINT32_FROM_LE(word1);
+    s->factory_pll_loaded = true;
+    g_free(data);
+    /* No attestation of device identity or factory provenance is possible. */
+}
+
+static char *am13e_get_factory_pll_file(Object *obj, Error **errp)
+{
+    AM13EMachineState *s = AM13E_MACHINE(obj);
+
+    return g_strdup(s->factory_pll_file ? s->factory_pll_file : "");
+}
+
+static void am13e_set_factory_pll_file(Object *obj, const char *value,
+                                      Error **errp)
+{
+    AM13EMachineState *s = AM13E_MACHINE(obj);
+
+    g_free(s->factory_pll_file);
+    s->factory_pll_file = (value && value[0]) ? g_strdup(value) : NULL;
+}
+
+/*
  * G2b: FRI register read/write semantics only. Real Flash read latency,
  * MCLK timekeeping, and the TRM nine-cycle pipeline requirement are
  * deliberately not modeled; the real SDK RAMFUNC performs FRI writes.
@@ -439,6 +568,7 @@ static void am13e_handoff_reset(void *opaque)
     s->sysctl_unmodeled_reported = false;
     s->fri_frdcntl = AM13E_FRI_FRDCNTL_RESET;
     s->fri_unmodeled_reported = false;
+    s->factory_unmodeled_reported = false;
 }
 
 static void am13e_init(MachineState *machine)
@@ -479,6 +609,12 @@ static void am13e_init(MachineState *machine)
                           "am13e-sysctl-g2a", AM13E_SYSCTL_SIZE);
     memory_region_add_subregion(sysmem, AM13E_SYSCTL_BASE, &s->sysctl);
 
+    /* FACTORY G2i: only caller-provided per-chip PLL startup words. */
+    am13e_load_factory_pll_fixture(s);
+    memory_region_init_io(&s->factory_rom, NULL, &am13e_factory_ops, s,
+                          "am13e-factory-pll-g2i", AM13E_FACTORY_SIZE);
+    memory_region_add_subregion(sysmem, AM13E_FACTORY_BASE, &s->factory_rom);
+
     /* FRI G2b: documented FRDCNTL fields only. */
     s->fri_frdcntl = AM13E_FRI_FRDCNTL_RESET;
     memory_region_init_io(&s->fri, NULL, &am13e_fri_ops, s,
@@ -509,7 +645,7 @@ static void am13e_init(MachineState *machine)
 static void am13e_class_init(ObjectClass *oc, void *data)
 {
     MachineClass *mc = MACHINE_CLASS(oc);
-    mc->desc = "AM13E23019 ESCape32 G2h SYSPLL register config";
+    mc->desc = "AM13E23019 ESCape32 G2i explicit factory ROM fixture";
     mc->init = am13e_init;
     mc->default_cpu_type = ARM_CPU_TYPE_NAME("cortex-m33-am13e");
     mc->default_ram_size = AM13E_SRAM_SIZE;
@@ -520,6 +656,12 @@ static void am13e_class_init(ObjectClass *oc, void *data)
                                    am13e_set_xtal_present);
     object_class_property_set_description(oc, "xtal-present",
         "Provide a virtual crystal fixture; default off, only XTAL clock");
+    object_class_property_add_str(oc, "factory-pll-file",
+                                  am13e_get_factory_pll_file,
+                                  am13e_set_factory_pll_file);
+    object_class_property_set_description(oc, "factory-pll-file",
+        "Optional 8-byte little-endian factory PLL startup word pair. "
+        "No implicit or default silicon calibration is supplied.");
 }
 static void am13e_finalize(Object *obj)
 {
@@ -529,6 +671,8 @@ static void am13e_finalize(Object *obj)
         timer_free(s->xtal_timer);
         s->xtal_timer = NULL;
     }
+    g_free(s->factory_pll_file);
+    s->factory_pll_file = NULL;
 }
 
 static const TypeInfo am13e_info = {
