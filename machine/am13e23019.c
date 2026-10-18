@@ -91,6 +91,12 @@ OBJECT_DECLARE_SIMPLE_TYPE(AM13EMachineState, AM13E_MACHINE)
 #define AM13E_SYSCTL_SYSPLLPARAM0_INITIAL 0x810a0000U
 #define AM13E_SYSCTL_SYSPLLPARAM1_INITIAL 0x0f00010fU
 #define AM13E_SYSPLL_ENABLE (1U << 8)
+#define AM13E_SIM_HSCLKCFG 0x110cU
+#define AM13E_SIM_PLL_NS INT64_C(50000) /* functional sim delay, not TI lock time */
+#define AM13E_SIM_PLLGOOD (1U << 9)
+#define AM13E_SIM_HSCLKGOOD (1U << 21)
+#define AM13E_SIM_SYSPLLOFF (1U << 14)
+#define AM13E_SIM_HSCLKMUX (1U << 4)
 
 /* TI hw_factoryregion.h and TRM §3.16: FACTORY FLASH window.
  * Only the 8–16MHz SYSPLL loop parameter pair is surfaced by G2i.
@@ -127,6 +133,7 @@ struct AM13EMachineState {
     uint32_t sysctl_mclkcfg;
     uint32_t sysctl_xtalcr;
     uint32_t sysctl_hsclken;
+    uint32_t sysctl_hsclkcfg;
     uint32_t sysctl_hfclkclkcfg;
     uint32_t sysctl_pllcfg0;
     uint32_t sysctl_pllcfg1;
@@ -134,7 +141,9 @@ struct AM13EMachineState {
     uint32_t sysctl_pllparam1;
     uint32_t sysctl_clkstatus;
     QEMUTimer *xtal_timer;
+    QEMUTimer *sim_pll_timer;
     bool xtal_present;
+    bool esc_sim;
     MemoryRegion factory_rom;
     char *factory_pll_file;
     bool factory_pll_loaded;
@@ -147,6 +156,35 @@ struct AM13EMachineState {
     Clock *cpuclk;
     Clock *refclk;
 };
+
+/* ESC-SIM: opt-in functional PLL timer; no physical trim/PLL model. */
+static void am13e_sim_pll_ready(void *opaque)
+{
+    AM13EMachineState *s = opaque;
+    if (!s->esc_sim || !(s->sysctl_hsclken & AM13E_SYSPLL_ENABLE) ||
+        !(s->sysctl_clkstatus & AM13E_HFCLK_GOOD) ||
+        (s->sysctl_pllcfg0 & 0x31U) != 0x11U ||
+        (s->sysctl_pllcfg1 & 0x7f03U) != 0x1f01U ||
+        s->sysctl_pllparam0 != s->factory_pll0 ||
+        s->sysctl_pllparam1 != s->factory_pll1) {
+        return;
+    }
+    s->sysctl_clkstatus &= ~AM13E_SIM_SYSPLLOFF;
+    s->sysctl_clkstatus |= AM13E_SIM_PLLGOOD;
+    if (!(s->sysctl_hsclkcfg & 1U)) {
+        s->sysctl_clkstatus |= AM13E_SIM_HSCLKGOOD;
+    }
+}
+
+static bool am13e_get_esc_sim(Object *obj, Error **errp)
+{
+    return AM13E_MACHINE(obj)->esc_sim;
+}
+
+static void am13e_set_esc_sim(Object *obj, bool on, Error **errp)
+{
+    AM13E_MACHINE(obj)->esc_sim = on;
+}
 
 /*
  * G2g virtual XTAL fixture:
@@ -162,7 +200,7 @@ static void am13e_xtal_ready(void *opaque)
 {
     AM13EMachineState *s = opaque;
 
-    if (!s->xtal_present ||
+    if (!(s->xtal_present || s->esc_sim) ||
         (s->sysctl_xtalcr & 1U) ||
         (s->sysctl_hsclken & 0x00010000U) ||
         !(s->sysctl_hfclkclkcfg & 0x10000000U)) {
@@ -187,7 +225,7 @@ static void am13e_xtal_enable(AM13EMachineState *s)
 {
     int64_t ns;
 
-    if (!s->xtal_present ||
+    if (!(s->xtal_present || s->esc_sim) ||
         (s->sysctl_hsclken & 0x00010000U) ||
         !(s->sysctl_hfclkclkcfg & 0x10000000U)) {
         /* No physical XTAL is inferred from a firmware enable request. */
@@ -250,6 +288,9 @@ static MemTxResult am13e_sysctl_read(void *opaque, hwaddr offset,
         return MEMTX_OK;
     case AM13E_SYSCTL_HSCLKEN:
         *value = s->sysctl_hsclken;
+        return MEMTX_OK;
+    case AM13E_SIM_HSCLKCFG:
+        *value = s->sysctl_hsclkcfg;
         return MEMTX_OK;
     case AM13E_SYSCTL_HFCLKCLKCFG:
         *value = s->sysctl_hfclkclkcfg;
@@ -332,6 +373,22 @@ static MemTxResult am13e_sysctl_write(void *opaque, hwaddr offset,
         s->sysctl_hfclkclkcfg = next;
         return MEMTX_OK;
     }
+    if (offset == AM13E_SIM_HSCLKCFG) {
+        next = (uint32_t)value;
+        if ((next ^ s->sysctl_hsclkcfg) & ~1U) {
+            return am13e_sysctl_unmodeled(s, offset, true, size);
+        }
+        s->sysctl_hsclkcfg = next;
+        if (s->esc_sim) {
+            if ((next & 1U) ? (s->sysctl_clkstatus & AM13E_HFCLK_GOOD) :
+                              (s->sysctl_clkstatus & AM13E_SIM_PLLGOOD)) {
+                s->sysctl_clkstatus |= AM13E_SIM_HSCLKGOOD;
+            } else {
+                s->sysctl_clkstatus &= ~AM13E_SIM_HSCLKGOOD;
+            }
+        }
+        return MEMTX_OK;
+    }
     if (offset == AM13E_SYSCTL_HSCLKEN) {
         next = (uint32_t)value;
         /* Accept only modeled control bits. These are enable/source
@@ -346,6 +403,27 @@ static MemTxResult am13e_sysctl_write(void *opaque, hwaddr offset,
             (next & 0x00010000U)) {
             /* XTAL is no longer selected as the HFCLK source. */
             am13e_xtal_off(s);
+        }
+        if (s->esc_sim && ((next ^ s->sysctl_hsclken) &
+                           AM13E_SYSPLL_ENABLE)) {
+            if (next & AM13E_SYSPLL_ENABLE) {
+                if ((s->sysctl_clkstatus & AM13E_HFCLK_GOOD) &&
+                    (s->sysctl_pllcfg0 & 0x31U) == 0x11U &&
+                    (s->sysctl_pllcfg1 & 0x7f03U) == 0x1f01U &&
+                    s->sysctl_pllparam0 == s->factory_pll0 &&
+                    s->sysctl_pllparam1 == s->factory_pll1) {
+                    s->sysctl_clkstatus &= ~AM13E_SIM_SYSPLLOFF;
+                    timer_mod(s->sim_pll_timer,
+                              qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) +
+                              AM13E_SIM_PLL_NS);
+                }
+            } else {
+                timer_del(s->sim_pll_timer);
+                s->sysctl_clkstatus &= ~(AM13E_SIM_PLLGOOD |
+                                          AM13E_SIM_HSCLKGOOD |
+                                          AM13E_SIM_HSCLKMUX);
+                s->sysctl_clkstatus |= AM13E_SIM_SYSPLLOFF;
+            }
         }
         s->sysctl_hsclken = next;
         return MEMTX_OK;
@@ -385,9 +463,19 @@ static MemTxResult am13e_sysctl_write(void *opaque, hwaddr offset,
      * the full 32-bit word after a read-modify-write.
      */
     if (((next ^ s->sysctl_mclkcfg) &
-         ~AM13E_SYSCTL_MCLKDIVCFG_MASK) != 0 ||
+         ~(AM13E_SYSCTL_MCLKDIVCFG_MASK |
+           (s->esc_sim ? 0x00010000U : 0U))) != 0 ||
+        (s->esc_sim && (next & 0x00010000U) &&
+         !(s->sysctl_clkstatus & AM13E_SIM_HSCLKGOOD)) ||
         (div != 0 && div != 1 && div != 3 && div != 5 && div != 7)) {
         return am13e_sysctl_unmodeled(s, offset, true, size);
+    }
+    if (s->esc_sim) {
+        if (next & 0x00010000U) {
+            s->sysctl_clkstatus |= AM13E_SIM_HSCLKMUX;
+        } else {
+            s->sysctl_clkstatus &= ~AM13E_SIM_HSCLKMUX;
+        }
     }
     s->sysctl_mclkcfg = next;
     return MEMTX_OK;
@@ -477,7 +565,15 @@ static void am13e_load_factory_pll_fixture(AM13EMachineState *s)
     uint32_t word0, word1;
 
     if (!s->factory_pll_file) {
-        return; /* Remain fail-closed; never invent factory words. */
+        if (s->esc_sim) {
+            /* Synthetic transport only: reset snapshots are NOT TI trim. */
+            s->factory_pll0 = AM13E_SYSCTL_SYSPLLPARAM0_INITIAL;
+            s->factory_pll1 = AM13E_SYSCTL_SYSPLLPARAM1_INITIAL;
+            s->factory_pll_loaded = true;
+            warn_report("ESC_SIM uses synthetic PLL parameters; "
+                        "no silicon calibration or timing accuracy");
+        }
+        return;
     }
     if (!g_file_get_contents(s->factory_pll_file, &data, &size, &error)) {
         error_report("G2_FACTORY_FILE_ERROR '%s': %s",
@@ -594,6 +690,7 @@ static void am13e_handoff_reset(void *opaque)
     s->sysctl_mclkcfg = AM13E_SYSCTL_MCLKCFG_INITIAL;
     s->sysctl_xtalcr = AM13E_SYSCTL_XTALCR_INITIAL;
     s->sysctl_hsclken = AM13E_SYSCTL_HSCLKEN_INITIAL;
+    s->sysctl_hsclkcfg = 0;
     s->sysctl_hfclkclkcfg = AM13E_SYSCTL_HFCLKCLKCFG_INITIAL;
     s->sysctl_pllcfg0 = AM13E_SYSCTL_SYSPLLCFG0_INITIAL;
     s->sysctl_pllcfg1 = AM13E_SYSCTL_SYSPLLCFG1_INITIAL;
@@ -601,6 +698,7 @@ static void am13e_handoff_reset(void *opaque)
     s->sysctl_pllparam1 = AM13E_SYSCTL_SYSPLLPARAM1_INITIAL;
     s->sysctl_clkstatus = AM13E_SYSCTL_CLKSTATUS_INITIAL;
     timer_del(s->xtal_timer);
+    timer_del(s->sim_pll_timer);
     s->sysctl_unmodeled_reported = false;
     s->fri_frdcntl = AM13E_FRI_FRDCNTL_RESET;
     s->fri_unmodeled_reported = false;
@@ -636,6 +734,7 @@ static void am13e_init(MachineState *machine)
     s->sysctl_mclkcfg = AM13E_SYSCTL_MCLKCFG_INITIAL;
     s->sysctl_xtalcr = AM13E_SYSCTL_XTALCR_INITIAL;
     s->sysctl_hsclken = AM13E_SYSCTL_HSCLKEN_INITIAL;
+    s->sysctl_hsclkcfg = 0;
     s->sysctl_hfclkclkcfg = AM13E_SYSCTL_HFCLKCLKCFG_INITIAL;
     s->sysctl_pllcfg0 = AM13E_SYSCTL_SYSPLLCFG0_INITIAL;
     s->sysctl_pllcfg1 = AM13E_SYSCTL_SYSPLLCFG1_INITIAL;
@@ -643,6 +742,8 @@ static void am13e_init(MachineState *machine)
     s->sysctl_pllparam1 = AM13E_SYSCTL_SYSPLLPARAM1_INITIAL;
     s->sysctl_clkstatus = AM13E_SYSCTL_CLKSTATUS_INITIAL;
     s->xtal_timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, am13e_xtal_ready, s);
+    s->sim_pll_timer = timer_new_ns(QEMU_CLOCK_VIRTUAL,
+                                    am13e_sim_pll_ready, s);
     memory_region_init_io(&s->sysctl, NULL, &am13e_sysctl_ops, s,
                           "am13e-sysctl-g2a", AM13E_SYSCTL_SIZE);
     memory_region_add_subregion(sysmem, AM13E_SYSCTL_BASE, &s->sysctl);
@@ -683,7 +784,7 @@ static void am13e_init(MachineState *machine)
 static void am13e_class_init(ObjectClass *oc, void *data)
 {
     MachineClass *mc = MACHINE_CLASS(oc);
-    mc->desc = "AM13E23019 ESCape32 G2j SYSPLL parameters and Factory ROM";
+    mc->desc = "AM13E23019 ESC-SIM virtual clocks and motor-facing MMIO";
     mc->init = am13e_init;
     mc->default_cpu_type = ARM_CPU_TYPE_NAME("cortex-m33-am13e");
     mc->default_ram_size = AM13E_SRAM_SIZE;
@@ -700,6 +801,10 @@ static void am13e_class_init(ObjectClass *oc, void *data)
     object_class_property_set_description(oc, "factory-pll-file",
         "Optional 8-byte little-endian factory PLL startup word pair. "
         "No implicit or default silicon calibration is supplied.");
+    object_class_property_add_bool(oc, "esc-sim", am13e_get_esc_sim,
+                                   am13e_set_esc_sim);
+    object_class_property_set_description(oc, "esc-sim",
+        "Functional-only ESC simulation (synthetic PLL trim/clock).");
 }
 static void am13e_finalize(Object *obj)
 {
@@ -708,6 +813,10 @@ static void am13e_finalize(Object *obj)
     if (s->xtal_timer) {
         timer_free(s->xtal_timer);
         s->xtal_timer = NULL;
+    }
+    if (s->sim_pll_timer) {
+        timer_free(s->sim_pll_timer);
+        s->sim_pll_timer = NULL;
     }
     g_free(s->factory_pll_file);
     s->factory_pll_file = NULL;

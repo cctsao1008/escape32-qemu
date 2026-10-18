@@ -146,6 +146,8 @@ def main():
     parser.add_argument("--elf", type=Path, required=True)
     parser.add_argument("--xtal-present", action="store_true",
                         help="Opt in to G2g virtual 25MHz XTAL fixture")
+    parser.add_argument("--esc-sim", action="store_true",
+                        help="Opt in to synthetic functional ESC startup defaults")
     parser.add_argument("--factory-pll-file", type=Path,
                         help="Explicit 8-byte little-endian Factory PLL pair (no default)")
     parser.add_argument("--timed-steps", action="store_true",
@@ -155,8 +157,8 @@ def main():
     args = parser.parse_args()
     if not 1 <= args.startup_steps <= 32768:
         parser.error("--startup-steps must be between 1 and 32768")
-    if args.timed_steps and not args.xtal_present:
-        parser.error("--timed-steps requires --xtal-present")
+    if args.timed_steps and not (args.xtal_present or args.esc_sim):
+        parser.error("--timed-steps requires --xtal-present or --esc-sim")
     qemu, elf = args.qemu.resolve(), args.elf.resolve()
     for file in (qemu, elf):
         if not file.is_file():
@@ -175,6 +177,8 @@ def main():
             "-chardev", f"socket,path={socket_path},server=on,wait=off,id=gdb0",
             "-gdb", "chardev:gdb0",
         ]
+        if args.esc_sim:
+            cmd[2] += ",esc-sim=on"
         if args.factory_pll_file is not None:
             # Keep the original ELF unaltered; provision only the
             # physically separate FACTORY window via an explicit fixture.

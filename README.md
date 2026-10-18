@@ -363,3 +363,24 @@ by default. To trace beyond it, an independently sourced factory
 pair must be passed via `--factory-pll-file`; all subsequent
 behavior needs its own evidence. Physical SYSPLL model and
 G2 Scheduler acceptance remain outstanding.
+
+## ESC-SIM: software-control-first profile
+
+With `-machine am13e23019,esc-sim=on` (or
+`tests/g1_handoff.py --esc-sim --timed-steps`) the emulator
+uses synthetic FACTORY PLL parameter defaults `0x810a0000`,
+`0x0f00010f` and virtual XTAL/PLL startup timers. Those
+defaults are **not** TI per-chip calibration; the 50µs virtual
+PLL startup interval is a functional simulation constant, not
+silicon timing. Only the firmware's valid 25MHz→200MHz
+divider configuration and explicit SYSPLLEN request may start
+the simulated PLL. SYSPLLGOOD and HSCLKGOOD then emerge after
+virtual elapsed time, and the MCLK switch is accepted.
+
+Default strict mode and earlier register tests remain unchanged.
+The purpose is to unblock unchanged ESCape32 ELF startup so
+the QEMU work can prioritize TIMG4/DMA2 DShot capture,
+MCPWM4 phase PWM, TIMG12 delayed commutation, CMPSS0/ECAP1
+BEMF edges, ADC0/1/2 sampling and an external BLDC plant.
+The profile does NOT validate PLL trim, frequency, silicon clocks,
+PCB safety, or high-current power-stage operation.
