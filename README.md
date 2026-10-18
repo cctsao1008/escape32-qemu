@@ -34,3 +34,20 @@ model callback but is not independently observed by the GDB test.
 
 Reference: AM13E230x TRM (SPRUJF2B) and ESCape32
 `am13e-port-v2`, commit `0f21de6`.
+
+### Bounded G1 Startup Trace (diagnostic, optional)
+
+Once the default `./test.sh ELF` passes, trace up to 4096 original
+Reset_Handler instructions without modifying the Firmware:
+
+```bash
+python3 tests/g1_handoff.py \
+  --qemu .build/qemu-src/build/qemu-system-arm \
+  --elf ~/github/ESCape32/build-qemu-am13e/AM13E-rev17.3.elf \
+  --startup-steps 4096
+```
+
+The test prints sampled PCs, frequent PCs and the recent PC history.
+It stops early if the actual HardFault vector is entered. A bounded
+trace is diagnostic only; no peripherals or fabricated ready bits
+are added, and normal loop/stall behavior is not labeled PASS.

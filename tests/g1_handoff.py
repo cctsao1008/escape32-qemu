@@ -11,6 +11,7 @@ import subprocess
 import tempfile
 import time
 from pathlib import Path
+from collections import Counter, deque
 
 APP_BASE = 0x00006000
 EXPECTED_SP = 0x20018000
@@ -86,7 +87,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--qemu", type=Path, required=True)
     parser.add_argument("--elf", type=Path, required=True)
+    parser.add_argument("--startup-steps", type=int, default=1,
+                        help="Bounded CPU single-step trace; 1 is the original G1 check")
     args = parser.parse_args()
+    if not 1 <= args.startup_steps <= 16384:
+        parser.error("--startup-steps must be between 1 and 16384")
     qemu, elf = args.qemu.resolve(), args.elf.resolve()
     for file in (qemu, elf):
         if not file.is_file():
@@ -142,6 +147,43 @@ def main():
                 print("NOTE: PRIMASK=1 is applied by board reset callback; "
                       "not independently read by this GDB test.")
                 print("NOTE: No SYSCTL/FRI, clock-ready or motor hardware modeled.")
+                if args.startup_steps > 1:
+                    # The first instruction was already stepped above.
+                    # Trace is diagnostic: instruction count is NOT evidence
+                    # that clock/peripherals or the ESC are initialized.
+                    hardfault_pc = rsp.mem32(APP_BASE + 3 * 4) & ~1
+                    history = deque([pc, new_pc], maxlen=16)
+                    hot = Counter((pc, new_pc))
+                    current = new_pc
+                    completed = 1
+                    reason = "step-limit"
+                    if current == hardfault_pc:
+                        reason = "hardfault-vector"
+                    else:
+                        for i in range(2, args.startup_steps + 1):
+                            response = rsp.command("s")
+                            if not response.startswith(("S", "T")):
+                                raise RuntimeError(f"Unexpected step response: {response}")
+                            if response[:3] not in ("S05", "T05"):
+                                raise RuntimeError(f"Guest stopped unexpectedly: {response}")
+                            current = rsp.reg(15)
+                            hot[current] += 1
+                            history.append(current)
+                            completed = i
+                            if i <= 12 or i % 256 == 0:
+                                print(f"G1_TRACE step={i} PC=0x{current:08x}")
+                            if current == hardfault_pc:
+                                reason = "hardfault-vector"
+                                break
+                    top = " ".join(f"0x{address:08x}:{count}"
+                                   for address, count in hot.most_common(6))
+                    recent = " ".join(f"0x{address:08x}" for address in history)
+                    print(f"G1_TRACE_SUMMARY steps={completed} reason={reason} "
+                          f"unique_pcs={len(hot)} current_pc=0x{current:08x}")
+                    print(f"G1_TRACE_HOT_PCS {top}")
+                    print(f"G1_TRACE_RECENT_PCS {recent}")
+                    print("TRACE_ONLY: no startup, clock, peripheral or "
+                          "safety-readiness verdict from instruction counts.")
         except Exception:
             if process.poll() is not None:
                 print("QEMU stderr:", process.stderr.read())
