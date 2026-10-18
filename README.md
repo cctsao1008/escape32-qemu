@@ -194,3 +194,41 @@ simulate oscillator startup time, monitor success, or PLL readiness.
 using QEMU virtual-time clocks, conditional on XTAL enable/source,
 monitor setup, and elapsed startup interval. Avoid host sleep
 or a fixed GOOD-bit response.
+
+## G2g: Explicit Virtual XTAL Fixture, deterministic startup time
+
+G2f no longer BusFaults. The original Startup enters the bounded
+`wait_clock_good(HFCLKGOOD)` loop at `PC=0x90ee..0x90fc` because
+`CLKSTATUS` remains in its reset state. G2g does **not** unconditionally
+return GOOD; it introduces a virtual crystal input explicitly selected
+with `-machine am13e23019,xtal-present=on`. Default is OFF.
+
+When the fixture is enabled, and XTALCR transitions OSCOFF:1→0,
+HSCLKEN selects XTAL (USEEXTHFCLK=0), and the SDK monitor bit
+HFCLKCLKCFG.HFCLKFLTCHK[28]=1, the model removes HFCLKOFF and
+HSCLKSOFF and schedules a single QEMU_CLOCK_VIRTUAL timer at
+`XTALTIME × 64,000 ns`. At the deadline, the fixture reports
+HFCLKGOOD=1 and maintains SYSPLLOFF=1, without claiming any actual
+oscillator waveform or silicon validation. Disabling XTAL cancels the
+event and restores OFF. There is no PLL model or motor model.
+
+SDK `hw_sysctl.h` and `DL_SYSCTL_enableHFCLKStartupMonitor()`
+set bit 28 to **1** for monitor enable. The prose in TRM
+SPRUJF2B §3.4.4.2.2 ambiguously says "clear" to enable, whereas
+the bit field table §3.14.2.15 and SDK define `1` as enabled.
+The model follows the actual compiled firmware and SDK bit encoding.
+
+Run `./test.sh path/to/AM13E-rev17.3.elf` to exercise:
+- No virtual crystal (default and explicit OFF): no manufactured GOOD.
+- Explicit virtual crystal: after enable, at 9,983,999 ns remains
+  pending, at 9,984,000 ns becomes GOOD.
+- Disable, restart, cancel before deadline: no stale timer event.
+
+All transitions use QTest `clock_step` on the QEMU virtual clock,
+not `sleep` or a host wall clock. The fixture assumes a successful
+clock startup *only when explicitly requested*; absent fixture
+does **not** simulate oscillator-failure detection latency.
+
+The GDB trace supports optional `--xtal-present` (default off).
+Unlike QTest's `clock_step`, GDB single-step timing is not itself a
+deterministic virtual-time/cycle-accuracy test.

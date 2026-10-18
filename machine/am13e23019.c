@@ -15,6 +15,7 @@
 #include "exec/address-spaces.h"
 #include "qom/object.h"
 #include "sysemu/reset.h"
+#include "qemu/timer.h"
 
 #define TYPE_AM13E_MACHINE MACHINE_TYPE_NAME("am13e23019")
 OBJECT_DECLARE_SIMPLE_TYPE(AM13EMachineState, AM13E_MACHINE)
@@ -67,6 +68,11 @@ OBJECT_DECLARE_SIMPLE_TYPE(AM13EMachineState, AM13E_MACHINE)
 #define AM13E_SYSCTL_HFCLKCLKCFG 0x1110U
 #define AM13E_SYSCTL_HFCLKCLKCFG_INITIAL 0x10000000U
 #define AM13E_SYSCTL_HFCLKCLKCFG_FIELDS 0x100000ffU
+/* Clock readiness is an event, never simply the result of writing XTALCR. */
+#define AM13E_HFCLK_GOOD (1U << 8)
+#define AM13E_HFCLK_OFF (1U << 13)
+#define AM13E_HSCLK_OFF (1U << 12)
+#define AM13E_XTAL_STARTUP_NS_PER_UNIT INT64_C(64000)
 
 /* TI SDK hw_memmap.h / hw_fri.h and TRM SPRUJF2B §13.7.2.1:
  * FRI_BASE=0x40028000; FRDCNTL offset=0x1000, reset=0x02000201.
@@ -90,6 +96,9 @@ struct AM13EMachineState {
     uint32_t sysctl_xtalcr;
     uint32_t sysctl_hsclken;
     uint32_t sysctl_hfclkclkcfg;
+    uint32_t sysctl_clkstatus;
+    QEMUTimer *xtal_timer;
+    bool xtal_present;
     MemoryRegion fri;
     uint32_t fri_frdcntl;
     bool fri_unmodeled_reported;
@@ -98,11 +107,72 @@ struct AM13EMachineState {
 };
 
 /*
- * G2a: the only supported SYSCTL accesses are two explicitly grounded,
- * read-only reset snapshots. There is no ready-bit synthesis or
- * permission to access unknown registers. Later G2 iterations must
- * implement real SYSCTL write/power/clock transitions and virtual time.
+ * G2g virtual XTAL fixture:
+ * - The external crystal is assumed present ONLY with the explicit
+ *   -machine am13e23019,xtal-present=on test option.
+ * - After XTAL enable with the monitor enabled, the documented XTALTIME
+ *   interval elapses on QEMU_CLOCK_VIRTUAL; no host sleep or always-GOOD bit.
+ * - This abstracts oscillator success after nominal startup time, NOT
+ *   crystal analog startup physics, clock-frequency verification or IRQs.
+ * - With the fixture absent, startup remains unmodeled/off (fail-closed).
  */
+static void am13e_xtal_ready(void *opaque)
+{
+    AM13EMachineState *s = opaque;
+
+    if (!s->xtal_present ||
+        (s->sysctl_xtalcr & 1U) ||
+        (s->sysctl_hsclken & 0x00010000U) ||
+        !(s->sysctl_hfclkclkcfg & 0x10000000U)) {
+        return;
+    }
+    s->sysctl_clkstatus |= AM13E_HFCLK_GOOD;
+    s->sysctl_clkstatus &= ~(AM13E_HFCLK_OFF | AM13E_HSCLK_OFF);
+}
+
+static void am13e_xtal_off(AM13EMachineState *s)
+{
+    timer_del(s->xtal_timer);
+    s->sysctl_clkstatus &= ~AM13E_HFCLK_GOOD;
+    s->sysctl_clkstatus |= AM13E_HFCLK_OFF;
+    /* HSCLKSOFF is the conjunction of HFCLKOFF and SYSPLLOFF. */
+    if (s->sysctl_clkstatus & (1U << 14)) {
+        s->sysctl_clkstatus |= AM13E_HSCLK_OFF;
+    }
+}
+
+static void am13e_xtal_enable(AM13EMachineState *s)
+{
+    int64_t ns;
+
+    if (!s->xtal_present ||
+        (s->sysctl_hsclken & 0x00010000U) ||
+        !(s->sysctl_hfclkclkcfg & 0x10000000U)) {
+        /* No physical XTAL is inferred from a firmware enable request. */
+        return;
+    }
+    ns = (int64_t)(s->sysctl_hfclkclkcfg & 0xffU) *
+         AM13E_XTAL_STARTUP_NS_PER_UNIT;
+    /* At zero XTALTIME, keep a distinct asynchronous completion event. */
+    if (ns == 0) {
+        ns = 1;
+    }
+    s->sysctl_clkstatus &= ~(AM13E_HFCLK_GOOD |
+                             AM13E_HFCLK_OFF | AM13E_HSCLK_OFF);
+    timer_mod(s->xtal_timer, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + ns);
+}
+
+static bool am13e_get_xtal_present(Object *obj, Error **errp)
+{
+    return AM13E_MACHINE(obj)->xtal_present;
+}
+
+static void am13e_set_xtal_present(Object *obj, bool present, Error **errp)
+{
+    AM13E_MACHINE(obj)->xtal_present = present;
+}
+
+/* All other undocumented SYSCTL accesses remain rejected. */
 static MemTxResult am13e_sysctl_unmodeled(AM13EMachineState *s,
                                          hwaddr offset,
                                          bool write, unsigned size)
@@ -131,7 +201,7 @@ static MemTxResult am13e_sysctl_read(void *opaque, hwaddr offset,
         *value = s->sysctl_mclkcfg;
         return MEMTX_OK;
     case AM13E_SYSCTL_CLKSTATUS:
-        *value = AM13E_SYSCTL_CLKSTATUS_INITIAL;
+        *value = s->sysctl_clkstatus;
         return MEMTX_OK;
     case AM13E_SYSCTL_XTALCR:
         *value = s->sysctl_xtalcr;
@@ -180,6 +250,11 @@ static MemTxResult am13e_sysctl_write(void *opaque, hwaddr offset,
             ~AM13E_SYSCTL_HSCLKEN_FIELDS) {
             return am13e_sysctl_unmodeled(s, offset, true, size);
         }
+        if (!(s->sysctl_hsclken & 0x00010000U) &&
+            (next & 0x00010000U)) {
+            /* XTAL is no longer selected as the HFCLK source. */
+            am13e_xtal_off(s);
+        }
         s->sysctl_hsclken = next;
         return MEMTX_OK;
     }
@@ -193,6 +268,15 @@ static MemTxResult am13e_sysctl_write(void *opaque, hwaddr offset,
         if ((next ^ s->sysctl_xtalcr) &
             ~AM13E_SYSCTL_XTALCR_WRITABLE) {
             return am13e_sysctl_unmodeled(s, offset, true, size);
+        }
+        if (!(s->sysctl_xtalcr & 1U) && (next & 1U)) {
+            am13e_xtal_off(s);
+        }
+        if ((s->sysctl_xtalcr & 1U) && !(next & 1U)) {
+            /* Request a new oscillator start; allow rearming only
+             * after the previous OFF state was reached.
+             */
+            am13e_xtal_enable(s);
         }
         s->sysctl_xtalcr = next;
         return MEMTX_OK;
@@ -305,6 +389,8 @@ static void am13e_handoff_reset(void *opaque)
     s->sysctl_xtalcr = AM13E_SYSCTL_XTALCR_INITIAL;
     s->sysctl_hsclken = AM13E_SYSCTL_HSCLKEN_INITIAL;
     s->sysctl_hfclkclkcfg = AM13E_SYSCTL_HFCLKCLKCFG_INITIAL;
+    s->sysctl_clkstatus = AM13E_SYSCTL_CLKSTATUS_INITIAL;
+    timer_del(s->xtal_timer);
     s->sysctl_unmodeled_reported = false;
     s->fri_frdcntl = AM13E_FRI_FRDCNTL_RESET;
     s->fri_unmodeled_reported = false;
@@ -340,6 +426,8 @@ static void am13e_init(MachineState *machine)
     s->sysctl_xtalcr = AM13E_SYSCTL_XTALCR_INITIAL;
     s->sysctl_hsclken = AM13E_SYSCTL_HSCLKEN_INITIAL;
     s->sysctl_hfclkclkcfg = AM13E_SYSCTL_HFCLKCLKCFG_INITIAL;
+    s->sysctl_clkstatus = AM13E_SYSCTL_CLKSTATUS_INITIAL;
+    s->xtal_timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, am13e_xtal_ready, s);
     memory_region_init_io(&s->sysctl, NULL, &am13e_sysctl_ops, s,
                           "am13e-sysctl-g2a", AM13E_SYSCTL_SIZE);
     memory_region_add_subregion(sysmem, AM13E_SYSCTL_BASE, &s->sysctl);
@@ -374,17 +462,33 @@ static void am13e_init(MachineState *machine)
 static void am13e_class_init(ObjectClass *oc, void *data)
 {
     MachineClass *mc = MACHINE_CLASS(oc);
-    mc->desc = "AM13E23019 ESCape32 app-handoff / G2a-G2f clock MMIO";
+    mc->desc = "AM13E23019 ESCape32 app-handoff / G2g virtual XTAL fixture";
     mc->init = am13e_init;
     mc->default_cpu_type = ARM_CPU_TYPE_NAME("cortex-m33-am13e");
     mc->default_ram_size = AM13E_SRAM_SIZE;
     mc->default_ram_id = "am13e.sram";
     mc->max_cpus = 1;
+    object_class_property_add_bool(oc, "xtal-present",
+                                   am13e_get_xtal_present,
+                                   am13e_set_xtal_present);
+    object_class_property_set_description(oc, "xtal-present",
+        "Provide a virtual crystal fixture; default off, only XTAL clock");
 }
+static void am13e_finalize(Object *obj)
+{
+    AM13EMachineState *s = AM13E_MACHINE(obj);
+
+    if (s->xtal_timer) {
+        timer_free(s->xtal_timer);
+        s->xtal_timer = NULL;
+    }
+}
+
 static const TypeInfo am13e_info = {
     .name = TYPE_AM13E_MACHINE,
     .parent = TYPE_MACHINE,
     .instance_size = sizeof(AM13EMachineState),
+    .instance_finalize = am13e_finalize,
     .class_init = am13e_class_init,
 };
 static void am13e_register(void)

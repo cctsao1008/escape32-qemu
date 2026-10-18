@@ -141,6 +141,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--qemu", type=Path, required=True)
     parser.add_argument("--elf", type=Path, required=True)
+    parser.add_argument("--xtal-present", action="store_true",
+                        help="Opt in to G2g virtual 25MHz XTAL fixture")
     parser.add_argument("--startup-steps", type=int, default=1,
                         help="Bounded CPU single-step trace; 1 is the original G1 check")
     args = parser.parse_args()
@@ -153,7 +155,10 @@ def main():
     with tempfile.TemporaryDirectory(prefix="am13e-g1-") as tmp:
         socket_path = os.path.join(tmp, "gdb.sock")
         cmd = [
-            str(qemu), "-M", "am13e23019", "-kernel", str(elf),
+            str(qemu), "-M",
+            "am13e23019,xtal-present=" +
+            ("on" if args.xtal_present else "off"),
+            "-kernel", str(elf),
             "-display", "none", "-monitor", "none", "-serial", "none",
             "-S",
             "-chardev", f"socket,path={socket_path},server=on,wait=off,id=gdb0",
