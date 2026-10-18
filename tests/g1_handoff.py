@@ -70,6 +70,12 @@ class RSP:
             raise RuntimeError(f"Cannot read CPU memory 0x{address:08x}: {raw}")
         return struct.unpack("<I", bytes.fromhex(raw))[0]
 
+    def mem16(self, address):
+        raw = self.command(f"m{address:x},2")
+        if len(raw) != 4:
+            raise RuntimeError(f"Cannot read Thumb opcode 0x{address:08x}: {raw}")
+        return struct.unpack("<H", bytes.fromhex(raw))[0]
+
 
 def wait_for_socket(path, process, timeout=15):
     end = time.monotonic() + timeout
@@ -84,6 +90,58 @@ def wait_for_socket(path, process, timeout=15):
             conn.close()
             time.sleep(0.05)
     raise TimeoutError(f"QEMU GDB socket did not appear: {path}")
+
+
+
+# Source: TI SDK dl_common.c, GCC cycle-delay loop in this exact Rel17.3 ELF.
+# The diagnostic verifies the NOP/BHS opcodes before accelerating the HOST
+# trace. QEMU must still execute all CPU instructions until actual return.
+SDK_DELAY_LOOP = (0x0000C6F6, 0x0000C6F8, 0x0000C6FA)
+
+
+def fast_forward_sdk_delay(rsp, pc, hardfault_pc):
+    """Execute a verified delay via GDB continue-to-LR, without skipping CPU."""
+    if pc not in SDK_DELAY_LOOP:
+        return None
+    nop = rsp.mem16(SDK_DELAY_LOOP[1])
+    branch = rsp.mem16(SDK_DELAY_LOOP[2])
+    if (nop, branch) != (0xBF00, 0xD2FC):
+        raise RuntimeError(
+            f"SDK delay loop opcode mismatch: NOP=0x{nop:04x} "
+            f"BHS=0x{branch:04x}; fast-forward rejected")
+    ret = rsp.reg(14) & ~1
+    if not (APP_BASE <= ret < 0x80000) or ret in SDK_DELAY_LOOP:
+        raise RuntimeError(f"Unexpected SDK delay LR=0x{ret:08x}")
+    breakpoints = tuple(dict.fromkeys((ret, hardfault_pc)))
+    installed = []
+    try:
+        for address in breakpoints:
+            reply = rsp.command(f"Z0,{address:x},2")
+            if reply != "OK":
+                raise RuntimeError(f"Cannot install GDB breakpoint at "
+                                   f"0x{address:08x}: {reply}")
+            installed.append(address)
+        try:
+            stop = rsp.command("c")
+        except socket.timeout as exc:
+            raise TimeoutError("SDK delay did not return within GDB timeout; "
+                               "no success inferred") from exc
+    finally:
+        for address in reversed(installed):
+            reply = rsp.command(f"z0,{address:x},2")
+            if reply != "OK":
+                raise RuntimeError(f"Failed to remove GDB breakpoint at "
+                                   f"0x{address:08x}: {reply}")
+    if not stop.startswith(("S05", "T05")):
+        raise RuntimeError(f"Unexpected GDB stop during SDK delay: {stop}")
+    observed = rsp.reg(15)
+    if observed not in breakpoints:
+        raise RuntimeError(f"SDK delay stopped at unknown 0x{observed:08x}, "
+                           f"not return=0x{ret:08x} or fault")
+    print(f"G1_DELAY_CONTINUE loop=0x{SDK_DELAY_LOOP[0]:08x} "
+          f"return=0x{ret:08x} stop=0x{observed:08x} "
+          "GUEST_INSTRUCTIONS_EXECUTED")
+    return observed
 
 
 def print_fault_snapshot(rsp):
@@ -152,6 +210,8 @@ def main():
                         help="Explicit 8-byte little-endian Factory PLL pair (no default)")
     parser.add_argument("--timed-steps", action="store_true",
                         help="Use QEMU 6.2 icount shift=10 and enable GDB timer steps (diagnostic)")
+    parser.add_argument("--fast-delay-loops", action="store_true",
+                        help="GDB continue-to-return for verified SDK cycle delay")
     parser.add_argument("--startup-steps", type=int, default=1,
                         help="Bounded CPU single-step trace; 1 is the original G1 check")
     args = parser.parse_args()
@@ -159,6 +219,8 @@ def main():
         parser.error("--startup-steps must be between 1 and 32768")
     if args.timed_steps and not (args.xtal_present or args.esc_sim):
         parser.error("--timed-steps requires --xtal-present or --esc-sim")
+    if args.fast_delay_loops and not (args.esc_sim and args.timed_steps):
+        parser.error("--fast-delay-loops requires --esc-sim --timed-steps")
     qemu, elf = args.qemu.resolve(), args.elf.resolve()
     for file in (qemu, elf):
         if not file.is_file():
@@ -253,6 +315,7 @@ def main():
                     hot = Counter((pc, new_pc))
                     current = new_pc
                     completed = 1
+                    fast_delays = 0
                     reason = "step-limit"
                     if current == hardfault_pc:
                         reason = "hardfault-vector"
@@ -264,6 +327,13 @@ def main():
                             if response[:3] not in ("S05", "T05"):
                                 raise RuntimeError(f"Guest stopped unexpectedly: {response}")
                             current = rsp.reg(15)
+                            if args.fast_delay_loops and current in SDK_DELAY_LOOP:
+                                # Continue actually runs the busywait in QEMU;
+                                # this iteration counts one host GDB stop,
+                                # not its many guest instructions.
+                                current = fast_forward_sdk_delay(
+                                    rsp, current, hardfault_pc)
+                                fast_delays += 1
                             hot[current] += 1
                             history.append(current)
                             completed = i
@@ -276,7 +346,11 @@ def main():
                                    for address, count in hot.most_common(6))
                     recent = " ".join(f"0x{address:08x}" for address in history)
                     print(f"G1_TRACE_SUMMARY steps={completed} reason={reason} "
-                          f"unique_pcs={len(hot)} current_pc=0x{current:08x}")
+                          f"unique_pcs={len(hot)} current_pc=0x{current:08x} "
+                          f"delay_continue_count={fast_delays}")
+                    if fast_delays:
+                        print("G1_TRACE_COUNT_NOTE steps=GDB_OBSERVATIONS "
+                              "not all guest instructions after continue")
                     print(f"G1_TRACE_HOT_PCS {top}")
                     print(f"G1_TRACE_RECENT_PCS {recent}")
                     if reason == "hardfault-vector":

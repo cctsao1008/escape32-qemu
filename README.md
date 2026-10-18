@@ -530,3 +530,26 @@ external Python motor plant must eventually drive these
 channels dynamically; the ADC sequencer conversion interface
 and NVIC timing remain guest-firmware-owned. Strict mode
 retains its fail-closed ADC data-path behavior.
+
+## G1 fast delay trace (full guest execution)
+
+After G4b QTest passed, the unchanged Rel17.3 ELF reached
+`0xC6F6/0xC6F8/0xC6FA`, the TI SDK `DL_Common_delayCycles`
+`SUBS; NOP; BHS` loop. `analog_sampling_backend.c` requests
+`mclk_hz/2000` delay cycles for ADC startup (500µs at 200MHz).
+The earlier 32768-step GDB budget ended mid-delay, **not a HardFault**.
+
+The opt-in diagnostic `--esc-sim --timed-steps --fast-delay-loops`
+verifies the actual Thumb NOP/BHS encodings, sets temporary GDB
+breakpoints at LR's return PC and HardFault vector, sends GDB
+`continue`, and removes the breakpoints after stop. **QEMU still
+executes all guest instructions and clock events.** Only the RSP
+round trips of the known busy-loop are avoided. Unexpected opcodes,
+timeouts, wrong stop PC, or unsupported breakpoints fail closed.
+The hardcoded PC is specific to this exact ELF, not portable to
+arbitrary rebuilt images.
+
+With accelerated observation, trace `steps` counts host GDB
+observations, **not all executed guest instructions**. The existing
+`icount shift=10` is diagnostic virtual time only, not physical
+Cortex-M33 cycle timing.
