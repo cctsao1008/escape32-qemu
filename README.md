@@ -169,3 +169,28 @@ reserved writes, and confirms no ready/status changes.
 **This is not Clock State Machine acceptance.** G2f still needs
 `HFCLKCLKCFG` startup-time/monitor controls and deterministic QEMU
 virtual-time transitions. No hardware and no firmware changes.
+
+## G2f: HFCLKCLKCFG Configuration Registers Only
+
+After G2e the guest enters the TI clock setup routine and faults at
+`0x400B0110`, with `stacked_PC=0x0000927e`. This is
+`SYSCTL.HFCLKCLKCFG` offset `0x1110` as defined in SDK
+`hw_sysctl.h`, TRM SPRUJF2B §3.14.2.15.
+
+The reset pattern is `1XXXXX00h`. The model explicitly sets
+`HFCLKFLTCHK[28]=1` and `XTALTIME[7:0]=0`, using zero for
+unknown/reserved bits (not claiming actual silicon readback).
+It supports stateful read/write RMW on **only** those two documented
+fields. A request to change any other field returns `MEMTX_ERROR`
+and does not change the register.
+
+`tests/g2_hfclkcfg.py` checks reset `0x10000000`, programs
+`XTALTIME=156` (~9.984ms nominal), changes the monitor control,
+rejects a reserved-bit write, and proves that `CLKSTATUS` has not
+been incorrectly changed to GOOD. G2f deliberately does **not**
+simulate oscillator startup time, monitor success, or PLL readiness.
+
+**Next architecture step:** implement timed HFCLK state transition
+using QEMU virtual-time clocks, conditional on XTAL enable/source,
+monitor setup, and elapsed startup interval. Avoid host sleep
+or a fixed GOOD-bit response.
