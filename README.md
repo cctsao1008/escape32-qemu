@@ -443,3 +443,33 @@ external nFAULT deassertion, PA26 DShot edges, MCPWM4
 waveforms, or IRQ routing. These are separate functional
 simulation components to add next. This pin-configuration
 model is prerequisite, not motor SITL acceptance.
+
+## G3c: ESC-SIM GPIO bootstrap as a single compatibility batch
+
+The first BusFault after G3b was `GPIO0.CPU_INT.IMASK` at
+`0x400F1028`, proving that the original firmware reached its
+PA22 nFAULT IRQ configuration. Do not iterate one unrelated GPIO
+register at a time.
+
+In opt-in `esc-sim=on` only, all three documented GPIO interrupt
+blocks (`CPU_INT`, `GEN_EVENT0`, `GEN_EVENT1`) support IMASK,
+RIS, MIS, IIDX, ISET, and ICLR software-visible state; with no
+external event source, RIS/MIS default to zero. This is register
+semantics and software-set flags, not completed NVIC GPIO IRQ
+delivery. All twelve SDK-defined ancillary GPIO configuration
+registers (clock override, polarity, filtering, wake, DMA mask,
+subscriber, etc.) have 32-bit shadow state. DIN/DOUT nibble aliases
+are available as well. Unknown GPIO addresses are **not**
+blanket-mapped; other motor-critical peripherals are untouched.
+
+When PA22's PINCM is `GPIO + PC + INENA`, GPIO0.DIN bit22
+is **HIGH by default (nFAULT deasserted)**. For a fixed initial
+fault level, use `-machine ...,esc-sim=on,esc-sim-nfault-asserted=on`:
+the digital input becomes LOW. This is an initial-level fixture,
+not full edge detection or fault-trip event injection. PA26 DShot
+does not receive a fictitious signal. GPIO power keys and
+Strict Mode's default fail-closed policy are retained.
+
+Next objective: reach the unchanged Rel17 core initialization,
+then implement TIMG4/DMA capture and MCPWM/BEMF/ADC interfaces
+rather than expanding low-value GPIO emulation further.
