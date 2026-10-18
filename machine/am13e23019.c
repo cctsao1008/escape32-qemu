@@ -144,6 +144,30 @@ OBJECT_DECLARE_SIMPLE_TYPE(AM13EMachineState, AM13E_MACHINE)
 #define AM13E_GPIO_DOESET 0x12d0U
 #define AM13E_GPIO_DOECLR 0x12e0U
 #define AM13E_GPIO_DIN 0x1380U
+/* AM13E DriverLib GPRCM front-end is identical on ADC0/1/2
+ * and TIMG4/12, irrespective of later ADC/timer datapath models.
+ * The +0x800 aperture is only 0x20 bytes; the rest of each MMIO
+ * block remains unimplemented, preventing fake ADC samples/captures.
+ */
+#define AM13E_SIM_GPRCM_COUNT 5U
+#define AM13E_SIM_GPRCM_OFFSET 0x0800U
+#define AM13E_SIM_GPRCM_SIZE 0x20U
+#define AM13E_SIM_GPRCM_PWREN 0x000U
+#define AM13E_SIM_GPRCM_RSTCTL 0x004U
+#define AM13E_SIM_GPRCM_STAT 0x014U
+#define AM13E_SIM_GPRCM_RESET_STKY (1U << 16)
+#define AM13E_SIM_GPRCM_PWREN_KEY 0x26000000U
+#define AM13E_SIM_GPRCM_RESET_KEY 0xb1000000U
+typedef struct AM13EPeripheralGPRCM {
+    MemoryRegion mmio;
+    uint32_t base;
+    const char *name;
+    bool powered;
+    bool reset_sticky;
+    bool unmodeled_reported;
+    bool esc_sim;
+} AM13EPeripheralGPRCM;
+
 #define AM13E_GPIO_PWREN_KEY 0x26000000U
 /* GPIO CPU_INT / GEN_EVENT0 / GEN_EVENT1, from TI hw_gpio.h.
  * ESC-SIM alone supports IRQ register readback and software ISET/ICLR.
@@ -217,6 +241,7 @@ struct AM13EMachineState {
     uint32_t factory_pll0;
     uint32_t factory_pll1;
     bool factory_unmodeled_reported;
+    AM13EPeripheralGPRCM peripheral_gprcm[AM13E_SIM_GPRCM_COUNT];
     AM13EGpioPort gpio[AM13E_GPIO_COUNT];
     MemoryRegion fri;
     uint32_t fri_frdcntl;
@@ -753,6 +778,99 @@ static void am13e_set_sim_nfault_asserted(Object *obj, bool value,
     AM13E_MACHINE(obj)->esc_sim_nfault_asserted = value;
 }
 
+/*
+ * G4a: shared GPRCM setup for ADC0/ADC1/ADC2, TIMG4, TIMG12.
+ * These are the exact documented peripheral address bases; no
+ * approximation of ADC conversion, Timer counter, DMA, IRQ, or PWM.
+ * The strict machine remains fail-closed unless esc-sim=on.
+ */
+static void am13e_gprcm_reset(AM13EPeripheralGPRCM *g)
+{
+    g->powered = false;
+    g->reset_sticky = false;
+    g->unmodeled_reported = false;
+}
+
+static MemTxResult am13e_gprcm_unmodeled(AM13EPeripheralGPRCM *g,
+                                         hwaddr offset, bool write,
+                                         unsigned size)
+{
+    if (!g->unmodeled_reported) {
+        error_report("G4_UNMODELED_GPRCM %s %s 0x%08" PRIx64
+                     " size=%u esc_sim=%u (transaction rejected)",
+                     g->name, write ? "write" : "read",
+                     (uint64_t)(g->base + AM13E_SIM_GPRCM_OFFSET + offset),
+                     size, g->esc_sim ? 1U : 0U);
+        g->unmodeled_reported = true;
+    }
+    return MEMTX_ERROR;
+}
+
+static MemTxResult am13e_gprcm_read(void *opaque, hwaddr offset,
+                                   uint64_t *value, unsigned size,
+                                   MemTxAttrs attrs)
+{
+    AM13EPeripheralGPRCM *g = opaque;
+    if (!g->esc_sim || size != 4) {
+        return am13e_gprcm_unmodeled(g, offset, false, size);
+    }
+    switch (offset) {
+    case AM13E_SIM_GPRCM_PWREN:
+        /* Password is write-only; ENABLE readback is bit 0. */
+        *value = g->powered ? 1U : 0U;
+        return MEMTX_OK;
+    case AM13E_SIM_GPRCM_STAT:
+        *value = g->reset_sticky ? AM13E_SIM_GPRCM_RESET_STKY : 0U;
+        return MEMTX_OK;
+    default:
+        return am13e_gprcm_unmodeled(g, offset, false, size);
+    }
+}
+
+static MemTxResult am13e_gprcm_write(void *opaque, hwaddr offset,
+                                    uint64_t value, unsigned size,
+                                    MemTxAttrs attrs)
+{
+    AM13EPeripheralGPRCM *g = opaque;
+    uint32_t data = (uint32_t)value;
+
+    if (!g->esc_sim || size != 4) {
+        return am13e_gprcm_unmodeled(g, offset, true, size);
+    }
+    switch (offset) {
+    case AM13E_SIM_GPRCM_PWREN:
+        if ((data & 0xff000000U) != AM13E_SIM_GPRCM_PWREN_KEY ||
+            (data & 0x00fffffeU)) {
+            return am13e_gprcm_unmodeled(g, offset, true, size);
+        }
+        g->powered = (data & 1U) != 0U;
+        return MEMTX_OK;
+    case AM13E_SIM_GPRCM_RSTCTL:
+        if ((data & 0xff000000U) != AM13E_SIM_GPRCM_RESET_KEY ||
+            (data & 0x00fffffcU)) {
+            return am13e_gprcm_unmodeled(g, offset, true, size);
+        }
+        if (data & 1U) {
+            g->reset_sticky = true;
+        } else if (data & 2U) {
+            g->reset_sticky = false;
+        }
+        return MEMTX_OK;
+    default:
+        return am13e_gprcm_unmodeled(g, offset, true, size);
+    }
+}
+
+static const MemoryRegionOps am13e_gprcm_ops = {
+    .read_with_attrs = am13e_gprcm_read,
+    .write_with_attrs = am13e_gprcm_write,
+    .endianness = DEVICE_LITTLE_ENDIAN,
+    .valid = {
+        .min_access_size = 4,
+        .max_access_size = 4,
+    },
+};
+
 /* G3b: IOMUX PINCM digital-control state, not an external pin model.
  * All 108 logical pin indices follow SDK hw_iomux.h.  This is
  * deliberately not a shortcut to DShot edges, PWM power, BEMF or faults.
@@ -1177,6 +1295,9 @@ static void am13e_handoff_reset(void *opaque)
     s->fri_frdcntl = AM13E_FRI_FRDCNTL_RESET;
     s->fri_unmodeled_reported = false;
     s->factory_unmodeled_reported = false;
+    for (unsigned i = 0; i < AM13E_SIM_GPRCM_COUNT; ++i) {
+        am13e_gprcm_reset(&s->peripheral_gprcm[i]);
+    }
     for (unsigned i = 0; i < AM13E_GPIO_COUNT; ++i) {
         am13e_gpio_reset_port(&s->gpio[i]);
     }
@@ -1239,6 +1360,35 @@ static void am13e_init(MachineState *machine)
                           "am13e-fri-g2b", AM13E_FRI_SIZE);
     memory_region_add_subregion(sysmem, AM13E_FRI_BASE, &s->fri);
 
+    /*
+     * Shared Power/Reset group. Scope is exact ADC0-2 and TIMG4/12
+     * GPRCM windows, not an artificial success read for the rest of
+     * their MMIO ranges. Layout comes from TI hw_memmap.h, hw_adc.h
+     * and hw_gptimer.h (GPRCM offset +0x800).
+     */
+    static const struct {
+        uint32_t base;
+        const char *name;
+    } gprcm_devices[AM13E_SIM_GPRCM_COUNT] = {
+        { 0x40000000U, "ADC0" },
+        { 0x40002000U, "ADC1" },
+        { 0x40004000U, "ADC2" },
+        { 0x40180000U, "TIMG4" },
+        { 0x40188000U, "TIMG12" },
+    };
+    for (unsigned i = 0; i < AM13E_SIM_GPRCM_COUNT; ++i) {
+        AM13EPeripheralGPRCM *g = &s->peripheral_gprcm[i];
+        g->base = gprcm_devices[i].base;
+        g->name = gprcm_devices[i].name;
+        g->esc_sim = s->esc_sim;
+        am13e_gprcm_reset(g);
+        memory_region_init_io(&g->mmio, NULL, &am13e_gprcm_ops, g,
+                              g->name, AM13E_SIM_GPRCM_SIZE);
+        memory_region_add_subregion(sysmem,
+                                    g->base + AM13E_SIM_GPRCM_OFFSET,
+                                    &g->mmio);
+    }
+
     /* G3b: 108 TI PINCM words for GPIO, DShot and PWM pad routing. */
     memset(s->pincm, 0, sizeof(s->pincm));
     s->iomux_unmodeled_reported = false;
@@ -1289,7 +1439,7 @@ static void am13e_init(MachineState *machine)
 static void am13e_class_init(ObjectClass *oc, void *data)
 {
     MachineClass *mc = MACHINE_CLASS(oc);
-        mc->desc = "AM13E23019 ESC-SIM GPIO bootstrap and pin routing G3c";
+        mc->desc = "AM13E23019 ESC-SIM ADC+TIMG shared reset/power and GPIO";
     mc->init = am13e_init;
     mc->default_cpu_type = ARM_CPU_TYPE_NAME("cortex-m33-am13e");
     mc->default_ram_size = AM13E_SRAM_SIZE;

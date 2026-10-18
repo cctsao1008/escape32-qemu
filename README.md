@@ -473,3 +473,25 @@ Strict Mode's default fail-closed policy are retained.
 Next objective: reach the unchanged Rel17 core initialization,
 then implement TIMG4/DMA capture and MCPWM/BEMF/ADC interfaces
 rather than expanding low-value GPIO emulation further.
+
+## G4a: ADC/TIMG peripheral GPRCM as one shared ESC-SIM bootstrap
+
+The original ELF progressed through GPIO and IOMUX setup, then
+performed `DL_ADC_reset(ADC0)` with `R0=0x40000000`,
+`R3=0xb1000003`, faulting at `BFAR=0x40000804`.
+TI SDK `hw_adc.h` and `hw_gptimer.h` define GPRCM
+`PWREN(+0x800)`, `RSTCTL(+0x804)`, `STAT(+0x814)`
+with the same unlock passwords for ADC0, ADC1, ADC2,
+TIMG4 (DShot capture) and TIMG12 (commutation timer).
+
+G4a provides **one shared setup model** for all five modules:
+reset sticky, reset-sticky clear, password-checked power on/off,
+reset/enable readback. This is enabled only by `esc-sim=on`;
+strict runs keep returning `MEMTX_ERROR`. All other ADC/TIMG
+offsets remain unassigned: **there are no fictitious ADC samples,
+timer counters, capture/DMA edges, or timer interrupts**.
+
+`tests/g4_peripheral_gprcm.py` tests all five modules,
+invalid passwords, reset status/clear, independent power and the
+fail-closed default. Next step should implement actual ESC
+data/control paths, not more single-register GPRCM patches.
