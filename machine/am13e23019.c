@@ -173,6 +173,14 @@ OBJECT_DECLARE_SIMPLE_TYPE(AM13EMachineState, AM13E_MACHINE)
  * Only dedicated peripheral GPRCM +0x800 belongs to the
  * existing shared GPRCM model, not to this register window.
  */
+/* Dedicated G7b test-only input stimulus: NOT AM13E silicon MMIO.
+ * Esc-sim explicitly opts in. Guest-visible only to test harness.
+ */
+#define AM13E_SIM_PA26_INJECT_BASE 0x5ffe0000U
+#define AM13E_SIM_PA26_INJECT_SIZE 0x10U
+#define AM13E_SIM_PA26_PIN (1U << 26)
+#define AM13E_SIM_PA26_GEN_EVENT1_CCU0 (1U << 8)
+#define AM13E_SIM_PA26_CAPTURE_CCCTL (0x00020003U)
 #define AM13E_DMA0_BASE 0x40020000U
 #define AM13E_DMA0_WINDOW 0x300U
 #define AM13E_DMA0_CHANNELS 12U
@@ -312,6 +320,8 @@ typedef struct AM13EGpioPort {
     bool esc_sim;
     bool nfault_asserted;
     const uint32_t *nfault_pincm;
+    const uint32_t *pa26_pincm;
+    const uint32_t *pa26_level;
     uint32_t sim_irq_mask[AM13E_GPIO_SIM_IRQ_GROUPS];
     uint32_t sim_irq_raw[AM13E_GPIO_SIM_IRQ_GROUPS];
     uint32_t sim_config[AM13E_GPIO_SIZE / 4U];
@@ -327,6 +337,12 @@ struct AM13EMachineState {
     AM13ESimWWDT wwdt;
     AM13ESimTimer gtimer[AM13E_SIM_TIMER_COUNT];
     AM13EDMA dma0;
+    MemoryRegion sim_pa26_inject;
+    uint32_t sim_pa26_level;
+    uint32_t sim_pa26_transitions;
+    uint32_t sim_pa26_captures;
+    uint32_t sim_pa26_dma_beats;
+    bool sim_pa26_bad_reported;
     MemoryRegion iomux;
     uint32_t pincm[AM13E_IOMUX_PIN_COUNT];
     bool iomux_unmodeled_reported;
@@ -1032,6 +1048,116 @@ static MemTxResult am13e_dma0_write(void *opaque, hwaddr offset,
 static const MemoryRegionOps am13e_dma0_ops = {
     .read_with_attrs = am13e_dma0_read,
     .write_with_attrs = am13e_dma0_write,
+    .endianness = DEVICE_LITTLE_ENDIAN,
+    .valid = { .min_access_size = 4, .max_access_size = 4 },
+};
+
+
+/* Test-only PA26 signal injection. Write logical levels 0/1 only.
+ * Capture is conditional on the guest's pinmux, input enable,
+ * TIMG4 clock/running/capture mode. DMA beat is further gated by
+ * GEN_EVENT1 CCU0 mask and DMA external trigger #34.
+ * No QEMU-forged decoder callback or firmware buffer population.
+ */
+static MemTxResult am13e_sim_pa26_invalid(AM13EMachineState *s,
+                                           hwaddr off, bool write,
+                                           unsigned size)
+{
+    if (!s->sim_pa26_bad_reported) {
+        error_report("G7B_INVALID_PA26_INJECTION %s 0x%08" PRIx64
+                     " width=%u esc_sim=%u",
+                     write ? "write" : "read",
+                     (uint64_t)(AM13E_SIM_PA26_INJECT_BASE + off),
+                     size, s->esc_sim ? 1U : 0U);
+        s->sim_pa26_bad_reported = true;
+    }
+    return MEMTX_ERROR;
+}
+
+static MemTxResult am13e_sim_pa26_read(void *opaque, hwaddr off,
+                                       uint64_t *val, unsigned size,
+                                       MemTxAttrs attrs)
+{
+    AM13EMachineState *s = opaque;
+    if (!s->esc_sim || size != 4) {
+        return am13e_sim_pa26_invalid(s, off, false, size);
+    }
+    switch (off) {
+    case 0U: *val = s->sim_pa26_level; return MEMTX_OK;
+    case 4U: *val = s->sim_pa26_transitions; return MEMTX_OK;
+    case 8U: *val = s->sim_pa26_captures; return MEMTX_OK;
+    case 12U: *val = s->sim_pa26_dma_beats; return MEMTX_OK;
+    default: return am13e_sim_pa26_invalid(s, off, false, size);
+    }
+}
+
+static MemTxResult am13e_sim_pa26_write(void *opaque, hwaddr off,
+                                        uint64_t val, unsigned size,
+                                        MemTxAttrs attrs)
+{
+    AM13EMachineState *s = opaque;
+    AM13ESimTimer *t = &s->gtimer[0]; /* TIMG4 */
+    AM13EDMA *d = &s->dma0;
+    const unsigned ch = AM13E_DMA0_CH2;
+    uint32_t prior, cfg;
+    bool rising;
+    if (!s->esc_sim || size != 4 || off != 0U || val > 1U) {
+        return am13e_sim_pa26_invalid(s, off, true, size);
+    }
+
+    prior = s->sim_pa26_level;
+    s->sim_pa26_level = (uint32_t)val;
+    if (prior == s->sim_pa26_level) {
+        return MEMTX_OK;
+    }
+    ++s->sim_pa26_transitions;
+
+    cfg = s->pincm[26U];
+    rising = s->sim_pa26_level != 0U;
+    if (!s->gpio[0].powered ||
+        (s->gpio[0].doe & AM13E_SIM_PA26_PIN) ||
+        /* TI hw_pinmap.h: PA26_TIMG4_0_CCP0 = PF3. */
+        (cfg & 0x000400bfU) != 0x00040083U ||
+        !t->running || !am13e_timer_hz(t) ||
+        (t->reg[0x804U / 4U] & 0x30U) != 0x20U) {
+        return MEMTX_OK;
+    }
+
+    cfg = t->reg[0x830U / 4U]; /* CCCTL_01[0] */
+    if (!(cfg & 0x00020000U)) { /* CC mode must be CAPTURE */
+        return MEMTX_OK;
+    }
+    cfg &= 7U; /* CCOND: RISE=1, FALL=2, BOTH=3 */
+    if (!(cfg == 3U || (rising && cfg == 1U) ||
+          (!rising && cfg == 2U))) {
+        return MEMTX_OK;
+    }
+
+    t->reg[0x810U / 4U] = am13e_timer_count(t) & 0xffffU;
+    ++s->sim_pa26_captures;
+    t->irq_raw[2] |= AM13E_SIM_PA26_GEN_EVENT1_CCU0;
+    if (!(t->irq_mask[2] & AM13E_SIM_PA26_GEN_EVENT1_CCU0)) {
+        return MEMTX_OK;
+    }
+    /* TI DMA trigger 34 is TIMG4 GEN_EVENT1.
+     * External trigger type bit7=0. The software-request bit
+     * is not set; this is the sole hardware-source DMA request.
+     */
+    if ((d->trigger[ch] & 0xffU) != 34U ||
+        !(d->ctl[ch] & AM13E_DMA0_ENABLED) || !d->sz[ch]) {
+        return MEMTX_OK;
+    }
+    uint32_t remaining = d->sz[ch];
+    am13e_dma0_ch2_beat(d);
+    if (d->sz[ch] < remaining) {
+        ++s->sim_pa26_dma_beats;
+    }
+    return MEMTX_OK;
+}
+
+static const MemoryRegionOps am13e_sim_pa26_ops = {
+    .read_with_attrs = am13e_sim_pa26_read,
+    .write_with_attrs = am13e_sim_pa26_write,
     .endianness = DEVICE_LITTLE_ENDIAN,
     .valid = { .min_access_size = 4, .max_access_size = 4 },
 };
@@ -2128,6 +2254,13 @@ static uint32_t am13e_gpio_input_value(AM13EGpioPort *g)
             input |= AM13E_GPIO_PA22_NFAULT_BIT;
         }
     }
+    if (g->esc_sim && g->bank == 0U && g->pa26_level &&
+        g->pa26_pincm && g->powered &&
+        (*g->pa26_pincm & 0x00040080U) == 0x00040080U &&
+        !(g->doe & AM13E_SIM_PA26_PIN)) {
+        input = (input & ~AM13E_SIM_PA26_PIN) |
+                (*g->pa26_level ? AM13E_SIM_PA26_PIN : 0U);
+    }
     return input;
 }
 
@@ -2379,6 +2512,11 @@ static void am13e_handoff_reset(void *opaque)
     s->fri_frdcntl = AM13E_FRI_FRDCNTL_RESET;
     s->fri_unmodeled_reported = false;
     s->factory_unmodeled_reported = false;
+    s->sim_pa26_level = 0U;
+    s->sim_pa26_transitions = 0U;
+    s->sim_pa26_captures = 0U;
+    s->sim_pa26_dma_beats = 0U;
+    s->sim_pa26_bad_reported = false;
     am13e_dma0_reset(&s->dma0);
     am13e_sim_wwdt_reset(&s->wwdt);
     for (unsigned i = 0; i < AM13E_SIM_TIMER_COUNT; ++i) {
@@ -2496,6 +2634,21 @@ static void am13e_init(MachineState *machine)
                                 AM13E_SIM_WWDT_BASE + 0x1100U,
                                 &s->wwdt.ctrl_mmio);
 
+    /* Simulator-only PA26 input level port, absent from real silicon.
+     * Tests use explicit virtual-time edges and cannot write firmware
+     * RX buffers directly.
+     */
+    s->sim_pa26_level = 0U;
+    s->sim_pa26_transitions = 0U;
+    s->sim_pa26_captures = 0U;
+    s->sim_pa26_dma_beats = 0U;
+    s->sim_pa26_bad_reported = false;
+    memory_region_init_io(&s->sim_pa26_inject, NULL,
+                          &am13e_sim_pa26_ops, s, "am13e-pa26-fixture",
+                          AM13E_SIM_PA26_INJECT_SIZE);
+    memory_region_add_subregion(sysmem, AM13E_SIM_PA26_INJECT_BASE,
+                                &s->sim_pa26_inject);
+
     /* DMA0 register configuration and real software-requested CH2 beats.
      * Hardware source 34 awaits explicit TIMG4 capture edge injection.
      */
@@ -2580,6 +2733,8 @@ static void am13e_init(MachineState *machine)
         g->esc_sim = s->esc_sim;
         g->nfault_asserted = s->esc_sim_nfault_asserted;
         g->nfault_pincm = i == 0U ? &s->pincm[22] : NULL;
+        g->pa26_pincm = i == 0U ? &s->pincm[26] : NULL;
+        g->pa26_level = i == 0U ? &s->sim_pa26_level : NULL;
         am13e_gpio_reset_port(g);
         memory_region_init_io(&g->mmio, NULL, &am13e_gpio_ops, g,
                               gpio_names[i], AM13E_GPIO_SIZE);
@@ -2623,7 +2778,7 @@ static void am13e_init(MachineState *machine)
 static void am13e_class_init(ObjectClass *oc, void *data)
 {
     MachineClass *mc = MACHINE_CLASS(oc);
-        mc->desc = "AM13E23019 ESC-SIM DMA0 CH2 transfer and TIMG4/TIMG12";
+        mc->desc = "AM13E23019 ESC-SIM PA26 input capture into DMA0 CH2";
     mc->init = am13e_init;
     mc->default_cpu_type = ARM_CPU_TYPE_NAME("cortex-m33-am13e");
     mc->default_ram_size = AM13E_SRAM_SIZE;

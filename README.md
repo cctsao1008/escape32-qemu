@@ -688,3 +688,48 @@ configuration-only. Strict mode continues rejecting DMA MMIO.
 trigger with no spontaneous capture, real four-word SRAM copying
 on explicit software requests, address/count progression,
 half-size/complete interrupt flags, error status and strict mode.
+
+## G7b: explicit PA26 edge input → TIMG4 CC0 → DMA0 CH2 → guest SRAM
+
+G7b introduces a **test-only, non-silicon address**
+`0x5FFE0000` in `-machine am13e23019,esc-sim=on`.
+Writing 32-bit `0` or `1` drives the external logical PA26
+pin level. Reads at +0/+4/+8/+12 report current level,
+accepted transitions, hardware captures and DMA beats. The
+test address is **NOT a TI AM13E peripheral and must not be
+accessed by production ESCape32 firmware**; it exists only as
+a deterministic injection interface for simulator/test clients.
+Strict Mode rejects it.
+
+A level change becomes a hardware capture **only** when
+GPIO0 is powered, PA26 is an input with
+`IOMUX.PINCM[26]=0x00040083`
+(PF3 TIMG4 CCP0 + PC + INENA), TIMG4 is
+running at configured BUSCLK in UP mode, and CCCTL_01[0]
+is CAPTURE with matching edge condition. The captured 16-bit
+counter timestamp enters the actual TIMG4 CC_01[0] register
+at `0x40181810`; software reads see the same value.
+
+Only if TIMG4 GEN_EVENT1 has CCU0 enabled (bit8)
+and DMA0 CH2 is **enabled** with external trigger34,
+the existing G7 32-bit DMA transfer function reads that
+physical timer register and writes one actual word to the
+firmware-owned Guest SRAM destination. Source/destination
+address, DMASZ, early/complete interrupt status and IRQ40
+retain the same G7 semantics. The simulation does **not**
+call ESCape32 decoder functions, inject a completed packet,
+or feed WWDT.
+
+`tests/g7b_pa26_capture.py` covers missing IOMUX,
+missing GEN_EVENT1 mask, incorrect DMA trigger, 32-edge
+DShot600 waveform, SRAM timestamp timing, checksum and
+remaining length, no extra DMA transfers after completion,
+and strict-mode rejection. These are **hardware-path
+QTests, not yet proof the unmodified Firmware finished
+initialization or decoded a frame**. The next acceptance
+is to boot firmware until `initio()` is ready, then drive
+identical pin-level events during guest execution and
+observe its own decoder/WWDT/command-output state.
+
+No GUI board, physical pin, motor load or analog conversion
+is implied by this fixture.
