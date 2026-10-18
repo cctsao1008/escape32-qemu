@@ -143,11 +143,15 @@ def main():
     parser.add_argument("--elf", type=Path, required=True)
     parser.add_argument("--xtal-present", action="store_true",
                         help="Opt in to G2g virtual 25MHz XTAL fixture")
+    parser.add_argument("--timed-steps", action="store_true",
+                        help="Use QEMU icount shift=13 and enable GDB timer single-steps (diagnostic only)")
     parser.add_argument("--startup-steps", type=int, default=1,
                         help="Bounded CPU single-step trace; 1 is the original G1 check")
     args = parser.parse_args()
     if not 1 <= args.startup_steps <= 16384:
         parser.error("--startup-steps must be between 1 and 16384")
+    if args.timed_steps and not args.xtal_present:
+        parser.error("--timed-steps requires --xtal-present")
     qemu, elf = args.qemu.resolve(), args.elf.resolve()
     for file in (qemu, elf):
         if not file.is_file():
@@ -164,6 +168,10 @@ def main():
             "-chardev", f"socket,path={socket_path},server=on,wait=off,id=gdb0",
             "-gdb", "chardev:gdb0",
         ]
+        if args.timed_steps:
+            # 8192 virtual ns/instruction. Diagnostic acceleration,
+            # NOT the real AM13E 200MHz instruction/cycle rate.
+            cmd += ["-icount", "shift=13,sleep=off,align=off"]
         process = subprocess.Popen(cmd, stdout=subprocess.DEVNULL,
                                    stderr=subprocess.PIPE, text=True)
         try:
@@ -182,6 +190,21 @@ def main():
                 xml_probe = rsp.command("qXfer:features:read:target.xml:0,1")
                 if not xml_probe.startswith(("m<", "l<")):
                     raise RuntimeError(f"Unexpected target XML reply: {xml_probe!r}")
+                if args.timed_steps:
+                    # QEMU 6.2 GDB default SSTEP_NOTIMER=4 blocks clock
+                    # event callbacks during 's'. SSTEP_ENABLE=1 allows
+                    # the guest to see scheduled virtual XTAL readiness.
+                    bits = rsp.command("qqemu.sstepbits")
+                    if "ENABLE=1" not in bits or "NOTIMER=4" not in bits:
+                        raise RuntimeError(f"Unexpected QEMU sstep bits: {bits!r}")
+                    accepted = rsp.command("Qqemu.sstep:1")
+                    if accepted != "OK":
+                        raise RuntimeError(f"Cannot enable timer steps: {accepted!r}")
+                    active = rsp.command("qqemu.sstep")
+                    if active != "0x1":
+                        raise RuntimeError(f"Timer single-step mode not set: {active!r}")
+                    print("G1_TIMED_STEPS icount_shift=13 ns_per_insn=8192 "
+                          "qemu_sstep=0x1 DIAGNOSTIC_ONLY")
                 sp, pc, xpsr = rsp.reg(13), rsp.reg(15), rsp.reg(25)
                 vt = rsp.mem32(0xE000ED08)
                 pfr1 = rsp.mem32(0xE000ED44)

@@ -232,3 +232,26 @@ does **not** simulate oscillator-failure detection latency.
 The GDB trace supports optional `--xtal-present` (default off).
 Unlike QTest's `clock_step`, GDB single-step timing is not itself a
 deterministic virtual-time/cycle-accuracy test.
+
+### Timed GDB diagnostic stepping
+
+QEMU 6.2 defaults its GDB single-stepping flags to
+`SSTEP_ENABLE|SSTEP_NOIRQ|SSTEP_NOTIMER`. Thus the regular
+`--startup-steps` trace alone may never deliver a virtual
+clock timer. The optional `--timed-steps` probes
+`qqemu.sstepbits`, explicitly applies `Qqemu.sstep:1`
+to enable timers/IRQs, and starts QEMU with
+`-icount shift=13,sleep=off,align=off`.
+
+```sh
+python3 tests/g1_handoff.py \
+  --qemu .build/qemu-src/build/qemu-system-arm \
+  --elf ~/github/ESCape32/build-qemu-am13e/AM13E-rev17.3.elf \
+  --xtal-present --timed-steps --startup-steps 16384
+```
+
+At shift=13, each guest instruction is charged 8192 virtual
+nanoseconds; this **deliberately accelerates** simulated time and
+does **not** model 200MHz CPU cycles. Results show control-flow
+progress only. Use the G2g QTest clock_step cases for actual timer
+boundary validation.
