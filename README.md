@@ -101,3 +101,25 @@ the product FW has completed clock initialization or qualified 200MHz.
 
 Sources: TRM SPRUJF2B §13.5.6 & §13.7.2.1 and SDK
 `hw_memmap.h`, `hw_fri.h`, `dl_fri.c`.
+
+## G2c: SYSCTL MCLKCFG Divider-only Write Model
+
+The G1 extended trace reached `stacked_PC=0x00009146` with a precise
+BusFault at `0x400B0104` (SYSCTL.MCLKCFG), after completing the
+FRI `RWAIT=3` sequence. The next genuine firmware operation is
+`DL_SYSCTL_setMCLKDivider(DL_SYSCTL_MCLK_DIV_2_DIV_4)`.
+TI DriverLib performs a full-word read-modify-write on
+`MCLKCFG[26:24]`, mask `0x07000000`. Allowed encodings are
+`0,1,3,5,7`; the reset/firmware-selected divider is 7.
+
+The G2c model provides a **stateful read/write divider field**.
+All other MCLKCFG fields retain their prior values, including
+`USEHSCLK[16]`, which remains unsupported and returns MEMTX_ERROR
+if changed. `CLKSTATUS` remains the reset snapshot; no source-switch
+or fabricated PLL lock event. QTest verifies legal transitions,
+the reset status, and rejection of a source change.
+
+**G2c PASS is a divider-register semantic check only.** A subsequent
+HardFault is expected when the startup reaches its next unmodeled
+SYSCTL register. Evidence: AM13E230x TRM SPRUJF2B §3.14.2.12;
+TI SDK `dl_sysctl.h` / `hw_sysctl.h`; G1 fault trace.

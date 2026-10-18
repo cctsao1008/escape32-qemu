@@ -200,7 +200,7 @@ def main():
                 print("PASS_G1_APP_HANDOFF_AND_FIRST_INSTRUCTION")
                 print("NOTE: PRIMASK=1 is applied by board reset callback; "
                       "not independently read by this GDB test.")
-                print("NOTE: No SYSCTL/FRI, clock-ready or motor hardware modeled.")
+                print("NOTE: SYSCTL and FRI MMIO are partial G2 models; no PLL/XTAL ready or motor hardware modeled.")
                 if args.startup_steps > 1:
                     # The first instruction was already stepped above.
                     # Trace is diagnostic: instruction count is NOT evidence
