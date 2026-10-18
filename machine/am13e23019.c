@@ -41,7 +41,7 @@ static void am13e_init(MachineState *machine)
         error_report("am13e23019 requires 128KiB SRAM and cortex-m33");
         exit(EXIT_FAILURE);
     }
-    memory_region_init_rom(&s->flash, OBJECT(machine), "am13e-main-flash",
+    memory_region_init_rom(&s->flash, NULL, "am13e-main-flash",
                            AM13E_FLASH_SIZE, &error_fatal);
     memory_region_add_subregion(sysmem, 0x00000000, &s->flash);
 
@@ -49,7 +49,7 @@ static void am13e_init(MachineState *machine)
     memory_region_add_subregion(sysmem, 0x20000000, machine->ram);
 
     /* Bank3's 32KiB code alias MUST share physical bytes with SRAM. */
-    memory_region_init_alias(&s->bank3_alias, OBJECT(machine),
+    memory_region_init_alias(&s->bank3_alias, NULL,
                              "am13e-bank3-code-alias", machine->ram,
                              96 * KiB, 32 * KiB);
     memory_region_add_subregion(sysmem, 0x00c18000, &s->bank3_alias);
