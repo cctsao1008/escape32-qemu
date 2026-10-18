@@ -655,3 +655,36 @@ TIMG12 delayed one-shot zero interrupt/clear,
 peripheral isolation, reset, and default strict
 failure. This is timer/IRQ infrastructure, **not yet
 a functional DShot or motor control SITL PASS**.
+
+## G7 — DMA0 registers and real CH2 memory-beat transport
+
+After G6 timer initialization the unchanged ESCape32 ELF faults
+at `BFAR=0x40021220`, stacked PC `0x00008A86`.
+TI `hw_dma.h` identifies this as **DMA0.DMACHAN[2].DMACTL**.
+The original `command_capture.c` maps TIMG4 CCP0 capture
+to DMA0 Channel 2, trigger source **34**. BiDShot reuses
+the channel for reply output through GPIO DOUTTGL.
+
+G7 maps all 12 DMA channel control/source/destination/remaining-
+count and trigger-select registers, CPU_INT IIDX/IMASK/RIS/
+MIS/ISET/ICLR, priority and ancillary settings. All are
+software-readable. Channel 2 supports a real 32-bit single
+transfer per **explicit** DMA request, copying through QEMU's
+guest address space (not bypassing firmware SRAM), updating
+DMASA, DMADA, DMASZ, setting early threshold and complete
+interrupt flags, and driving NVIC IRQ40. An unsupported width/
+address generates DMA address-error status instead of silently
+succeeding.
+
+**No fake captures:** simply enabling Channel 2 with external
+trigger 34 does not move bytes, set flags or feed WWDT.
+A PA26 pin-edge input injection → TIMG4 CCP0 event → DMA trigger
+is the next G7b dependency. Until connected, this is genuine
+DMA transport infrastructure and firmware init readback,
+**not** DShot receive verification. Channel 0/1/3..11 are
+configuration-only. Strict mode continues rejecting DMA MMIO.
+
+`tests/g7_dma.py` checks all 12 configurations, external
+trigger with no spontaneous capture, real four-word SRAM copying
+on explicit software requests, address/count progression,
+half-size/complete interrupt flags, error status and strict mode.

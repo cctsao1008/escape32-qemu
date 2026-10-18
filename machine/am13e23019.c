@@ -173,6 +173,12 @@ OBJECT_DECLARE_SIMPLE_TYPE(AM13EMachineState, AM13E_MACHINE)
  * Only dedicated peripheral GPRCM +0x800 belongs to the
  * existing shared GPRCM model, not to this register window.
  */
+#define AM13E_DMA0_BASE 0x40020000U
+#define AM13E_DMA0_WINDOW 0x300U
+#define AM13E_DMA0_CHANNELS 12U
+#define AM13E_DMA0_CH2 2U
+#define AM13E_DMA0_CH2_ADDRERR (1U << 24)
+#define AM13E_DMA0_ENABLED (1U << 1)
 #define AM13E_SIM_TIMER_COUNT 2U
 #define AM13E_SIM_TIMER_REG_START 0x1000U
 #define AM13E_SIM_TIMER_REG_SIZE 0x900U
@@ -225,6 +231,20 @@ struct AM13ESimADC {
     uint32_t interrupt_overflow;
     bool unmodeled_reported;
 };
+
+typedef struct AM13EDMA {
+    MemoryRegion mmio;
+    qemu_irq irq;
+    bool esc_sim;
+    bool bad_reported;
+    uint32_t mask, raw, debugctl, eventmode, priority;
+    uint32_t trigger[AM13E_DMA0_CHANNELS];
+    uint32_t ctl[AM13E_DMA0_CHANNELS];
+    uint32_t src[AM13E_DMA0_CHANNELS];
+    uint32_t dst[AM13E_DMA0_CHANNELS];
+    uint32_t sz[AM13E_DMA0_CHANNELS];
+    uint32_t initial_sz[AM13E_DMA0_CHANNELS];
+} AM13EDMA;
 
 struct AM13ESimTimer {
     MemoryRegion mmio;
@@ -306,6 +326,7 @@ struct AM13EMachineState {
     uint32_t sysctl_systemcfg;
     AM13ESimWWDT wwdt;
     AM13ESimTimer gtimer[AM13E_SIM_TIMER_COUNT];
+    AM13EDMA dma0;
     MemoryRegion iomux;
     uint32_t pincm[AM13E_IOMUX_PIN_COUNT];
     bool iomux_unmodeled_reported;
@@ -824,6 +845,193 @@ static MemTxResult am13e_timer_write(void *opaque, hwaddr off,
 static const MemoryRegionOps am13e_timer_ops = {
     .read_with_attrs = am13e_timer_read,
     .write_with_attrs = am13e_timer_write,
+    .endianness = DEVICE_LITTLE_ENDIAN,
+    .valid = { .min_access_size = 4, .max_access_size = 4 },
+};
+
+
+/* G7: DMA0 SDK register bank, 12 configurations, event-gated CH2.
+ * Software requests can exercise real 32-bit memory transport.
+ * No event source is spontaneously asserted. In the next gate,
+ * PA26 edge capture will become the TIMG4 GEN_EVENT1 trigger #34.
+ */
+static void am13e_dma0_irq_update(AM13EDMA *d)
+{
+    if (d->irq) {
+        qemu_set_irq(d->irq, !!(d->mask & d->raw));
+    }
+}
+static void am13e_dma0_reset(AM13EDMA *d)
+{
+    d->mask = d->raw = d->debugctl = d->eventmode = d->priority = 0;
+    d->bad_reported = false;
+    memset(d->trigger, 0, sizeof(d->trigger));
+    memset(d->ctl, 0, sizeof(d->ctl));
+    memset(d->src, 0, sizeof(d->src));
+    memset(d->dst, 0, sizeof(d->dst));
+    memset(d->sz, 0, sizeof(d->sz));
+    memset(d->initial_sz, 0, sizeof(d->initial_sz));
+    am13e_dma0_irq_update(d);
+}
+static MemTxResult am13e_dma0_bad(AM13EDMA *d, hwaddr offset,
+                                 bool write, unsigned size)
+{
+    if (!d->bad_reported) {
+        error_report("G7_UNMODELED_DMA0 %s 0x%08" PRIx64
+                     " width=%u rejected",
+                     write ? "write" : "read",
+                     (uint64_t)(AM13E_DMA0_BASE + 0x1000U + offset),
+                     size);
+        d->bad_reported = true;
+    }
+    return MEMTX_ERROR;
+}
+static void am13e_dma0_ch2_beat(AM13EDMA *d)
+{
+    const unsigned ch = AM13E_DMA0_CH2;
+    uint32_t ctrl = d->ctl[ch], val;
+    MemTxResult status;
+
+    if (!(ctrl & AM13E_DMA0_ENABLED) || d->sz[ch] == 0U) {
+        return;
+    }
+    /* Current ESC DShot RX/TX requires word/word, normal, single,
+     * with either fixed or increment-by-one 32-bit addresses.
+     */
+    if ((ctrl & 0x00007700U) != 0x00002200U ||
+        (ctrl & 0x33000000U) ||
+        (((ctrl >> 16) & 15U) != 0U && ((ctrl >> 16) & 15U) != 3U) ||
+        (((ctrl >> 20) & 15U) != 0U && ((ctrl >> 20) & 15U) != 3U)) {
+        d->raw |= AM13E_DMA0_CH2_ADDRERR;
+        d->ctl[ch] &= ~AM13E_DMA0_ENABLED;
+        am13e_dma0_irq_update(d);
+        return;
+    }
+    status = address_space_read(&address_space_memory, d->src[ch],
+                                MEMTXATTRS_UNSPECIFIED, (uint8_t *)&val, 4);
+    if (status == MEMTX_OK) {
+        status = address_space_write(&address_space_memory, d->dst[ch],
+                                     MEMTXATTRS_UNSPECIFIED,
+                                     (const uint8_t *)&val, 4);
+    }
+    if (status != MEMTX_OK) {
+        d->raw |= AM13E_DMA0_CH2_ADDRERR;
+        d->ctl[ch] &= ~AM13E_DMA0_ENABLED;
+        am13e_dma0_irq_update(d);
+        return;
+    }
+    if (((ctrl >> 16) & 15U) == 3U) {
+        d->src[ch] += 4U;
+    }
+    if (((ctrl >> 20) & 15U) == 3U) {
+        d->dst[ch] += 4U;
+    }
+    --d->sz[ch];
+    unsigned early = (ctrl >> 4) & 7U;
+    unsigned threshold = early == 7U ? d->initial_sz[ch] / 2U :
+                       early == 1U ? 1U : early == 2U ? 2U :
+                       early == 3U ? 4U : early == 4U ? 8U :
+                       early == 5U ? 32U : early == 6U ? 64U : 0U;
+    if (threshold && d->sz[ch] == threshold) {
+        d->raw |= 1U << (16U + ch);
+    }
+    if (d->sz[ch] == 0U) {
+        d->raw |= 1U << ch;
+        d->ctl[ch] &= ~AM13E_DMA0_ENABLED;
+    }
+    am13e_dma0_irq_update(d);
+}
+static MemTxResult am13e_dma0_read(void *opaque, hwaddr offset,
+                                  uint64_t *value, unsigned width,
+                                  MemTxAttrs attrs)
+{
+    AM13EDMA *d = opaque;
+    uint32_t off = (uint32_t)offset;
+    if (!d->esc_sim || width != 4 || (off & 3U)) {
+        return am13e_dma0_bad(d, offset, false, width);
+    }
+    switch (off) {
+    case 0x018U: *value = d->debugctl; return MEMTX_OK;
+    case 0x020U: *value = d->raw & d->mask ?
+                    __builtin_ctz(d->raw & d->mask) + 1U : 0U;
+                 return MEMTX_OK;
+    case 0x028U: *value = d->mask; return MEMTX_OK;
+    case 0x030U: *value = d->raw; return MEMTX_OK;
+    case 0x038U: *value = d->raw & d->mask; return MEMTX_OK;
+    case 0x0e0U: *value = d->eventmode; return MEMTX_OK;
+    case 0x0fcU: *value = 0; return MEMTX_OK; /* No silicon DESC */
+    case 0x100U: *value = d->priority; return MEMTX_OK;
+    default: break;
+    }
+    if (off >= 0x110U && off < 0x140U) {
+        *value = d->trigger[(off - 0x110U) / 4U];
+        return MEMTX_OK;
+    }
+    if (off >= 0x200U && off < 0x2c0U) {
+        unsigned ch = (off - 0x200U) / 16U;
+        switch ((off - 0x200U) & 15U) {
+        case 0U: *value = d->ctl[ch] & ~1U; return MEMTX_OK;
+        case 4U: *value = d->src[ch]; return MEMTX_OK;
+        case 8U: *value = d->dst[ch]; return MEMTX_OK;
+        case 12U: *value = d->sz[ch]; return MEMTX_OK;
+        }
+    }
+    return am13e_dma0_bad(d, offset, false, width);
+}
+static MemTxResult am13e_dma0_write(void *opaque, hwaddr offset,
+                                   uint64_t value, unsigned width,
+                                   MemTxAttrs attrs)
+{
+    AM13EDMA *d = opaque;
+    uint32_t off = (uint32_t)offset, data = (uint32_t)value;
+    if (!d->esc_sim || width != 4 || (off & 3U)) {
+        return am13e_dma0_bad(d, offset, true, width);
+    }
+    switch (off) {
+    case 0x018U: d->debugctl = data; return MEMTX_OK;
+    case 0x028U: d->mask = data; am13e_dma0_irq_update(d);
+                 return MEMTX_OK;
+    case 0x040U: d->raw |= data; am13e_dma0_irq_update(d);
+                 return MEMTX_OK;
+    case 0x048U: d->raw &= ~data; am13e_dma0_irq_update(d);
+                 return MEMTX_OK;
+    case 0x0e0U: d->eventmode = data; return MEMTX_OK;
+    case 0x100U: d->priority = data; return MEMTX_OK;
+    default: break;
+    }
+    if (off >= 0x110U && off < 0x140U) {
+        d->trigger[(off - 0x110U) / 4U] = data & 0xffU;
+        return MEMTX_OK;
+    }
+    if (off >= 0x200U && off < 0x2c0U) {
+        unsigned ch = (off - 0x200U) / 16U;
+        switch ((off - 0x200U) & 15U) {
+        case 0U:
+            if ((data & 1U) &&
+                (ch != AM13E_DMA0_CH2 || (d->trigger[ch] & 0x7fU))) {
+                return am13e_dma0_bad(d, offset, true, width);
+            }
+            d->ctl[ch] = data & ~1U; /* DMAREQ strobe auto clears */
+            if (data & 1U) {
+                am13e_dma0_ch2_beat(d);
+            }
+            return MEMTX_OK;
+        case 4U: d->src[ch] = data; return MEMTX_OK;
+        case 8U: d->dst[ch] = data; return MEMTX_OK;
+        case 12U:
+            if (data & ~0xffffU) {
+                return am13e_dma0_bad(d, offset, true, width);
+            }
+            d->sz[ch] = data;
+            d->initial_sz[ch] = data;
+            return MEMTX_OK;
+        }
+    }
+    return am13e_dma0_bad(d, offset, true, width);
+}
+static const MemoryRegionOps am13e_dma0_ops = {
+    .read_with_attrs = am13e_dma0_read,
+    .write_with_attrs = am13e_dma0_write,
     .endianness = DEVICE_LITTLE_ENDIAN,
     .valid = { .min_access_size = 4, .max_access_size = 4 },
 };
@@ -2171,6 +2379,7 @@ static void am13e_handoff_reset(void *opaque)
     s->fri_frdcntl = AM13E_FRI_FRDCNTL_RESET;
     s->fri_unmodeled_reported = false;
     s->factory_unmodeled_reported = false;
+    am13e_dma0_reset(&s->dma0);
     am13e_sim_wwdt_reset(&s->wwdt);
     for (unsigned i = 0; i < AM13E_SIM_TIMER_COUNT; ++i) {
         am13e_sim_timer_reset(&s->gtimer[i]);
@@ -2287,6 +2496,16 @@ static void am13e_init(MachineState *machine)
                                 AM13E_SIM_WWDT_BASE + 0x1100U,
                                 &s->wwdt.ctrl_mmio);
 
+    /* DMA0 register configuration and real software-requested CH2 beats.
+     * Hardware source 34 awaits explicit TIMG4 capture edge injection.
+     */
+    s->dma0.esc_sim = s->esc_sim;
+    am13e_dma0_reset(&s->dma0);
+    memory_region_init_io(&s->dma0.mmio, NULL, &am13e_dma0_ops,
+                          &s->dma0, "am13e-dma0-g7", AM13E_DMA0_WINDOW);
+    memory_region_add_subregion(sysmem, AM13E_DMA0_BASE + 0x1000U,
+                                &s->dma0.mmio);
+
     /* TIMG4/TIMG12 counters use distinct virtual clocks/IRQ states. */
     static const uint32_t gt_base[AM13E_SIM_TIMER_COUNT] = {
         0x40180000U, 0x40188000U
@@ -2386,6 +2605,8 @@ static void am13e_init(MachineState *machine)
                              OBJECT(sysmem), &error_abort);
     sysbus_realize(SYS_BUS_DEVICE(core), &error_fatal);
     /* Peripheral IRQ numbers verified against TI startup_gcc_arm.c. */
+    /* DMA0_INT_IRQn is 40 in TI hw_ints.h. */
+    s->dma0.irq = qdev_get_gpio_in(core, 40U);
     static const unsigned timerg_irq[AM13E_SIM_TIMER_COUNT] = {44U, 45U};
     for (unsigned i = 0; i < AM13E_SIM_TIMER_COUNT; ++i) {
         s->gtimer[i].irq = qdev_get_gpio_in(core, timerg_irq[i]);
@@ -2402,7 +2623,7 @@ static void am13e_init(MachineState *machine)
 static void am13e_class_init(ObjectClass *oc, void *data)
 {
     MachineClass *mc = MACHINE_CLASS(oc);
-        mc->desc = "AM13E23019 ESC-SIM TIMG4/DShot and TIMG12 commutation timers";
+        mc->desc = "AM13E23019 ESC-SIM DMA0 CH2 transfer and TIMG4/TIMG12";
     mc->init = am13e_init;
     mc->default_cpu_type = ARM_CPU_TYPE_NAME("cortex-m33-am13e");
     mc->default_ram_size = AM13E_SRAM_SIZE;
