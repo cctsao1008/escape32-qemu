@@ -41,6 +41,14 @@ OBJECT_DECLARE_SIMPLE_TYPE(AM13EMachineState, AM13E_MACHINE)
  */
 #define AM13E_SYSCTL_MCLKDIVCFG_MASK 0x07000000U
 
+/* TI TRM SPRUJF2B §3.14.2.73: SYSCTL.XTALCR offset 0x1474.
+ * Reset 0x00000001: OSCOFF=1 (powered down), SE=0 (crystal mode).
+ * G2d models configuration bits, NOT oscillator startup completion.
+ */
+#define AM13E_SYSCTL_XTALCR 0x1474U
+#define AM13E_SYSCTL_XTALCR_INITIAL 0x00000001U
+#define AM13E_SYSCTL_XTALCR_WRITABLE 0x00000003U
+
 /* TI SDK hw_memmap.h / hw_fri.h and TRM SPRUJF2B §13.7.2.1:
  * FRI_BASE=0x40028000; FRDCNTL offset=0x1000, reset=0x02000201.
  * WS0_MODE bit0, RWAIT bits11:8. Preserve the undocumented RW
@@ -60,6 +68,7 @@ struct AM13EMachineState {
     MemoryRegion sysctl;
     bool sysctl_unmodeled_reported;
     uint32_t sysctl_mclkcfg;
+    uint32_t sysctl_xtalcr;
     MemoryRegion fri;
     uint32_t fri_frdcntl;
     bool fri_unmodeled_reported;
@@ -103,6 +112,9 @@ static MemTxResult am13e_sysctl_read(void *opaque, hwaddr offset,
     case AM13E_SYSCTL_CLKSTATUS:
         *value = AM13E_SYSCTL_CLKSTATUS_INITIAL;
         return MEMTX_OK;
+    case AM13E_SYSCTL_XTALCR:
+        *value = s->sysctl_xtalcr;
+        return MEMTX_OK;
     default:
         return am13e_sysctl_unmodeled(s, offset, false, size);
     }
@@ -115,7 +127,24 @@ static MemTxResult am13e_sysctl_write(void *opaque, hwaddr offset,
     AM13EMachineState *s = opaque;
     uint32_t next, div;
 
-    if (size != 4 || offset != AM13E_SYSCTL_MCLKCFG) {
+    if (size != 4) {
+        return am13e_sysctl_unmodeled(s, offset, true, size);
+    }
+    if (offset == AM13E_SYSCTL_XTALCR) {
+        next = (uint32_t)value;
+        /* Reserved bits 31:2 are not modeled; preserve reset=0.
+         * OSCOFF=0 is only a request to run the oscillator.
+         * CLKSTATUS remains OFF until a future virtual-time model
+         * has proved that the startup interval elapsed.
+         */
+        if ((next ^ s->sysctl_xtalcr) &
+            ~AM13E_SYSCTL_XTALCR_WRITABLE) {
+            return am13e_sysctl_unmodeled(s, offset, true, size);
+        }
+        s->sysctl_xtalcr = next;
+        return MEMTX_OK;
+    }
+    if (offset != AM13E_SYSCTL_MCLKCFG) {
         return am13e_sysctl_unmodeled(s, offset, true, size);
     }
     next = (uint32_t)value;
@@ -220,6 +249,7 @@ static void am13e_handoff_reset(void *opaque)
     g_assert(env->v7m.vecbase[M_REG_NS] == AM13E_APP_BASE);
     env->v7m.primask[M_REG_NS] = 1;
     s->sysctl_mclkcfg = AM13E_SYSCTL_MCLKCFG_INITIAL;
+    s->sysctl_xtalcr = AM13E_SYSCTL_XTALCR_INITIAL;
     s->sysctl_unmodeled_reported = false;
     s->fri_frdcntl = AM13E_FRI_FRDCNTL_RESET;
     s->fri_unmodeled_reported = false;
@@ -250,8 +280,9 @@ static void am13e_init(MachineState *machine)
                              96 * KiB, 32 * KiB);
     memory_region_add_subregion(sysmem, 0x00c18000, &s->bank3_alias);
 
-    /* SYSCTL G2a/G2c: reset status and legal MCLKDIVCFG writes only. */
+    /* SYSCTL G2a/G2c/G2d: snapshots, MCLK divider, XTAL control. */
     s->sysctl_mclkcfg = AM13E_SYSCTL_MCLKCFG_INITIAL;
+    s->sysctl_xtalcr = AM13E_SYSCTL_XTALCR_INITIAL;
     memory_region_init_io(&s->sysctl, NULL, &am13e_sysctl_ops, s,
                           "am13e-sysctl-g2a", AM13E_SYSCTL_SIZE);
     memory_region_add_subregion(sysmem, AM13E_SYSCTL_BASE, &s->sysctl);
@@ -286,7 +317,7 @@ static void am13e_init(MachineState *machine)
 static void am13e_class_init(ObjectClass *oc, void *data)
 {
     MachineClass *mc = MACHINE_CLASS(oc);
-    mc->desc = "AM13E23019 ESCape32 app-handoff / G2a-G2c clock MMIO";
+    mc->desc = "AM13E23019 ESCape32 app-handoff / G2a-G2d clock MMIO";
     mc->init = am13e_init;
     mc->default_cpu_type = ARM_CPU_TYPE_NAME("cortex-m33-am13e");
     mc->default_ram_size = AM13E_SRAM_SIZE;

@@ -123,3 +123,26 @@ the reset status, and rejection of a source change.
 HardFault is expected when the startup reaches its next unmodeled
 SYSCTL register. Evidence: AM13E230x TRM SPRUJF2B §3.14.2.12;
 TI SDK `dl_sysctl.h` / `hw_sysctl.h`; G1 fault trace.
+
+## G2d: SYSCTL.XTALCR Control Bits (not oscillator readiness)
+
+The G1 trace after G2c reaches a precise BusFault at
+`BFAR=0x400B0474`, from `stacked_PC=0x00009246`. This address is
+`SYSCTL_BASE (0x400AF000) + XTALCR (0x1474)`, as defined in TI SDK
+`hw_sysctl.h`. TRM SPRUJF2B §3.14.2.73 specifies reset value
+`0x00000001`; bit 0 `OSCOFF` = 1, bit 1 `SE` = 0.
+
+G2d adds stateful **read and write** of `XTALCR.OSCOFF` and
+`XTALCR.SE`. All other bits remain at zero; changes to reserved
+bits are rejected with `MEMTX_ERROR`. Clearing OSCOFF is an
+**oscillator-enable request only**: `CLKSTATUS` stays at reset
+`0x00007000`; neither HFCLKGOOD nor any PLL Ready is manufactured.
+The initial state is restored on machine reset.
+
+`tests/g2_xtalcr.py` exercises reset, crystal/single-ended settings,
+enable request with unchanged clock status, and reserved-write rejection.
+
+Next: implement the adjacent startup-monitor and HSCLKEN register
+semantics, then a virtual-time oscillator readiness transition only
+after the documented startup interval and actual enable request.
+No hardware, host wall-clock sleeps, or firmware patches are used.
