@@ -45,6 +45,9 @@ python3 "$ROOT/tests/g2_esc_sim.py" \
 python3 "$ROOT/tests/g3_gpio.py" \
     --qemu "$ROOT/.build/qemu-src/build/qemu-system-arm" \
     --elf "$1"
+python3 "$ROOT/tests/g3_iomux.py" \
+    --qemu "$ROOT/.build/qemu-src/build/qemu-system-arm" \
+    --elf "$1"
 python3 "$ROOT/tests/g1_handoff.py" \
     --qemu "$ROOT/.build/qemu-src/build/qemu-system-arm" \
     --elf "$1"

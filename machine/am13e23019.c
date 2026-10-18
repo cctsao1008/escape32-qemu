@@ -145,6 +145,20 @@ OBJECT_DECLARE_SIMPLE_TYPE(AM13EMachineState, AM13E_MACHINE)
 #define AM13E_GPIO_DOECLR 0x12e0U
 #define AM13E_GPIO_DIN 0x1380U
 #define AM13E_GPIO_PWREN_KEY 0x26000000U
+
+/* TI hw_memmap.h / hw_iomux.h: IOMUX PINCM[108] at 0x400CC000,
+ * one 32-bit word per pin; offsets 0x00..0x1AC.  PA22 is PINCM[22]
+ * (+0x58), the observed original nFAULT initialization fault.
+ *
+ * Model digital configuration fields exactly enough for the ESC's
+ * pin ownership, input-enable and PWM/DSHOT function checks.
+ * WAKESTAT[13] and reserved bits are not writable.
+ */
+#define AM13E_IOMUX_BASE 0x400CC000U
+#define AM13E_IOMUX_PIN_COUNT 108U
+#define AM13E_IOMUX_APERTURE 0x200U
+#define AM13E_IOMUX_WRITABLE 0x1e1f00bfU
+#define AM13E_IOMUX_WAKSTAT (1U << 13)
 #define AM13E_GPIO_RSTCTL_KEY 0xb1000000U
 
 typedef struct AM13EGpioPort {
@@ -163,6 +177,9 @@ struct AM13EMachineState {
     MemoryRegion flash;
     MemoryRegion bank3_alias;
     MemoryRegion sysctl;
+    MemoryRegion iomux;
+    uint32_t pincm[AM13E_IOMUX_PIN_COUNT];
+    bool iomux_unmodeled_reported;
     bool sysctl_unmodeled_reported;
     uint32_t sysctl_mclkcfg;
     uint32_t sysctl_xtalcr;
@@ -708,6 +725,71 @@ static const MemoryRegionOps am13e_fri_ops = {
 };
 
 
+
+/* G3b: IOMUX PINCM digital-control state, not an external pin model.
+ * All 108 logical pin indices follow SDK hw_iomux.h.  This is
+ * deliberately not a shortcut to DShot edges, PWM power, BEMF or faults.
+ */
+static MemTxResult am13e_iomux_invalid(AM13EMachineState *s, hwaddr offset,
+                                      bool write, unsigned size)
+{
+    if (!s->iomux_unmodeled_reported) {
+        error_report("G3_UNMODELED_IOMUX %s 0x%08" PRIx64
+                     " size=%u (transaction rejected)",
+                     write ? "write" : "read",
+                     (uint64_t)(AM13E_IOMUX_BASE + offset), size);
+        s->iomux_unmodeled_reported = true;
+    }
+    return MEMTX_ERROR;
+}
+
+static MemTxResult am13e_iomux_read(void *opaque, hwaddr offset,
+                                   uint64_t *value, unsigned size,
+                                   MemTxAttrs attrs)
+{
+    AM13EMachineState *s = opaque;
+
+    if (size != 4 || (offset & 3U) != 0U ||
+        offset >= 4U * AM13E_IOMUX_PIN_COUNT) {
+        return am13e_iomux_invalid(s, offset, false, size);
+    }
+    *value = s->pincm[offset / 4U];
+    return MEMTX_OK;
+}
+
+static MemTxResult am13e_iomux_write(void *opaque, hwaddr offset,
+                                    uint64_t value, unsigned size,
+                                    MemTxAttrs attrs)
+{
+    AM13EMachineState *s = opaque;
+    uint32_t next;
+
+    if (size != 4 || (offset & 3U) != 0U ||
+        offset >= 4U * AM13E_IOMUX_PIN_COUNT) {
+        return am13e_iomux_invalid(s, offset, true, size);
+    }
+    next = (uint32_t)value;
+    /* No undocumented or read-only bits can be changed.
+     * The software-visible PINCM field values are preserved exactly.
+     * WAKESTAT is a hardware input/wake event; no such source exists yet.
+     */
+    if ((next ^ s->pincm[offset / 4U]) & ~AM13E_IOMUX_WRITABLE) {
+        return am13e_iomux_invalid(s, offset, true, size);
+    }
+    s->pincm[offset / 4U] = next;
+    return MEMTX_OK;
+}
+
+static const MemoryRegionOps am13e_iomux_ops = {
+    .read_with_attrs = am13e_iomux_read,
+    .write_with_attrs = am13e_iomux_write,
+    .endianness = DEVICE_LITTLE_ENDIAN,
+    .valid = {
+        .min_access_size = 4,
+        .max_access_size = 4,
+    },
+};
+
 /*
  * G3a: GPIO Power/Reset and minimal digital register aliases.
  * The first MMIO fault after ESC-SIM SYSPLL startup was at
@@ -889,6 +971,8 @@ static void am13e_handoff_reset(void *opaque)
     for (unsigned i = 0; i < AM13E_GPIO_COUNT; ++i) {
         am13e_gpio_reset_port(&s->gpio[i]);
     }
+    memset(s->pincm, 0, sizeof(s->pincm));
+    s->iomux_unmodeled_reported = false;
 }
 
 static void am13e_init(MachineState *machine)
@@ -946,6 +1030,13 @@ static void am13e_init(MachineState *machine)
                           "am13e-fri-g2b", AM13E_FRI_SIZE);
     memory_region_add_subregion(sysmem, AM13E_FRI_BASE, &s->fri);
 
+    /* G3b: 108 TI PINCM words for GPIO, DShot and PWM pad routing. */
+    memset(s->pincm, 0, sizeof(s->pincm));
+    s->iomux_unmodeled_reported = false;
+    memory_region_init_io(&s->iomux, NULL, &am13e_iomux_ops, s,
+                          "am13e-iomux-g3b", AM13E_IOMUX_APERTURE);
+    memory_region_add_subregion(sysmem, AM13E_IOMUX_BASE, &s->iomux);
+
     /* GPIO0..3: power/reset plus basic digital output aliases. */
     static const char *const gpio_names[AM13E_GPIO_COUNT] = {
         "am13e-gpio0", "am13e-gpio1", "am13e-gpio2", "am13e-gpio3"
@@ -986,7 +1077,7 @@ static void am13e_init(MachineState *machine)
 static void am13e_class_init(ObjectClass *oc, void *data)
 {
     MachineClass *mc = MACHINE_CLASS(oc);
-    mc->desc = "AM13E23019 ESC-SIM clock + GPIO power/IO G3a";
+    mc->desc = "AM13E23019 ESC-SIM GPIO and 108-pin IOMUX G3b";
     mc->init = am13e_init;
     mc->default_cpu_type = ARM_CPU_TYPE_NAME("cortex-m33-am13e");
     mc->default_ram_size = AM13E_SRAM_SIZE;

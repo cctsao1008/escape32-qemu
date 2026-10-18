@@ -417,3 +417,29 @@ per-port isolation. These are QTests, **not** evidence of DShot
 input, PWM drive, motor spin or BEMF feedback. The next runtime
 trace should identify the smallest additional IOMUX/Timer/ADC
 MMIO surface needed for the unchanged ELF to initialize.
+
+## G3b — IOMUX PINCM routing for nFAULT and future ESC signal paths
+
+In ESC-SIM, the original ELF has passed G3a GPIO0 power-on and now
+raises a precise BusFault at `BFAR=0x400CC058`,
+`stacked_PC=0x00007660`, trying to write `0x00040081`.
+Per TI `hw_memmap.h`, `hw_iomux.h` and AM13E
+`board_io.h`, this is `IOMUX->PINCM[22]` for **PA22 nFAULT**:
+`PF=1` (GPIO), `PC=1`, `INENA=1`.
+
+G3b maps exactly 108 PINCM registers
+`0x400CC000 + 4*i`, `i=0..107`, with 32-bit
+read/write persistence of SDK-defined fields: PF, PC,
+pull-up/down, input enable, hysteresis, drive strength,
+Hi-Z, inversion and wakeup controls. Unspecified bits
+and hardware-only WAKESTAT are not writable, and
+indices 108+ remain rejected (`MEMTX_ERROR`).
+Reset clears all PINCM words. Unlike a generic MMIO
+catch-all this preserves per-pad ownership and software
+readback checks.
+
+G3b does **not** implement electrical signal level,
+external nFAULT deassertion, PA26 DShot edges, MCPWM4
+waveforms, or IRQ routing. These are separate functional
+simulation components to add next. This pin-configuration
+model is prerequisite, not motor SITL acceptance.
