@@ -22,13 +22,88 @@ OBJECT_DECLARE_SIMPLE_TYPE(AM13EMachineState, AM13E_MACHINE)
 #define AM13E_FLASH_SIZE (512 * KiB)
 #define AM13E_APP_BASE 0x00006000U
 
+/* TI SDK hw_memmap.h: SYSCTL_BASE=0x400AF000.
+ * TI TRM SPRUJF2B §3.14.2.12 MCLKCFG reset: 07XXX2X0h.
+ * §3.14.2.34 CLKSTATUS: SYSPLLOFF/HFCLKOFF/HSCLKSOFF reset 1.
+ * X-designated reserved bits are deliberately represented as 0 and
+ * do not constitute a claim about silicon's unspecified read values.
+ */
+#define AM13E_SYSCTL_BASE 0x400AF000U
+#define AM13E_SYSCTL_SIZE 0x4000U
+#define AM13E_SYSCTL_MCLKCFG 0x1104U
+#define AM13E_SYSCTL_CLKSTATUS 0x1204U
+#define AM13E_SYSCTL_MCLKCFG_INITIAL 0x07000200U
+#define AM13E_SYSCTL_CLKSTATUS_INITIAL 0x00007000U
+
 struct AM13EMachineState {
     MachineState parent_obj;
     ARMv7MState armv7m;
     MemoryRegion flash;
     MemoryRegion bank3_alias;
+    MemoryRegion sysctl;
+    bool sysctl_unmodeled_reported;
     Clock *cpuclk;
     Clock *refclk;
+};
+
+/*
+ * G2a: the only supported SYSCTL accesses are two explicitly grounded,
+ * read-only reset snapshots. There is no ready-bit synthesis or
+ * permission to access unknown registers. Later G2 iterations must
+ * implement real SYSCTL write/power/clock transitions and virtual time.
+ */
+static MemTxResult am13e_sysctl_unmodeled(AM13EMachineState *s,
+                                         hwaddr offset,
+                                         bool write, unsigned size)
+{
+    if (!s->sysctl_unmodeled_reported) {
+        error_report("G2_UNMODELED_SYSCTL %s 0x%08" PRIx64 " size=%u "
+                     "(transaction rejected)",
+                     write ? "write" : "read",
+                     (uint64_t)(AM13E_SYSCTL_BASE + offset), size);
+        s->sysctl_unmodeled_reported = true;
+    }
+    return MEMTX_ERROR;
+}
+
+static MemTxResult am13e_sysctl_read(void *opaque, hwaddr offset,
+                                    uint64_t *value, unsigned size,
+                                    MemTxAttrs attrs)
+{
+    AM13EMachineState *s = opaque;
+
+    if (size != 4) {
+        return am13e_sysctl_unmodeled(s, offset, false, size);
+    }
+    switch (offset) {
+    case AM13E_SYSCTL_MCLKCFG:
+        *value = AM13E_SYSCTL_MCLKCFG_INITIAL;
+        return MEMTX_OK;
+    case AM13E_SYSCTL_CLKSTATUS:
+        *value = AM13E_SYSCTL_CLKSTATUS_INITIAL;
+        return MEMTX_OK;
+    default:
+        return am13e_sysctl_unmodeled(s, offset, false, size);
+    }
+}
+
+static MemTxResult am13e_sysctl_write(void *opaque, hwaddr offset,
+                                     uint64_t value, unsigned size,
+                                     MemTxAttrs attrs)
+{
+    AM13EMachineState *s = opaque;
+
+    return am13e_sysctl_unmodeled(s, offset, true, size);
+}
+
+static const MemoryRegionOps am13e_sysctl_ops = {
+    .read_with_attrs = am13e_sysctl_read,
+    .write_with_attrs = am13e_sysctl_write,
+    .endianness = DEVICE_LITTLE_ENDIAN,
+    .valid = {
+        .min_access_size = 4,
+        .max_access_size = 4,
+    },
 };
 
 /*
@@ -73,6 +148,11 @@ static void am13e_init(MachineState *machine)
                              96 * KiB, 32 * KiB);
     memory_region_add_subregion(sysmem, 0x00c18000, &s->bank3_alias);
 
+    /* SYSCTL G2a reset register snapshot, unmapped behavior is a fault. */
+    memory_region_init_io(&s->sysctl, NULL, &am13e_sysctl_ops, s,
+                          "am13e-sysctl-g2a", AM13E_SYSCTL_SIZE);
+    memory_region_add_subregion(sysmem, AM13E_SYSCTL_BASE, &s->sysctl);
+
     /* Placeholder QEMU clocks, not an AM13E SYSCTL/PLL model. */
     s->cpuclk = clock_new(OBJECT(machine), "CPUCLK");
     clock_set_hz(s->cpuclk, 200000000);
@@ -97,7 +177,7 @@ static void am13e_init(MachineState *machine)
 static void am13e_class_init(ObjectClass *oc, void *data)
 {
     MachineClass *mc = MACHINE_CLASS(oc);
-    mc->desc = "AM13E23019 ESCape32 app-handoff prototype (G1)";
+    mc->desc = "AM13E23019 ESCape32 app-handoff / SYSCTL G2a prototype";
     mc->init = am13e_init;
     mc->default_cpu_type = ARM_CPU_TYPE_NAME("cortex-m33-am13e");
     mc->default_ram_size = AM13E_SRAM_SIZE;

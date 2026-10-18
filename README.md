@@ -51,3 +51,27 @@ The test prints sampled PCs, frequent PCs and the recent PC history.
 It stops early if the actual HardFault vector is entered. A bounded
 trace is diagnostic only; no peripherals or fabricated ready bits
 are added, and normal loop/stall behavior is not labeled PASS.
+
+## G2a: SYSCTL Reset Snapshot (first increment; not G2 scheduler PASS)
+
+`0x400B0104` is `SYSCTL.SOCLOCK.MCLKCFG`, offset `0x1104`
+from `SYSCTL_BASE=0x400AF000`. Reading this register was the precise
+BusFault captured during G1 startup trace. G2a maps a deliberately
+minimal SYSCTL aperture; the two **read-only** modeled reset values are:
+
+| Register | Address | Explicit reset fields | G2a value |
+| --- | --- | --- | --- |
+| MCLKCFG | `0x400B0104` | MCLKDIVCFG=7; USEHSCLK=0 | `0x07000200` |
+| CLKSTATUS | `0x400B0204` | SYSPLLOFF=HFCLKOFF=HSCLKSOFF=1; SYSOSCFREQ=0 | `0x00007000` |
+
+TRM reset fields marked `X` are represented as 0 **for this emulator
+profile only**. All other SYSCTL reads and all SYSCTL writes are rejected
+with `MEMTX_ERROR` and the first invalid transaction is logged as
+`G2_UNMODELED_SYSCTL`. In particular, this does **not** simulate XTAL,
+SYSPLL lock, FRI Flash wait states, or real 200 MHz clock switching.
+A subsequent HardFault is expected until its next reached register
+has an explicit model. The existing G1 one-step check remains valid.
+
+Source: AM13E230x TRM SPRUJF2B §§3.14.2.12, 3.14.2.34; TI SDK
+`hw_memmap.h`, `hw_sysctl.h`. `PASS_G2A` is **only** a reset-register
+readback test, not the G2 Scheduler acceptance gate.

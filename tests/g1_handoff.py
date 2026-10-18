@@ -113,7 +113,12 @@ def print_fault_snapshot(rsp):
     # We are stopped at vector entry before the Handler prologue.
     # Inspect a basic hardware frame only when EXC_RETURN indicates MSP
     # and a basic (non-extended-FP) exception frame.
-    is_exc_return = (lr & 0xffffffe0) == 0xffffffe0
+    # Armv8-M EXC_RETURN can carry security-state bits in [7:5].
+    # The old FFFFFFE0 mask incorrectly rejected observed 0xFFFFFFB9.
+    # We only decode the basic MSP frame for architecturally plausible
+    # EXC_RETURN encodings; no exception state is changed.
+    is_exc_return = ((lr & 0xffffff00) == 0xffffff00 and
+                     (lr & 0x1f) in (0x11, 0x19, 0x1d))
     using_msp = not (lr & (1 << 2))
     basic_frame = bool(lr & (1 << 4))
     if (is_exc_return and using_msp and basic_frame and
