@@ -75,3 +75,29 @@ has an explicit model. The existing G1 one-step check remains valid.
 Source: AM13E230x TRM SPRUJF2B §§3.14.2.12, 3.14.2.34; TI SDK
 `hw_memmap.h`, `hw_sysctl.h`. `PASS_G2A` is **only** a reset-register
 readback test, not the G2 Scheduler acceptance gate.
+
+## G2b: FRI Flash Read Interface FRDCNTL
+
+The G1 extended startup now reaches `0x00C18018` executing copied
+TI `.TI.ramfunc`. Its precise BusFault has `BFAR=0x40029000`,
+which is `FRI_BASE (0x40028000) + FRDCNTL (0x1000)`.
+
+G2b models **FRDCNTL only**, reset `0x02000201` as specified by
+AM13E230x TRM SPRUJF2B §13.7.2.1. The documented fields
+`WS0_MODE[0]` and `RWAIT[11:8]` are writable and readable.
+All other register bits retain the reset image; undocumented
+reserved R/W bits are not assigned invented functionality.
+Writes to other FRI offsets and reads from other FRI offsets return
+`MEMTX_ERROR` (first occurrence logged as `G2_UNMODELED_FRI`).
+
+QTest validates the actual TI DriverLib sequence for
+`DL_FRI_setReadWaitStates(3)`:
+`0x02000201 → 0x02000200 → 0x02000300`.
+
+**Limitations:** no simulated Flash access latency, wait-state
+enforcement, nine-cycle return flush, SYSPLL transitions, or motor
+feedback. G2b's PASS is a register-model test, *not* a claim that
+the product FW has completed clock initialization or qualified 200MHz.
+
+Sources: TRM SPRUJF2B §13.5.6 & §13.7.2.1 and SDK
+`hw_memmap.h`, `hw_fri.h`, `dl_fri.c`.

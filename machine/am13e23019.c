@@ -35,6 +35,17 @@ OBJECT_DECLARE_SIMPLE_TYPE(AM13EMachineState, AM13E_MACHINE)
 #define AM13E_SYSCTL_MCLKCFG_INITIAL 0x07000200U
 #define AM13E_SYSCTL_CLKSTATUS_INITIAL 0x00007000U
 
+/* TI SDK hw_memmap.h / hw_fri.h and TRM SPRUJF2B §13.7.2.1:
+ * FRI_BASE=0x40028000; FRDCNTL offset=0x1000, reset=0x02000201.
+ * WS0_MODE bit0, RWAIT bits11:8. Preserve the undocumented RW
+ * reserved [27:24] bits at their reset value; do not invent semantics.
+ */
+#define AM13E_FRI_BASE 0x40028000U
+#define AM13E_FRI_SIZE 0x2000U
+#define AM13E_FRI_FRDCNTL 0x1000U
+#define AM13E_FRI_FRDCNTL_RESET 0x02000201U
+#define AM13E_FRI_FRDCNTL_FIELDS (0x00000f00U | 0x00000001U)
+
 struct AM13EMachineState {
     MachineState parent_obj;
     ARMv7MState armv7m;
@@ -42,6 +53,9 @@ struct AM13EMachineState {
     MemoryRegion bank3_alias;
     MemoryRegion sysctl;
     bool sysctl_unmodeled_reported;
+    MemoryRegion fri;
+    uint32_t fri_frdcntl;
+    bool fri_unmodeled_reported;
     Clock *cpuclk;
     Clock *refclk;
 };
@@ -107,6 +121,65 @@ static const MemoryRegionOps am13e_sysctl_ops = {
 };
 
 /*
+ * G2b: FRI register read/write semantics only. Real Flash read latency,
+ * MCLK timekeeping, and the TRM nine-cycle pipeline requirement are
+ * deliberately not modeled; the real SDK RAMFUNC performs FRI writes.
+ */
+static MemTxResult am13e_fri_unmodeled(AM13EMachineState *s,
+                                      hwaddr offset, bool write,
+                                      unsigned size)
+{
+    if (!s->fri_unmodeled_reported) {
+        error_report("G2_UNMODELED_FRI %s 0x%08" PRIx64 " size=%u "
+                     "(transaction rejected)",
+                     write ? "write" : "read",
+                     (uint64_t)(AM13E_FRI_BASE + offset), size);
+        s->fri_unmodeled_reported = true;
+    }
+    return MEMTX_ERROR;
+}
+
+static MemTxResult am13e_fri_read(void *opaque, hwaddr offset,
+                                 uint64_t *value, unsigned size,
+                                 MemTxAttrs attrs)
+{
+    AM13EMachineState *s = opaque;
+
+    if (size != 4 || offset != AM13E_FRI_FRDCNTL) {
+        return am13e_fri_unmodeled(s, offset, false, size);
+    }
+    *value = s->fri_frdcntl;
+    return MEMTX_OK;
+}
+
+static MemTxResult am13e_fri_write(void *opaque, hwaddr offset,
+                                  uint64_t value, unsigned size,
+                                  MemTxAttrs attrs)
+{
+    AM13EMachineState *s = opaque;
+
+    if (size != 4 || offset != AM13E_FRI_FRDCNTL) {
+        return am13e_fri_unmodeled(s, offset, true, size);
+    }
+    /* Only known, documented firmware-operated bits change state.
+     * All other register bits retain their reset state.
+     */
+    s->fri_frdcntl = (s->fri_frdcntl & ~AM13E_FRI_FRDCNTL_FIELDS) |
+                     ((uint32_t)value & AM13E_FRI_FRDCNTL_FIELDS);
+    return MEMTX_OK;
+}
+
+static const MemoryRegionOps am13e_fri_ops = {
+    .read_with_attrs = am13e_fri_read,
+    .write_with_attrs = am13e_fri_write,
+    .endianness = DEVICE_LITTLE_ENDIAN,
+    .valid = {
+        .min_access_size = 4,
+        .max_access_size = 4,
+    },
+};
+
+/*
  * Model the state at the END of the real ESCape32 Bootloader handoff:
  * __disable_irq(); quiesce(); VTOR=APP; MSP=vector[0]; BX vector[1].
  * This is NOT silicon reset and it does NOT emulate Boot validation.
@@ -121,6 +194,8 @@ static void am13e_handoff_reset(void *opaque)
     g_assert(!arm_feature(env, ARM_FEATURE_M_SECURITY));
     g_assert(env->v7m.vecbase[M_REG_NS] == AM13E_APP_BASE);
     env->v7m.primask[M_REG_NS] = 1;
+    s->fri_frdcntl = AM13E_FRI_FRDCNTL_RESET;
+    s->fri_unmodeled_reported = false;
 }
 
 static void am13e_init(MachineState *machine)
@@ -153,6 +228,12 @@ static void am13e_init(MachineState *machine)
                           "am13e-sysctl-g2a", AM13E_SYSCTL_SIZE);
     memory_region_add_subregion(sysmem, AM13E_SYSCTL_BASE, &s->sysctl);
 
+    /* FRI G2b: documented FRDCNTL fields only. */
+    s->fri_frdcntl = AM13E_FRI_FRDCNTL_RESET;
+    memory_region_init_io(&s->fri, NULL, &am13e_fri_ops, s,
+                          "am13e-fri-g2b", AM13E_FRI_SIZE);
+    memory_region_add_subregion(sysmem, AM13E_FRI_BASE, &s->fri);
+
     /* Placeholder QEMU clocks, not an AM13E SYSCTL/PLL model. */
     s->cpuclk = clock_new(OBJECT(machine), "CPUCLK");
     clock_set_hz(s->cpuclk, 200000000);
@@ -177,7 +258,7 @@ static void am13e_init(MachineState *machine)
 static void am13e_class_init(ObjectClass *oc, void *data)
 {
     MachineClass *mc = MACHINE_CLASS(oc);
-    mc->desc = "AM13E23019 ESCape32 app-handoff / SYSCTL G2a prototype";
+    mc->desc = "AM13E23019 ESCape32 app-handoff / SYSCTL G2a / FRI G2b";
     mc->init = am13e_init;
     mc->default_cpu_type = ARM_CPU_TYPE_NAME("cortex-m33-am13e");
     mc->default_ram_size = AM13E_SRAM_SIZE;
