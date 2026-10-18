@@ -68,6 +68,19 @@ OBJECT_DECLARE_SIMPLE_TYPE(AM13EMachineState, AM13E_MACHINE)
 #define AM13E_SYSCTL_HFCLKCLKCFG 0x1110U
 #define AM13E_SYSCTL_HFCLKCLKCFG_INITIAL 0x10000000U
 #define AM13E_SYSCTL_HFCLKCLKCFG_FIELDS 0x100000ffU
+
+/* TRM SPRUJF2B §§3.14.2.16–17. The X portions of the reset
+ * patterns are unknown; represented as zero only for this emulator.
+ * CFG0 known reset: ENABLECLK0=1, ENABLECLK1=1.
+ * CFG1 known reset: QDIV=0x23, PDIV=0.
+ */
+#define AM13E_SYSCTL_SYSPLLCFG0 0x1120U
+#define AM13E_SYSCTL_SYSPLLCFG1 0x1124U
+#define AM13E_SYSCTL_SYSPLLCFG0_INITIAL 0x00000030U
+#define AM13E_SYSCTL_SYSPLLCFG1_INITIAL 0x00002300U
+#define AM13E_SYSCTL_SYSPLLCFG0_FIELDS 0x0000ff31U
+#define AM13E_SYSCTL_SYSPLLCFG1_FIELDS 0x00007f03U
+#define AM13E_SYSPLL_ENABLE (1U << 8)
 /* Clock readiness is an event, never simply the result of writing XTALCR. */
 #define AM13E_HFCLK_GOOD (1U << 8)
 #define AM13E_HFCLK_OFF (1U << 13)
@@ -96,6 +109,8 @@ struct AM13EMachineState {
     uint32_t sysctl_xtalcr;
     uint32_t sysctl_hsclken;
     uint32_t sysctl_hfclkclkcfg;
+    uint32_t sysctl_pllcfg0;
+    uint32_t sysctl_pllcfg1;
     uint32_t sysctl_clkstatus;
     QEMUTimer *xtal_timer;
     bool xtal_present;
@@ -212,6 +227,12 @@ static MemTxResult am13e_sysctl_read(void *opaque, hwaddr offset,
     case AM13E_SYSCTL_HFCLKCLKCFG:
         *value = s->sysctl_hfclkclkcfg;
         return MEMTX_OK;
+    case AM13E_SYSCTL_SYSPLLCFG0:
+        *value = s->sysctl_pllcfg0;
+        return MEMTX_OK;
+    case AM13E_SYSCTL_SYSPLLCFG1:
+        *value = s->sysctl_pllcfg1;
+        return MEMTX_OK;
     default:
         return am13e_sysctl_unmodeled(s, offset, false, size);
     }
@@ -226,6 +247,28 @@ static MemTxResult am13e_sysctl_write(void *opaque, hwaddr offset,
 
     if (size != 4) {
         return am13e_sysctl_unmodeled(s, offset, true, size);
+    }
+    if (offset == AM13E_SYSCTL_SYSPLLCFG0 ||
+        offset == AM13E_SYSCTL_SYSPLLCFG1) {
+        uint32_t *reg = offset == AM13E_SYSCTL_SYSPLLCFG0 ?
+                        &s->sysctl_pllcfg0 : &s->sysctl_pllcfg1;
+        uint32_t mask = offset == AM13E_SYSCTL_SYSPLLCFG0 ?
+                        AM13E_SYSCTL_SYSPLLCFG0_FIELDS :
+                        AM13E_SYSCTL_SYSPLLCFG1_FIELDS;
+        next = (uint32_t)value;
+        /* SYSPLL must be disabled during configuration. A register
+         * write is not PLL startup, lock, or successful calibration.
+         * Reject unknown reserved bits and invalid QDIV encodings.
+         */
+        if ((s->sysctl_hsclken & AM13E_SYSPLL_ENABLE) ||
+            ((next ^ *reg) & ~mask) ||
+            (offset == AM13E_SYSCTL_SYSPLLCFG1 &&
+             (((next >> 8) & 0x7fU) == 0U ||
+              ((next >> 8) & 0x7fU) > 0x7eU))) {
+            return am13e_sysctl_unmodeled(s, offset, true, size);
+        }
+        *reg = next;
+        return MEMTX_OK;
     }
     if (offset == AM13E_SYSCTL_HFCLKCLKCFG) {
         next = (uint32_t)value;
@@ -389,6 +432,8 @@ static void am13e_handoff_reset(void *opaque)
     s->sysctl_xtalcr = AM13E_SYSCTL_XTALCR_INITIAL;
     s->sysctl_hsclken = AM13E_SYSCTL_HSCLKEN_INITIAL;
     s->sysctl_hfclkclkcfg = AM13E_SYSCTL_HFCLKCLKCFG_INITIAL;
+    s->sysctl_pllcfg0 = AM13E_SYSCTL_SYSPLLCFG0_INITIAL;
+    s->sysctl_pllcfg1 = AM13E_SYSCTL_SYSPLLCFG1_INITIAL;
     s->sysctl_clkstatus = AM13E_SYSCTL_CLKSTATUS_INITIAL;
     timer_del(s->xtal_timer);
     s->sysctl_unmodeled_reported = false;
@@ -426,6 +471,8 @@ static void am13e_init(MachineState *machine)
     s->sysctl_xtalcr = AM13E_SYSCTL_XTALCR_INITIAL;
     s->sysctl_hsclken = AM13E_SYSCTL_HSCLKEN_INITIAL;
     s->sysctl_hfclkclkcfg = AM13E_SYSCTL_HFCLKCLKCFG_INITIAL;
+    s->sysctl_pllcfg0 = AM13E_SYSCTL_SYSPLLCFG0_INITIAL;
+    s->sysctl_pllcfg1 = AM13E_SYSCTL_SYSPLLCFG1_INITIAL;
     s->sysctl_clkstatus = AM13E_SYSCTL_CLKSTATUS_INITIAL;
     s->xtal_timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, am13e_xtal_ready, s);
     memory_region_init_io(&s->sysctl, NULL, &am13e_sysctl_ops, s,
@@ -462,7 +509,7 @@ static void am13e_init(MachineState *machine)
 static void am13e_class_init(ObjectClass *oc, void *data)
 {
     MachineClass *mc = MACHINE_CLASS(oc);
-    mc->desc = "AM13E23019 ESCape32 app-handoff / G2g virtual XTAL fixture";
+    mc->desc = "AM13E23019 ESCape32 G2h SYSPLL register config";
     mc->init = am13e_init;
     mc->default_cpu_type = ARM_CPU_TYPE_NAME("cortex-m33-am13e");
     mc->default_ram_size = AM13E_SRAM_SIZE;

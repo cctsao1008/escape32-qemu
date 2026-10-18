@@ -269,3 +269,29 @@ incorrectly rejected QEMU's valid `qqemu.sstepbits` response
 `ENABLE=1,NOIRQ=2,NOTIMER=4`. A host-only regression
 `tests/test_rsp.py` is run by `test.sh` before guest tests. This
 change does not modify firmware, CPU or SYSCTL/XTAL behavior.
+
+## G2h: Native SYSPLLCFG0/1 RMW (not PLL lock)
+
+An extended QEMU timed GDB trace of the original ESCape32 ELF
+passed the virtual XTAL GOOD loop; the next precise BusFault was
+`BFAR=0x400B0120`, `stacked_PC=0x0000917a`.
+This is `SYSCTL.SYSPLLCFG0` per TI AM13E230x TRM
+SPRUJF2B §§3.14.2.16–17 and SDK `hw_sysctl.h`.
+
+G2h models **only** `SYSPLLCFG0` and `SYSPLLCFG1` with
+32-bit read/write RMW: `CFG0` offset 0x1120, modeled fields
+SYSPLLREF, ENABLECLK0/1 and RDIVCLK0/1 (mask `0x0000ff31`);
+`CFG1` offset 0x1124, PDIV and QDIV (mask `0x00007f03`).
+The documented reset parts are `CFG0=0x00000030`
+(ENABLECLK0=ENABLECLK1=1) and `CFG1=0x00002300` (QDIV=0x23).
+Unknown reserved reset X bits are represented as zero in this
+virtual profile, not claimed as actual silicon values. QDIV=0
+and QDIV=127 are rejected, along with reserved-bit changes.
+Config writes are rejected if SYSPLLEN is asserted.
+
+Firmware's 25MHz / 2 × (31+1) / 2 = 200MHz configuration is
+accepted as register state, **not** proof of PLL lock, runtime
+clock frequency, or motor safety. `CLKSTATUS` is unchanged.
+SYSPLLPARAM0/1 and factory calibration remain unimplemented;
+the next blocked MMIO or factory access should be diagnosed
+rather than substituting fictional calibration values.
