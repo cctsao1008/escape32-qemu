@@ -384,3 +384,36 @@ MCPWM4 phase PWM, TIMG12 delayed commutation, CMPSS0/ECAP1
 BEMF edges, ADC0/1/2 sampling and an external BLDC plant.
 The profile does NOT validate PLL trim, frequency, silicon clocks,
 PCB safety, or high-current power-stage operation.
+
+## G3a — GPIO Peripheral Power, Reset, Digital I/O
+
+With ESC-SIM active the original ELF passes the virtual 25MHz
+XTAL/SYSPLL/MCLK initialization and next faults on
+`GPIO0_BASE(0x400F0000)+PWREN(0x800)=0x400F0800`
+at `stacked_PC=0x00007640`. The stacked `R2=0x26000001`
+is the TI `DL_GPIO_enablePower(GPIO0)` access, rather than
+a motor-control arithmetic failure.
+
+G3a adds four isolated GPIO banks (GPIO0..3, 0x2000 spacing)
+using TI SDK `hw_memmap.h`, `hw_gpio.h`, and `dl_gpio.h`:
+- `GPRCM.PWREN` at +0x800 requires write KEY 0x26, retaining
+  ENABLE bit 0 and reading key as 0.
+- `GPRCM.RSTCTL` at +0x804 requires write KEY 0xB1; RESETASSERT
+  clears digital DOUT/DOE and sets STAT.RESETSTKY[16]. Sticky
+  clear is available independently.
+- GPIO DOUT/SET/CLR/TGL and DOE/SET/CLR aliases are backed
+  by local digital port state after power-enable.
+- DIN +0x1380 currently returns only the internally driven
+  `DOUT & DOE` for basic software testing. **External input
+  stimulus, analog pins, GPIO edge interrupts, and IOMUX
+  peripheral routing are not yet implemented.** Do not treat
+  this as a physically wired external pin state.
+- Unknown GPIO MMIO addresses/widths and invalid GPRCM keys
+  remain `MEMTX_ERROR` (no blanket fake register behavior).
+
+`tests/g3_gpio.py` checks reset state, rejected keyless PWREN,
+valid power-on/off, alias readback, reset sticky semantics and
+per-port isolation. These are QTests, **not** evidence of DShot
+input, PWM drive, motor spin or BEMF feedback. The next runtime
+trace should identify the smallest additional IOMUX/Timer/ADC
+MMIO surface needed for the unchanged ELF to initialize.

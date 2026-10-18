@@ -123,6 +123,40 @@ OBJECT_DECLARE_SIMPLE_TYPE(AM13EMachineState, AM13E_MACHINE)
 #define AM13E_FRI_FRDCNTL_RESET 0x02000201U
 #define AM13E_FRI_FRDCNTL_FIELDS (0x00000f00U | 0x00000001U)
 
+/* TI AM13E230x SDK hw_memmap.h/hw_gpio.h:
+ * GPIO0-3 at 0x400F0000 + 0x2000*n.
+ * GPRCM.PWREN uses KEY=0x26[31:24] and ENABLE[0].
+ * GPRCM.RSTCTL uses KEY=0xB1[31:24].
+ * This is digital MMIO bring-up only; no IOMUX or DShot waveform yet.
+ */
+#define AM13E_GPIO_COUNT 4U
+#define AM13E_GPIO_BASE 0x400F0000U
+#define AM13E_GPIO_STRIDE 0x2000U
+#define AM13E_GPIO_SIZE 0x2000U
+#define AM13E_GPIO_PWREN 0x0800U
+#define AM13E_GPIO_RSTCTL 0x0804U
+#define AM13E_GPIO_STAT 0x0814U
+#define AM13E_GPIO_DOUT 0x1280U
+#define AM13E_GPIO_DOUTSET 0x1290U
+#define AM13E_GPIO_DOUTCLR 0x12a0U
+#define AM13E_GPIO_DOUTTGL 0x12b0U
+#define AM13E_GPIO_DOE 0x12c0U
+#define AM13E_GPIO_DOESET 0x12d0U
+#define AM13E_GPIO_DOECLR 0x12e0U
+#define AM13E_GPIO_DIN 0x1380U
+#define AM13E_GPIO_PWREN_KEY 0x26000000U
+#define AM13E_GPIO_RSTCTL_KEY 0xb1000000U
+
+typedef struct AM13EGpioPort {
+    MemoryRegion mmio;
+    uint32_t bank;
+    bool powered;
+    bool reset_sticky;
+    bool unmodeled_reported;
+    uint32_t dout;
+    uint32_t doe;
+} AM13EGpioPort;
+
 struct AM13EMachineState {
     MachineState parent_obj;
     ARMv7MState armv7m;
@@ -150,6 +184,7 @@ struct AM13EMachineState {
     uint32_t factory_pll0;
     uint32_t factory_pll1;
     bool factory_unmodeled_reported;
+    AM13EGpioPort gpio[AM13E_GPIO_COUNT];
     MemoryRegion fri;
     uint32_t fri_frdcntl;
     bool fri_unmodeled_reported;
@@ -672,6 +707,154 @@ static const MemoryRegionOps am13e_fri_ops = {
     },
 };
 
+
+/*
+ * G3a: GPIO Power/Reset and minimal digital register aliases.
+ * The first MMIO fault after ESC-SIM SYSPLL startup was at
+ * GPIO0.GPRCM.PWREN (0x400F0800) with R2=0x26000001.
+ * No generic "always ready" or full GPIO register map is assumed.
+ *
+ * DIN reports only internally driven digital GPIO outputs, with
+ * no external stimulus or PINCM/peripheral routing connected yet.
+ * Future DShot pin injection must use the TIMG4 capture path.
+ */
+static void am13e_gpio_reset_port(AM13EGpioPort *g)
+{
+    g->powered = false;
+    g->reset_sticky = false;
+    g->unmodeled_reported = false;
+    g->dout = 0;
+    g->doe = 0;
+}
+
+static MemTxResult am13e_gpio_unmodeled(AM13EGpioPort *g,
+                                       hwaddr offset, bool write,
+                                       unsigned size)
+{
+    if (!g->unmodeled_reported) {
+        error_report("G3_UNMODELED_GPIO%u %s 0x%08" PRIx64
+                     " size=%u powered=%u (transaction rejected)",
+                     g->bank, write ? "write" : "read",
+                     (uint64_t)(AM13E_GPIO_BASE +
+                       g->bank * AM13E_GPIO_STRIDE + offset),
+                     size, g->powered ? 1U : 0U);
+        g->unmodeled_reported = true;
+    }
+    return MEMTX_ERROR;
+}
+
+static MemTxResult am13e_gpio_read(void *opaque, hwaddr offset,
+                                  uint64_t *value, unsigned size,
+                                  MemTxAttrs attrs)
+{
+    AM13EGpioPort *g = opaque;
+
+    if (size != 4) {
+        return am13e_gpio_unmodeled(g, offset, false, size);
+    }
+    switch (offset) {
+    case AM13E_GPIO_PWREN:
+        /* KEY is write-only; the ENABLE field is readable. */
+        *value = g->powered ? 1U : 0U;
+        return MEMTX_OK;
+    case AM13E_GPIO_STAT:
+        *value = g->reset_sticky ? (1U << 16) : 0U;
+        return MEMTX_OK;
+    default:
+        break;
+    }
+    if (!g->powered) {
+        return am13e_gpio_unmodeled(g, offset, false, size);
+    }
+    switch (offset) {
+    case AM13E_GPIO_DOE:
+        *value = g->doe;
+        return MEMTX_OK;
+    case AM13E_GPIO_DIN:
+        /* Digital-only internal drive readback. External levels are
+         * intentionally absent until explicit pin/plant injection.
+         */
+        *value = g->dout & g->doe;
+        return MEMTX_OK;
+    default:
+        return am13e_gpio_unmodeled(g, offset, false, size);
+    }
+}
+
+static MemTxResult am13e_gpio_write(void *opaque, hwaddr offset,
+                                   uint64_t value, unsigned size,
+                                   MemTxAttrs attrs)
+{
+    AM13EGpioPort *g = opaque;
+    uint32_t data = (uint32_t)value;
+
+    if (size != 4) {
+        return am13e_gpio_unmodeled(g, offset, true, size);
+    }
+    switch (offset) {
+    case AM13E_GPIO_PWREN:
+        if ((data & 0xff000000U) != AM13E_GPIO_PWREN_KEY ||
+            (data & 0x00fffffeU)) {
+            return am13e_gpio_unmodeled(g, offset, true, size);
+        }
+        g->powered = (data & 1U) != 0U;
+        return MEMTX_OK;
+    case AM13E_GPIO_RSTCTL:
+        if ((data & 0xff000000U) != AM13E_GPIO_RSTCTL_KEY ||
+            (data & 0x00fffffcU)) {
+            return am13e_gpio_unmodeled(g, offset, true, size);
+        }
+        if (data & 1U) {
+            g->dout = 0;
+            g->doe = 0;
+            g->reset_sticky = true;
+        } else if (data & 2U) {
+            g->reset_sticky = false;
+        }
+        return MEMTX_OK;
+    default:
+        break;
+    }
+    if (!g->powered) {
+        return am13e_gpio_unmodeled(g, offset, true, size);
+    }
+    switch (offset) {
+    case AM13E_GPIO_DOUT:
+        g->dout = data;
+        return MEMTX_OK;
+    case AM13E_GPIO_DOUTSET:
+        g->dout |= data;
+        return MEMTX_OK;
+    case AM13E_GPIO_DOUTCLR:
+        g->dout &= ~data;
+        return MEMTX_OK;
+    case AM13E_GPIO_DOUTTGL:
+        g->dout ^= data;
+        return MEMTX_OK;
+    case AM13E_GPIO_DOE:
+        g->doe = data;
+        return MEMTX_OK;
+    case AM13E_GPIO_DOESET:
+        g->doe |= data;
+        return MEMTX_OK;
+    case AM13E_GPIO_DOECLR:
+        g->doe &= ~data;
+        return MEMTX_OK;
+    default:
+        return am13e_gpio_unmodeled(g, offset, true, size);
+    }
+}
+
+static const MemoryRegionOps am13e_gpio_ops = {
+    .read_with_attrs = am13e_gpio_read,
+    .write_with_attrs = am13e_gpio_write,
+    .endianness = DEVICE_LITTLE_ENDIAN,
+    .valid = {
+        .min_access_size = 4,
+        .max_access_size = 4,
+    },
+};
+
 /*
  * Model the state at the END of the real ESCape32 Bootloader handoff:
  * __disable_irq(); quiesce(); VTOR=APP; MSP=vector[0]; BX vector[1].
@@ -703,6 +886,9 @@ static void am13e_handoff_reset(void *opaque)
     s->fri_frdcntl = AM13E_FRI_FRDCNTL_RESET;
     s->fri_unmodeled_reported = false;
     s->factory_unmodeled_reported = false;
+    for (unsigned i = 0; i < AM13E_GPIO_COUNT; ++i) {
+        am13e_gpio_reset_port(&s->gpio[i]);
+    }
 }
 
 static void am13e_init(MachineState *machine)
@@ -760,6 +946,22 @@ static void am13e_init(MachineState *machine)
                           "am13e-fri-g2b", AM13E_FRI_SIZE);
     memory_region_add_subregion(sysmem, AM13E_FRI_BASE, &s->fri);
 
+    /* GPIO0..3: power/reset plus basic digital output aliases. */
+    static const char *const gpio_names[AM13E_GPIO_COUNT] = {
+        "am13e-gpio0", "am13e-gpio1", "am13e-gpio2", "am13e-gpio3"
+    };
+    for (unsigned i = 0; i < AM13E_GPIO_COUNT; ++i) {
+        AM13EGpioPort *g = &s->gpio[i];
+
+        g->bank = i;
+        am13e_gpio_reset_port(g);
+        memory_region_init_io(&g->mmio, NULL, &am13e_gpio_ops, g,
+                              gpio_names[i], AM13E_GPIO_SIZE);
+        memory_region_add_subregion(sysmem,
+                                    AM13E_GPIO_BASE + i * AM13E_GPIO_STRIDE,
+                                    &g->mmio);
+    }
+
     /* Placeholder QEMU clocks, not an AM13E SYSCTL/PLL model. */
     s->cpuclk = clock_new(OBJECT(machine), "CPUCLK");
     clock_set_hz(s->cpuclk, 200000000);
@@ -784,7 +986,7 @@ static void am13e_init(MachineState *machine)
 static void am13e_class_init(ObjectClass *oc, void *data)
 {
     MachineClass *mc = MACHINE_CLASS(oc);
-    mc->desc = "AM13E23019 ESC-SIM virtual clocks and motor-facing MMIO";
+    mc->desc = "AM13E23019 ESC-SIM clock + GPIO power/IO G3a";
     mc->init = am13e_init;
     mc->default_cpu_type = ARM_CPU_TYPE_NAME("cortex-m33-am13e");
     mc->default_ram_size = AM13E_SRAM_SIZE;
