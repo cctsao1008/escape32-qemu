@@ -16,6 +16,7 @@
 #include "qom/object.h"
 #include "sysemu/reset.h"
 #include "qemu/timer.h"
+#include "hw/irq.h"
 
 #define TYPE_AM13E_MACHINE MACHINE_TYPE_NAME("am13e23019")
 OBJECT_DECLARE_SIMPLE_TYPE(AM13EMachineState, AM13E_MACHINE)
@@ -149,6 +150,20 @@ OBJECT_DECLARE_SIMPLE_TYPE(AM13EMachineState, AM13E_MACHINE)
  * The +0x800 aperture is only 0x20 bytes; the rest of each MMIO
  * block remains unimplemented, preventing fake ADC samples/captures.
  */
+/* Three ADCs share the TI driverlib configuration and conversion flow.
+ * CTRL aperture is ADC_BASE+0x1000; result registers are independently
+ * mapped at ADCxRESULT_BASE 0x4000A000/B000/C000.
+ */
+#define AM13E_SIM_ADC_COUNT 3U
+#define AM13E_SIM_ADC_REG_BASE 0x1000U
+#define AM13E_SIM_ADC_REG_SIZE 0x340U
+#define AM13E_SIM_ADC_RESULT_SIZE 0x20U
+#define AM13E_SIM_ADC_CONV_NS INT64_C(20000) /* synthetic 20us interval */
+#define AM13E_SIM_ADC_CTL1_PWR (1U << 7)
+#define AM13E_SIM_ADC_CTL1_BUSY (1U << 13)
+#define AM13E_SIM_ADC_SEQ_ENABLE (1U << 31)
+#define AM13E_SIM_ADC_SEQ_SWFRC (1U << 30)
+#define AM13E_SIM_ADC_INT1_ENABLE (1U << 7)
 #define AM13E_SIM_GPRCM_COUNT 5U
 #define AM13E_SIM_GPRCM_OFFSET 0x0800U
 #define AM13E_SIM_GPRCM_SIZE 0x20U
@@ -158,6 +173,9 @@ OBJECT_DECLARE_SIMPLE_TYPE(AM13EMachineState, AM13E_MACHINE)
 #define AM13E_SIM_GPRCM_RESET_STKY (1U << 16)
 #define AM13E_SIM_GPRCM_PWREN_KEY 0x26000000U
 #define AM13E_SIM_GPRCM_RESET_KEY 0xb1000000U
+typedef struct AM13ESimADC AM13ESimADC;
+static void am13e_sim_adc_reset(AM13ESimADC *adc);
+
 typedef struct AM13EPeripheralGPRCM {
     MemoryRegion mmio;
     uint32_t base;
@@ -166,7 +184,26 @@ typedef struct AM13EPeripheralGPRCM {
     bool reset_sticky;
     bool unmodeled_reported;
     bool esc_sim;
+    AM13ESimADC *adc; /* Optional ADC datapath reset owner. */
 } AM13EPeripheralGPRCM;
+
+struct AM13ESimADC {
+    MemoryRegion reg_mmio;
+    MemoryRegion result_mmio;
+    QEMUTimer *timer;
+    qemu_irq irq;
+    AM13EPeripheralGPRCM *gprcm;
+    uint32_t base;
+    const char *name;
+    bool esc_sim;
+    bool busy;
+    uint32_t registers[AM13E_SIM_ADC_REG_SIZE / 4U];
+    uint16_t results[16];
+    uint16_t channel_samples[32];
+    uint32_t interrupt_flags;
+    uint32_t interrupt_overflow;
+    bool unmodeled_reported;
+};
 
 #define AM13E_GPIO_PWREN_KEY 0x26000000U
 /* GPIO CPU_INT / GEN_EVENT0 / GEN_EVENT1, from TI hw_gpio.h.
@@ -241,6 +278,8 @@ struct AM13EMachineState {
     uint32_t factory_pll0;
     uint32_t factory_pll1;
     bool factory_unmodeled_reported;
+    AM13ESimADC adc[AM13E_SIM_ADC_COUNT];
+    char *esc_sim_adc_fixture_file;
     AM13EPeripheralGPRCM peripheral_gprcm[AM13E_SIM_GPRCM_COUNT];
     AM13EGpioPort gpio[AM13E_GPIO_COUNT];
     MemoryRegion fri;
@@ -778,6 +817,300 @@ static void am13e_set_sim_nfault_asserted(Object *obj, bool value,
     AM13E_MACHINE(obj)->esc_sim_nfault_asserted = value;
 }
 
+
+/* G4b: model TI native ADC0/1/2 SOC configuration plus SW conversion.
+ * This is NOT an analog ADC: external sample values are per-channel raw
+ * codes from an explicit fixture or the 2048-code synthetic fallback.
+ * ADCINT1 is delivered to its real AM13E interrupt input only after
+ * sequencer completion, never by a mere configuration/read.
+ */
+static bool am13e_adc_config_reg(uint32_t address)
+{
+    if (address == 0x000U || address == 0x004U ||
+        address == 0x010U || address == 0x014U ||
+        (address >= 0x04cU && address <= 0x088U &&
+         !(address & 3U)) ||
+        address == 0x0d4U || address == 0x0d8U ||
+        address == 0x0e8U || address == 0x180U ||
+        (address >= 0x320U && address <= 0x330U &&
+         !(address & 3U))) {
+        return true;
+    }
+    /* PPB1..4: CONFIG (+0x00), TRIPHI (+0x10), TRIPLO (+0x14). */
+    if (address >= 0x100U && address <= 0x174U) {
+        uint32_t minor = (address - 0x100U) & 0x1fU;
+        return minor == 0U || minor == 0x10U || minor == 0x14U;
+    }
+    /* PPB accumulation and shift/sync: limit and config2 are writable. */
+    if (address >= 0x200U && address <= 0x2c8U) {
+        uint32_t minor = (address - 0x200U) & 0x3fU;
+        return minor == 0U || minor == 8U;
+    }
+    return false;
+}
+
+static MemTxResult am13e_adc_unmodeled(AM13ESimADC *adc, hwaddr offset,
+                                       bool write, unsigned size)
+{
+    if (!adc->unmodeled_reported) {
+        error_report("G4_UNMODELED_ADC %s %s 0x%08" PRIx64
+                     " size=%u (transaction rejected)",
+                     adc->name, write ? "write" : "read",
+                     (uint64_t)(adc->base + AM13E_SIM_ADC_REG_BASE + offset),
+                     size);
+        adc->unmodeled_reported = true;
+    }
+    return MEMTX_ERROR;
+}
+
+static void am13e_sim_adc_irq_update(AM13ESimADC *adc)
+{
+    if (adc->irq) {
+        qemu_set_irq(adc->irq, !!(adc->interrupt_flags & 1U));
+    }
+}
+
+static void am13e_sim_adc_reset(AM13ESimADC *adc)
+{
+    if (adc->timer) {
+        timer_del(adc->timer);
+    }
+    adc->busy = false;
+    adc->interrupt_flags = 0;
+    adc->interrupt_overflow = 0;
+    adc->unmodeled_reported = false;
+    memset(adc->registers, 0, sizeof(adc->registers));
+    memset(adc->results, 0, sizeof(adc->results));
+    am13e_sim_adc_irq_update(adc);
+}
+
+static void am13e_sim_adc_complete(void *opaque)
+{
+    AM13ESimADC *adc = opaque;
+    uint32_t end, seq;
+
+    if (!adc->esc_sim || !adc->busy || !adc->gprcm->powered ||
+        !(adc->registers[0] & AM13E_SIM_ADC_CTL1_PWR)) {
+        return;
+    }
+    seq = adc->registers[0x324U / 4U];
+    if (!(seq & AM13E_SIM_ADC_SEQ_ENABLE)) {
+        return;
+    }
+    /* Sequence 1: END[3:0] indexes the final SOC. The firmware's
+     * native scan uses SOC0..SOC2 and optionally SOC3.
+     */
+    end = adc->registers[0x320U / 4U] & 0x0fU;
+    for (unsigned i = 0U; i <= end && i < 16U; ++i) {
+        uint32_t ctl = adc->registers[(0x04cU + i * 4U) / 4U];
+        uint32_t channel = (ctl >> 15U) & 31U;
+        adc->results[i] = adc->channel_samples[channel];
+    }
+    adc->busy = false;
+    adc->registers[0] &= ~AM13E_SIM_ADC_CTL1_BUSY;
+    if (adc->registers[0x010U / 4U] & AM13E_SIM_ADC_INT1_ENABLE) {
+        if (adc->interrupt_flags & 1U) {
+            adc->interrupt_overflow |= 1U;
+        }
+        adc->interrupt_flags |= 1U;
+        am13e_sim_adc_irq_update(adc);
+    }
+}
+
+static MemTxResult am13e_adc_read(void *opaque, hwaddr offset,
+                                 uint64_t *value, unsigned size,
+                                 MemTxAttrs attrs)
+{
+    AM13ESimADC *adc = opaque;
+    uint32_t addr = (uint32_t)offset;
+    if (!adc->esc_sim || size != 4 || (addr & 3U)) {
+        return am13e_adc_unmodeled(adc, offset, false, size);
+    }
+    switch (addr) {
+    case 0x018U: /* ADCRAWINTFLG */
+    case 0x01cU: /* ADCINTFLG */
+        *value = adc->interrupt_flags;
+        return MEMTX_OK;
+    case 0x028U: /* ADCINTOVF */
+        *value = adc->interrupt_overflow;
+        return MEMTX_OK;
+    case 0x03cU: /* ADCSOCFLG1 (no queued SOC after conversion) */
+    case 0x044U: /* ADCSOCOVF1 */
+    case 0x0ccU: /* ADCEVTSTAT */
+        *value = 0;
+        return MEMTX_OK;
+    case 0x0e4U: /* ADCREV: simulator has no silicon revision */
+    case 0x19cU: /* ADCREV2 */
+        *value = 0;
+        return MEMTX_OK;
+    default:
+        if (!am13e_adc_config_reg(addr)) {
+            return am13e_adc_unmodeled(adc, offset, false, size);
+        }
+        *value = adc->registers[addr / 4U];
+        return MEMTX_OK;
+    }
+}
+
+static MemTxResult am13e_adc_write(void *opaque, hwaddr offset,
+                                  uint64_t value, unsigned size,
+                                  MemTxAttrs attrs)
+{
+    AM13ESimADC *adc = opaque;
+    uint32_t addr = (uint32_t)offset;
+    uint32_t data = (uint32_t)value;
+    uint32_t *reg;
+    if (!adc->esc_sim || size != 4 || (addr & 3U)) {
+        return am13e_adc_unmodeled(adc, offset, true, size);
+    }
+    switch (addr) {
+    case 0x020U: /* ADCINTFLGFRC */
+        adc->interrupt_flags |= (data & 0x0fU);
+        am13e_sim_adc_irq_update(adc);
+        return MEMTX_OK;
+    case 0x024U: /* ADCINTFLGCLR */
+        adc->interrupt_flags &= ~(data & 0x0fU);
+        am13e_sim_adc_irq_update(adc);
+        return MEMTX_OK;
+    case 0x02cU: /* ADCINTOVFCLR */
+        adc->interrupt_overflow &= ~(data & 0x0fU);
+        return MEMTX_OK;
+    case 0x048U: /* ADCSOCOVFCLR1 */
+    case 0x0d0U: /* ADCEVTCLR */
+        return MEMTX_OK; /* No overflow/event yet, only W1C. */
+    default:
+        break;
+    }
+    if (!am13e_adc_config_reg(addr)) {
+        return am13e_adc_unmodeled(adc, offset, true, size);
+    }
+    reg = &adc->registers[addr / 4U];
+    if (addr == 0x000U) {
+        /* ADCCTL1 busy flag is output-only hardware state. */
+        *reg = (data & ~AM13E_SIM_ADC_CTL1_BUSY) |
+               (*reg & AM13E_SIM_ADC_CTL1_BUSY);
+    } else if (addr == 0x324U) {
+        if ((data & AM13E_SIM_ADC_SEQ_SWFRC) &&
+            !(*reg & AM13E_SIM_ADC_SEQ_SWFRC)) {
+            if (!(data & AM13E_SIM_ADC_SEQ_ENABLE) ||
+                !(adc->registers[0] & AM13E_SIM_ADC_CTL1_PWR) ||
+                !adc->gprcm->powered || adc->busy) {
+                return am13e_adc_unmodeled(adc, offset, true, size);
+            }
+            adc->busy = true;
+            adc->registers[0] |= AM13E_SIM_ADC_CTL1_BUSY;
+            timer_mod(adc->timer, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL)
+                                  + AM13E_SIM_ADC_CONV_NS);
+        }
+        /* Software force is a trigger strobe; cannot remain set. */
+        *reg = data & ~AM13E_SIM_ADC_SEQ_SWFRC;
+    } else {
+        *reg = data;
+    }
+    return MEMTX_OK;
+}
+
+static const MemoryRegionOps am13e_adc_ops = {
+    .read_with_attrs = am13e_adc_read,
+    .write_with_attrs = am13e_adc_write,
+    .endianness = DEVICE_LITTLE_ENDIAN,
+    .valid = { .min_access_size = 4, .max_access_size = 4 },
+};
+
+static MemTxResult am13e_adc_results_read(void *opaque, hwaddr offset,
+                                         uint64_t *value, unsigned size,
+                                         MemTxAttrs attrs)
+{
+    AM13ESimADC *adc = opaque;
+    uint32_t idx = (uint32_t)offset / 2U;
+    if (!adc->esc_sim || (offset & 1U) || (size != 2 && size != 4) ||
+        idx >= 16U || (size == 4 && idx >= 15U)) {
+        return MEMTX_ERROR;
+    }
+    *value = adc->results[idx];
+    if (size == 4) {
+        *value |= (uint64_t)adc->results[idx + 1U] << 16U;
+    }
+    return MEMTX_OK;
+}
+
+static MemTxResult am13e_adc_results_write(void *opaque, hwaddr offset,
+                                          uint64_t value, unsigned size,
+                                          MemTxAttrs attrs)
+{
+    return MEMTX_ERROR; /* ADCRESULTs are never software-writable. */
+}
+
+static const MemoryRegionOps am13e_adc_results_ops = {
+    .read_with_attrs = am13e_adc_results_read,
+    .write_with_attrs = am13e_adc_results_write,
+    .endianness = DEVICE_LITTLE_ENDIAN,
+    .valid = { .min_access_size = 2, .max_access_size = 4 },
+};
+
+static void am13e_sim_adc_load_fixture(AM13EMachineState *s)
+{
+    gchar *data = NULL;
+    gsize size = 0;
+    GError *error = NULL;
+
+    /* Fallback allows control-flow bring-up without a real motor plant.
+     * This exact 12-bit midscale code has no sensor voltage/current/NTC
+     * meaning. Every sample is produced by SW sequencer event only.
+     */
+    for (unsigned n = 0; n < AM13E_SIM_ADC_COUNT; ++n) {
+        for (unsigned ch = 0; ch < 32U; ++ch) {
+            s->adc[n].channel_samples[ch] = 2048U;
+        }
+    }
+    if (!s->esc_sim || !s->esc_sim_adc_fixture_file) {
+        return;
+    }
+    if (!g_file_get_contents(s->esc_sim_adc_fixture_file, &data,
+                             &size, &error)) {
+        error_report("ESC_SIM_ADC_FIXTURE_READ '%s': %s",
+                     s->esc_sim_adc_fixture_file, error->message);
+        g_clear_error(&error);
+        exit(EXIT_FAILURE);
+    }
+    if (size != AM13E_SIM_ADC_COUNT * 32U * 2U) {
+        error_report("ESC_SIM_ADC_FIXTURE_SIZE expected 192 bytes, got %"
+                     G_GSIZE_FORMAT, size);
+        g_free(data);
+        exit(EXIT_FAILURE);
+    }
+    for (unsigned n = 0; n < AM13E_SIM_ADC_COUNT; ++n) {
+        for (unsigned ch = 0; ch < 32U; ++ch) {
+            unsigned offset = (n * 32U + ch) * 2U;
+            uint32_t code = (uint8_t)data[offset] |
+                            ((uint32_t)(uint8_t)data[offset + 1U] << 8U);
+            if (code > 4095U) {
+                error_report("ESC_SIM_ADC_FIXTURE_RANGE ADC%u CH%u=%u",
+                             n, ch, code);
+                g_free(data);
+                exit(EXIT_FAILURE);
+            }
+            s->adc[n].channel_samples[ch] = (uint16_t)code;
+        }
+    }
+    g_free(data);
+}
+
+static char *am13e_get_adc_fixture(Object *obj, Error **errp)
+{
+    AM13EMachineState *s = AM13E_MACHINE(obj);
+    return g_strdup(s->esc_sim_adc_fixture_file ?
+                    s->esc_sim_adc_fixture_file : "");
+}
+
+static void am13e_set_adc_fixture(Object *obj, const char *path,
+                                   Error **errp)
+{
+    AM13EMachineState *s = AM13E_MACHINE(obj);
+    g_free(s->esc_sim_adc_fixture_file);
+    s->esc_sim_adc_fixture_file = path && *path ? g_strdup(path) : NULL;
+}
+
 /*
  * G4a: shared GPRCM setup for ADC0/ADC1/ADC2, TIMG4, TIMG12.
  * These are the exact documented peripheral address bases; no
@@ -852,6 +1185,9 @@ static MemTxResult am13e_gprcm_write(void *opaque, hwaddr offset,
         }
         if (data & 1U) {
             g->reset_sticky = true;
+            if (g->adc) {
+                am13e_sim_adc_reset(g->adc);
+            }
         } else if (data & 2U) {
             g->reset_sticky = false;
         }
@@ -1298,6 +1634,9 @@ static void am13e_handoff_reset(void *opaque)
     for (unsigned i = 0; i < AM13E_SIM_GPRCM_COUNT; ++i) {
         am13e_gprcm_reset(&s->peripheral_gprcm[i]);
     }
+    for (unsigned i = 0; i < AM13E_SIM_ADC_COUNT; ++i) {
+        am13e_sim_adc_reset(&s->adc[i]);
+    }
     for (unsigned i = 0; i < AM13E_GPIO_COUNT; ++i) {
         am13e_gpio_reset_port(&s->gpio[i]);
     }
@@ -1389,6 +1728,38 @@ static void am13e_init(MachineState *machine)
                                     &g->mmio);
     }
 
+    /* ESC-SIM ADC0/1/2 data and controls: per-channel synthetic
+     * fixture codes, software-triggered time, and real NVIC IRQ0..2.
+     * ADC1 and ADC2 interrupt numbers are 13 and 18 in TI startup
+     * vector table (device-specific IRQ indices 8,13,18).
+     */
+    am13e_sim_adc_load_fixture(s);
+    static const char *const adc_names[AM13E_SIM_ADC_COUNT] = {
+        "am13e-adc0", "am13e-adc1", "am13e-adc2"
+    };
+    static const uint32_t adc_result_base[AM13E_SIM_ADC_COUNT] = {
+        0x4000a000U, 0x4000b000U, 0x4000c000U
+    };
+    for (unsigned i = 0; i < AM13E_SIM_ADC_COUNT; ++i) {
+        AM13ESimADC *a = &s->adc[i];
+
+        a->base = gprcm_devices[i].base;
+        a->name = adc_names[i];
+        a->esc_sim = s->esc_sim;
+        a->gprcm = &s->peripheral_gprcm[i];
+        a->gprcm->adc = a;
+        a->timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, am13e_sim_adc_complete, a);
+        am13e_sim_adc_reset(a);
+        memory_region_init_io(&a->reg_mmio, NULL, &am13e_adc_ops, a,
+                              adc_names[i], AM13E_SIM_ADC_REG_SIZE);
+        memory_region_add_subregion(sysmem, a->base + AM13E_SIM_ADC_REG_BASE,
+                                    &a->reg_mmio);
+        memory_region_init_io(&a->result_mmio, NULL, &am13e_adc_results_ops,
+                              a, adc_names[i], AM13E_SIM_ADC_RESULT_SIZE);
+        memory_region_add_subregion(sysmem, adc_result_base[i],
+                                    &a->result_mmio);
+    }
+
     /* G3b: 108 TI PINCM words for GPIO, DShot and PWM pad routing. */
     memset(s->pincm, 0, sizeof(s->pincm));
     s->iomux_unmodeled_reported = false;
@@ -1431,6 +1802,11 @@ static void am13e_init(MachineState *machine)
     object_property_set_link(OBJECT(&s->armv7m), "memory",
                              OBJECT(sysmem), &error_abort);
     sysbus_realize(SYS_BUS_DEVICE(core), &error_fatal);
+    /* Peripheral IRQ numbers verified against TI startup_gcc_arm.c. */
+    static const unsigned adc_irq[AM13E_SIM_ADC_COUNT] = {8U, 13U, 18U};
+    for (unsigned i = 0; i < AM13E_SIM_ADC_COUNT; ++i) {
+        s->adc[i].irq = qdev_get_gpio_in(core, adc_irq[i]);
+    }
     armv7m_load_kernel(ARM_CPU(first_cpu), machine->kernel_filename,
                        AM13E_FLASH_SIZE);
     qemu_register_reset(am13e_handoff_reset, s);
@@ -1439,7 +1815,7 @@ static void am13e_init(MachineState *machine)
 static void am13e_class_init(ObjectClass *oc, void *data)
 {
     MachineClass *mc = MACHINE_CLASS(oc);
-        mc->desc = "AM13E23019 ESC-SIM ADC+TIMG shared reset/power and GPIO";
+        mc->desc = "AM13E23019 ESC-SIM ADC sequencer and IRQ input for sensors";
     mc->init = am13e_init;
     mc->default_cpu_type = ARM_CPU_TYPE_NAME("cortex-m33-am13e");
     mc->default_ram_size = AM13E_SRAM_SIZE;
@@ -1465,6 +1841,12 @@ static void am13e_class_init(ObjectClass *oc, void *data)
                                    am13e_set_sim_nfault_asserted);
     object_class_property_set_description(oc, "esc-sim-nfault-asserted",
         "Initial external PA22 active-low nFAULT, simulation only");
+    object_class_property_add_str(oc, "esc-sim-adc-fixture-file",
+                                  am13e_get_adc_fixture,
+                                  am13e_set_adc_fixture);
+    object_class_property_set_description(oc, "esc-sim-adc-fixture-file",
+        "Optional 192-byte LE ADCx[3] channel[32] 12-bit code table. "
+        "Without it, software-triggered samples are synthetic midscale.");
 }
 static void am13e_finalize(Object *obj)
 {
@@ -1478,6 +1860,14 @@ static void am13e_finalize(Object *obj)
         timer_free(s->sim_pll_timer);
         s->sim_pll_timer = NULL;
     }
+    for (unsigned i = 0; i < AM13E_SIM_ADC_COUNT; ++i) {
+        if (s->adc[i].timer) {
+            timer_free(s->adc[i].timer);
+            s->adc[i].timer = NULL;
+        }
+    }
+    g_free(s->esc_sim_adc_fixture_file);
+    s->esc_sim_adc_fixture_file = NULL;
     g_free(s->factory_pll_file);
     s->factory_pll_file = NULL;
 }

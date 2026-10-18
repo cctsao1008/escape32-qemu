@@ -495,3 +495,38 @@ timer counters, capture/DMA edges, or timer interrupts**.
 invalid passwords, reset status/clear, independent power and the
 fail-closed default. Next step should implement actual ESC
 data/control paths, not more single-register GPRCM patches.
+
+## G4b — Native ADC0/1/2 sequencer and deterministic sampling
+
+The unchanged ELF now passed GPIO and GPRCM setup and faulted
+at `ADC0.ADCCTL2 = 0x40001004` (stacked_PC 0x0000cf80).
+Rather than register-by-register GPRCM extensions, G4b maps the
+TI ADC0/1/2 `ADCCTL1/2`, SOC0..15, PPB1..4, Interrupt
+Selection/Flag/Clear, and SEQCTL / SEQ1..4 CONFIG registers.
+The configuration addresses are cross-checked with SDK
+`hw_adc.h` and actual firmware
+`analog_sampling_backend.c`.
+
+ADC RESULT0..15 are separate memory-mapped, read-only
+16-bit registers at `ADC0RESULT_BASE=0x4000A000`,
+`ADC1RESULT_BASE=0x4000B000`,
+`ADC2RESULT_BASE=0x4000C000`. Configuring ADC does
+not generate samples or interrupt flags. After a valid
+SEQ1 SWFRC trigger, a QEMU virtual timer delays completion
+20µs (simulator-only fixed interval, NOT TI ADC timing).
+Only then are results copied from the raw input-code table and
+`ADCINTFLG` asserted, with ADC0/1/2 INT1 outputs connected to
+NVIC IRQ8,13,18 as in `startup_gcc_arm.c`. Clearing
+`ADCINTFLGCLR` deasserts the IRQ.
+
+`-machine am13e23019,esc-sim=on,esc-sim-adc-fixture-file=/PATH`
+accepts exactly **192 bytes** (`uint16_le[3][32]`),
+each input code 0..4095. Omitting the fixture uses the
+explicit synthetic 2048-code midpoint, not an actual current,
+bus voltage or temperature. These are *static analog inputs*,
+not yet a live virtual motor plant or analog transfer model.
+No calibration/temperature/overcurrent claim is made. The
+external Python motor plant must eventually drive these
+channels dynamically; the ADC sequencer conversion interface
+and NVIC timing remain guest-firmware-owned. Strict mode
+retains its fail-closed ADC data-path behavior.

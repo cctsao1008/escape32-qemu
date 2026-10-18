@@ -54,6 +54,9 @@ python3 "$ROOT/tests/g3_gpio_bootstrap.py" \
 python3 "$ROOT/tests/g4_peripheral_gprcm.py" \
     --qemu "$ROOT/.build/qemu-src/build/qemu-system-arm" \
     --elf "$1"
+python3 "$ROOT/tests/g4_adc_sequencer.py" \
+    --qemu "$ROOT/.build/qemu-src/build/qemu-system-arm" \
+    --elf "$1"
 python3 "$ROOT/tests/g1_handoff.py" \
     --qemu "$ROOT/.build/qemu-src/build/qemu-system-arm" \
     --elf "$1"
