@@ -260,3 +260,12 @@ allows observation beyond this deadline. This is deliberately
 accelerated and **does not** model 200MHz CPU cycles. Results show control-flow
 progress only. Use the G2g QTest clock_step cases for actual timer
 boundary validation.
+
+### RSP error reply classification
+
+The RSP client now rejects only exact two-hex-digit remote error
+packets (`E01`, `E2a`, etc.). The earlier `result.startswith("E")`
+incorrectly rejected QEMU's valid `qqemu.sstepbits` response
+`ENABLE=1,NOIRQ=2,NOTIMER=4`. A host-only regression
+`tests/test_rsp.py` is run by `test.sh` before guest tests. This
+change does not modify firmware, CPU or SYSCTL/XTAL behavior.

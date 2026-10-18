@@ -5,6 +5,7 @@ No application binary rewriting, replacement startup, fake MMIO, or motor.
 """
 import argparse
 import os
+import re
 import socket
 import struct
 import subprocess
@@ -51,7 +52,9 @@ class RSP:
             raise RuntimeError("Invalid RSP reply checksum")
         self.sock.sendall(b"+")
         result = packet.decode("ascii")
-        if result.startswith("E"):
+        # RSP errors are exactly 'E' followed by two hex digits.
+        # 'ENABLE=1,NOIRQ=2,NOTIMER=4' is a valid QEMU feature reply.
+        if re.fullmatch(r"E[0-9a-fA-F]{2}", result):
             raise RuntimeError(f"GDB RSP error for {payload}: {result}")
         return result
 
