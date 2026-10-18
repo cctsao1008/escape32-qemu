@@ -332,3 +332,34 @@ to observe further original ELF execution when separately sourced
 valid data exists. G2i does not implement SYSPLLPARAM0/1,
 analog PLL behavior, or fabricate SYSPLLGOOD. Without source data,
 the same BFAR is the correct fail-closed result.
+
+## G2j: SYSPLLPARAM0/1, opaque calibration-word transport
+
+The AM13E230x TRM SPRUJF2B §§3.14.2.18–19 identifies
+SYSPLLPARAM0/1 at `SYSCTL_BASE+0x1128`/`+0x112c`.
+Both contain writable factory-derived tuning parameters. Their
+documented reset fields produce emulator snapshots `0x810a0000`
+and `0x0f00010f`. Unknown reset fields marked X are represented
+by zero **only as an emulator convention**.
+
+G2j implements 32-bit read/write storage of the *complete* words,
+including undefined R/W-X bits, because the unmodified firmware
+copies opaque data from a separately provisioned FACTORY address.
+No attempt is made to interpret or invent the per-chip values.
+Both writes are blocked while SYSPLL is enabled, as described by
+TRM `CLKSTATUS.SYSPLLBLKUPD` semantics. No automatic lock,
+clock-frequency output, or GOOD bits are produced by parameter
+writes.
+
+The independent QTest `tests/g2_pllparam.py` provisions an
+**explicit, temporary 8-byte synthetic transport fixture**, then
+validates the actual FACTORY→SYSPLLPARAM full-word copy and
+readback. The synthetic fixture is *not* TI analog calibration and
+must never be used to qualify PLL frequency, lock or physical
+motor-controller behavior.
+
+The real ELF still stops at the first unprovisioned FACTORY read
+by default. To trace beyond it, an independently sourced factory
+pair must be passed via `--factory-pll-file`; all subsequent
+behavior needs its own evidence. Physical SYSPLL model and
+G2 Scheduler acceptance remain outstanding.

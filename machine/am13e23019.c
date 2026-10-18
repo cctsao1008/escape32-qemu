@@ -80,6 +80,16 @@ OBJECT_DECLARE_SIMPLE_TYPE(AM13EMachineState, AM13E_MACHINE)
 #define AM13E_SYSCTL_SYSPLLCFG1_INITIAL 0x00002300U
 #define AM13E_SYSCTL_SYSPLLCFG0_FIELDS 0x0000ff31U
 #define AM13E_SYSCTL_SYSPLLCFG1_FIELDS 0x00007f03U
+
+/* TI TRM SPRUJF2B §§3.14.2.18–19, SYSPLL factory tuning
+ * parameter registers. Reserved R/W-X bits have undefined reset
+ * values: their emulator reset image is 0, but full-word writes
+ * remain opaque to preserve original firmware's FACTORY copy.
+ */
+#define AM13E_SYSCTL_SYSPLLPARAM0 0x1128U
+#define AM13E_SYSCTL_SYSPLLPARAM1 0x112cU
+#define AM13E_SYSCTL_SYSPLLPARAM0_INITIAL 0x810a0000U
+#define AM13E_SYSCTL_SYSPLLPARAM1_INITIAL 0x0f00010fU
 #define AM13E_SYSPLL_ENABLE (1U << 8)
 
 /* TI hw_factoryregion.h and TRM §3.16: FACTORY FLASH window.
@@ -120,6 +130,8 @@ struct AM13EMachineState {
     uint32_t sysctl_hfclkclkcfg;
     uint32_t sysctl_pllcfg0;
     uint32_t sysctl_pllcfg1;
+    uint32_t sysctl_pllparam0;
+    uint32_t sysctl_pllparam1;
     uint32_t sysctl_clkstatus;
     QEMUTimer *xtal_timer;
     bool xtal_present;
@@ -248,6 +260,12 @@ static MemTxResult am13e_sysctl_read(void *opaque, hwaddr offset,
     case AM13E_SYSCTL_SYSPLLCFG1:
         *value = s->sysctl_pllcfg1;
         return MEMTX_OK;
+    case AM13E_SYSCTL_SYSPLLPARAM0:
+        *value = s->sysctl_pllparam0;
+        return MEMTX_OK;
+    case AM13E_SYSCTL_SYSPLLPARAM1:
+        *value = s->sysctl_pllparam1;
+        return MEMTX_OK;
     default:
         return am13e_sysctl_unmodeled(s, offset, false, size);
     }
@@ -262,6 +280,22 @@ static MemTxResult am13e_sysctl_write(void *opaque, hwaddr offset,
 
     if (size != 4) {
         return am13e_sysctl_unmodeled(s, offset, true, size);
+    }
+    if (offset == AM13E_SYSCTL_SYSPLLPARAM0 ||
+        offset == AM13E_SYSCTL_SYSPLLPARAM1) {
+        /* The factory pair is copied verbatim, including R/W-X bits:
+         * this is digital register transport, NOT analog calibration.
+         * Hardware blocks parameter writes after PLL enable.
+         */
+        if (s->sysctl_hsclken & AM13E_SYSPLL_ENABLE) {
+            return am13e_sysctl_unmodeled(s, offset, true, size);
+        }
+        if (offset == AM13E_SYSCTL_SYSPLLPARAM0) {
+            s->sysctl_pllparam0 = (uint32_t)value;
+        } else {
+            s->sysctl_pllparam1 = (uint32_t)value;
+        }
+        return MEMTX_OK;
     }
     if (offset == AM13E_SYSCTL_SYSPLLCFG0 ||
         offset == AM13E_SYSCTL_SYSPLLCFG1) {
@@ -563,6 +597,8 @@ static void am13e_handoff_reset(void *opaque)
     s->sysctl_hfclkclkcfg = AM13E_SYSCTL_HFCLKCLKCFG_INITIAL;
     s->sysctl_pllcfg0 = AM13E_SYSCTL_SYSPLLCFG0_INITIAL;
     s->sysctl_pllcfg1 = AM13E_SYSCTL_SYSPLLCFG1_INITIAL;
+    s->sysctl_pllparam0 = AM13E_SYSCTL_SYSPLLPARAM0_INITIAL;
+    s->sysctl_pllparam1 = AM13E_SYSCTL_SYSPLLPARAM1_INITIAL;
     s->sysctl_clkstatus = AM13E_SYSCTL_CLKSTATUS_INITIAL;
     timer_del(s->xtal_timer);
     s->sysctl_unmodeled_reported = false;
@@ -603,6 +639,8 @@ static void am13e_init(MachineState *machine)
     s->sysctl_hfclkclkcfg = AM13E_SYSCTL_HFCLKCLKCFG_INITIAL;
     s->sysctl_pllcfg0 = AM13E_SYSCTL_SYSPLLCFG0_INITIAL;
     s->sysctl_pllcfg1 = AM13E_SYSCTL_SYSPLLCFG1_INITIAL;
+    s->sysctl_pllparam0 = AM13E_SYSCTL_SYSPLLPARAM0_INITIAL;
+    s->sysctl_pllparam1 = AM13E_SYSCTL_SYSPLLPARAM1_INITIAL;
     s->sysctl_clkstatus = AM13E_SYSCTL_CLKSTATUS_INITIAL;
     s->xtal_timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, am13e_xtal_ready, s);
     memory_region_init_io(&s->sysctl, NULL, &am13e_sysctl_ops, s,
@@ -645,7 +683,7 @@ static void am13e_init(MachineState *machine)
 static void am13e_class_init(ObjectClass *oc, void *data)
 {
     MachineClass *mc = MACHINE_CLASS(oc);
-    mc->desc = "AM13E23019 ESCape32 G2i explicit factory ROM fixture";
+    mc->desc = "AM13E23019 ESCape32 G2j SYSPLL parameters and Factory ROM";
     mc->init = am13e_init;
     mc->default_cpu_type = ARM_CPU_TYPE_NAME("cortex-m33-am13e");
     mc->default_ram_size = AM13E_SRAM_SIZE;
