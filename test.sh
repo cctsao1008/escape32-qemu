@@ -75,6 +75,9 @@ python3 "$ROOT/tests/g8_sysctl_motor.py" \
 python3 "$ROOT/tests/g9_mcpwm_observer.py" \
     --qemu "$ROOT/.build/qemu-src/build/qemu-system-arm" \
     --elf "$1"
+python3 "$ROOT/tests/g10_feedback.py" \
+    --qemu "$ROOT/.build/qemu-src/build/qemu-system-arm" \
+    --elf "$1"
 python3 "$ROOT/tests/test_virtual_bldc.py"
 python3 "$ROOT/tests/g1_handoff.py" \
     --qemu "$ROOT/.build/qemu-src/build/qemu-system-arm" \
