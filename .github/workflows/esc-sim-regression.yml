@@ -52,7 +52,7 @@ jobs:
             -DESCAPE32_BUILD_AM13E=ON \
             -DAM13E_SDK_ROOT=/tmp/e62-sdk \
             -DAM13E_BOOT_LINKER_SCRIPT=/tmp/e62-escape32/boot/mcu/AM13E/config.ld
-          cmake --build /tmp/e62-fw-build --target AM13E BOOT5_PB14 -j 2
+          # Test the actual Application ELF only; Boot firmware is a separate\n          # project and is not needed for QEMU's application handoff.\n          cmake --build /tmp/e62-fw-build --target AM13E-rev17.3.elf -j 2
           test -f /tmp/e62-fw-build/AM13E-rev17.3.elf
           arm-none-eabi-objdump -d /tmp/e62-fw-build/AM13E-rev17.3.elf \
             | grep -A 4 '<DL_MCPWM_setEmulationMode>:' | head -5
