@@ -771,3 +771,49 @@ invalid clock bits, SDK-compatible RMW power/key behavior,
 independent PWM4/ECAP1/CMPSS0/XBAR bits, reset sticky/clear
 and strict-mode rejection. The acceptance for **real PWM**
 is still a separate guest-driven signal/commutation test.
+
+## G9a: real guest MCPWM4 output observer, no fabricated duty
+
+`MCPWM4_BASE=0x40014000` uses the TI SDK `hw_mcpwm.h`
+register offsets for `TBCTL`, `TBPRD`, `TBPRDS`,
+`TBCTR`, `PWM1..3 CMPA/B active+shadow`,
+`PWM1..3 AQCTLA/B active+shadow`, `DBCTL`,
+`DBFED/RED`, `GLDCTL`, `GLDOSHTCTL/STS`, and
+`ETSEL/ETPERIOD/INTEN/INTFLAG/INTCLR/INTFRC`.
+MCPWM4 PWM power (SYSCTL bit9) and
+`PERCLKCR.TBCLKSYNC` must both be enabled. The native
+100MHz time-base count advances under QEMU Virtual Time,
+generating zero interrupts at real counter boundaries
+(NVIC external IRQ28). Rel17 one-shot global-load
+shadow transactions are committed only on such events,
+not immediately upon software writes.
+
+A read-only **non-silicon** ESC-SIM observer at
+`0x5FFE1000` reports running/status (+0), running
+(+4), period ticks (+8), current counter (+C),
+six internal AQ/DB levels (+10), validity mask (+14),
+and six **HIGH ticks per carrier** (+18..+2C).
+Levels are calculated from the active firmware-written
+AQ and Compare registers and supported independent
+dead-band timing, not from a throttle command or an
+assumed duty setting. Unsupported AQ action types and
+DB topology return **invalid** instead of silently
+fabricating plausible output.
+
+The observer is INTERNAL MCPWM logic, not a guarantee
+that PB13 gate polarity, six physical pad routes or
+gate-driver electrical conditions have been satisfied.
+Its duty values must not be interpreted as energized
+motor phases until those separate board conditions
+are checked. Without explicit compile-time electrical
+board output definitions, original ESCape32 can
+deliberately keep gate drive disabled; the simulator
+must not bypass that firmware decision. Likewise,
+no motor BEMF or ECAP crossing is asserted by this
+observer alone. Actual closed-loop validation requires
+the host motor plant and CMPSS0/ECAP1 link.
+
+`tests/g9_mcpwm_observer.py` checks TBCLKSYNC gating,
+native six-AQ duty measurement, one-shot global
+shadow load at Counter ZERO, firmware IRQ clear and
+strict-mode refusal. No Trip Protection claim.

@@ -199,6 +199,16 @@ OBJECT_DECLARE_SIMPLE_TYPE(AM13EMachineState, AM13E_MACHINE)
 /* Dedicated G7b test-only input stimulus: NOT AM13E silicon MMIO.
  * Esc-sim explicitly opts in. Guest-visible only to test harness.
  */
+/* G9 MCPWM4 simulation; observer window is simulator-only and read-only.
+ * Six outputs are INTERNAL AQ/DB signals. The host must separately
+ * qualify the external gate polarity and six IOMUX pad routes.
+ */
+#define AM13E_SIM_MCPWM_BASE 0x40014000U
+#define AM13E_SIM_MCPWM_SIZE 0x600U
+#define AM13E_SIM_PWM_OBSERVER 0x5ffe1000U
+#define AM13E_SIM_PWM_OBS_SIZE 0x80U
+#define AM13E_SIM_PWM_CLK 100000000U
+#define AM13E_SIM_PWM_POWER_BIT (1U << 9)
 #define AM13E_SIM_PA26_INJECT_BASE 0x5ffe0000U
 #define AM13E_SIM_PA26_INJECT_SIZE 0x10U
 #define AM13E_SIM_PA26_PIN (1U << 26)
@@ -262,6 +272,22 @@ struct AM13ESimADC {
     uint32_t interrupt_overflow;
     bool unmodeled_reported;
 };
+
+typedef struct AM13ESimPWM {
+    MemoryRegion mmio;
+    MemoryRegion observer;
+    QEMUTimer *zero_timer;
+    qemu_irq irq;
+    struct AM13EMachineState *machine;
+    uint32_t reg[AM13E_SIM_MCPWM_SIZE / 4U];
+    int64_t epoch_ns;
+    uint32_t counter_base;
+    uint32_t irqs;
+    uint32_t zero_events;
+    bool running;
+    bool latch;
+    bool reported_unmodeled;
+} AM13ESimPWM;
 
 typedef struct AM13EDMA {
     MemoryRegion mmio;
@@ -367,6 +393,7 @@ struct AM13EMachineState {
     AM13ESimWWDT wwdt;
     AM13ESimTimer gtimer[AM13E_SIM_TIMER_COUNT];
     AM13EDMA dma0;
+    AM13ESimPWM pwm4;
     MemoryRegion sim_pa26_inject;
     uint32_t sim_pa26_level;
     uint32_t sim_pa26_transitions;
@@ -1283,10 +1310,444 @@ static uint32_t *am13e_sim_motor_analog_cfg(AM13EMachineState *s,
     }
 }
 
+
+/* MCPWM4 G9a: native register read/write, real virtual zero events,
+ * six-channel AQ+per-output DB delay evaluation and read-only observer.
+ * No external gate signal, motor speed, comparator, or ECAP event is
+ * manufactured by this block.
+ */
+static void am13e_pwm4_irq_update(AM13ESimPWM *p)
+{
+    if (p->irq) {
+        qemu_set_irq(p->irq, !!(p->irqs & p->reg[0x90U / 4U]));
+    }
+}
+
+static bool am13e_pwm4_clock_allowed(const AM13ESimPWM *p)
+{
+    const AM13EMachineState *s = p->machine;
+    return s->esc_sim &&
+           !!(s->sim_mc_power & AM13E_SIM_PWM_POWER_BIT) &&
+           !!(s->sim_perclkcr & 1U) &&
+           (p->reg[0x10U / 4U] & 3U) == 0U &&
+           p->reg[0x14U / 4U] > 0U;
+}
+
+static uint32_t am13e_pwm4_hz(const AM13ESimPWM *p)
+{
+    uint32_t divider = (p->reg[0x10U / 4U] >> 2U) & 15U;
+    if (divider > 7U) {
+        return 0U;
+    }
+    /* TI DL_MCPWM predivider: /1, /2, /4, ... /128. */
+    return AM13E_SIM_PWM_CLK >> divider;
+}
+
+static uint32_t am13e_pwm4_count(AM13ESimPWM *p)
+{
+    uint32_t period = p->reg[0x14U / 4U] & 0xffffU;
+    if (!p->running || !am13e_pwm4_clock_allowed(p)) {
+        return p->counter_base;
+    }
+    uint32_t hz = am13e_pwm4_hz(p);
+    int64_t elapsed = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) - p->epoch_ns;
+    if (elapsed <= 0 || !hz) {
+        return p->counter_base;
+    }
+    uint64_t ticks = (uint64_t)(elapsed / INT64_C(1000000000)) * hz +
+        (uint64_t)(elapsed % INT64_C(1000000000)) * hz /
+        UINT64_C(1000000000);
+    return (uint32_t)(((uint64_t)p->counter_base + ticks) %
+                      ((uint64_t)period + 1U));
+}
+
+static void am13e_pwm4_rearm(AM13ESimPWM *p)
+{
+    if (p->zero_timer) {
+        timer_del(p->zero_timer);
+    }
+    if (!p->running || !am13e_pwm4_clock_allowed(p)) {
+        return;
+    }
+    uint32_t period = p->reg[0x14U / 4U] & 0xffffU;
+    uint32_t count = p->counter_base % (period + 1U);
+    uint64_t ticks = (uint64_t)period + 1U - count;
+    uint32_t hz = am13e_pwm4_hz(p);
+    if (!hz) {
+        return;
+    }
+    uint64_t ns = (ticks * UINT64_C(1000000000) + hz - 1U) / hz;
+    timer_mod(p->zero_timer, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) +
+              (int64_t)MAX(ns, UINT64_C(1)));
+}
+
+static void am13e_pwm4_shadow_load(AM13ESimPWM *p)
+{
+    /* Only the full image after one-shot latch may become ACTIVE.
+     * This matches the Rel17 six-output transaction boundary.
+     */
+    if (!(p->reg[0xf0U / 4U] & 1U)) {
+        return;
+    }
+    if ((p->reg[0xf0U / 4U] & 2U) && !p->latch) {
+        return;
+    }
+    p->reg[0x14U / 4U] = p->reg[0x18U / 4U] & 0xffffU;
+    for (unsigned module = 0; module < 3U; ++module) {
+        unsigned base = 0x100U + 0x200U * module;
+        for (unsigned sub = 0; sub < 4U; ++sub) {
+            unsigned offset = sub < 2U ?
+                (base + sub * 8U) : (base + 0x20U + (sub - 2U) * 8U);
+            p->reg[offset / 4U] = p->reg[(offset + 4U) / 4U];
+        }
+    }
+    if ((p->reg[0xc0U / 4U] & (3U << 16)) != (3U << 16)) {
+        p->reg[0xd0U / 4U] = p->reg[0xd8U / 4U];
+    }
+    if ((p->reg[0xc0U / 4U] & (3U << 18)) != (3U << 18)) {
+        p->reg[0xd4U / 4U] = p->reg[0xdcU / 4U];
+    }
+    if (p->reg[0xf0U / 4U] & 2U) {
+        p->latch = false;
+    }
+}
+
+static void am13e_pwm4_zero_event(void *opaque)
+{
+    AM13ESimPWM *p = opaque;
+    if (!p->running || !am13e_pwm4_clock_allowed(p)) {
+        return;
+    }
+    p->epoch_ns = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
+    p->counter_base = 0U;
+    am13e_pwm4_shadow_load(p);
+    ++p->zero_events;
+    /* The firmware programs ET1/ET2 source as TBCTR ZERO (0).
+     * Never generate an interrupt just because time advanced if
+     * the programmed event source does not match.
+     */
+    if ((p->reg[0x80U / 4U] & 0x1fU) == 0U &&
+        (p->reg[0x84U / 4U] & 7U) != 0U) {
+        p->irqs |= 8U;
+    }
+    am13e_pwm4_irq_update(p);
+    am13e_pwm4_rearm(p);
+}
+
+static void am13e_pwm4_clock_update(AM13ESimPWM *p)
+{
+    bool allowed = am13e_pwm4_clock_allowed(p);
+    if (!allowed) {
+        if (p->running) {
+            p->counter_base = am13e_pwm4_count(p);
+        }
+        p->running = false;
+        if (p->zero_timer) {
+            timer_del(p->zero_timer);
+        }
+    } else if (!p->running) {
+        p->running = true;
+        p->epoch_ns = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
+        am13e_pwm4_rearm(p);
+    }
+}
+
+static void am13e_pwm4_reset(AM13ESimPWM *p)
+{
+    if (p->zero_timer) {
+        timer_del(p->zero_timer);
+    }
+    memset(p->reg, 0, sizeof(p->reg));
+    p->reg[0x10U / 4U] = 2U; /* safe STOP_FREEZE */
+    p->irqs = p->zero_events = p->counter_base = 0U;
+    p->running = p->latch = p->reported_unmodeled = false;
+    p->epoch_ns = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
+    am13e_pwm4_irq_update(p);
+}
+
+static MemTxResult am13e_pwm4_invalid(AM13ESimPWM *p, hwaddr off,
+                                      bool wr, unsigned size)
+{
+    if (!p->reported_unmodeled) {
+        error_report("G9_UNMODELED_MCPWM4 %s 0x%08" PRIx64
+                     " size=%u (transaction rejected)",
+                     wr ? "write" : "read",
+                     (uint64_t)(AM13E_SIM_MCPWM_BASE + off), size);
+        p->reported_unmodeled = true;
+    }
+    return MEMTX_ERROR;
+}
+
+static bool am13e_pwm4_rw_reg(hwaddr off)
+{
+    switch (off) {
+    case 0x10U: case 0x14U: case 0x18U: case 0x1cU:
+    case 0x20U: case 0x24U: case 0x28U: case 0x30U:
+    case 0x40U: case 0x44U: case 0x48U: case 0x4cU:
+    case 0x50U: case 0x60U: case 0x64U: case 0x68U:
+    case 0x6cU: case 0x70U: case 0x74U: case 0x80U:
+    case 0x84U: case 0x88U: case 0x90U: case 0x94U:
+    case 0x98U: case 0x9cU: case 0xa0U: case 0xacU:
+    case 0xb0U: case 0xb4U: case 0xc0U: case 0xd0U:
+    case 0xd4U: case 0xd8U: case 0xdcU: case 0xf0U:
+    case 0xf4U: case 0xf8U:
+        return true;
+    default:
+        break;
+    }
+    if (off < 0x100U || off > 0x534U) {
+        return false;
+    }
+    unsigned minor = (off - 0x100U) % 0x200U;
+    return minor == 0x00U || minor == 0x04U ||
+           minor == 0x08U || minor == 0x0cU ||
+           minor == 0x20U || minor == 0x24U ||
+           minor == 0x28U || minor == 0x2cU ||
+           minor == 0x30U || minor == 0x34U;
+}
+
+static uint32_t am13e_pwm4_raw_aq(AM13ESimPWM *p, unsigned out,
+                                  uint32_t c, bool *valid)
+{
+    uint32_t base = 0x100U + (out / 2U) * 0x200U;
+    uint32_t aq = p->reg[(base + ((out & 1U) ? 0x28U : 0x20U)) / 4U];
+    uint32_t ca = p->reg[(base + 0x00U) / 4U];
+    uint32_t cb = p->reg[(base + 0x08U) / 4U];
+    uint32_t zro = aq & 3U, result;
+    if ((aq & 0xcccU) != 0U || zro == 3U) {
+        *valid = false; /* unsupported PRD/down-AQ or TOGGLE */
+        return 0;
+    }
+    result = zro == 2U ? 1U : 0U;
+    if (ca && ca <= c && ca <= p->reg[0x14U / 4U]) {
+        uint32_t action = (aq >> 4U) & 3U;
+        if (action == 1U) result = 0U;
+        if (action == 2U) result = 1U;
+        if (action == 3U) *valid = false;
+    }
+    if (cb && cb <= c && cb <= p->reg[0x14U / 4U]) {
+        uint32_t action = (aq >> 8U) & 3U;
+        if (action == 1U) result = 0U;
+        if (action == 2U) result = 1U;
+        if (action == 3U) *valid = false;
+    }
+    uint32_t force = p->reg[(base + 0x30U) / 4U];
+    force = (force >> ((out & 1U) ? 4U : 0U)) & 7U;
+    if (force == 1U) result = 0U;
+    else if (force == 2U) result = 1U;
+    else if (force != 0U) {
+        /* AQ one-shot force depends on the separately strobed
+         * AQOTSFRC latch. Until that timing is modeled, an
+         * intermediate force request cannot be a valid output.
+         */
+        *valid = false;
+    }
+    return result;
+}
+
+static uint32_t am13e_pwm4_level(AM13ESimPWM *p, unsigned out,
+                                 uint32_t c, bool *valid)
+{
+    uint32_t period = p->reg[0x14U / 4U] & 0xffffU;
+    uint32_t dbctl = p->reg[0xc0U / 4U];
+    uint32_t dly, now, before;
+    if (!am13e_pwm4_clock_allowed(p) || !p->running) {
+        return 0U;
+    }
+    /* Support the native independent-A RED / independent-B FED
+     * convention, including separate source select. Other DB
+     * topologies cannot be interpreted as equivalent PWM duty.
+     */
+    if (dbctl & (0x1c0U | 0x100U)) {
+        *valid = false;
+        return 0U;
+    }
+    now = am13e_pwm4_raw_aq(p, out, c, valid);
+    if (out & 1U) {
+        if (!(dbctl & 2U)) return now;
+        dly = p->reg[0xd0U / 4U] & 0x3fffU;
+    } else {
+        if (!(dbctl & 1U)) return now;
+        dly = p->reg[0xd4U / 4U] & 0x3fffU;
+    }
+    if (dly > period) {
+        *valid = false;
+        return 0U;
+    }
+    uint32_t past = (c + period + 1U - dly) % (period + 1U);
+    before = am13e_pwm4_raw_aq(p, out, past, valid);
+    /* A RED postpones new HIGH; B FED postpones new LOW.
+     * Polarity bits and cross-source topology remain deliberately
+     * unsupported, rather than silently misreporting six outputs.
+     */
+    if ((dbctl & 0x0cU) != 0U ||
+        ((dbctl & 0x30U) != 0U && (dbctl & 0x30U) != 0x20U)) {
+        /* Independently sourced A-RED and B-FED is supported.
+         * SDK FED_INPUT_PWMB = 1 => DBCTL.IN_MODE[5]=1.
+         * Inverted polarity and cross-source inputs fail closed.
+         */
+        *valid = false;
+        return 0U;
+    }
+    if (!(out & 1U) && now && !before) return 0U;
+    if ((out & 1U) && !now && before) return 1U;
+    return now;
+}
+
+static MemTxResult am13e_pwm4_read(void *opaque, hwaddr off,
+                                  uint64_t *value, unsigned size,
+                                  MemTxAttrs attrs)
+{
+    AM13ESimPWM *p = opaque;
+    if (!p->machine->esc_sim || size != 4U || !am13e_pwm4_rw_reg(off)) {
+        return am13e_pwm4_invalid(p, off, false, size);
+    }
+    switch (off) {
+    case 0x28U: *value = am13e_pwm4_count(p); return MEMTX_OK;
+    case 0x94U: *value = p->irqs; return MEMTX_OK;
+    case 0x98U: case 0x9cU: case 0x74U: case 0xb4U:
+        *value = 0U; return MEMTX_OK; /* write-one command read */
+    case 0xf4U: *value = 0U; return MEMTX_OK;
+    case 0xf8U: *value = p->latch ? 1U : 0U; return MEMTX_OK;
+    default: *value = p->reg[off / 4U]; return MEMTX_OK;
+    }
+}
+
+static MemTxResult am13e_pwm4_write(void *opaque, hwaddr off,
+                                   uint64_t value, unsigned size,
+                                   MemTxAttrs attrs)
+{
+    AM13ESimPWM *p = opaque;
+    uint32_t data = (uint32_t)value;
+    if (!p->machine->esc_sim || size != 4U || !am13e_pwm4_rw_reg(off) ||
+        !(p->machine->sim_mc_power & AM13E_SIM_PWM_POWER_BIT)) {
+        return am13e_pwm4_invalid(p, off, true, size);
+    }
+    switch (off) {
+    case 0x10U:
+        p->counter_base = am13e_pwm4_count(p);
+        p->reg[off / 4U] = data;
+        p->epoch_ns = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
+        p->running = false;
+        am13e_pwm4_clock_update(p);
+        return MEMTX_OK;
+    case 0x14U:
+        p->reg[off / 4U] = data & 0xffffU;
+        am13e_pwm4_rearm(p);
+        return MEMTX_OK;
+    case 0x28U:
+        p->counter_base = data & 0xffffU;
+        p->epoch_ns = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
+        am13e_pwm4_rearm(p);
+        return MEMTX_OK;
+    case 0x90U:
+        p->reg[off / 4U] = data & 0x18U;
+        am13e_pwm4_irq_update(p);
+        return MEMTX_OK;
+    case 0x98U:
+        p->irqs &= ~data;
+        am13e_pwm4_irq_update(p);
+        return MEMTX_OK;
+    case 0x9cU:
+        p->irqs |= data & 0x18U;
+        am13e_pwm4_irq_update(p);
+        return MEMTX_OK;
+    case 0xf4U:
+        if (data & 2U) p->latch = false;
+        if (data & 1U) p->latch = true;
+        if (data & 4U) am13e_pwm4_shadow_load(p);
+        return MEMTX_OK;
+    case 0xf8U: case 0x94U: case 0x20U: case 0x88U:
+        return am13e_pwm4_invalid(p, off, true, size);
+    default:
+        p->reg[off / 4U] = data;
+        return MEMTX_OK;
+    }
+}
+static const MemoryRegionOps am13e_pwm4_ops = {
+    .read_with_attrs = am13e_pwm4_read,
+    .write_with_attrs = am13e_pwm4_write,
+    .endianness = DEVICE_LITTLE_ENDIAN,
+    .valid = { .min_access_size = 4, .max_access_size = 4 },
+};
+
+/* Read-only non-silicon observer: offset 0 status
+ * 4 running, 8 period, c counter, 10 active six-bit levels,
+ * 14 valid mask, 18..2c duty high-ticks per PWM cycle (6x).
+ * Status bit0 running, bit1 TBCLKSYNC, bit2 PWM power,
+ * bit3 observer-valid all 6 channels. Gate status is excluded
+ * by design; it depends on the external board's gate polarity.
+ */
+static MemTxResult am13e_pwm4_obs_read(void *opaque, hwaddr off,
+                                      uint64_t *value, unsigned size,
+                                      MemTxAttrs attrs)
+{
+    AM13ESimPWM *p = opaque;
+    AM13EMachineState *s = p->machine;
+    if (!s->esc_sim || size != 4U || off > 0x2cU || (off & 3U)) {
+        return MEMTX_ERROR;
+    }
+    uint32_t period = p->reg[0x14U / 4U] & 0xffffU;
+    bool running = p->running && am13e_pwm4_clock_allowed(p);
+    bool all_valid = true;
+    uint32_t levels = 0U, valid = 0U, counts[6] = {0};
+    if (running && period > 0U) {
+        uint32_t at = am13e_pwm4_count(p);
+        for (unsigned out = 0; out < 6U; ++out) {
+            bool ok = true;
+            levels |= am13e_pwm4_level(p, out, at, &ok) << out;
+            if (ok) valid |= 1U << out;
+            else all_valid = false;
+            if (off >= 0x18U) {
+                for (uint32_t tick = 0; tick <= period; ++tick) {
+                    bool sample_ok = true;
+                    counts[out] += am13e_pwm4_level(p, out, tick,
+                                                     &sample_ok);
+                    if (!sample_ok) {
+                        all_valid = false;
+                        valid &= ~(1U << out);
+                        break;
+                    }
+                }
+            }
+        }
+    } else {
+        all_valid = false;
+    }
+    switch (off) {
+    case 0x00U:
+        *value = (running ? 1U : 0U) |
+                 ((s->sim_perclkcr & 1U) ? 2U : 0U) |
+                 ((s->sim_mc_power & AM13E_SIM_PWM_POWER_BIT) ? 4U : 0U) |
+                 (all_valid ? 8U : 0U); return MEMTX_OK;
+    case 0x04U: *value = running ? 1U : 0U; return MEMTX_OK;
+    case 0x08U: *value = period + 1U; return MEMTX_OK;
+    case 0x0cU: *value = am13e_pwm4_count(p); return MEMTX_OK;
+    case 0x10U: *value = levels; return MEMTX_OK;
+    case 0x14U: *value = valid; return MEMTX_OK;
+    default:
+        *value = running ? counts[(off - 0x18U) / 4U] : 0U;
+        return MEMTX_OK;
+    }
+}
+static MemTxResult am13e_pwm4_obs_write(void *opaque, hwaddr off,
+                                       uint64_t value, unsigned size,
+                                       MemTxAttrs attrs)
+{
+    return MEMTX_ERROR; /* not writable by guest or test harness */
+}
+static const MemoryRegionOps am13e_pwm4_obs_ops = {
+    .read_with_attrs = am13e_pwm4_obs_read,
+    .write_with_attrs = am13e_pwm4_obs_write,
+    .endianness = DEVICE_LITTLE_ENDIAN,
+    .valid = { .min_access_size = 4, .max_access_size = 4 },
+};
+
 static void am13e_sim_motor_sysctl_reset(AM13EMachineState *s)
 {
     s->sim_perclkcr = 0U; /* ESC-SIM initial TBCLKSYNC disabled */
     s->sim_mc_power = 0U; /* No motor peripheral powered */
+    am13e_pwm4_reset(&s->pwm4);
     s->sim_mc_reset_sticky = 0U;
     memset(s->sim_mc_mux, 0, sizeof(s->sim_mc_mux));
     s->sim_cmpssctl = 0U;
@@ -1348,6 +1809,7 @@ static MemTxResult am13e_sim_motor_sysctl_write(AM13EMachineState *s,
          * time-base model; it does not make motor output active.
          */
         s->sim_perclkcr = data;
+        am13e_pwm4_clock_update(&s->pwm4);
         return MEMTX_OK;
     case AM13E_SIM_PWREN_MCPERIPH:
         if ((data & 0xff000000U) != AM13E_SIM_MCPERIPH_KEY_PWR ||
@@ -1355,6 +1817,7 @@ static MemTxResult am13e_sim_motor_sysctl_write(AM13EMachineState *s,
             return am13e_sysctl_unmodeled(s, offset, true, size);
         }
         s->sim_mc_power = data & AM13E_SIM_MCPERIPH_MASK;
+        am13e_pwm4_clock_update(&s->pwm4);
         return MEMTX_OK;
     case AM13E_SIM_RST_ASSERT_MC:
     case AM13E_SIM_RST_CLEAR_MC:
@@ -1364,6 +1827,9 @@ static MemTxResult am13e_sim_motor_sysctl_write(AM13EMachineState *s,
         }
         if (offset == AM13E_SIM_RST_ASSERT_MC) {
             s->sim_mc_reset_sticky |= data & AM13E_SIM_MCPERIPH_MASK;
+            if (data & AM13E_SIM_PWM_POWER_BIT) {
+                am13e_pwm4_reset(&s->pwm4);
+            }
         } else {
             s->sim_mc_reset_sticky &= ~(data & AM13E_SIM_MCPERIPH_MASK);
         }
@@ -2777,6 +3243,23 @@ static void am13e_init(MachineState *machine)
                                     &g->mmio);
     }
 
+    /* G9 MCPWM4 controller with virtual PWM counter-zero events.
+     * Separate, read-only observer reports effective six AQ/DB levels.
+     */
+    s->pwm4.machine = s;
+    s->pwm4.zero_timer = timer_new_ns(QEMU_CLOCK_VIRTUAL,
+                                      am13e_pwm4_zero_event, &s->pwm4);
+    am13e_pwm4_reset(&s->pwm4);
+    memory_region_init_io(&s->pwm4.mmio, NULL, &am13e_pwm4_ops, &s->pwm4,
+                          "am13e-mcpwm4-native", AM13E_SIM_MCPWM_SIZE);
+    memory_region_add_subregion(sysmem, AM13E_SIM_MCPWM_BASE,
+                                &s->pwm4.mmio);
+    memory_region_init_io(&s->pwm4.observer, NULL, &am13e_pwm4_obs_ops,
+                          &s->pwm4, "esc-sim-mcpwm4-observer",
+                          AM13E_SIM_PWM_OBS_SIZE);
+    memory_region_add_subregion(sysmem, AM13E_SIM_PWM_OBSERVER,
+                                &s->pwm4.observer);
+
     /* WWDT0 virtual counter: GPRCM shared, status/CTL separate. */
     s->wwdt.gprcm = &s->peripheral_gprcm[5];
     s->wwdt.gprcm->wwdt = &s->wwdt;
@@ -2916,6 +3399,8 @@ static void am13e_init(MachineState *machine)
                              OBJECT(sysmem), &error_abort);
     sysbus_realize(SYS_BUS_DEVICE(core), &error_fatal);
     /* Peripheral IRQ numbers verified against TI startup_gcc_arm.c. */
+    /* TI hw_ints.h MCPWM4_INT_IRQn = 28. */
+    s->pwm4.irq = qdev_get_gpio_in(core, 28U);
     /* DMA0_INT_IRQn is 40 in TI hw_ints.h. */
     s->dma0.irq = qdev_get_gpio_in(core, 40U);
     static const unsigned timerg_irq[AM13E_SIM_TIMER_COUNT] = {44U, 45U};
@@ -2934,7 +3419,7 @@ static void am13e_init(MachineState *machine)
 static void am13e_class_init(ObjectClass *oc, void *data)
 {
     MachineClass *mc = MACHINE_CLASS(oc);
-        mc->desc = "AM13E23019 ESC-SIM PA26 input capture into DMA0 CH2";
+        mc->desc = "AM13E23019 ESC-SIM MCPWM4 observer, PA26 capture and ADC";
     mc->init = am13e_init;
     mc->default_cpu_type = ARM_CPU_TYPE_NAME("cortex-m33-am13e");
     mc->default_ram_size = AM13E_SRAM_SIZE;
@@ -2982,6 +3467,10 @@ static void am13e_finalize(Object *obj)
     if (s->wwdt.timer) {
         timer_free(s->wwdt.timer);
         s->wwdt.timer = NULL;
+    }
+    if (s->pwm4.zero_timer) {
+        timer_free(s->pwm4.zero_timer);
+        s->pwm4.zero_timer = NULL;
     }
     for (unsigned i = 0; i < AM13E_SIM_TIMER_COUNT; ++i) {
         if (s->gtimer[i].zero_timer) {
