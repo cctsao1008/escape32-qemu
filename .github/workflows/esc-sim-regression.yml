@@ -64,14 +64,14 @@ jobs:
           set -euo pipefail
           ./build.sh
 
-      - name: Run G0-G9 tests against real ELF
+      - name: Run G0-G10 tests against real ELF
         run: |
           set -euo pipefail
           mkdir -p artifacts
           ./test.sh /tmp/e62-fw-build/AM13E-rev17.3.elf \
-            2>&1 | tee artifacts/g0-g9.log
+            2>&1 | tee artifacts/g0-g10.log
 
-      - name: Extended G1 native PWM4 initialization trace
+      - name: Extended G1 native PWM4 and ECAP1 initialization trace
         run: |
           set -euo pipefail
           mkdir -p artifacts
@@ -79,8 +79,8 @@ jobs:
             --qemu .build/qemu-src/build/qemu-system-arm \
             --elf /tmp/e62-fw-build/AM13E-rev17.3.elf \
             --esc-sim --timed-steps --fast-delay-loops \
-            --startup-steps 32768 --require-pwm4-init \
-            2>&1 | tee artifacts/g1-pwm4-init.log
+            --startup-steps 32768 --require-pwm4-init --require-ecap1-init \
+            2>&1 | tee artifacts/g1-pwm4-ecap1-init.log
 
       - name: Upload truthful integration logs
         if: always()
