@@ -1,0 +1,89 @@
+name: E62 AM13E QEMU firmware integration
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'machine/**'
+      - 'tests/**'
+      - 'tools/**'
+      - 'build.sh'
+      - 'test.sh'
+      - '.github/workflows/esc-sim-regression.yml'
+  workflow_dispatch:
+
+jobs:
+  firmware-backed-qemu:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout pinned QEMU submodule
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 1
+
+      - name: Install QEMU dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libglib2.0-dev \
+            libpixman-1-dev libfdt-dev ninja-build meson python3 git
+
+      - name: Install ARM GNU toolchain
+        uses: carlosperate/arm-none-eabi-gcc-action@v1
+
+      - name: Pin ESCape32 HAL fix and TI SDK
+        run: |
+          set -euo pipefail
+          git clone --quiet https://github.com/cctsao1008/ESCape32.git /tmp/e62-escape32
+          git -C /tmp/e62-escape32 checkout --quiet --detach b0204670515d2de0b2480b52273038f1ee13d30a
+          git clone --quiet https://github.com/TexasInstruments/am13e2x_sdk.git /tmp/e62-sdk
+          git -C /tmp/e62-sdk checkout --quiet --detach b872469ceef18de5e39a1d3acb0821ec158b44c7
+          test -f /tmp/e62-sdk/source/driverlib/am13e230x/dl_mcpwm.c
+          arm-none-eabi-gcc --version | head -1
+
+      - name: Build real AM13E-rev17.3 ELF from source
+        run: |
+          set -euo pipefail
+          cmake -S /tmp/e62-escape32 -B /tmp/e62-fw-build \
+            -G 'Unix Makefiles' \
+            -DESCAPE32_BUILD_AM13E=ON \
+            -DAM13E_SDK_ROOT=/tmp/e62-sdk \
+            -DAM13E_BOOT_LINKER_SCRIPT=/tmp/e62-escape32/boot/mcu/AM13E/config.ld
+          cmake --build /tmp/e62-fw-build --target AM13E BOOT5_PB14 -j 2
+          test -f /tmp/e62-fw-build/AM13E-rev17.3.elf
+          arm-none-eabi-objdump -d /tmp/e62-fw-build/AM13E-rev17.3.elf \
+            | grep -A 4 '<DL_MCPWM_setEmulationMode>:' | head -5
+
+      - name: Build pinned QEMU AM13E model
+        run: |
+          set -euo pipefail
+          ./build.sh
+
+      - name: Run G0-G9 tests against real ELF
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          ./test.sh /tmp/e62-fw-build/AM13E-rev17.3.elf \
+            2>&1 | tee artifacts/g0-g9.log
+
+      - name: Extended G1 native PWM4 initialization trace
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          python3 tests/g1_handoff.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf /tmp/e62-fw-build/AM13E-rev17.3.elf \
+            --esc-sim --timed-steps --fast-delay-loops \
+            --startup-steps 32768 --require-pwm4-init \
+            2>&1 | tee artifacts/g1-pwm4-init.log
+
+      - name: Upload truthful integration logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-qemu-integration
+          path: artifacts/
+          if-no-files-found: warn
