@@ -80,6 +80,12 @@ if entry not in cpu_content:
 updates[cpu_file] = cpu_content
 source = root / 'machine/am13e23019.c'
 target = qemu / 'hw/arm/am13e23019.c'
+feedback_source = root / 'machine/am13e_motor_feedback.inc'
+feedback_target = qemu / 'hw/arm/am13e_motor_feedback.inc'
+if feedback_target.is_symlink():
+    sys.exit('ERROR: generated feedback path is a symlink')
+if not feedback_target.exists() or feedback_target.read_bytes() != feedback_source.read_bytes():
+    feedback_target.write_bytes(feedback_source.read_bytes())
 if target.is_symlink():
     sys.exit('ERROR: generated machine path is a symlink; refusing overwrite')
 if target.exists() and 'TYPE_AM13E_MACHINE MACHINE_TYPE_NAME("am13e23019")' not in target.read_text():
