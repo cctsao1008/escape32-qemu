@@ -327,7 +327,6 @@ def main():
                     current = new_pc
                     completed = 1
                     fast_delays = 0
-                    ecap_caplden_seen = False
                     reason = "step-limit"
                     if current == hardfault_pc:
                         reason = "hardfault-vector"
@@ -349,14 +348,6 @@ def main():
                             hot[current] += 1
                             history.append(current)
                             completed = i
-                            # The safe-stop policy may clear CAPLDEN after
-                            # initialization. Sample during guest execution.
-                            if args.require_ecap1_init and i % 16 == 0:
-                                power_sample = rsp.mem32(0x400B0424)
-                                if power_sample & (1 << 4):
-                                    sample_ecctl1 = rsp.mem16(0x40441028)
-                                    if sample_ecctl1 & 0x100:
-                                        ecap_caplden_seen = True
                             if i <= 12 or i % 256 == 0:
                                 print(f"G1_TRACE step={i} PC=0x{current:08x}")
                             if current == hardfault_pc:
@@ -403,11 +394,20 @@ def main():
                         ecctl1 = rsp.mem16(0x40441028)
                         ecctl2 = rsp.mem16(0x4044102a)
                         tsctr = rsp.mem32(0x40441000)
-                        ecap_caplden_seen |= bool(ecctl1 & 0x100)
+                        # Native ECCTL1 may be enabled for fewer than
+                        # 16 GDB steps before the firmware safety path
+                        # disables it. A periodic sample can miss that
+                        # write (observed on WSL). The simulator now
+                        # records each real ECCTL1 0->1 transaction and
+                        # exposes a read-only non-silicon audit register.
+                        caplden_history = rsp.mem32(0x5ffe200c)
+                        caplden_ever_enabled = bool(caplden_history & 1)
+                        caplden_enables = caplden_history >> 16
                         print(f"G1_ECAP1_INIT_OBSERVED PWREN=0x{power:08x} "
                               f"ECCTL0=0x{ecctl0:08x} "
                               f"ECCTL1_FINAL=0x{ecctl1:04x} "
-                              f"CAPLDEN_EVER_ENABLED={int(ecap_caplden_seen)} "
+                              f"CAPLDEN_EVER_ENABLED={int(caplden_ever_enabled)} "
+                              f"CAPLDEN_ENABLE_TRANSITIONS={caplden_enables} "
                               f"ECCTL2=0x{ecctl2:04x} TSCTR={tsctr} "
                               f"reason={reason}")
                         if reason == "hardfault-vector":
@@ -417,7 +417,8 @@ def main():
                                 raise AssertionError("Original ECAP1.ECCTL2 BusFault persists")
                         if ((power & (1 << 4)) == 0 or
                                 (ecctl0 & 0x7f) != 45 or
-                                not ecap_caplden_seen or
+                                not caplden_ever_enabled or
+                                caplden_enables == 0 or
                                 (ecctl2 & 0x10) == 0):
                             raise AssertionError("Native ECAP1 capture initialization incomplete")
                         print("PASS_G1_NATIVE_ECAP1_CAPTURE_INITIALIZATION_ONLY")
