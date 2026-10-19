@@ -53,7 +53,7 @@ def elf_function_address(path, name):
     functions.  No objdump dependency, and stripped/ambiguous images fail.
     """
     blob = Path(path).read_bytes()
-    if len(blob) < 52 or blob[:6] != b"\\x7fELF\\x01\\x01":
+    if len(blob) < 52 or blob[:6] != b"\x7fELF\x01\x01":
         raise ValueError("Expected a little-endian ELF32 file")
     hdr = struct.unpack_from("<16sHHIIIIIHHHHHH", blob)
     section_off, entry_size, count = hdr[6], hdr[11], hdr[12]
@@ -78,7 +78,7 @@ def elf_function_address(path, name):
                 struct.unpack_from("<IIIBBH", blob, pos))
             if (st_info & 15) != 2 or st_name >= len(names):
                 continue
-            end = names.find(b"\\0", st_name)
+            end = names.find(b"\0", st_name)
             if end < 0:
                 raise ValueError("Unterminated function symbol")
             if names[st_name:end] == name.encode("ascii"):
