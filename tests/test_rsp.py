@@ -3,7 +3,10 @@
 import socket
 import unittest
 
-from g1_handoff import RSP, SDK_DELAY_LOOP, fast_forward_sdk_delay
+from g1_handoff import RSP, fast_forward_sdk_delay
+
+# Synthetic unit-test opcode addresses only; integration resolves ELF symbol.
+TEST_DELAY_LOOP = (0xc6f6, 0xc6f8, 0xc6fa)
 
 
 def exchange(reply, command="qqemu.sstepbits"):
@@ -43,7 +46,7 @@ class DelayRSPMock:
     def __init__(self, stop_pc=0x776a, nop=0xbf00, branch=0xd2fc):
         self.stop_pc = stop_pc
         self.ops = []
-        self.code = {SDK_DELAY_LOOP[1]: nop, SDK_DELAY_LOOP[2]: branch}
+        self.code = {TEST_DELAY_LOOP[1]: nop, TEST_DELAY_LOOP[2]: branch}
 
     def mem16(self, address):
         return self.code[address]
@@ -60,7 +63,7 @@ class DelayBreakpoints(unittest.TestCase):
     def test_executed_to_caller(self):
         rsp = DelayRSPMock()
         self.assertEqual(fast_forward_sdk_delay(
-            rsp, SDK_DELAY_LOOP[0], 0x7610), 0x776a)
+            rsp, TEST_DELAY_LOOP[0], 0x7610, TEST_DELAY_LOOP), 0x776a)
         self.assertEqual(rsp.ops, [
             "Z0,776a,2", "Z0,7610,2", "c", "z0,7610,2", "z0,776a,2"
         ])
@@ -68,17 +71,17 @@ class DelayBreakpoints(unittest.TestCase):
     def test_captures_hardfault_instead_of_hanging(self):
         rsp = DelayRSPMock(stop_pc=0x7610)
         self.assertEqual(fast_forward_sdk_delay(
-            rsp, SDK_DELAY_LOOP[2], 0x7610), 0x7610)
+            rsp, TEST_DELAY_LOOP[2], 0x7610, TEST_DELAY_LOOP), 0x7610)
 
     def test_fails_closed_when_elf_code_changes(self):
         rsp = DelayRSPMock(nop=0)
         with self.assertRaisesRegex(RuntimeError, "opcode mismatch"):
-            fast_forward_sdk_delay(rsp, SDK_DELAY_LOOP[0], 0x7610)
+            fast_forward_sdk_delay(rsp, TEST_DELAY_LOOP[0], 0x7610, TEST_DELAY_LOOP)
         self.assertEqual(rsp.ops, [])
 
     def test_other_pc_is_untouched(self):
         rsp = DelayRSPMock()
-        self.assertIsNone(fast_forward_sdk_delay(rsp, 0xc700, 0x7610))
+        self.assertIsNone(fast_forward_sdk_delay(rsp, 0xc700, 0x7610, TEST_DELAY_LOOP))
         self.assertEqual(rsp.ops, [])
 
 
