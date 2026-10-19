@@ -733,3 +733,41 @@ observe its own decoder/WWDT/command-output state.
 
 No GUI board, physical pin, motor load or analog conversion
 is implied by this fixture.
+
+## G8: SYSCTL motor-control power, reset and PWM sync batch
+
+G7b peripheral QTests passed and the unchanged Rel17.3 ELF
+advanced beyond PA26 capture/DMA configuration before
+`BFAR=0x400B048C`, stacked PC `0x00009946`.
+The TI SDK `hw_sysctl.h` identifies this as
+`SYSCTL.SOCLOCK.PERCLKCR` at offset `0x148C`,
+not a new DMA or TIMG fault. Bit 0 is `TBCLKSYNC`:
+PWM time-base counters are gated by this register.
+
+G8 adds opt-in ESC-SIM-only digital control state:
+`PERCLKCR.TBCLKSYNC`, `PWREN_MCPERIPH` (+0x1424),
+`RSTCTL_ASSERT_MCPERIPH` (+0x1428),
+`RSTCTL_CLEAR_MCPERIPH` (+0x142C), and
+`STAT_MCPERIPH` (+0x1430). These are the shared power and
+reset controls for EQEP0..2, ECAP0/1, PWM0..4, CMPSS0..3,
+and XBAR, with documented KEY=0x26 (power) and KEY=0xB1
+(reset) and valid bits 0..14. Power readback excludes the
+write-only key; reset assert is sticky until cleared,
+and reset command registers read as zero.
+
+G8 also preserves digital read/write state for exact SDK
+`CMPHPMXSEL`, `CMPLPMXSEL`, `CMPHNMXSEL`,
+`CMPLNMXSEL`, `CMPSSCTL`, `CMPSSDACBUFCONFIG`,
+and `ANAREFCTL` configuration addresses. They are NOT
+synthetic comparator outcomes, ECAP BEMF edges, PWM
+waveforms, or verified trip protection. The future MCPWM4
+time-base model must honor `TBCLKSYNC` and the PWM4 power
+bit, while CMPSS0/ECAP1/XBAR event sources must be driven
+by the motor plant. Unknown MMIO addresses and strict-mode
+operations still reject transactions.
+
+`tests/g8_sysctl_motor.py` checks TBCLKSYNC gating state,
+invalid clock bits, SDK-compatible RMW power/key behavior,
+independent PWM4/ECAP1/CMPSS0/XBAR bits, reset sticky/clear
+and strict-mode rejection. The acceptance for **real PWM**
+is still a separate guest-driven signal/commutation test.
