@@ -304,6 +304,9 @@ typedef struct AM13ESimFeedback {
     bool phase_valid[3];
     unsigned capture_index;
     bool oneshot_frozen, filtered, filter_pending, cmp_latch;
+    /* Read-only ESC-SIM diagnostic: survives an ECCTL1 disable write. */
+    bool caplden_ever_enabled;
+    uint32_t caplden_enable_transitions;
     bool reported_ecap, reported_cmp;
 } AM13ESimFeedback;
 
