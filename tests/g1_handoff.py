@@ -210,6 +210,8 @@ def main():
                         help="GDB continue-to-return for verified SDK cycle delay")
     parser.add_argument("--require-pwm4-init", action="store_true",
                         help="Fail unless the guest enabled PWM4 power and initialized native TBCTL/TBPRD")
+    parser.add_argument("--require-ecap1-init", action="store_true",
+                        help="Fail unless native ECAP1 capture registers are initialized after PWM4")
     parser.add_argument("--startup-steps", type=int, default=1,
                         help="Bounded CPU single-step trace; 1 is the original G1 check")
     args = parser.parse_args()
@@ -221,6 +223,10 @@ def main():
         parser.error("--fast-delay-loops requires --esc-sim --timed-steps")
     if args.require_pwm4_init and (not args.esc_sim or args.startup_steps == 1):
         parser.error("--require-pwm4-init requires --esc-sim and an extended trace")
+    if args.require_ecap1_init and (not args.esc_sim or
+                                     not args.require_pwm4_init or
+                                     args.startup_steps == 1):
+        parser.error("--require-ecap1-init requires --esc-sim, --require-pwm4-init and extended trace")
     qemu, elf = args.qemu.resolve(), args.elf.resolve()
     for file in (qemu, elf):
         if not file.is_file():
@@ -380,6 +386,30 @@ def main():
                                 tbctl & 0x3f != 0x06 or period != 4165):
                             raise AssertionError("MCPWM4 initialization has not completed")
                         print("PASS_G1_NATIVE_PWM4_HAL_INITIALIZATION_ONLY")
+                    if args.require_ecap1_init:
+                        # Read native TI ECAP1 registers observed from the
+                        # guest execution, not prewritten host test values.
+                        power = rsp.mem32(0x400B0424)
+                        ecctl0 = rsp.mem32(0x40441024)
+                        ecctl1 = rsp.mem16(0x40441028)
+                        ecctl2 = rsp.mem16(0x4044102a)
+                        tsctr = rsp.mem32(0x40441000)
+                        print(f"G1_ECAP1_INIT_OBSERVED PWREN=0x{power:08x} "
+                              f"ECCTL0=0x{ecctl0:08x} "
+                              f"ECCTL1=0x{ecctl1:04x} "
+                              f"ECCTL2=0x{ecctl2:04x} TSCTR={tsctr} "
+                              f"reason={reason}")
+                        if reason == "hardfault-vector":
+                            cfsr = rsp.mem32(0xE000ED28)
+                            bfar = rsp.mem32(0xE000ED38)
+                            if cfsr & 0x8000 and bfar == 0x4044102a:
+                                raise AssertionError("Original ECAP1.ECCTL2 BusFault persists")
+                        if ((power & (1 << 4)) == 0 or
+                                (ecctl0 & 0x7f) != 45 or
+                                (ecctl1 & 0x100) == 0 or
+                                (ecctl2 & 0x10) == 0):
+                            raise AssertionError("Native ECAP1 capture initialization incomplete")
+                        print("PASS_G1_NATIVE_ECAP1_CAPTURE_INITIALIZATION_ONLY")
                     print("TRACE_ONLY: no startup, clock, peripheral or "
                           "safety-readiness verdict from instruction counts.")
         except Exception:
