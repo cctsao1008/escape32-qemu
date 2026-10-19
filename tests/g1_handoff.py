@@ -13,10 +13,7 @@ import tempfile
 import time
 from pathlib import Path
 from collections import Counter, deque
-
-APP_BASE = 0x00006000
-EXPECTED_SP = 0x20018000
-EXPECTED_RESET_WORD = 0x0000DBFD
+from elf_image import APP_BASE, app_vector_from_elf
 
 
 class RSP:
@@ -212,6 +209,8 @@ def main():
                         help="Use QEMU 6.2 icount shift=10 and enable GDB timer steps (diagnostic)")
     parser.add_argument("--fast-delay-loops", action="store_true",
                         help="GDB continue-to-return for verified SDK cycle delay")
+    parser.add_argument("--require-pwm4-init", action="store_true",
+                        help="Fail unless the guest enabled PWM4 power and initialized native TBCTL/TBPRD")
     parser.add_argument("--startup-steps", type=int, default=1,
                         help="Bounded CPU single-step trace; 1 is the original G1 check")
     args = parser.parse_args()
@@ -221,12 +220,15 @@ def main():
         parser.error("--timed-steps requires --xtal-present or --esc-sim")
     if args.fast_delay_loops and not (args.esc_sim and args.timed_steps):
         parser.error("--fast-delay-loops requires --esc-sim --timed-steps")
+    if args.require_pwm4_init and (not args.esc_sim or args.startup_steps == 1):
+        parser.error("--require-pwm4-init requires --esc-sim and an extended trace")
     qemu, elf = args.qemu.resolve(), args.elf.resolve()
     for file in (qemu, elf):
         if not file.is_file():
             parser.error(f"Missing file: {file}")
     if args.factory_pll_file is not None and not args.factory_pll_file.is_file():
         parser.error(f"Missing factory fixture: {args.factory_pll_file}")
+    expected_sp, expected_reset = app_vector_from_elf(elf)
     with tempfile.TemporaryDirectory(prefix="am13e-g1-") as tmp:
         socket_path = os.path.join(tmp, "gdb.sock")
         cmd = [
@@ -289,7 +291,7 @@ def main():
                 print(f"APP_VECTOR SP=0x{vec_sp:08x} RESET=0x{vec_pc:08x}")
                 print(f"G1_HANDOFF SP=0x{sp:08x} PC=0x{pc:08x} "
                       f"XPSR=0x{xpsr:08x} VTOR=0x{vt:08x} PFR1=0x{pfr1:08x}")
-                assert (vec_sp, vec_pc) == (EXPECTED_SP, EXPECTED_RESET_WORD), "Rel17.3 image mismatch"
+                assert (vec_sp, vec_pc) == (expected_sp, expected_reset), "QEMU flash vector differs from supplied ELF"
                 assert sp == vec_sp and pc == (vec_pc & ~1), "CPU initial MSP/PC does not match original ELF"
                 assert xpsr & 0x01000000, "Thumb state was not set"
                 assert vt == APP_BASE, "Application VTOR was not relocated"
@@ -355,6 +357,26 @@ def main():
                     print(f"G1_TRACE_RECENT_PCS {recent}")
                     if reason == "hardfault-vector":
                         print_fault_snapshot(rsp)
+                    if args.require_pwm4_init:
+                        # This is a guest-observed HAL initialization proof,
+                        # not a host-written register fixture or motor PASS.
+                        power = rsp.mem32(0x400B0424)  # PWREN_MCPERIPH
+                        tbctl = rsp.mem32(0x40014010)  # MCPWM4.TBCTL
+                        period = rsp.mem32(0x40014014) # MCPWM4.TBPRD
+                        print(f"G1_PWM4_INIT_OBSERVED PWREN=0x{power:08x} "
+                              f"TBCTL=0x{tbctl:08x} TBPRD={period} "
+                              f"reason={reason}")
+                        if reason == "hardfault-vector":
+                            cfsr = rsp.mem32(0xE000ED28)
+                            bfar = rsp.mem32(0xE000ED38)
+                            if cfsr & 0x8000 and bfar == 0x40014010:
+                                raise AssertionError("Original MCPWM4.TBCTL BusFault persists")
+                        # 200MHz MCLK, SDK prescaler /2, 24kHz
+                        # inactive carrier: 4165 is original HAL config.
+                        if ((power & (1 << 9)) == 0 or
+                                tbctl & 0x3f != 0x06 or period != 4165):
+                            raise AssertionError("MCPWM4 initialization has not completed")
+                        print("PASS_G1_NATIVE_PWM4_HAL_INITIALIZATION_ONLY")
                     print("TRACE_ONLY: no startup, clock, peripheral or "
                           "safety-readiness verdict from instruction counts.")
         except Exception:
