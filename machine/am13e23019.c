@@ -290,6 +290,23 @@ typedef struct AM13ESimPWM {
     bool reported_power_off;
 } AM13ESimPWM;
 
+/* ECAP1 counter/capture and CMPSS0 high comparator, ESC-SIM only. */
+typedef struct AM13ESimFeedback {
+    MemoryRegion ecap_mmio, cmp_mmio, stimulus_mmio;
+    QEMUTimer *overflow_timer, *filter_timer;
+    qemu_irq ecap_irq;
+    struct AM13EMachineState *machine;
+    int64_t epoch_ns;
+    uint32_t count_base, ctrphs, cap[4], ecctl0, syncsel;
+    uint16_t ecctl1, ecctl2, eceint, ecflg;
+    uint16_t cmp[0x74U / 2U];
+    uint16_t phase_code[3];
+    bool phase_valid[3];
+    unsigned capture_index;
+    bool oneshot_frozen, filtered, filter_pending, cmp_latch;
+    bool reported_ecap, reported_cmp;
+} AM13ESimFeedback;
+
 typedef struct AM13EDMA {
     MemoryRegion mmio;
     qemu_irq irq;
@@ -395,6 +412,7 @@ struct AM13EMachineState {
     AM13ESimTimer gtimer[AM13E_SIM_TIMER_COUNT];
     AM13EDMA dma0;
     AM13ESimPWM pwm4;
+    AM13ESimFeedback feedback;
     MemoryRegion sim_pa26_inject;
     uint32_t sim_pa26_level;
     uint32_t sim_pa26_transitions;
@@ -436,6 +454,8 @@ struct AM13EMachineState {
     Clock *cpuclk;
     Clock *refclk;
 };
+
+#include "am13e_motor_feedback.inc"
 
 /* ESC-SIM: opt-in functional PLL timer; no physical trim/PLL model. */
 static void am13e_sim_pll_ready(void *opaque)
@@ -1422,6 +1442,7 @@ static void am13e_pwm4_zero_event(void *opaque)
     p->epoch_ns = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
     p->counter_base = 0U;
     am13e_pwm4_shadow_load(p);
+    am13e_g10_pwm_sync(&p->machine->feedback);
     ++p->zero_events;
     /* The firmware programs ET1/ET2 source as TBCTR ZERO (0).
      * Never generate an interrupt just because time advanced if
@@ -1763,6 +1784,7 @@ static void am13e_sim_motor_sysctl_reset(AM13EMachineState *s)
     s->sim_perclkcr = 0U; /* ESC-SIM initial TBCLKSYNC disabled */
     s->sim_mc_power = 0U; /* No motor peripheral powered */
     am13e_pwm4_reset(&s->pwm4);
+    am13e_g10_reset(&s->feedback);
     s->sim_mc_reset_sticky = 0U;
     memset(s->sim_mc_mux, 0, sizeof(s->sim_mc_mux));
     s->sim_cmpssctl = 0U;
@@ -1813,6 +1835,9 @@ static MemTxResult am13e_sim_motor_sysctl_write(AM13EMachineState *s,
     uint32_t *cfg = am13e_sim_motor_analog_cfg(s, offset);
     if (cfg) {
         *cfg = data;
+        if (offset == AM13E_SIM_CMPHP_MUX) {
+            am13e_g10_cmp_evaluate(&s->feedback);
+        }
         return MEMTX_OK;
     }
     switch (offset) {
@@ -1831,7 +1856,14 @@ static MemTxResult am13e_sim_motor_sysctl_write(AM13EMachineState *s,
             (data & 0x00ffffffU & ~AM13E_SIM_MCPERIPH_MASK)) {
             return am13e_sysctl_unmodeled(s, offset, true, size);
         }
+        if (!(data & AM13E_G10_ECAP_POWER)) {
+            am13e_g10_stop_counter(&s->feedback);
+        }
         s->sim_mc_power = data & AM13E_SIM_MCPERIPH_MASK;
+        if (s->feedback.ecctl2 & 0x10U) {
+            am13e_g10_ovf_rearm(&s->feedback);
+        }
+        am13e_g10_cmp_evaluate(&s->feedback);
         am13e_pwm4_clock_update(&s->pwm4);
         return MEMTX_OK;
     case AM13E_SIM_RST_ASSERT_MC:
@@ -1844,6 +1876,10 @@ static MemTxResult am13e_sim_motor_sysctl_write(AM13EMachineState *s,
             s->sim_mc_reset_sticky |= data & AM13E_SIM_MCPERIPH_MASK;
             if (data & AM13E_SIM_PWM_POWER_BIT) {
                 am13e_pwm4_reset(&s->pwm4);
+            }
+            if (data & (AM13E_G10_ECAP_POWER |
+                        AM13E_G10_CMPSS_POWER)) {
+                am13e_g10_reset(&s->feedback);
             }
         } else {
             s->sim_mc_reset_sticky &= ~(data & AM13E_SIM_MCPERIPH_MASK);
@@ -3275,6 +3311,33 @@ static void am13e_init(MachineState *machine)
     memory_region_add_subregion(sysmem, AM13E_SIM_PWM_OBSERVER,
                                 &s->pwm4.observer);
 
+    /* G10 functional ECAP1/CMPSS0, powered by real SYSCTL bits.
+     * The simulator-only analog port supplies explicit test voltages.
+     */
+    s->feedback.machine = s;
+    s->feedback.overflow_timer = timer_new_ns(QEMU_CLOCK_VIRTUAL,
+                                            am13e_g10_ovf_event,
+                                            &s->feedback);
+    s->feedback.filter_timer = timer_new_ns(QEMU_CLOCK_VIRTUAL,
+                                          am13e_g10_filter_done,
+                                          &s->feedback);
+    am13e_g10_reset(&s->feedback);
+    memory_region_init_io(&s->feedback.ecap_mmio, NULL,
+                          &am13e_g10_ecap_ops, &s->feedback,
+                          "am13e-ecap1-g10", AM13E_G10_ECAP_SIZE);
+    memory_region_add_subregion(sysmem, AM13E_G10_ECAP_BASE,
+                                &s->feedback.ecap_mmio);
+    memory_region_init_io(&s->feedback.cmp_mmio, NULL,
+                          &am13e_g10_cmp_ops, &s->feedback,
+                          "am13e-cmpss0-g10", AM13E_G10_CMPSS_SIZE);
+    memory_region_add_subregion(sysmem, AM13E_G10_CMPSS_BASE,
+                                &s->feedback.cmp_mmio);
+    memory_region_init_io(&s->feedback.stimulus_mmio, NULL,
+                          &am13e_g10_stim_ops, &s->feedback,
+                          "esc-sim-bemf-test-stimulus", 0x10U);
+    memory_region_add_subregion(sysmem, AM13E_G10_STIM_BASE,
+                                &s->feedback.stimulus_mmio);
+
     /* WWDT0 virtual counter: GPRCM shared, status/CTL separate. */
     s->wwdt.gprcm = &s->peripheral_gprcm[5];
     s->wwdt.gprcm->wwdt = &s->wwdt;
@@ -3416,6 +3479,8 @@ static void am13e_init(MachineState *machine)
     /* Peripheral IRQ numbers verified against TI startup_gcc_arm.c. */
     /* TI hw_ints.h MCPWM4_INT_IRQn = 28. */
     s->pwm4.irq = qdev_get_gpio_in(core, 28U);
+    /* TI hw_ints.h ECAP1_INT_IRQn = 30. */
+    s->feedback.ecap_irq = qdev_get_gpio_in(core, 30U);
     /* DMA0_INT_IRQn is 40 in TI hw_ints.h. */
     s->dma0.irq = qdev_get_gpio_in(core, 40U);
     static const unsigned timerg_irq[AM13E_SIM_TIMER_COUNT] = {44U, 45U};
@@ -3478,6 +3543,14 @@ static void am13e_finalize(Object *obj)
     if (s->sim_pll_timer) {
         timer_free(s->sim_pll_timer);
         s->sim_pll_timer = NULL;
+    }
+    if (s->feedback.overflow_timer) {
+        timer_free(s->feedback.overflow_timer);
+        s->feedback.overflow_timer = NULL;
+    }
+    if (s->feedback.filter_timer) {
+        timer_free(s->feedback.filter_timer);
+        s->feedback.filter_timer = NULL;
     }
     if (s->wwdt.timer) {
         timer_free(s->wwdt.timer);
