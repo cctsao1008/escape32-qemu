@@ -1,0 +1,163 @@
+#!/usr/bin/env python3
+"""G10A-C: native ECAP1, 16-bit CMPSS0, virtual-time capture and real edges.
+
+Stimulus register 0x5ffe2000 is explicitly simulator-only and does not
+claim a virtual motor, analog comparator delay or silicon calibration.
+"""
+import argparse
+from pathlib import Path
+from g9_mcpwm_observer import run
+
+SYS = 0x400af000
+POWER = SYS + 0x1424
+MUX = SYS + 0x1444
+SYNC = SYS + 0x148c
+EC = 0x40441000
+CMP = 0x40460000
+STIM = 0x5ffe2000
+PWM = 0x40014000
+
+def readw(q, a):
+    return int(q.cmd(f"readw 0x{a:08x}")[1], 0)
+
+def writew(q, a, v):
+    q.cmd(f"writew 0x{a:08x} 0x{v:04x}")
+
+def step(q, ns):
+    q.cmd(f"clock_step {ns}")
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--qemu", type=Path, required=True)
+    ap.add_argument("--elf", type=Path, required=True)
+    args = ap.parse_args()
+
+    def functional(q):
+        # Reset genuinely unpowered; rejected access is not a fake R/W shim.
+        assert q.read(POWER) == 0
+        q.write(EC + 0x24, 45)
+        assert q.read(EC + 0x24) != 45
+        q.write(POWER, 0x26000010)  # ECAP1 bit4 only
+        assert q.read(EC + 0x00) == 0
+        assert readw(q, EC + 0x2a) == 0
+        assert readw(q, EC + 0x2c) == 0
+        assert readw(q, EC + 0x2e) == 0
+        q.write(EC + 0x24, 45)
+        assert q.read(EC + 0x24) == 45
+        writew(q, EC + 0x28, 0x100)  # CAPLDEN, rising event 1
+        writew(q, EC + 0x2c, 2)      # CEVT1 IRQ enable
+        assert readw(q, EC + 0x2e) == 0  # enable does not trigger event
+        assert q.read(EC + 0x28) == 0x000200100
+        writew(q, EC + 0x2a, 0x10)   # TSCTRSTOP bit: free running
+        step(q, 1000)
+        ts1 = q.read(EC)
+        assert 100 <= ts1 <= 150, ts1
+        assert q.read(EC + 8) == 0
+        assert readw(q, EC + 0x2e) == 0
+        writew(q, EC + 0x2a, 0)
+        ts2 = q.read(EC)
+        step(q, 2000)
+        assert q.read(EC) == ts2
+        writew(q, EC + 0x2a, 0x10)
+        step(q, 200)
+        assert q.read(EC) > ts2
+        print("G10A_ECAP1_POWER_16_32_BIT_REGS_STOP_START_NO_PHANTOM=PASS")
+
+        # Explicit phase sample without enabled CMPSS0 cannot create capture.
+        q.write(STIM, 0x10000 | 2500)
+        step(q, 1000)
+        assert q.read(EC + 8) == 0
+        assert readw(q, EC + 0x2e) == 0
+        q.write(POWER, 0x26000410)
+        q.write(MUX, 0)                # COMP HP0 (phase U)
+        writew(q, CMP + 0x08, 0)       # DAC active on MCLK
+        writew(q, CMP + 0x0c, 2048)
+        assert readw(q, CMP + 0x0e) == 2048
+        writew(q, CMP + 0x30, 0x420)  # sample window 5, threshold 3
+        writew(q, CMP + 0x32, 0)
+        writew(q, CMP + 0x72, 0)
+        writew(q, CMP, 0x8008)        # COMPDACE, CTRIPH filtered
+        step(q, 100)
+        assert q.read(EC + 8) != 0    # qualifying HIGH edge captured
+        assert readw(q, CMP + 0x04) & 1
+        assert readw(q, EC + 0x2e) & 3 == 3
+        first = q.read(EC + 8)
+        writew(q, EC + 0x30, 3)       # ECCLR W1C flags+global
+        assert readw(q, EC + 0x2e) == 0
+        step(q, 500)
+        assert q.read(EC + 8) == first
+        assert readw(q, EC + 0x2e) == 0
+        print("G10B_CAPTURE_FROM_QUALIFIED_FILTERED_EDGE_IRQ_W1C=PASS")
+
+        # Glitches shorter than 3 virtual filter samples cannot capture.
+        q.write(STIM, 0x10000 | 1500)
+        step(q, 10)
+        q.write(STIM, 0x10000 | 2500)
+        step(q, 100)
+        assert readw(q, EC + 0x2e) == 0
+        assert q.read(EC + 8) == first
+        print("G10C_SHORT_PULSE_REJECTED_NO_SYNTHETIC_CAPTURE=PASS")
+
+        # Falling capture polarity, then change sample across DAC threshold.
+        writew(q, EC + 0x28, 0x101)
+        q.write(STIM, 0x10000 | 1500)
+        step(q, 100)
+        assert q.read(EC + 8) > first
+        assert readw(q, EC + 0x2e) & 2
+        fall_cap = q.read(EC + 8)
+        writew(q, EC + 0x30, 3)
+        # CAPLDEN=0: event status still asserts but CAP1 must not load.
+        writew(q, EC + 0x28, 0)
+        q.write(STIM, 0x10000 | 2500)
+        step(q, 100)
+        assert readw(q, EC + 0x2e) & 2
+        assert q.read(EC + 8) == fall_cap
+        print("G10C_EDGE_POLARITY_CAPLDEN_DISABLED_STILL_SETS_FLAG=PASS")
+
+        # Wrong capture input selection or comparator power never invents edge.
+        writew(q, EC + 0x30, 3)
+        q.write(EC + 0x24, 44)
+        q.write(STIM, 0x10000 | 1500)
+        step(q, 100)
+        assert readw(q, EC + 0x2e) == 0
+        q.write(EC + 0x24, 45)
+        writew(q, CMP, 0)             # Comparator disabled
+        q.write(STIM, 0x10000 | 2500)
+        step(q, 100)
+        assert readw(q, EC + 0x2e) == 0
+        print("G10C_INPUT45_AND_COMPARATOR_POWER_ROUTE_FAIL_CLOSED=PASS")
+
+        # PWM sync DAC: active DAC not updated until a real PWM zero event.
+        q.write(POWER, 0x26000610)   # plus PWM4
+        writew(q, CMP, 0)
+        writew(q, CMP + 0x08, 0x80)
+        writew(q, CMP + 0x0c, 3000)
+        assert readw(q, CMP + 0x0e) == 2048
+        q.write(PWM + 0x14, 99)
+        q.write(PWM + 0x10, 0)
+        q.write(SYNC, 1)
+        step(q, 1000)
+        assert readw(q, CMP + 0x0e) == 3000
+        print("G10C_DAC_ACTIVE_LOAD_AT_REAL_MCPWM_ZERO=PASS")
+
+        # Power removal must freeze ECAP and reject subsequent register writes.
+        q.write(POWER, 0x26000000)
+        q.write(EC + 0x24, 44)
+        assert q.read(EC + 0x24) != 44
+        print("PASS_G10A_G10B_G10C_ECAP1_CMPSS0_FEEDBACK_FIXTURE")
+
+    errors = run(args.qemu.resolve(), args.elf.resolve(), True, functional)
+    assert "G10_UNMODELED_ECAP1" in errors, errors
+
+    def strict(q):
+        q.write(EC + 0x24, 45)
+        q.write(CMP, 0x8008)
+        q.write(STIM, 0x10000 | 2500)
+        assert q.read(EC + 8) == 0xffffffff
+    strict_errors = run(args.qemu.resolve(), args.elf.resolve(), False, strict)
+    assert "G10_UNMODELED_ECAP1" in strict_errors, strict_errors
+    assert "G10_UNMODELED_CMPSS0" in strict_errors, strict_errors
+    print("PASS_G10_STRICT_MODE_NO_FEEDBACK_SHIM")
+
+if __name__ == "__main__":
+    main()
