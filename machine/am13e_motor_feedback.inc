@@ -150,10 +150,11 @@ static void am13e_g10_output(AM13ESimFeedback *f, bool level)
 static void am13e_g10_filter_done(void *opaque)
 {
     AM13ESimFeedback *f = opaque;
+    unsigned mux = f->machine->sim_mc_mux[0] & 7U;
     if (!am13e_g10_cmp_powered(f) ||
         !(f->cmp[0x00U / 2U] & 0x8000U) ||
         (f->cmp[0x30U / 2U] & 7U) != 0U ||
-        !f->phase_valid[f->machine->sim_mc_mux[0] & 3U]) {
+        mux >= 3U || !f->phase_valid[mux]) {
         return;
     }
     if (am13e_g10_raw(f) == f->filter_pending) {
@@ -176,8 +177,9 @@ static void am13e_g10_cmp_evaluate(AM13ESimFeedback *f)
     if (f->filter_pending == f->filtered) {
         return;
     }
-    uint32_t window = (f->cmp[0x30U / 2U] >> 3U) & 31U;
-    uint32_t threshold = (f->cmp[0x30U / 2U] >> 9U) & 31U;
+    /* DriverLib encodes SAMPWIN and THRESH as value-minus-one. */
+    uint32_t window = ((f->cmp[0x30U / 2U] >> 3U) & 31U) + 1U;
+    uint32_t threshold = ((f->cmp[0x30U / 2U] >> 9U) & 31U) + 1U;
     if (!window || !threshold || threshold > window) {
         return; /* incomplete/invalid filter cannot emit an event */
     }
@@ -393,6 +395,7 @@ static bool am13e_g10_cmp_write16(AM13ESimFeedback *f, hwaddr off,
     if (off == 0x0cU || off == 0x24U) {
         v &= 0x0fffU;
     }
+    bool filter_init = off == 0x30U && !!(v & 0x8000U);
     if (off == 0x30U) v &= 0x7fffU; /* FILINIT self-clears */
     f->cmp[off / 2U] = v;
     if (off == 0x0cU && !(f->cmp[0x08U / 2U] & 0x80U)) {
@@ -402,8 +405,10 @@ static bool am13e_g10_cmp_write16(AM13ESimFeedback *f, hwaddr off,
     if (off == 0x08U && !(v & 0x80U)) {
         f->cmp[0x0eU / 2U] = f->cmp[0x0cU / 2U];
     }
-    if (off == 0x30U && (v & 0x8000U)) {
+    if (filter_init) {
+        if (f->filter_timer) timer_del(f->filter_timer);
         f->filtered = am13e_g10_raw(f);
+        f->filter_pending = f->filtered;
     }
     am13e_g10_cmp_evaluate(f);
     return true;
