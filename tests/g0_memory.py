@@ -6,6 +6,7 @@ import socket
 import subprocess
 import tempfile
 from pathlib import Path
+from elf_image import app_vector_from_elf
 
 class QTest:
     def __init__(self, sock):
@@ -35,6 +36,7 @@ def main():
     for f in (qemu, elf):
         if not f.is_file():
             parser.error('file not found: ' + str(f))
+    expected_sp, expected_reset = app_vector_from_elf(elf)
     with tempfile.TemporaryDirectory(prefix='am13e-g0-') as tmp:
         path = os.path.join(tmp, 'qtest.sock')
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener:
@@ -52,7 +54,7 @@ def main():
                     qt = QTest(sock)
                     sp, reset = qt.read(0x6000), qt.read(0x6004)
                     print(f'APP_VECTOR SP=0x{sp:08x} RESET=0x{reset:08x}')
-                    assert (sp, reset) == (0x20018000, 0x0000dbfd), 'Unexpected Rel17.3 ELF vectors'
+                    assert (sp, reset) == (expected_sp, expected_reset), 'QEMU flash vector differs from supplied ELF'
                     for a, b, pattern in [
                         (0x20018000, 0x00c18000, 0x1234abcd),
                         (0x00c18004, 0x20018004, 0xdeadbeef),
