@@ -63,6 +63,28 @@ def main():
         assert q.read(EC) > ts2
         print("G10A_ECAP1_POWER_16_32_BIT_REGS_STOP_START_NO_PHANTOM=PASS")
 
+        # Actual 32-bit TSCTR rollover; enable alone must not set CTROVF.
+        q.write(EC, 0xfffffff0)
+        writew(q, EC + 0x2c, 0x20)
+        assert readw(q, EC + 0x2e) == 0
+        step(q, 160)
+        assert readw(q, EC + 0x2e) & 0x21 == 0x21
+        assert q.read(EC) < 10
+        writew(q, EC + 0x30, 0x21)
+        assert readw(q, EC + 0x2e) == 0
+        writew(q, EC + 0x2c, 0x02)
+        print("G10B_NATIVE_TSCTR_OVERFLOW_IRQ_AND_W1C=PASS")
+
+        # ECFRC is a software flag force, never a timestamp capture.
+        writew(q, EC + 0x32, 0x02)
+        assert readw(q, EC + 0x2e) & 0x03 == 0x03
+        assert q.read(EC + 8) == 0
+        writew(q, EC + 0x30, 0x02)
+        assert readw(q, EC + 0x2e) == 1
+        writew(q, EC + 0x30, 0x01)
+        assert readw(q, EC + 0x2e) == 0
+        print("G10B_ECFRC_FORCE_FLAG_NOT_CAPTURE_TIMESTAMP=PASS")
+
         # Explicit phase sample without enabled CMPSS0 cannot create capture.
         q.write(STIM, 0x10000 | 2500)
         step(q, 1000)
@@ -116,11 +138,13 @@ def main():
 
         # Wrong capture input selection or comparator power never invents edge.
         writew(q, EC + 0x30, 3)
-        q.write(EC + 0x24, 44)
+        writew(q, EC + 0x28, 0x101)  # falling edge would qualify
+        q.write(EC + 0x24, 44)        # but wrong input excludes it
         q.write(STIM, 0x10000 | 1500)
         step(q, 100)
         assert readw(q, EC + 0x2e) == 0
         q.write(EC + 0x24, 45)
+        writew(q, EC + 0x28, 0x100)  # rising edge would qualify
         writew(q, CMP, 0)             # Comparator disabled
         q.write(STIM, 0x10000 | 2500)
         step(q, 100)
