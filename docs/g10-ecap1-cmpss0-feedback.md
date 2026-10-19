@@ -68,10 +68,20 @@ python3 tests/g1_handoff.py \
 ```
 
 The native test checks ECAP1 power, Input 45, running counter and
-CAPLDEN observed while the guest was actually executing. Firmware
-may legitimately clear CAPLDEN during a subsequent safety shutdown;
-the final exception snapshot alone must not be treated as proof
-that ECAP1 was never initialized.
+CAPLDEN **actually enabled by at least one native ECCTL1 MMIO write**.
+The read-only, ESC-SIM-only history register at `0x5FFE200C` has
+bit0=CAPLDEN ever enabled since ECAP1 reset, and bits31:16=count of
+0->1 enable transitions. No physical AM13E register exists there.
+Only a write to the genuine ECAP1.ECCTL1 with bit8 changing 0->1
+can update that history; the test-only register cannot be written.
+
+The first G10D test used GDB sampling every 16 instructions. A WSL
+build could set and clear ECCTL1.CAPLDEN within that sampling period
+so its final ECCTL1=0 was incorrectly reported as an initialization
+failure. The native-write observer avoids this compiler/step-phase
+dependence while keeping source/ELF unmodified. A legitimate safety
+shutdown can clear CAPLDEN without erasing historical initialization.
+The history is cleared by QEMU machine/ECAP1 reset, not by bit8=0.
 
 An initial firmware trace on the G10 model passed the previous
 `BFAR=0x4044102A` ECAP1 initialization BusFault, then encountered
