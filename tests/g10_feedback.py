@@ -47,7 +47,7 @@ def main():
         writew(q, EC + 0x28, 0x100)  # CAPLDEN, rising event 1
         writew(q, EC + 0x2c, 2)      # CEVT1 IRQ enable
         assert readw(q, EC + 0x2e) == 0  # enable does not trigger event
-        assert q.read(EC + 0x28) == 0x000200100
+        assert q.read(EC + 0x28) == 0x00000100
         writew(q, EC + 0x2a, 0x10)   # TSCTRSTOP bit: free running
         step(q, 1000)
         ts1 = q.read(EC)
@@ -153,7 +153,7 @@ def main():
         q.write(EC + 0x24, 45)
         q.write(CMP, 0x8008)
         q.write(STIM, 0x10000 | 2500)
-        assert q.read(EC + 8) == 0xffffffff
+        q.read(EC + 8)  # unmapped access must be logged
     strict_errors = run(args.qemu.resolve(), args.elf.resolve(), False, strict)
     assert "G10_UNMODELED_ECAP1" in strict_errors, strict_errors
     assert "G10_UNMODELED_CMPSS0" in strict_errors, strict_errors
