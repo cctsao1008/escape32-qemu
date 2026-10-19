@@ -817,3 +817,28 @@ the host motor plant and CMPSS0/ECAP1 link.
 native six-AQ duty measurement, one-shot global
 shadow load at Counter ZERO, firmware IRQ clear and
 strict-mode refusal. No Trip Protection claim.
+
+
+## G10 — ECAP1/CMPSS0 BEMF event path, not yet an autonomous motor
+
+The opt-in `esc-sim=on` profile now includes ECAP1 native
+halfword/word register semantics, a virtual-time 100MHz timestamp
+counter, event capture registers, interrupt flags/W1C and NVIC IRQ30.
+CMPSS0 has a high-DAC comparator, synthetic bounded filter delay,
+MCPWM4-zero DAC sync, and correctly gated ECAP Input 45.
+The simulator-only `0x5FFE2000` phase stimulus requires explicit
+12-bit valid input samples; neither motor speed nor a BEMF crossing
+is generated solely from PWM configuration or elapsed time.
+
+The `tests/g10_feedback.py` regression covers powered/strict mode,
+short pulses, wrong routes, CAPLDEN suppression and real input events.
+The CI extends the original ELF G1 trace with
+`--require-pwm4-init --require-ecap1-init`.
+The native firmware has passed its previous `0x4044102A`
+ECAP1 BusFault; a distinct later `CFSR=0x00040000` INVPC
+UsageFault remains under investigation. **No automatic BLDC plant
+connection, firmware startup completion, closed loop, board output
+authorization, or physical safety has been verified.**
+
+See [G10 ECAP1/CMPSS0 scope, registers, tests and limitations](
+docs/g10-ecap1-cmpss0-feedback.md).
