@@ -43,3 +43,46 @@ def app_vector_from_elf(path):
             f"Unexpected AM13E image: SP=0x{sp:08x}, RESET=0x{reset:08x}, "
             f"ELF_ENTRY=0x{e_entry:08x}")
     return sp, reset
+
+
+
+def elf_function_address(path, name):
+    """Resolve an exact function in the supplied ELF32 symbol table.
+
+    No hardcoded PC offsets: AM13E HAL rebuilds legitimately move TI SDK
+    functions.  No objdump dependency, and stripped/ambiguous images fail.
+    """
+    blob = Path(path).read_bytes()
+    if len(blob) < 52 or blob[:6] != b"\\x7fELF\\x01\\x01":
+        raise ValueError("Expected a little-endian ELF32 file")
+    hdr = struct.unpack_from("<16sHHIIIIIHHHHHH", blob)
+    section_off, entry_size, count = hdr[6], hdr[11], hdr[12]
+    if not count or entry_size != 40 or section_off + count * entry_size > len(blob):
+        raise ValueError("ELF section headers missing or malformed")
+    sections = [struct.unpack_from("<IIIIIIIIII", blob, section_off + i * 40)
+                for i in range(count)]
+    hits = []
+    for sh in sections:
+        if sh[1] != 2:  # SHT_SYMTAB
+            continue
+        off, size, link, entsize = sh[4], sh[5], sh[6], sh[9]
+        if link >= count or entsize != 16 or size % 16 or off + size > len(blob):
+            raise ValueError("Malformed ELF function symbol table")
+        string_section = sections[link]
+        str_off, str_size = string_section[4], string_section[5]
+        if string_section[1] != 3 or str_off + str_size > len(blob):
+            raise ValueError("Malformed ELF string table")
+        names = blob[str_off:str_off + str_size]
+        for pos in range(off, off + size, 16):
+            st_name, value, st_size, st_info, _other, _section = (
+                struct.unpack_from("<IIIBBH", blob, pos))
+            if (st_info & 15) != 2 or st_name >= len(names):
+                continue
+            end = names.find(b"\\0", st_name)
+            if end < 0:
+                raise ValueError("Unterminated function symbol")
+            if names[st_name:end] == name.encode("ascii"):
+                hits.append((value & ~1, st_size))
+    if len(hits) != 1 or not APP_BASE <= hits[0][0] < 0x80000:
+        raise ValueError(f"Missing or ambiguous ELF function symbol: {name}")
+    return hits[0]
