@@ -69,6 +69,10 @@ def main():
         assert q.read(OBS) & 1 == 0
         assert q.read(CTL) == 2      # STOP/FREEZE at reset
         assert q.read(OBS + 0x10) == 0
+        assert q.read(POWER) & 0x200 == 0  # TI PWM4 reset power OFF
+        q.write(CTL, 0)                   # deliberately unpowered TBCTL
+        assert q.read(CTL) == 2           # rejected, never fabricated
+        print("G9_UNPOWERED_TBCTL_WRITE_REJECTED=PASS")
         q.write(POWER, 0x26000200)  # PWM4 power bit 9
         assert q.read(POWER) & 0x200
 
@@ -155,7 +159,8 @@ def main():
         assert q.read(PWM + 0x100) == 50
         print("PASS_G9A_MCPWM4_OUTPUT_OBSERVER_NO_SYNTHETIC_MOTOR=PASS")
 
-    run(qemu, elf, True, functional)
+    sim_errors = run(qemu, elf, True, functional)
+    assert "G9_MCPWM4_POWER_OFF_WRITE" in sim_errors, sim_errors
 
     def strict(q):
         q.read(OBS)
