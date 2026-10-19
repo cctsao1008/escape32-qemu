@@ -35,6 +35,9 @@ def main():
     def functional(q):
         # Reset genuinely unpowered; rejected access is not a fake R/W shim.
         assert q.read(POWER) == 0
+        assert q.read(STIM + 12) == 0  # read-only CAPLDEN audit is clear
+        q.write(STIM + 12, 1)         # cannot forge guest transition
+        assert q.read(STIM + 12) == 0
         q.write(EC + 0x24, 45)
         assert q.read(EC + 0x24) != 45
         q.write(POWER, 0x26000010)  # ECAP1 bit4 only
@@ -45,6 +48,14 @@ def main():
         q.write(EC + 0x24, 45)
         assert q.read(EC + 0x24) == 45
         writew(q, EC + 0x28, 0x100)  # CAPLDEN, rising event 1
+        assert q.read(STIM + 12) == 0x00010001
+        writew(q, EC + 0x28, 0x100)  # idempotent: no false transition
+        assert q.read(STIM + 12) == 0x00010001
+        writew(q, EC + 0x28, 0)      # subsequent safety-style disable
+        assert q.read(STIM + 12) == 0x00010001  # historical bit persists
+        writew(q, EC + 0x28, 0x100)
+        assert q.read(STIM + 12) == 0x00020001
+        print("G10D_CAPLDEN_STICKY_NATIVE_WRITE_AUDIT_NOT_GDB_SAMPLING=PASS")
         writew(q, EC + 0x2c, 2)      # CEVT1 IRQ enable
         assert readw(q, EC + 0x2e) == 0  # enable does not trigger event
         assert q.read(EC + 0x28) == 0x00000100
@@ -164,6 +175,12 @@ def main():
         assert readw(q, CMP + 0x0e) == 3000
         print("G10C_DAC_ACTIVE_LOAD_AT_REAL_MCPWM_ZERO=PASS")
 
+        # The diagnostic history is reset only by a peripheral reset.
+        assert q.read(STIM + 12) & 1
+        q.write(SYS + 0x1428, 0xb1000010)  # ECAP1 reset assert
+        assert q.read(STIM + 12) == 0
+        print("G10D_ECAP1_RESET_CLEARS_WRITE_AUDIT=PASS")
+
         # Power removal must freeze ECAP and reject subsequent register writes.
         q.write(POWER, 0x26000000)
         q.write(EC + 0x24, 44)
@@ -177,7 +194,8 @@ def main():
         q.write(EC + 0x24, 45)
         q.write(CMP, 0x8008)
         q.write(STIM, 0x10000 | 2500)
-        q.read(EC + 8)  # unmapped access must be logged
+        q.read(STIM + 12)  # no observer in strict mode
+        q.read(EC + 8)  # unpowered/unmodeled access must be logged
     strict_errors = run(args.qemu.resolve(), args.elf.resolve(), False, strict)
     assert "G10_UNMODELED_ECAP1" in strict_errors, strict_errors
     assert "G10_UNMODELED_CMPSS0" in strict_errors, strict_errors
