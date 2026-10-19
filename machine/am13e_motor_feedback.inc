@@ -216,6 +216,8 @@ static void am13e_g10_reset(AM13ESimFeedback *f)
     memset(f->phase_code, 0, sizeof(f->phase_code));
     memset(f->phase_valid, 0, sizeof(f->phase_valid));
     f->filtered = f->filter_pending = f->cmp_latch = false;
+    f->caplden_ever_enabled = false;
+    f->caplden_enable_transitions = 0U;
     f->reported_ecap = f->reported_cmp = false;
     am13e_g10_irq_update(f);
 }
@@ -251,7 +253,17 @@ static bool am13e_g10_ecap_put16(AM13ESimFeedback *f,
                                  hwaddr off, uint16_t v)
 {
     switch (off) {
-    case 0x28: f->ecctl1 = v; return true;
+    case 0x28:
+        /* Sticky diagnostic records the ACTUAL guest MMIO transition,
+         * unlike GDB sampling at arbitrary multiples of 16 steps.
+         * An independent simulator-only read-only observer exposes it;
+         * there is no corresponding AM13E register or firmware write. */
+        if ((v & 0x0100U) && !(f->ecctl1 & 0x0100U)) {
+            f->caplden_ever_enabled = true;
+            ++f->caplden_enable_transitions;
+        }
+        f->ecctl1 = v;
+        return true;
     case 0x2a: {
         bool before = !!(f->ecctl2 & 0x10U);
         if (before) am13e_g10_stop_counter(f);
@@ -471,7 +483,15 @@ static MemTxResult am13e_g10_stim_read(void *opaque, hwaddr off,
 {
     AM13ESimFeedback *f = opaque;
     if (!f->machine->esc_sim || size != 4U ||
-        off >= 12U || (off & 3U)) return MEMTX_ERROR;
+        off >= 16U || (off & 3U)) return MEMTX_ERROR;
+    if (off == 12U) {
+        /* Test-only read-only history, never a native silicon register.
+         * bit0: ECCTL1.CAPLDEN has been enabled since device reset.
+         * bits31:16: bounded count of actual 0->1 transitions. */
+        *value = (f->caplden_ever_enabled ? 1U : 0U) |
+                 (MIN(f->caplden_enable_transitions, UINT32_C(65535)) << 16);
+        return MEMTX_OK;
+    }
     unsigned phase = off / 4U;
     *value = f->phase_code[phase] | (f->phase_valid[phase] ? 0x10000U : 0U);
     return MEMTX_OK;
