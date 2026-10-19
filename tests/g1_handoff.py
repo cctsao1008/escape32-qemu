@@ -13,7 +13,7 @@ import tempfile
 import time
 from pathlib import Path
 from collections import Counter, deque
-from elf_image import APP_BASE, app_vector_from_elf
+from elf_image import APP_BASE, app_vector_from_elf, elf_function_address
 
 
 class RSP:
@@ -90,24 +90,23 @@ def wait_for_socket(path, process, timeout=15):
 
 
 
-# Source: TI SDK dl_common.c, GCC cycle-delay loop in this exact Rel17.3 ELF.
-# The diagnostic verifies the NOP/BHS opcodes before accelerating the HOST
-# trace. QEMU must still execute all CPU instructions until actual return.
-SDK_DELAY_LOOP = (0x0000C6F6, 0x0000C6F8, 0x0000C6FA)
+# Source: TI SDK dl_common.c.  Resolve this function from the real ELF:
+# the native HAL fix changed linked addresses, but not SDK delay logic.
+# The diagnostic checks loop opcodes, then QEMU executes real instructions.
 
 
-def fast_forward_sdk_delay(rsp, pc, hardfault_pc):
+def fast_forward_sdk_delay(rsp, pc, hardfault_pc, sdk_delay_loop):
     """Execute a verified delay via GDB continue-to-LR, without skipping CPU."""
-    if pc not in SDK_DELAY_LOOP:
+    if pc not in sdk_delay_loop:
         return None
-    nop = rsp.mem16(SDK_DELAY_LOOP[1])
-    branch = rsp.mem16(SDK_DELAY_LOOP[2])
+    nop = rsp.mem16(sdk_delay_loop[1])
+    branch = rsp.mem16(sdk_delay_loop[2])
     if (nop, branch) != (0xBF00, 0xD2FC):
         raise RuntimeError(
             f"SDK delay loop opcode mismatch: NOP=0x{nop:04x} "
             f"BHS=0x{branch:04x}; fast-forward rejected")
     ret = rsp.reg(14) & ~1
-    if not (APP_BASE <= ret < 0x80000) or ret in SDK_DELAY_LOOP:
+    if not (APP_BASE <= ret < 0x80000) or ret in sdk_delay_loop:
         raise RuntimeError(f"Unexpected SDK delay LR=0x{ret:08x}")
     breakpoints = tuple(dict.fromkeys((ret, hardfault_pc)))
     installed = []
@@ -135,7 +134,7 @@ def fast_forward_sdk_delay(rsp, pc, hardfault_pc):
     if observed not in breakpoints:
         raise RuntimeError(f"SDK delay stopped at unknown 0x{observed:08x}, "
                            f"not return=0x{ret:08x} or fault")
-    print(f"G1_DELAY_CONTINUE loop=0x{SDK_DELAY_LOOP[0]:08x} "
+    print(f"G1_DELAY_CONTINUE loop=0x{sdk_delay_loop[0]:08x} "
           f"return=0x{ret:08x} stop=0x{observed:08x} "
           "GUEST_INSTRUCTIONS_EXECUTED")
     return observed
@@ -229,6 +228,10 @@ def main():
     if args.factory_pll_file is not None and not args.factory_pll_file.is_file():
         parser.error(f"Missing factory fixture: {args.factory_pll_file}")
     expected_sp, expected_reset = app_vector_from_elf(elf)
+    delay_addr, delay_size = elf_function_address(elf, "DL_Common_delayCycles")
+    if delay_size != 10:
+        raise RuntimeError("SDK delay function changed; cannot accelerate")
+    sdk_delay_loop = (delay_addr + 2, delay_addr + 4, delay_addr + 6)
     with tempfile.TemporaryDirectory(prefix="am13e-g1-") as tmp:
         socket_path = os.path.join(tmp, "gdb.sock")
         cmd = [
@@ -329,12 +332,12 @@ def main():
                             if response[:3] not in ("S05", "T05"):
                                 raise RuntimeError(f"Guest stopped unexpectedly: {response}")
                             current = rsp.reg(15)
-                            if args.fast_delay_loops and current in SDK_DELAY_LOOP:
+                            if args.fast_delay_loops and current in sdk_delay_loop:
                                 # Continue actually runs the busywait in QEMU;
                                 # this iteration counts one host GDB stop,
                                 # not its many guest instructions.
                                 current = fast_forward_sdk_delay(
-                                    rsp, current, hardfault_pc)
+                                    rsp, current, hardfault_pc, sdk_delay_loop)
                                 fast_delays += 1
                             hot[current] += 1
                             history.append(current)
