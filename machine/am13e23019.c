@@ -287,6 +287,7 @@ typedef struct AM13ESimPWM {
     bool running;
     bool latch;
     bool reported_unmodeled;
+    bool reported_power_off;
 } AM13ESimPWM;
 
 typedef struct AM13EDMA {
@@ -1461,6 +1462,7 @@ static void am13e_pwm4_reset(AM13ESimPWM *p)
     p->reg[0x10U / 4U] = 2U; /* safe STOP_FREEZE */
     p->irqs = p->zero_events = p->counter_base = 0U;
     p->running = p->latch = p->reported_unmodeled = false;
+    p->reported_power_off = false;
     p->epoch_ns = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
     am13e_pwm4_irq_update(p);
 }
@@ -1619,9 +1621,22 @@ static MemTxResult am13e_pwm4_write(void *opaque, hwaddr off,
 {
     AM13ESimPWM *p = opaque;
     uint32_t data = (uint32_t)value;
-    if (!p->machine->esc_sim || size != 4U || !am13e_pwm4_rw_reg(off) ||
-        !(p->machine->sim_mc_power & AM13E_SIM_PWM_POWER_BIT)) {
+    if (!p->machine->esc_sim || size != 4U || !am13e_pwm4_rw_reg(off)) {
         return am13e_pwm4_invalid(p, off, true, size);
+    }
+    /* Explicit TI PWM4 power gate: never silently let the original ELF
+     * program TBCTL before its own SYSCTL.PWREN_MCPERIPH[9] handshake.
+     * Keep a separate diagnostic from genuinely unmodeled MCPWM offsets.
+     */
+    if (!(p->machine->sim_mc_power & AM13E_SIM_PWM_POWER_BIT)) {
+        if (!p->reported_power_off) {
+            error_report("G9_MCPWM4_POWER_OFF_WRITE 0x%08" PRIx64
+                         " value=0x%08x size=%u PWREN=0x%08x (rejected)",
+                         (uint64_t)(AM13E_SIM_MCPWM_BASE + off), data,
+                         size, p->machine->sim_mc_power);
+            p->reported_power_off = true;
+        }
+        return MEMTX_ERROR;
     }
     switch (off) {
     case 0x10U:
