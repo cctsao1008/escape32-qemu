@@ -4,6 +4,7 @@ import socket
 import unittest
 
 from g1_handoff import RSP, fast_forward_sdk_delay
+from g11_exception_lifecycle import receive_async_stop
 
 # Synthetic unit-test opcode addresses only; integration resolves ELF symbol.
 TEST_DELAY_LOOP = (0xc6f6, 0xc6f8, 0xc6fa)
@@ -84,6 +85,46 @@ class DelayBreakpoints(unittest.TestCase):
         self.assertIsNone(fast_forward_sdk_delay(rsp, 0xc700, 0x7610, TEST_DELAY_LOOP))
         self.assertEqual(rsp.ops, [])
 
+
+
+
+class G11AsyncStopPacket(unittest.TestCase):
+    """Ctrl-C stop arrives asynchronously, *without* another command ACK."""
+
+    def test_async_stop_packet_and_ack(self):
+        client, server = socket.socketpair()
+        try:
+            data = b"T02"
+            server.sendall(b"$" + data +
+                           f"#{sum(data) & 255:02x}".encode("ascii"))
+            self.assertEqual(receive_async_stop(RSP(client)), "T02")
+            self.assertEqual(server.recv(1), b"+")
+        finally:
+            client.close()
+            server.close()
+
+    def test_async_stop_packet_rejects_bad_checksum(self):
+        client, server = socket.socketpair()
+        try:
+            server.sendall(b"$T02#00")
+            with self.assertRaisesRegex(RuntimeError, "checksum"):
+                receive_async_stop(RSP(client))
+            self.assertEqual(server.recv(1), b"-")
+        finally:
+            client.close()
+            server.close()
+
+    def test_async_stop_with_queued_ack(self):
+        client, server = socket.socketpair()
+        try:
+            data = b"S02"
+            server.sendall(b"+$" + data +
+                           f"#{sum(data) & 255:02x}".encode("ascii"))
+            self.assertEqual(receive_async_stop(RSP(client)), "S02")
+            self.assertEqual(server.recv(1), b"+")
+        finally:
+            client.close()
+            server.close()
 
 if __name__ == "__main__":
     unittest.main()
