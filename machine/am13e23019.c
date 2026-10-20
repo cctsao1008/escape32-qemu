@@ -58,6 +58,9 @@ OBJECT_DECLARE_SIMPLE_TYPE(AM13EMachineState, AM13E_MACHINE)
 #define AM13E_SIM_ANAREFCTL      0x1488U
 #define AM13E_SYSCTL_MCLKCFG 0x1104U
 #define AM13E_SYSCTL_CLKSTATUS 0x1204U
+/* TI hw_sysctl.h: SYSCTL->SOCLOCK.RSTCAUSE is native +0x1220.
+ * ID[4:0] is read-to-clear. No implicit POR/WWDT/BOOTRST fixture. */
+#define AM13E_SYSCTL_RSTCAUSE 0x1220U
 #define AM13E_SYSCTL_MCLKCFG_INITIAL 0x07000200U
 #define AM13E_SYSCTL_CLKSTATUS_INITIAL 0x00007000U
 
@@ -440,6 +443,8 @@ struct AM13EMachineState {
     uint32_t sysctl_pllparam0;
     uint32_t sysctl_pllparam1;
     uint32_t sysctl_clkstatus;
+    uint32_t sysctl_rstcause;        /* guest native read-to-clear ID[4:0] */
+    uint32_t sim_rstcause_seed;      /* explicit machine fixture only */
     QEMUTimer *xtal_timer;
     QEMUTimer *sim_pll_timer;
     bool xtal_present;
@@ -540,6 +545,45 @@ static bool am13e_get_esc_sim(Object *obj, Error **errp)
 static void am13e_set_esc_sim(Object *obj, bool on, Error **errp)
 {
     AM13E_MACHINE(obj)->esc_sim = on;
+}
+
+/* G12 simulator-only reset-history *source*, not a writable silicon
+ * register. If the bootloader's preceding reset cause is unspecified,
+ * no POR or watchdog event may be fabricated. An explicit enum fixture
+ * exercises the real SYSCTL.RSTCAUSE read-to-clear semantics.
+ */
+static char *am13e_get_sim_reset_cause(Object *obj, Error **errp)
+{
+    return g_strdup_printf("0x%x",
+                           AM13E_MACHINE(obj)->sim_rstcause_seed);
+}
+static void am13e_set_sim_reset_cause(Object *obj, const char *input,
+                                      Error **errp)
+{
+    char *end = NULL;
+    guint64 value;
+    if (!input || !*input) {
+        error_setg(errp, "esc-sim-reset-cause requires an explicit reset ID");
+        return;
+    }
+    value = g_ascii_strtoull(input, &end, 0);
+    if (end == input || *end != 0 || value > 0x1dU) {
+        error_setg(errp, "invalid G12 esc-sim-reset-cause: %s", input);
+        return;
+    }
+    switch (value) {
+    case 0x00U: case 0x01U: case 0x02U: case 0x03U:
+    case 0x04U: case 0x05U: case 0x08U: case 0x09U:
+    case 0x0cU: case 0x0dU: case 0x0eU:
+    case 0x10U: case 0x11U: case 0x14U: case 0x15U:
+    case 0x1aU: case 0x1bU: case 0x1cU: case 0x1dU:
+        AM13E_MACHINE(obj)->sim_rstcause_seed = value;
+        return;
+    default:
+        error_setg(errp, "reserved TI SYSCTL.RSTCAUSE ID: 0x%" PRIx64,
+                   (uint64_t)value);
+        return;
+    }
 }
 
 /*
@@ -1970,6 +2014,14 @@ static MemTxResult am13e_sysctl_read(void *opaque, hwaddr offset,
     case AM13E_SYSCTL_CLKSTATUS:
         *value = s->sysctl_clkstatus;
         return MEMTX_OK;
+    case AM13E_SYSCTL_RSTCAUSE:
+        /* TI DriverLib DL_SYSCTL_getResetCause() performs one 32-bit
+         * read of RSTCAUSE.ID[4:0]; silicon clears that field on read.
+         * Strict mode also models this *documented* register only.
+         */
+        *value = s->sysctl_rstcause;
+        s->sysctl_rstcause = 0U;
+        return MEMTX_OK;
     case AM13E_SIM_SYSTEMCFG:
         if (!s->esc_sim) {
             return am13e_sysctl_unmodeled(s, offset, false, size);
@@ -3234,6 +3286,7 @@ static void am13e_handoff_reset(void *opaque)
     s->sysctl_pllparam0 = AM13E_SYSCTL_SYSPLLPARAM0_INITIAL;
     s->sysctl_pllparam1 = AM13E_SYSCTL_SYSPLLPARAM1_INITIAL;
     s->sysctl_clkstatus = AM13E_SYSCTL_CLKSTATUS_INITIAL;
+    s->sysctl_rstcause = s->esc_sim ? s->sim_rstcause_seed : 0U;
     timer_del(s->xtal_timer);
     timer_del(s->sim_pll_timer);
     s->sysctl_unmodeled_reported = false;
@@ -3275,6 +3328,10 @@ static void am13e_init(MachineState *machine)
         error_report("am13e23019 requires 128KiB SRAM and cortex-m33-am13e");
         exit(EXIT_FAILURE);
     }
+    if (!s->esc_sim && s->sim_rstcause_seed != 0U) {
+        error_report("esc-sim-reset-cause requires esc-sim=on");
+        exit(EXIT_FAILURE);
+    }
     memory_region_init_rom(&s->flash, NULL, "am13e-main-flash",
                            AM13E_FLASH_SIZE, &error_fatal);
     memory_region_add_subregion(sysmem, 0x00000000, &s->flash);
@@ -3301,6 +3358,7 @@ static void am13e_init(MachineState *machine)
     s->sysctl_pllparam0 = AM13E_SYSCTL_SYSPLLPARAM0_INITIAL;
     s->sysctl_pllparam1 = AM13E_SYSCTL_SYSPLLPARAM1_INITIAL;
     s->sysctl_clkstatus = AM13E_SYSCTL_CLKSTATUS_INITIAL;
+    s->sysctl_rstcause = s->esc_sim ? s->sim_rstcause_seed : 0U;
     s->xtal_timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, am13e_xtal_ready, s);
     s->sim_pll_timer = timer_new_ns(QEMU_CLOCK_VIRTUAL,
                                     am13e_sim_pll_ready, s);
@@ -3583,6 +3641,13 @@ static void am13e_class_init(ObjectClass *oc, void *data)
                                    am13e_set_esc_sim);
     object_class_property_set_description(oc, "esc-sim",
         "Functional-only ESC simulation (synthetic PLL trim/clock).");
+    object_class_property_add_str(oc, "esc-sim-reset-cause",
+                                  am13e_get_sim_reset_cause,
+                                  am13e_set_sim_reset_cause);
+    object_class_property_set_description(oc, "esc-sim-reset-cause",
+        "Optional explicit TI RSTCAUSE.ID reset history fixture, "
+        "read-to-clear at native 0x400B0220. Default NORST=0 "
+        "(no POR/WWDT fault synthesized).");
     object_class_property_add_bool(oc, "esc-sim-nfault-asserted",
                                    am13e_get_sim_nfault_asserted,
                                    am13e_set_sim_nfault_asserted);
