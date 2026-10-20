@@ -78,6 +78,31 @@ if entry not in cpu_content:
         sys.exit('ERROR: QEMU v6.2.0 CPU registry anchor missing')
     cpu_content = cpu_content.replace(anchor, entry + anchor, 1)
 updates[cpu_file] = cpu_content
+# G11 native + independent PendSV control reproduced a QEMU 6.2.0 bug:
+# v7m_exception_taken() produces EXC_RETURN.ES=1 for a v8-M CPU with
+# M_SECURITY intentionally absent, but do_v7m_exception_exit() rejects
+# ES=1 on that same architecture with CFSR.INVPC. This is visible with
+# the original ESCape32 SysTick handler AND a separate 20-instruction
+# PendSV-only fixture. Repair the GENERATOR (not exception validation).
+# The exact anchor is specific to the pinned QEMU revision, fail closed.
+m_helper_file = qemu / 'target/arm/m_helper.c'
+m_helper = m_helper_file.read_text()
+bad_excret = '''        if (targets_secure || !arm_feature(env, ARM_FEATURE_M_SECURITY)) {
+            lr |= R_V7M_EXCRET_ES_MASK;
+        }
+'''
+good_excret = '''        /* G11: no Security Extension -> EXC_RETURN.ES must be zero.
+         * QEMU 6.2's unmodified v8-M return integrity check explicitly
+         * rejects ES=1 when M_SECURITY is absent. */
+        if (targets_secure && arm_feature(env, ARM_FEATURE_M_SECURITY)) {
+            lr |= R_V7M_EXCRET_ES_MASK;
+        }
+'''
+if good_excret not in m_helper:
+    if m_helper.count(bad_excret) != 1:
+        sys.exit('ERROR: pinned QEMU v8-M EXC_RETURN.ES anchor changed')
+    m_helper = m_helper.replace(bad_excret, good_excret, 1)
+updates[m_helper_file] = m_helper
 source = root / 'machine/am13e23019.c'
 target = qemu / 'hw/arm/am13e23019.c'
 feedback_source = root / 'machine/am13e_motor_feedback.inc'
