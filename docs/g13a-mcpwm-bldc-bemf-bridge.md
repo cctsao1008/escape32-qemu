@@ -74,3 +74,36 @@ board/polarity, arm-command, motor or power-stage safety conditions
 is supplied by G13A. A true closed-loop PASS additionally requires
 repeated native duty/commutation changes causally attributable to
 fed-back capture events, not QTest register writes.
+
+## First passing integrated QTest evidence
+
+[CI run 39470700306](https://github.com/cctsao1008/escape32-qemu/actions/runs/39470700306)
+completed successfully. It built the pinned original AM13E Rel17.3
+application ELF and custom QEMU and passed all G0–G12 regressions
+plus the G13A feedback fixture. Actual log:
+
+```text
+G13A_ANALOG_SATURATION_REJECTED=PASS
+G13A_DISCONNECTED_GATE_ZERO_MOTION_NO_STIMULUS=PASS
+G13A_QEMU_MCPWM_TO_MOTOR_TO_CMPSS_ECAP_CAPTURE=PASS rpm=977.04 phase_u_code=2229 CAP1=200013
+PASS_G13A_GATE_PAD_AND_INVALID_PWM_FAIL_CLOSED
+PASS_G13A_QTEST_ONLY_NO_NATIVE_CLOSED_LOOP_CLAIM
+PASS_G12_NATIVE_SYSTICK_PENDSV_THREAD_SHIFT2
+PASS_G12_NATIVE_WFI_EXECUTE_IRQ_WAKE_REVISIT_SHIFT2
+```
+
+These numbers are consequences of the explicitly chosen
+idealized **test motor and analog parameters**; they are not
+empirical data for an E62 production motor. In this QTest setup,
+a 75% U-high / 75% V-low output was programmed into native QEMU
+MCPWM4 model registers. The six-output observer reported this
+actual modeled image, the host advanced the motor for 2,000
+PWM periods (2ms virtual time), produced a 12-bit voltage sample
+(phase U code 2229), and CMPSS0 filtered it into a real
+ECAP1 capture (CAP1 200013). There was no software write
+to ECAP1 CAP1 or forced comparator/IRQ flag.
+
+**No native closed-loop qualification is implied.** Firmware
+must demonstrate its own gate/pad authorization, dynamically
+changing six-output AQ/compare image and real response to
+captured BEMF before G13B can be considered.
