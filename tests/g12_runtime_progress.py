@@ -201,6 +201,14 @@ def collect(shift, args, native_wfi, artifact_dir):
                 stopped_by_timeout = False
                 final = pre
                 seen = set()
+                wfi_first_pc = None
+                wfi_first_scr = None
+                wfi_stepped = False
+                wfi_repeat = False
+                wfi_post_tick = False
+                # Runtime WFI probe is opt-in; shift10 remains a controlled
+                # negative timebase comparison, not a forced ISR bypass.
+                probe_roundtrip = args.probe_wfi_roundtrip and shift == 2
                 try:
                     for stop_no in range(args.max_stops):
                         stop, interrupted = continue_bounded(
@@ -216,6 +224,8 @@ def collect(shift, args, native_wfi, artifact_dir):
                             raise AssertionError(
                                 f"Unrecognized GDB breakpoint stop pc=0x{pc:08x}")
                         seen.add(event)
+                        if event == "SYSTICK_ENTRY" and wfi_stepped:
+                            wfi_post_tick = True
                         data = {"event": event, "pc": pc,
                                 "ipsr": state["ipsr"],
                                 "primask": state["primask"],
@@ -245,6 +255,46 @@ def collect(shift, args, native_wfi, artifact_dir):
                         # at an identical PC while masking guest progress.
                         del_bp(rsp, pc)
                         armed.remove(pc)
+                        if probe_roundtrip and event.startswith("MAIN_WFI"):
+                            if wfi_first_pc is None:
+                                wfi_first_pc, wfi_first_scr = pc, data["scr"]
+                                # Arm a fresh SysTick entry witness AFTER
+                                # WFI, independent of earlier IRQ release.
+                                if systick not in armed:
+                                    add_bp(rsp, systick)
+                                    armed.add(systick)
+                                stepped = rsp.command("s")  # execute native WFI
+                                if not stepped.startswith(("S05", "T05")):
+                                    raise RuntimeError(
+                                        f"G12 WFI step stop: {stepped}")
+                                after = observer(rsp)
+                                wfi_stepped = after["pc"] != pc
+                                print(f"G12_SHIFT_{shift}_WFI_STEP "
+                                      f"ORIGINAL_PC=0x{pc:08x} "
+                                      f"AFTER_PC=0x{after['pc']:08x} "
+                                      f"AFTER_IPSR={after['ipsr']} "
+                                      f"INSTRUCTION_ADVANCED={int(wfi_stepped)}",
+                                      flush=True)
+                                if after["pc"] == systick:
+                                    # A real tick may be accepted during
+                                    # QEMU's interruptible WFI step.
+                                    wfi_post_tick = True
+                                    del_bp(rsp, systick)
+                                    armed.remove(systick)
+                                if wfi_stepped and wfi_first_pc not in armed:
+                                    # Step *past* the first breakpoint before
+                                    # re-arming it: never count a stale PC.
+                                    add_bp(rsp, wfi_first_pc)
+                                    armed.add(wfi_first_pc)
+                                continue
+                            if wfi_stepped:
+                                wfi_repeat = True
+                                print(f"G12_SHIFT_{shift}_WFI_REVISIT "
+                                      f"PC=0x{pc:08x} "
+                                      f"POST_WFI_SYSTICK={int(wfi_post_tick)}",
+                                      flush=True)
+                                if wfi_post_tick:
+                                    break
                         # Do not stop at the first Thread return: G12
                         # must also probe actual Rel17 WFI locations.
                         # Thread release and motor-loop WFI are distinct
@@ -252,7 +302,8 @@ def collect(shift, args, native_wfi, artifact_dir):
                         # handlers and a native main WFI were observed.
                         if ("SYSTICK_ENTRY" in seen and
                                 "PENDSV_ENTRY" in seen and
-                                any(x.startswith("MAIN_WFI") for x in seen)):
+                                any(x.startswith("MAIN_WFI") for x in seen) and
+                                not probe_roundtrip):
                             break
                 finally:
                     for pc in sorted(armed, reverse=True):
@@ -270,6 +321,10 @@ def collect(shift, args, native_wfi, artifact_dir):
                     "events": events,
                     "reached_thread_pc": "THREAD_AFTER_CPSIE" in seen,
                     "reached_wfi": any(e.startswith("MAIN_WFI") for e in seen),
+                    "wfi_step_advanced": wfi_stepped,
+                    "wfi_revisited": wfi_repeat,
+                    "wfi_systick_after": wfi_post_tick,
+                    "wfi_first_scr": wfi_first_scr,
                     "reached_pendsv": "PENDSV_ENTRY" in seen,
                     "reached_systick": "SYSTICK_ENTRY" in seen,
                     "hardfault": "HARDFAULT" in seen or final["ipsr"] == 3,
@@ -309,6 +364,9 @@ def collect(shift, args, native_wfi, artifact_dir):
           f"PENDSV_BREAK={int(summary['reached_pendsv'])} "
           f"THREAD_AFTER_CPSIE={int(summary['reached_thread_pc'])} "
           f"MAIN_WFI={int(summary['reached_wfi'])} "
+          f"WFI_STEP={int(summary['wfi_step_advanced'])} "
+          f"WFI_REVISIT={int(summary['wfi_revisited'])} "
+          f"POST_WFI_SYSTICK={int(summary['wfi_systick_after'])} "
           f"HARDFAULT={int(summary['hardfault'])} "
           f"INVPC={int(summary['invpc'])} "
           f"BOUNDED_PAUSE={int(summary['bounded_pause'])}",
@@ -336,6 +394,10 @@ def main():
                     help="Opt-in: at least one shift must hit native PendSV")
     ap.add_argument("--require-wfi", action="store_true",
                     help="Opt-in: at least one shift must hit a native main WFI")
+    ap.add_argument("--probe-wfi-roundtrip", action="store_true",
+                    help="Shift2: execute real native WFI and look for IRQ/revisit")
+    ap.add_argument("--require-wfi-roundtrip", action="store_true",
+                    help="Gate: require a post-WFI SysTick and repeated native WFI")
     args = ap.parse_args()
     if not args.qemu.is_file() or not args.elf.is_file():
         ap.error("Both QEMU binary and original ELF must exist")
@@ -346,6 +408,12 @@ def main():
             len(set(args.shifts)) == len(args.shifts) and
             all(0 <= shift <= 12 for shift in args.shifts)):
         ap.error("Unsupported G12 timebase or execution bound")
+    if args.require_wfi_roundtrip:
+        args.probe_wfi_roundtrip = True
+        if 2 not in args.shifts:
+            ap.error("--require-wfi-roundtrip requires shift 2")
+        if args.max_stops < 6:
+            ap.error("--require-wfi-roundtrip requires at least six stops")
     app_vector_from_elf(args.elf)
     wfi = native_wfi_locations(args.elf, args.objdump)
     if args.artifact_dir:
@@ -366,6 +434,17 @@ def main():
             raise AssertionError("G12 shift=2 has not demonstrated "
                                  "SysTick -> PendSV -> native Thread")
         print("PASS_G12_NATIVE_SYSTICK_PENDSV_THREAD_SHIFT2")
+    if args.require_wfi_roundtrip:
+        case = next(x for x in results if x["shift"] == 2)
+        if not (case["wfi_first_scr"] is not None and
+                (case["wfi_first_scr"] & 2) and
+                case["wfi_step_advanced"] and
+                case["wfi_systick_after"] and
+                case["wfi_revisited"] and
+                not case["hardfault"] and not case["invpc"]):
+            raise AssertionError("G12 native WFI step -> SysTick -> "
+                                 "WFI revisit not demonstrated")
+        print("PASS_G12_NATIVE_WFI_EXECUTE_IRQ_WAKE_REVISIT_SHIFT2")
     for name, enabled, predicate in [
         ("THREAD", args.require_thread, lambda x: x["reached_thread_pc"]),
         ("PENDSV", args.require_pendsv, lambda x: x["reached_pendsv"]),
