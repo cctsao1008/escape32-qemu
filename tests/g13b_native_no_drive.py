@@ -96,6 +96,14 @@ def require_no_native_drive(state: dict, label: str):
         raise AssertionError(f"{label}: reference firmware drove PB13 gate")
     if state["qualified_by_gate_and_pwm_pins"]:
         raise AssertionError(f"{label}: virtual bridge would allow drive")
+    # Assert all six *actual* pad muxes remain GPIO input, rather than
+    # relying solely on PB13 being disabled. A surprise PWM pin route
+    # is a reference safety regression even if the gate is still off.
+    for index, cfg in enumerate(state["six_pincm"]):
+        if (cfg & 0x000400bf) != 0x00040081:
+            raise AssertionError(
+                f"{label}: physical PWM pad {index} unexpectedly connected: "
+                f"PINCM=0x{cfg:08x}")
     if state["pwm_observer_status"] & 1:
         raise AssertionError(f"{label}: unexpected running physical PWM output")
     if state["tbclksync"] & 1:
