@@ -70,7 +70,7 @@ python3 tests/g11_exception_lifecycle.py \
   --qemu .build/qemu-src/build/qemu-system-arm \
   --elf ~/github/ESCape32/build-qemu-am13e/AM13E-rev17.3.elf \
   --mode both --startup-steps 32768 --post-steps 512 \
-  --artifact-dir artifacts
+  --require-no-invpc --artifact-dir artifacts
 ```
 
 **Acceptance boundary:** A `PASS_G11_DIAGNOSTIC_INSTRUMENTATION_ONLY`
@@ -120,3 +120,44 @@ to Thread with exactly one handled IRQ and zero CFSR, and a native-ELF
 trace where previously forced INVPC no longer occurs. Any later
 MMIO/scheduler/firmware fault must be reported separately, not
 reclassified as complete firmware or motor readiness.
+
+## G11 post-fix acceptance evidence
+
+GitHub Actions run
+[39460918624](https://github.com/cctsao1008/escape32-qemu/actions/runs/39460918624)
+successfully built the pinned QEMU machine and native ELF and passed the
+G0–G10 suite, G11A, G11B–D and the independent G11E control.
+
+- Native **single-step**: `EXC_RETURN=0xFFFFFFB8`;
+  bounded `REACHED_HARDFAULT=0, INVPC=0`.
+- Native **continuous-run**: reaches SysTick at IPSR15, then executes
+  for an explicitly bounded 60ms host slice before the GDB Ctrl-C
+  interrupt. `CFSR=0`, `HFSR=0`, and `INVPC=0` at the halted
+  CPU snapshot. The RSP stop packet is consumed asynchronously
+  without a spurious extra command/ACK.
+- Independent **PendSV-only** fixture: `PENDSV_COUNT=1`,
+  `MARKER=0x5A`, `PRIMASK=0`, `IPSR=0`,
+  `CFSR=0`, `HFSR=0`. This demonstrates a real IRQ handler
+  and exception return to Thread on the patched QEMU model.
+- A GDB single-step may execute the short PendSV handler fully
+  between host stops. The fixture's guest-owned counter, status
+  marker and clean return are the acceptance evidence; lack of
+  an `IPSR=14` sample is **not** failure.
+- The original `EXC_RETURN=0xFFFFFFB9` / `INVPC=1`
+  regression is captured in pre-fix run
+  [39459305199](https://github.com/cctsao1008/escape32-qemu/actions/runs/39459305199)
+  and the separate failing PendSV fixture in
+  [39459664910](https://github.com/cctsao1008/escape32-qemu/actions/runs/39459664910).
+
+The current CI command adds `--require-no-invpc` to make both native
+execution modes **regression gates**, not just diagnostic printouts.
+Only a successful run of that exact revision qualifies the new
+gate itself as passed.
+
+**Important limitation:** The startup trace uses QEMU
+`-icount shift=10` (1024 *virtual* ns per executed instruction),
+not the AM13E 200MHz instruction/cycle timing. The 16kHz SysTick
+may be continually pending and prevent normal Thread-mode progress
+under this artificially slow CPU model. Thousands of clean SysTick
+exception returns are not evidence of a feasible real-time ISR
+budget, complete firmware startup, or an operational ESC.
