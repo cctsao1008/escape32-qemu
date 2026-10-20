@@ -28,6 +28,55 @@ SYST_CSR = 0xe000e010
 SYST_RVR = 0xe000e014
 SCB_SCR = 0xe000ed10
 CFSR_INVPC = 0x40000
+SCB_BFAR = 0xe000ed38
+
+
+def inspect_hardfault(rsp, elf, objdump):
+    """Guest fault evidence only: BFAR, basic exception stack and opcode.
+
+    Never suppress a fault, advance PC, write stack/registers or clear CFSR.
+    The G11 nonsecure M33 EXC_RETURN=0xFFFFFFB8 has ES bit0=0;
+    G1's historic decoder only accepted bit0=1, so decode locally.
+    """
+    fault_lr = rsp.reg(14)
+    sp = rsp.reg(13)
+    bfar = rsp.mem32(SCB_BFAR)
+    cfsr = rsp.mem32(0xe000ed28)
+    print(f"G12_FAULT_CONTEXT EXC_RETURN=0x{fault_lr:08x} "
+          f"MSP=0x{sp:08x} CFSR=0x{cfsr:08x} BFAR=0x{bfar:08x}",
+          flush=True)
+    details = {"exc_return": fault_lr, "msp": sp, "cfsr": cfsr, "bfar": bfar}
+    basic_msp_frame = (
+        (fault_lr & 0xffffff00) == 0xffffff00 and
+        (fault_lr & 4) == 0 and (fault_lr & 0x10) != 0 and
+        (fault_lr & 2) == 0 and
+        0x20000000 <= sp <= 0x2001ffe0)
+    if not basic_msp_frame:
+        print("G12_FAULT_FRAME_NOT_DECODED "
+              "EXC_RETURN not supported basic MSP frame")
+        return details
+    names = ("R0", "R1", "R2", "R3", "R12", "LR", "PC", "XPSR")
+    words = [rsp.mem32(sp + i * 4) for i in range(8)]
+    details["stacked"] = dict(zip(names, words))
+    print("G12_FAULT_FRAME " +
+          " ".join(f"{n}=0x{v:08x}" for n, v in zip(names, words)),
+          flush=True)
+    stacked_pc = words[6]
+    if not (0x6000 <= stacked_pc < 0x80000):
+        print("G12_FAULT_SYMBOL_UNAVAILABLE stacked PC outside app flash")
+        return details
+    try:
+        decoded = subprocess.run(
+            [objdump, "-d", f"--start-address={max(0, stacked_pc - 4)}",
+             f"--stop-address={stacked_pc + 6}", str(elf)],
+            check=True, capture_output=True, text=True, timeout=15)
+        useful = [line.strip() for line in decoded.stdout.splitlines()
+                  if re.match(r"^[0-9a-fA-F]+:", line.strip())]
+        for line in useful[-8:]:
+            print(f"G12_FAULT_DISASM {line}", flush=True)
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        print("G12_FAULT_DISASM_UNAVAILABLE")
+    return details
 
 def instruction_budget(shift, tick_hz=16000):
     """Only ns/instruction diagnostic estimate; NOT a real CPI/IPC claim."""
@@ -186,7 +235,11 @@ def collect(shift, args, native_wfi, artifact_dir):
                         if interrupted:
                             stopped_by_timeout = True
                             break
-                        if pc == hardfault or (state["cfsr"] & CFSR_INVPC):
+                        if pc == hardfault:
+                            data["fault_detail"] = inspect_hardfault(
+                                rsp, args.elf, args.objdump)
+                            break
+                        if state["cfsr"] & CFSR_INVPC:
                             break
                         # Breakpoints are one-shot, to avoid re-trapping
                         # at an identical PC while masking guest progress.
@@ -242,6 +295,14 @@ def collect(shift, args, native_wfi, artifact_dir):
                     (artifact_dir / f"g12-s{shift}-cpu-int.log").write_bytes(
                         cpu_log.read_bytes())
             if proc.stderr:
+                stderr_text = proc.stderr.read()
+                if stderr_text:
+                    if artifact_dir:
+                        (artifact_dir / f"g12-s{shift}-qemu-stderr.log").write_text(
+                            stderr_text)
+                    for line in stderr_text.splitlines()[-30:]:
+                        print(f"G12_SHIFT_{shift}_QEMU_STDERR {line[:240]}",
+                              flush=True)
                 proc.stderr.close()
     print(f"G12_SHIFT_{shift}_SUMMARY "
           f"SYSTICK={int(summary['reached_systick'])} "
