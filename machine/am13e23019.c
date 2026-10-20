@@ -316,6 +316,16 @@ typedef struct AM13ESimFeedback {
     bool reported_ecap, reported_cmp;
 } AM13ESimFeedback;
 
+/* G13B1 waveform scheduling only; PA26 physical capture stays G7B-owned. */
+typedef struct AM13EPA26Wave {
+    MemoryRegion mmio;
+    QEMUTimer *timer;
+    struct AM13EMachineState *machine;
+    uint32_t delta_ns[256], levels[256];
+    uint32_t queued, delivered, staged_delay, staged_level;
+    bool delay_valid, level_valid, running;
+} AM13EPA26Wave;
+
 typedef struct AM13EDMA {
     MemoryRegion mmio;
     qemu_irq irq;
@@ -424,6 +434,7 @@ struct AM13EMachineState {
     AM13ESimPWM pwm4;
     AM13ESimFeedback feedback;
     MemoryRegion sim_pa26_inject;
+    AM13EPA26Wave pa26_wave;
     uint32_t sim_pa26_level;
     uint32_t sim_pa26_transitions;
     uint32_t sim_pa26_captures;
@@ -1339,6 +1350,8 @@ static const MemoryRegionOps am13e_sim_pa26_ops = {
     .endianness = DEVICE_LITTLE_ENDIAN,
     .valid = { .min_access_size = 4, .max_access_size = 4 },
 };
+
+#include "am13e_pa26_waveform.inc"
 
 static void am13e_xtal_ready(void *opaque)
 {
@@ -3298,6 +3311,7 @@ static void am13e_handoff_reset(void *opaque)
     s->sim_pa26_captures = 0U;
     s->sim_pa26_dma_beats = 0U;
     s->sim_pa26_bad_reported = false;
+    am13e_pa26_wave_reset(&s->pa26_wave);
     am13e_dma0_reset(&s->dma0);
     am13e_sim_wwdt_reset(&s->wwdt);
     for (unsigned i = 0; i < AM13E_SIM_TIMER_COUNT; ++i) {
@@ -3486,6 +3500,17 @@ static void am13e_init(MachineState *machine)
                           AM13E_SIM_PA26_INJECT_SIZE);
     memory_region_add_subregion(sysmem, AM13E_SIM_PA26_INJECT_BASE,
                                 &s->sim_pa26_inject);
+    /* Non-silicon, test-only external wire transition queue. It drives
+     * G7B's PA26 level path; never writes decoder SRAM or DMA flags. */
+    s->pa26_wave.machine = s;
+    s->pa26_wave.timer = timer_new_ns(QEMU_CLOCK_VIRTUAL,
+                                    am13e_pa26_wave_event, &s->pa26_wave);
+    am13e_pa26_wave_reset(&s->pa26_wave);
+    memory_region_init_io(&s->pa26_wave.mmio, NULL,
+                          &am13e_pa26_wave_ops, &s->pa26_wave,
+                          "esc-sim-pa26-external-waveform", AM13E_PA26_WAVE_SIZE);
+    memory_region_add_subregion(sysmem, AM13E_PA26_WAVE_BASE,
+                                &s->pa26_wave.mmio);
 
     /* DMA0 register configuration and real software-requested CH2 beats.
      * Hardware source 34 awaits explicit TIMG4 capture edge injection.
@@ -3671,6 +3696,10 @@ static void am13e_finalize(Object *obj)
     if (s->sim_pll_timer) {
         timer_free(s->sim_pll_timer);
         s->sim_pll_timer = NULL;
+    }
+    if (s->pa26_wave.timer) {
+        timer_free(s->pa26_wave.timer);
+        s->pa26_wave.timer = NULL;
     }
     if (s->feedback.overflow_timer) {
         timer_free(s->feedback.overflow_timer);
