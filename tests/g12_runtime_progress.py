@@ -192,12 +192,14 @@ def collect(shift, args, native_wfi, artifact_dir):
                         # at an identical PC while masking guest progress.
                         del_bp(rsp, pc)
                         armed.remove(pc)
-                        # Once we have an IRQ and a Thread-side PC, or
-                        # enough samples, keep the test deliberately bounded.
+                        # Do not stop at the first Thread return: G12
+                        # must also probe actual Rel17 WFI locations.
+                        # Thread release and motor-loop WFI are distinct
+                        # milestones; only stop early once *both* IRQ
+                        # handlers and a native main WFI were observed.
                         if ("SYSTICK_ENTRY" in seen and
                                 "PENDSV_ENTRY" in seen and
-                                any(x.startswith(("THREAD_", "MAIN_WFI"))
-                                    for x in seen)):
+                                any(x.startswith("MAIN_WFI") for x in seen)):
                             break
                 finally:
                     for pc in sorted(armed, reverse=True):
@@ -264,6 +266,9 @@ def main():
     ap.add_argument("--max-stops", type=int, default=6)
     ap.add_argument("--artifact-dir", type=Path)
     ap.add_argument("--require-no-invpc", action="store_true")
+    ap.add_argument("--require-shift2-progress", action="store_true",
+                    help="CI gate: shift 2 must actually enter SysTick, "
+                         "PendSV and resume native Thread without Fault")
     ap.add_argument("--require-thread", action="store_true",
                     help="Opt-in: at least one shift must hit native Thread PC")
     ap.add_argument("--require-pendsv", action="store_true",
@@ -291,6 +296,15 @@ def main():
             json.dumps(results, indent=2) + "\n")
     if args.require_no_invpc and any(x["invpc"] for x in results):
         raise AssertionError("G12 native INVPC regression")
+    if args.require_shift2_progress:
+        case = next((x for x in results if x["shift"] == 2), None)
+        if case is None or not (
+                case["reached_systick"] and case["reached_pendsv"] and
+                case["reached_thread_pc"] and not case["hardfault"] and
+                not case["invpc"]):
+            raise AssertionError("G12 shift=2 has not demonstrated "
+                                 "SysTick -> PendSV -> native Thread")
+        print("PASS_G12_NATIVE_SYSTICK_PENDSV_THREAD_SHIFT2")
     for name, enabled, predicate in [
         ("THREAD", args.require_thread, lambda x: x["reached_thread_pc"]),
         ("PENDSV", args.require_pendsv, lambda x: x["reached_pendsv"]),
