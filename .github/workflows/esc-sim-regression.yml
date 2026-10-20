@@ -106,6 +106,18 @@ jobs:
             --artifact-dir artifacts \
             2>&1 | tee artifacts/g11-independent-pendsv.log
 
+      - name: G12 native runtime progress vs virtual instruction time
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          python3 tests/g12_runtime_progress.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf /tmp/e62-fw-build/AM13E-rev17.3.elf \
+            --shifts 2 10 --startup-steps 32768 \
+            --slice-ms 80 --max-stops 6 \
+            --require-no-invpc --artifact-dir artifacts \
+            2>&1 | tee artifacts/g12-runtime-progress.log
+
       - name: Upload truthful integration logs
         if: always()
         uses: actions/upload-artifact@v4
