@@ -93,6 +93,19 @@ jobs:
             --artifact-dir artifacts \
             2>&1 | tee artifacts/g11-exception-lifecycle.log
 
+      - name: G11 independent Cortex-M33 PendSV exception control
+        run: |
+          set -euo pipefail
+          arm-none-eabi-gcc -mcpu=cortex-m33 -mthumb -nostdlib -nostartfiles \
+            -Wl,-T,tests/fixtures/g11_pendsv_irq.ld \
+            tests/fixtures/g11_pendsv_irq.S \
+            -o artifacts/g11_pendsv_irq.elf
+          python3 tests/g11_minimal_exception.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf artifacts/g11_pendsv_irq.elf \
+            --artifact-dir artifacts \
+            2>&1 | tee artifacts/g11-independent-pendsv.log
+
       - name: Upload truthful integration logs
         if: always()
         uses: actions/upload-artifact@v4
