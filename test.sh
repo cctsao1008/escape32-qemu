@@ -6,6 +6,7 @@ if [[ $# -ne 1 ]]; then
     exit 2
 fi
 python3 "$ROOT/tests/test_rsp.py"
+python3 "$ROOT/tests/test_g12_runtime.py"
 python3 "$ROOT/tests/g0_memory.py" \
     --qemu "$ROOT/.build/qemu-src/build/qemu-system-arm" \
     --elf "$1"
