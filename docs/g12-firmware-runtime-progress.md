@@ -147,3 +147,20 @@ from nonzero fixture, write rejection and strict no-phantom
 semantics. The **native** continuation beyond the previous
 BusFault and WFI still require a subsequent CI result; neither
 model compilation nor a QTest pass implies normal motor startup.
+
+## Sleep-on-Exit model limitation (pinned QEMU 6.2.0)
+
+The underlying QEMU 6.2.0 `hw/intc/armv7m_nvic.c` explicitly says
+its implementation **ignores SEVONPEND and SLEEPONEXIT**, which it
+describes as architecturally permitted. QEMU may retain
+`SCB->SCR.SLEEPONEXIT=1` in a readback but not implement the
+silicon sleep-on-handler-return behavior. The original ESCape32
+Rel17 runtime sets `SCB->SCR=SCB_SCR_SLEEPONEXIT_Msk` just before
+`__WFI()`.
+
+Consequently, a G12 WFI opcode step, interrupt acceptance and a
+later Thread/WFI revisit only validate the **guest instruction and
+event path within this QEMU model**. They do not prove AM13E
+Sleep-on-Exit semantics, real 16kHz wake latency or physical
+power state. Record the post-WFI observed IPSR/PC and actual QEMU
+CPU exception logs without injecting an IRQ or clearing SCR.
