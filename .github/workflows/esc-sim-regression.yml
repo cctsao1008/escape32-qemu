@@ -115,7 +115,8 @@ jobs:
             --elf /tmp/e62-fw-build/AM13E-rev17.3.elf \
             --shifts 2 10 --startup-steps 32768 \
             --slice-ms 80 --max-stops 6 \
-            --require-no-invpc --artifact-dir artifacts \
+            --require-no-invpc --require-shift2-progress \
+            --artifact-dir artifacts \
             2>&1 | tee artifacts/g12-runtime-progress.log
 
       - name: Upload truthful integration logs
