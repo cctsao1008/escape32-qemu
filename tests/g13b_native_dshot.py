@@ -45,9 +45,16 @@ def write32(rsp, addr, value):
 def queue_edge(rsp, delay_ns, level):
     if not 10 <= delay_ns <= 100000000 or level not in (0, 1):
         raise ValueError("Physically invalid fixture edge")
+    before = rsp.mem32(WAVE + 0x08)
     write32(rsp, WAVE + 0x00, delay_ns)
     write32(rsp, WAVE + 0x04, level)
     write32(rsp, WAVE + 0x18, 1)
+    after = rsp.mem32(WAVE + 0x08)
+    if after != before + 1:
+        raise AssertionError(
+            f"External PA26 queue failed to commit via GDB: "
+            f"before={before} after={after} level={level} delay={delay_ns}; "
+            "GDB RSP memory write OK is not proof of a 32-bit MMIO write")
 
 
 def queue_dshot600_wire(rsp, throttle):
