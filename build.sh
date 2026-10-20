@@ -111,6 +111,12 @@ if feedback_target.is_symlink():
     sys.exit('ERROR: generated feedback path is a symlink')
 if not feedback_target.exists() or feedback_target.read_bytes() != feedback_source.read_bytes():
     feedback_target.write_bytes(feedback_source.read_bytes())
+wave_source = root / 'machine/am13e_pa26_waveform.inc'
+wave_target = qemu / 'hw/arm/am13e_pa26_waveform.inc'
+if wave_target.is_symlink():
+    sys.exit('ERROR: generated PA26 waveform path is a symlink')
+if not wave_target.exists() or wave_target.read_bytes() != wave_source.read_bytes():
+    wave_target.write_bytes(wave_source.read_bytes())
 if target.is_symlink():
     sys.exit('ERROR: generated machine path is a symlink; refusing overwrite')
 if target.exists() and 'TYPE_AM13E_MACHINE MACHINE_TYPE_NAME("am13e23019")' not in target.read_text():
