@@ -164,3 +164,35 @@ event path within this QEMU model**. They do not prove AM13E
 Sleep-on-Exit semantics, real 16kHz wake latency or physical
 power state. Record the post-WFI observed IPSR/PC and actual QEMU
 CPU exception logs without injecting an IRQ or clearing SCR.
+
+## Final G12 CI acceptance
+
+[GitHub Actions run 39469440080](https://github.com/cctsao1008/escape32-qemu/actions/runs/39469440080)
+passed all previous G0–G11 regression and the enforced G12
+`--require-shift2-progress --require-wfi-roundtrip --require-no-invpc`
+native-ELF gate. The two shift=2 acceptance lines are:
+
+```text
+PASS_G12_NATIVE_SYSTICK_PENDSV_THREAD_SHIFT2
+PASS_G12_NATIVE_WFI_EXECUTE_IRQ_WAKE_REVISIT_SHIFT2
+```
+
+The GDB trace observed original main `wfi` at PC `0x679A`,
+then a single step whose next reported PC was `0x8072` in exception
+60 (TIMG12 IRQ), a subsequent SysTick entry IPSR=15, and another
+breakpoint at the **same original main WFI** with IPSR=0.
+The observed PC transition is evidence that execution progressed
+past the WFI breakpoint; an exception arriving in this step is not
+by itself proof of hardware sleep residency. The native code and
+peripheral/IRQ paths were not patched or forced.
+
+No CFSR/HFSR fault occurred in that bounded shift=2 comparison.
+At shift=10, no Thread/PendSV/WFI breakpoint was reached during
+the bounded 80ms host-time run; 3,146 SysTick entries were logged.
+That shift does not simulate 200 MHz CPU cycle timing and must not
+be used to estimate real silicon throughput.
+
+G12 is **complete for native IRQ/Thread/WFI functional progression**
+within the tested simulator profile; **open** are silicon
+Sleep-on-Exit, timing budget, sustained runtime across sensor/receiver
+inputs, gate/pad enable, PWM switching and closed-loop BLDC motion.
