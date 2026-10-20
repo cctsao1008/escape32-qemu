@@ -131,6 +131,17 @@ jobs:
             --artifact artifacts/g13b0-native-drive.json \
             2>&1 | tee artifacts/g13b0-native-drive.log
 
+      - name: G13B1 original-ELF DShot600 PA26 input via TIMER capture DMA
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          python3 tests/g13b_native_dshot.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf /tmp/e62-fw-build/AM13E-rev17.3.elf \
+            --throttle 1000 --startup-steps 32768 --slice-ms 300 \
+            --artifact artifacts/g13b1-native-dshot.json \
+            2>&1 | tee artifacts/g13b1-native-dshot.log
+
       - name: Upload truthful integration logs
         if: always()
         uses: actions/upload-artifact@v4
