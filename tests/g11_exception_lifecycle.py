@@ -301,6 +301,8 @@ def main():
     ap.add_argument("--cont-slice-ms", type=int, default=60,
                     help="Bound each continuous GDB slice before Ctrl-C")
     ap.add_argument("--artifact-dir", type=Path)
+    ap.add_argument("--require-no-invpc", action="store_true",
+                    help="Regression gate: neither run may set sticky CFSR.INVPC")
     args = ap.parse_args()
     for path in (args.qemu, args.elf):
         if not path.is_file():
@@ -323,6 +325,15 @@ def main():
         print(f"G11_COMPARISON STEP_INVPC={int(bool(a['cfsr'] & 0x40000))} "
               f"CONT_INVPC={int(bool(b['cfsr'] & 0x40000))} "
               f"STEP_IPSR={a['ipsr']} CONT_IPSR={b['ipsr']}")
+    if args.require_no_invpc:
+        # CFSR is sticky unless guest code clears it. Both runs stop
+        # immediately after the native firmware IRQ release, and a
+        # regression must fail CI rather than be misreported as PASS.
+        for mode, state in results.items():
+            if state["cfsr"] & 0x00040000:
+                raise AssertionError(f"INVPC recurred during {mode} "
+                                     "exception lifecycle observation")
+        print("PASS_G11_NATIVE_CPSIE_SYSTICK_NO_INVPC_BOUNDED_TRACE")
     print("PASS_G11_DIAGNOSTIC_INSTRUMENTATION_ONLY "
           "NO_FIRMWARE_BOOT_OR_EXCEPTION_RETURN_CORRECTNESS_CLAIM")
 
