@@ -74,11 +74,15 @@ class MotorPlantTest(unittest.TestCase):
         }
         for pin, func in MCPWM4_ROUTES:
             data[PINCM_BASE+4*pin] = 0x80 | func
+        data[PINCM_BASE+4*45] = 0x81  # PB13 gate GPIO route is mandatory
         read = lambda addr: data.get(addr, 0)
         self.assertTrue(gate_and_pads_connected(
             read, gate_active_level=1))
         self.assertFalse(gate_and_pads_connected(
             read, gate_active_level=0))
+        data[PINCM_BASE+4*45] = 0  # GPIO DOE/DOUT without pad mux is not gate
+        self.assertFalse(gate_and_pads_connected(read, gate_active_level=1))
+        data[PINCM_BASE+4*45] = 0x81
         data[PINCM_BASE+4*25] = 0
         self.assertFalse(gate_and_pads_connected(
             read, gate_active_level=1))
