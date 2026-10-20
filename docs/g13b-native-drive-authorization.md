@@ -75,7 +75,25 @@ for entry to the **real original**
 The test must additionally confirm real capture/DMA evidence and
 that PB13 remains physically disconnected.
 
-**Acceptance is pending a passing CI/native ELF log.** Even a real
+The independently configured QTest ingress has already passed
+[CI run 39516680718](https://github.com/cctsao1008/escape32-qemu/actions/runs/39516680718):
+the exact physical-edge queue delivered 32 transitions into
+TIMG4 Capture and 32 DMA0 CH2 SRAM beats, reproducing DShot600
+frame `0x7D0A`. This does **not** prove the guest decoder was run.
+
+The first native attempt,
+[CI run 39516817766](https://github.com/cctsao1008/escape32-qemu/actions/runs/39516817766),
+failed **before** DShot decode: writing the test-only external
+signal MMIO via GDB RSP `M` returned OK but did not enqueue a
+physical edge. QEMU 6.2.0 `cpu_memory_rw_debug()` uses
+`address_space_write_rom()` for debug writes, which intentionally
+does not dispatch an MMIO MemoryRegionOps write. The test harness
+now uses a **separate QTest socket** for genuinely dispatched
+`writel` commands while TCG/GDB runs the unchanged native guest.
+GDB retains read-only observation/breakpoint responsibilities.
+
+**Native callback acceptance is pending a passing CI/native ELF log.**
+Even a real
 callback proves only command **ingress**, not successful arming,
 positive PWM gate authorization, valid BEMF zero-cross consumption,
 motor spin-up or closed-loop speed/commutation control.
