@@ -6,7 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from g12_runtime_progress import instruction_budget, int_events, native_wfi_locations
+from g12_runtime_progress import instruction_budget, int_events, native_wfi_locations, inspect_hardfault
 
 
 class G12HostEvidence(unittest.TestCase):
@@ -64,6 +64,27 @@ class G12HostEvidence(unittest.TestCase):
         self.assertEqual(counts["excret_success"], 2)
         self.assertEqual(counts["excret_integrity_failure"], 0)
         self.assertEqual(len(examples), 3)
+
+
+    def test_nonsecure_m33_basic_fault_frame_with_es_zero(self):
+        class Stub:
+            def reg(self, index):
+                return {13: 0x20017f00, 14: 0xffffffb8}[index]
+            def mem32(self, addr):
+                if addr == 0xe000ed38:
+                    return 0x4044102a
+                if addr == 0xe000ed28:
+                    return 0x8200
+                assert 0x20017f00 <= addr < 0x20017f20
+                return {0x20017f18: 0x9032,
+                        0x20017f1c: 0x01000000}.get(addr, 0)
+        objdump = SimpleNamespace(stdout="9032: 6800 ldr r0, [r0]")
+        with patch("g12_runtime_progress.subprocess.run",
+                   return_value=objdump):
+            details = inspect_hardfault(Stub(), Path("original.elf"),
+                                        "arm-none-eabi-objdump")
+        self.assertEqual(details["bfar"], 0x4044102a)
+        self.assertEqual(details["stacked"]["PC"], 0x9032)
 
 
 if __name__ == "__main__":
