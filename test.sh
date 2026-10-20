@@ -88,6 +88,9 @@ python3 "$ROOT/tests/g12_reset_cause.py" \
 python3 "$ROOT/tests/g13_pwm_motor_feedback.py" \
     --qemu "$ROOT/.build/qemu-src/build/qemu-system-arm" \
     --elf "$1"
+python3 "$ROOT/tests/g13b_pa26_waveform.py" \
+    --qemu "$ROOT/.build/qemu-src/build/qemu-system-arm" \
+    --elf "$1"
 python3 "$ROOT/tests/test_virtual_bldc.py"
 python3 "$ROOT/tests/g1_handoff.py" \
     --qemu "$ROOT/.build/qemu-src/build/qemu-system-arm" \
