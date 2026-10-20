@@ -74,7 +74,7 @@ def test_wave(q):
     q.write(START, 1)
     assert q.read(BUSY) == 1
     # Each scheduled edge has a unique nonzero QEMU virtual-clock deadline.
-    q.cmd("clock_step 1_000_000")
+    q.cmd("clock_step 1000000")
     assert q.read(BUSY) == 0
     assert q.read(DONE) == q.read(NUM) == 32
     assert q.read(LINE) == 0
