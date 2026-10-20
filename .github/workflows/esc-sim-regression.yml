@@ -90,7 +90,7 @@ jobs:
             --qemu .build/qemu-src/build/qemu-system-arm \
             --elf /tmp/e62-fw-build/AM13E-rev17.3.elf \
             --mode both --startup-steps 32768 --post-steps 512 \
-            --artifact-dir artifacts \
+            --require-no-invpc --artifact-dir artifacts \
             2>&1 | tee artifacts/g11-exception-lifecycle.log
 
       - name: G11 independent Cortex-M33 PendSV exception control
