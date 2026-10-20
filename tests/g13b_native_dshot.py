@@ -210,8 +210,51 @@ def main():
                             record["ipsr"] == 3):
                         raise AssertionError(
                             "Native DShot frame/capture/DMA/drive ownership mismatch")
-                    print("PASS_G13B1_ORIGINAL_ELF_DSHOT_RX_FROM_PA26_WIRE "
-                          "NOT_NATIVE_ARMING_OR_CLOSED_LOOP", flush=True)
+                    print("G13B1_FRAME_REACHED_ORIGINAL_ELF_CALLBACK=PASS",
+                          flush=True)
+
+                    # A breakpoint at the callback entry alone does NOT
+                    # demonstrate CRC acceptance or throttle policy. Run the
+                    # *unaltered* guest callback all the way to its original
+                    # caller's return PC and inspect its original return
+                    # value and actual Rel17 throttle variable afterward.
+                    return_pc = rsp.reg(14) & ~1
+                    if not 0x6000 <= return_pc < 0x80000 or return_pc == pc:
+                        raise AssertionError(
+                            f"Non-native callback return PC 0x{return_pc:08x}")
+                    del_bp(rsp, native_callback)
+                    armed.remove(native_callback)
+                    add_bp(rsp, return_pc)
+                    armed.add(return_pc)
+                    stop, interrupted = continue_bounded(rsp, args.slice_ms)
+                    if interrupted or not stop.startswith(("S05", "T05")):
+                        raise AssertionError("Native DShot callback never returned")
+                    if rsp.reg(15) == hardfault:
+                        raise AssertionError("HardFault during native CRC/policy")
+                    if rsp.reg(15) != return_pc:
+                        raise AssertionError(
+                            f"Unexpected native callback return PC 0x{rsp.reg(15):08x}")
+                    crc_accepted = rsp.reg(0) & 0xffffffff
+                    throttle_after = rsp.mem32(throt_addr)
+                    gate_still_off = gate_disconnected(rsp)
+                    record.update(callback_return_pc=return_pc,
+                                  callback_return=crc_accepted,
+                                  throttle_after_callback=throttle_after,
+                                  gate_disconnected_after_callback=
+                                  gate_still_off)
+                    print("G13B1_NATIVE_CRC_THROTTLE_POLICY " +
+                          json.dumps({"return_value": crc_accepted,
+                                      "throttle_before":
+                                      record["throttle_pre_callback"],
+                                      "throttle_after": throttle_after,
+                                      "gate_still_isolated": gate_still_off}),
+                          flush=True)
+                    if (crc_accepted != 1 or throttle_after <= 0 or
+                            not gate_still_off or observer(rsp)["cfsr"]):
+                        raise AssertionError(
+                            "Native DShot CRC/throttle ownership not demonstrated")
+                    print("PASS_G13B1_ORIGINAL_ELF_DSHOT_RX_CRC_THROTTLE "
+                          "GATE_STILL_ISOLATED_NOT_CLOSED_LOOP", flush=True)
                 finally:
                     for pc in sorted(armed, reverse=True):
                         del_bp(rsp, pc)
