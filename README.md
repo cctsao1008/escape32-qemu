@@ -869,3 +869,22 @@ See [G11 lifecycle diagnostics, independent control and acceptance
 boundaries](docs/g11-cortex-m33-exception-lifecycle.md). This does not
 establish full firmware boot, ESC motor readiness or closed-loop BLDC
 behavior.
+
+## G12 — Firmware runtime progress versus QEMU virtual time
+
+Native ELF runtime probes now distinguish actual SysTick/PendSV IRQ
+entry, Thread return after the original `CPSIE i`, and native
+`am13e_rel17_app_main` WFI opcodes, using bounded GDB execution.
+`icount shift=2` supplies 4 virtual ns/instruction while diagnostic
+`shift=10` supplies 1,024 ns/instruction. These are **not** AM13E
+cycle-accurate timings.
+
+Initial [G12 CI evidence](https://github.com/cctsao1008/escape32-qemu/actions/runs/39464794010)
+shows native SysTick → PendSV → Thread at shift=2 with no Fault,
+while shift=10 remains in repeated SysTick activity within the
+same bounded observation (2,500 SysTick events). The
+`--require-shift2-progress` gate enforces actual native IRQ-to-Thread
+progress, not mere successful GDB handoff. WFI and sustained control
+loop progression remain **separate** proof obligations.
+
+See [G12 test methodology and precise limitations](docs/g12-firmware-runtime-progress.md).
