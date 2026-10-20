@@ -11,6 +11,7 @@ or power-stage enable is permitted or implied.
 """
 import argparse
 import json
+import socket
 import subprocess
 import tempfile
 import sys
@@ -26,6 +27,7 @@ from g11_exception_lifecycle import (
     add_bp, del_bp, continue_bounded
 )
 from g7b_pa26_capture import dshot_frame
+from g0_memory import QTest
 from tools.virtual_bldc import GATE_EN, GPIO1_BASE, PINCM_BASE
 
 WAVE = 0x5ffe4000
@@ -34,47 +36,41 @@ TIMG4 = 0x40180000
 DMA = 0x40020000
 
 
-def write32(rsp, addr, value):
-    encoded = int(value).to_bytes(4, byteorder="little").hex()
-    ack = rsp.command(f"M{addr:x},4:{encoded}")
-    if ack != "OK":
-        raise RuntimeError(f"Simulator external input write rejected "
-                           f"addr=0x{addr:08x}, ack={ack!r}")
-
-
-def queue_edge(rsp, delay_ns, level):
+def queue_edge(qtest, delay_ns, level):
     if not 10 <= delay_ns <= 100000000 or level not in (0, 1):
         raise ValueError("Physically invalid fixture edge")
-    before = rsp.mem32(WAVE + 0x08)
-    write32(rsp, WAVE + 0x00, delay_ns)
-    write32(rsp, WAVE + 0x04, level)
-    write32(rsp, WAVE + 0x18, 1)
-    after = rsp.mem32(WAVE + 0x08)
+    # QEMU 6.2 GDB RSP M packets use address_space_write_rom and
+    # IGNORE MMIO writes while falsely returning OK. An independent
+    # out-of-band QTest socket with native TCG is required to perform
+    # REAL address_space_write() against the simulator-only input port.
+    before = qtest.read(WAVE + 0x08)
+    qtest.write(WAVE + 0x00, delay_ns)
+    qtest.write(WAVE + 0x04, level)
+    qtest.write(WAVE + 0x18, 1)
+    after = qtest.read(WAVE + 0x08)
     if after != before + 1:
-        raise AssertionError(
-            f"External PA26 queue failed to commit via GDB: "
-            f"before={before} after={after} level={level} delay={delay_ns}; "
-            "GDB RSP memory write OK is not proof of a 32-bit MMIO write")
+        raise AssertionError(f"External edge not committed "
+                             f"before={before}, after={after}, level={level}")
 
 
-def queue_dshot600_wire(rsp, throttle):
+def queue_dshot600_wire(qtest, throttle):
     if not 48 <= throttle <= 2047:
         raise ValueError("Only genuine DShot throttle data frames")
     frame = dshot_frame(throttle)
-    assert rsp.mem32(WAVE + 0x08) == 0
+    assert qtest.read(WAVE + 0x08) == 0
     # DShot600 100MHz TIMG4: high bit1=125 ticks, bit0=63 ticks,
     # period=167 ticks. Each queue entry is a real pin level transition.
-    queue_edge(rsp, 10000, 1)  # quiet idle before first rising edge
+    queue_edge(qtest, 10000, 1)  # quiet idle before first rising edge
     for bit in range(15, -1, -1):
         high_ticks = 125 if (frame >> bit) & 1 else 63
         if bit != 15:
-            queue_edge(rsp, 10 * (167 - previous_high), 1)
-        queue_edge(rsp, 10 * high_ticks, 0)
+            queue_edge(qtest, 10 * (167 - previous_high), 1)
+        queue_edge(qtest, 10 * high_ticks, 0)
         previous_high = high_ticks
-    if rsp.mem32(WAVE + 0x08) != 32:
+    if qtest.read(WAVE + 0x08) != 32:
         raise AssertionError("DShot physical edge count is not 32")
-    write32(rsp, WAVE + 0x1c, 1)  # launch against QEMU VIRTUAL time
-    if rsp.mem32(WAVE + 0x10) != 1:
+    qtest.write(WAVE + 0x1c, 1)  # QEMU virtual-time arm, not guest write
+    if qtest.read(WAVE + 0x10) != 1:
         raise AssertionError("External waveform was not scheduled")
     print(f"G13B1_REAL_INPUT_FRAME=0x{frame:04x} "
           "PA26_EDGES_SCHEDULED=32 ONLY_EXTERNAL_LINE", flush=True)
@@ -113,16 +109,27 @@ def main():
     events = []
     with tempfile.TemporaryDirectory(prefix="e62-g13b1-native-") as tmp:
         sock = str(Path(tmp) / "gdb.sock")
+        qtpath = str(Path(tmp) / "qtest.sock")
+        listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        listener.bind(qtpath)
+        listener.listen(1)
+        listener.settimeout(15)
         cmd = [str(args.qemu.resolve()), "-M", "am13e23019,esc-sim=on",
                "-kernel", str(args.elf.resolve()), "-S",
                "-display", "none", "-serial", "none", "-monitor", "none",
                "-chardev",
                f"socket,path={sock},server=on,wait=off,id=gdb0",
                "-gdb", "chardev:gdb0",
+               "-qtest", f"unix:path={qtpath}",
                "-icount", "shift=2,sleep=off,align=off"]
         proc = subprocess.Popen(
             cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+        qsock = None
         try:
+            qsock, _ = listener.accept()
+            qtest = QTest(qsock)
+            print("G13B1_TCG_QTEST_EXTERNAL_PORT_CONNECTED "
+                  "NO_GUEST_REGISTER_WRITES", flush=True)
             with wait_for_socket(sock, proc) as conn:
                 rsp = RSP(conn)
                 if not rsp.command("?").startswith(("S", "T")):
@@ -158,7 +165,7 @@ def main():
                         raise AssertionError("PA26 waveform fixture not clear")
                     del_bp(rsp, original_wfi)
                     armed.remove(original_wfi)
-                    frame = queue_dshot600_wire(rsp, args.throttle)
+                    frame = queue_dshot600_wire(qtest, args.throttle)
                     add_bp(rsp, native_callback)
                     armed.add(native_callback)
                     stop, interrupted = continue_bounded(rsp, args.slice_ms)
@@ -209,6 +216,9 @@ def main():
                     for pc in sorted(armed, reverse=True):
                         del_bp(rsp, pc)
         finally:
+            if qsock is not None:
+                qsock.close()
+            listener.close()
             if proc.poll() is None:
                 proc.terminate()
             try:
