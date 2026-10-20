@@ -888,3 +888,24 @@ progress, not mere successful GDB handoff. WFI and sustained control
 loop progression remain **separate** proof obligations.
 
 See [G12 test methodology and precise limitations](docs/g12-firmware-runtime-progress.md).
+
+## G13A — QTest-measured six PWM -> Virtual BLDC -> BEMF feedback
+
+The separate G13A **peripheral/plant fixture** now passes in
+[CI run 39470700306](https://github.com/cctsao1008/escape32-qemu/actions/runs/39470700306).
+It requires a valid, running six-channel MCPWM4 AQ observer,
+the actual PB13 GPIO pin mux plus output enable/gate polarity,
+all six PWM pin routes, and powered CMPSS0/ECAP1 Input45 before
+integrating the idealized BLDC motor. The explicit analog frontend
+converts calculated phase BEMF into 12-bit stimulus values (without
+silent saturation), then the native QEMU CMPSS filter generates
+an actual ECAP1 capture timestamp (fixture result CAP1=200013).
+Invalid gate/pads/PWM abort before further stimulus writes.
+
+The MCPWM4 output image and power/gate register configuration in
+this fixture are **QTest-authored**; ESCape32's original firmware
+does NOT yet control this loop. G13B original-ELF native drive,
+comparator feedback consumption, firmware commutation adjustments
+and real electrical safety qualification remain OPEN.
+
+See [G13A methods/limits](docs/g13a-mcpwm-bldc-bemf-bridge.md).
