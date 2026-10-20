@@ -66,7 +66,8 @@ python3 tests/g12_runtime_progress.py \
   --qemu .build/qemu-src/build/qemu-system-arm \
   --elf ~/github/ESCape32/build-qemu-am13e/AM13E-rev17.3.elf \
   --shifts 2 10 --slice-ms 80 --max-stops 6 \
-  --require-no-invpc --artifact-dir artifacts
+  --require-no-invpc --require-shift2-progress \
+  --artifact-dir artifacts
 ```
 
 `--require-thread`, `--require-pendsv`, and `--require-wfi` are
@@ -82,3 +83,28 @@ blocked progress is due to (a) artificially small icount instruction
 budget, (b) intended SLEEPONEXIT/WFI behavior, (c) absent model of
 a real required sensor/event, or (d) an actual architectural defect.
 Only evidence-backed software or peripheral-model changes qualify.
+
+## First native comparison (before WFI extension)
+
+[CI run 39464794010](https://github.com/cctsao1008/escape32-qemu/actions/runs/39464794010)
+reproduced the same pinned native firmware at two timebases:
+
+- **shift=2**: `SYSTICK_ENTRY IPSR=15`, then `PENDSV_ENTRY IPSR=14`,
+  then `THREAD_AFTER_CPSIE IPSR=0`; no HardFault or INVPC. QEMU's
+  actual `CPU_LOG_INT` messages recorded three SysTick entries and two
+  PendSV entries during this bounded run.
+- **shift=10**: 2,500 SysTick entries and 2,499 attempted exception
+  returns in an 80ms host-time diagnostic slice. No PendSV or native
+  Thread PC breakpoint was reached within that slice. CFSR and HFSR
+  remained zero; this was not a new Fault.
+- The previous test terminated early after returning to Thread,
+  so **WFI was not yet tested**. This has now been extended:
+  after the first Thread return, the test continues (bounded)
+  toward the actual native Rel17 WFI instructions.
+
+The observed shift=2 sequence is now an opt-in **mandatory CI gate**
+`--require-shift2-progress`. The shift=10 result remains a
+**timebase-dependent observation**, not a permanent assertion that
+the original firmware must starve when the simulator timing changes.
+A WFI hit is recorded but is not asserted until its interpretation
+(sensor wait versus main motor loop) is established.
