@@ -18,7 +18,7 @@ PWM = 0x40014000
 OBS = 0x5ffe1000
 PERIOD, SHADOW, CTL, COUNTER = PWM+0x14, PWM+0x18, PWM+0x10, PWM+0x28
 
-def run(qemu, elf, sim, check):
+def run(qemu, elf, sim, check, machine_extra=""):
     with tempfile.TemporaryDirectory(prefix="am13e-g9-") as td:
         sock = os.path.join(td, "qtest.sock")
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as server:
@@ -27,7 +27,7 @@ def run(qemu, elf, sim, check):
             server.settimeout(15)
             proc = subprocess.Popen([
                 str(qemu), "-machine",
-                "am13e23019,accel=qtest,esc-sim=" + ("on" if sim else "off"),
+                "am13e23019,accel=qtest,esc-sim=" + ("on" if sim else "off") + machine_extra,
                 "-kernel", str(elf), "-display", "none", "-serial", "none",
                 "-monitor", "none", "-qtest", "unix:path=" + sock,
             ], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
