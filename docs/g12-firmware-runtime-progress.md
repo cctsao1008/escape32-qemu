@@ -108,3 +108,42 @@ The observed shift=2 sequence is now an opt-in **mandatory CI gate**
 the original firmware must starve when the simulator timing changes.
 A WFI hit is recorded but is not asserted until its interpretation
 (sensor wait versus main motor loop) is established.
+
+## Native post-Thread RSTCAUSE BusFault
+
+The WFI-extended G12 run
+[39466570185](https://github.com/cctsao1008/escape32-qemu/actions/runs/39466570185)
+proved that native SysTick (IPSR 15), PendSV (IPSR 14) and Thread
+(IPSR 0) execute at shift=2, then encountered a **new** precise
+BusFault before WFI:
+
+```text
+CFSR=0x00008200 BFAR=0x400B0220
+stacked_PC=0x000075E6
+am13e_app_motor_reset_flags():
+  ldr.w r3, [r3, #0x220]
+QEMU: G2_UNMODELED_SYSCTL read 0x400b0220
+```
+
+Texas Instruments AM13E SDK `hw_sysctl.h` defines the native
+`SYSCTL->SOCLOCK.RSTCAUSE` at SYSCTL base + 0x1220. Its
+`ID[4:0]` field is **read-to-clear**; DriverLib
+`DL_SYSCTL_getResetCause()` reads it. This is unrelated to the
+already repaired Cortex-M33 INVPC fault.
+
+QEMU now models exactly that 32-bit register: it preserves a
+valid reset-cause ID and clears it on read; guest writes remain
+rejected. The model's Bootloader-handoff default is
+`NORST=0` because there is no proven prior silicon reset source.
+A **simulator-only explicit** machine option
+`esc-sim-reset-cause=0xe` can supply a TI documented WWDT0
+reset-history fixture for QTest. This option does not invent a
+watchdog trip in the normal simulation and is disallowed in
+strict mode. Reserved enumerations and unmodeled SYSCTL registers
+remain rejected.
+
+`tests/g12_reset_cause.py` covers default NORST, read-to-clear
+from nonzero fixture, write rejection and strict no-phantom
+semantics. The **native** continuation beyond the previous
+BusFault and WFI still require a subsequent CI result; neither
+model compilation nor a QTest pass implies normal motor startup.
