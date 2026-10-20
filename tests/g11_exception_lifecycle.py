@@ -131,7 +131,49 @@ def stepped(rsp, cpsie, hardfault, count):
         raise AssertionError("CPSIE did not release PRIMASK")
     return final
 
-def continuous(rsp, cpsie, hardfault, elf, count):
+def receive_async_stop(rsp):
+    """Receive QEMU's asynchronous stop after GDB Ctrl-C on a running 'c'.
+
+    RSP.command('c') already consumed its initial '+' ACK before timing
+    out waiting for the stop packet. It is INCORRECT to send a new GDB
+    command at that point: a pending '$T02' will be misread as its ACK.
+    """
+    start = rsp.byte()
+    if start == b"+":   # tolerate an already outstanding continue ACK
+        start = rsp.byte()
+    if start != b"$":
+        raise RuntimeError(f"Expected async GDB stop packet, got {start!r}")
+    packet = bytearray()
+    while True:
+        ch = rsp.byte()
+        if ch == b"#":
+            break
+        packet.extend(ch)
+    checksum = (rsp.byte() + rsp.byte()).decode("ascii")
+    if checksum.lower() != f"{sum(packet) & 255:02x}":
+        rsp.sock.sendall(b"-")
+        raise RuntimeError("Bad asynchronous GDB stop checksum")
+    rsp.sock.sendall(b"+")
+    return packet.decode("ascii")
+
+def continue_bounded(rsp, milliseconds):
+    """Run genuine guest instructions; interrupt and HALT after deadline."""
+    timeout = rsp.sock.gettimeout()
+    try:
+        rsp.sock.settimeout(milliseconds / 1000.0)
+        try:
+            return rsp.command("c"), False
+        except socket.timeout:
+            rsp.sock.settimeout(5)
+            rsp.sock.sendall(b"\x03")  # GDB remote asynchronous interrupt
+            stopped = receive_async_stop(rsp)
+            if not stopped.startswith(("S02", "T02", "S05", "T05")):
+                raise RuntimeError(f"Unexpected async stop: {stopped}")
+            return stopped, True
+    finally:
+        rsp.sock.settimeout(timeout)
+
+def continuous(rsp, cpsie, hardfault, elf, count, slice_ms):
     pre = observer(rsp)
     display("CONT", "PRE_CPSIE", pre)
     if pre["primask"] != 1 or pre["ipsr"] != 0:
@@ -147,20 +189,19 @@ def continuous(rsp, cpsie, hardfault, elf, count):
     final = pre
     try:
         for i in range(count):
-            try:
-                stopped = rsp.command("c")
-            except socket.timeout:
-                # Explicitly report an indeterminate run, not an IRQ PASS.
-                print("G11_CONT_TIMEOUT continuous run did not reach a "
-                      "breakpoint within the RSP deadline")
-                break
-            if not stopped.startswith(("S05", "T05")):
+            stopped, interrupted = continue_bounded(rsp, slice_ms)
+            if not interrupted and not stopped.startswith(("S05", "T05")):
                 raise RuntimeError(f"Unexpected continue stop: {stopped}")
             final = observer(rsp)
             at = final["pc"]
-            label = entry.get(at, f"UNEXPECTED_PC_0x{at:08x}")
+            label = ("BOUNDED_CONT_RUN_PAUSED" if interrupted else
+                     entry.get(at, f"UNEXPECTED_PC_0x{at:08x}"))
             display("CONT", f"STOP_{i}_{label}", final)
             seen.append(label)
+            if interrupted:
+                print(f"G11_CONT_BOUNDED_RUN slice_ms={slice_ms} "
+                      "QEMU_STOPPED_BY_GDB_CTRL_C GUEST_INSTRUCTIONS_EXECUTED")
+                break
             if at == hardfault:
                 break
             if at in armed:
@@ -235,7 +276,8 @@ def run(mode, qemu, elf, args, savedir):
                 cpsie, hardfault, scans = reach_release(rsp, elf, args.startup_steps)
                 if mode == "step":
                     return stepped(rsp, cpsie, hardfault, args.post_steps)
-                return continuous(rsp, cpsie, hardfault, elf, args.cont_stops)
+                return continuous(rsp, cpsie, hardfault, elf,
+                                  args.cont_stops, args.cont_slice_ms)
         finally:
             if process.poll() is None:
                 process.terminate()
@@ -256,13 +298,16 @@ def main():
     ap.add_argument("--startup-steps", type=int, default=32768)
     ap.add_argument("--post-steps", type=int, default=512)
     ap.add_argument("--cont-stops", type=int, default=6)
+    ap.add_argument("--cont-slice-ms", type=int, default=60,
+                    help="Bound each continuous GDB slice before Ctrl-C")
     ap.add_argument("--artifact-dir", type=Path)
     args = ap.parse_args()
     for path in (args.qemu, args.elf):
         if not path.is_file():
             ap.error("Missing file: " + str(path))
     if not (1 <= args.startup_steps <= 65536 and
-            1 <= args.post_steps <= 4096 and 1 <= args.cont_stops <= 20):
+            1 <= args.post_steps <= 4096 and 1 <= args.cont_stops <= 20 and
+            10 <= args.cont_slice_ms <= 1000):
         ap.error("Invalid bound")
     app_vector_from_elf(args.elf)
     savedir = args.artifact_dir
