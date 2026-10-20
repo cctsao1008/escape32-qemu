@@ -207,6 +207,9 @@ OBJECT_DECLARE_SIMPLE_TYPE(AM13EMachineState, AM13E_MACHINE)
 #define AM13E_SIM_MCPWM_SIZE 0x600U
 #define AM13E_SIM_PWM_OBSERVER 0x5ffe1000U
 #define AM13E_SIM_PWM_OBS_SIZE 0x80U
+/* G11 read-only non-silicon CPU/exception probe. Not guest firmware MMIO. */
+#define AM13E_G11_ARCH_OBS_BASE 0x5ffe3000U
+#define AM13E_G11_ARCH_OBS_SIZE 0x40U
 #define AM13E_SIM_PWM_CLK 100000000U
 #define AM13E_SIM_PWM_POWER_BIT (1U << 9)
 #define AM13E_SIM_PA26_INJECT_BASE 0x5ffe0000U
@@ -403,6 +406,7 @@ struct AM13EMachineState {
     MemoryRegion flash;
     MemoryRegion bank3_alias;
     MemoryRegion sysctl;
+    MemoryRegion g11_arch_obs;
     uint32_t sysctl_systemcfg;
     uint32_t sim_perclkcr;
     uint32_t sim_mc_power;
@@ -459,6 +463,55 @@ struct AM13EMachineState {
 };
 
 #include "am13e_motor_feedback.inc"
+
+/* G11: a read-only diagnostic viewport into Cortex-M33 architectural
+ * register state. Nothing in the firmware accesses this non-silicon window.
+ * No synthetic exception, stack fixup or interrupt is injected.
+ */
+static MemTxResult am13e_g11_arch_read(void *opaque, hwaddr off,
+                                     uint64_t *value, unsigned size,
+                                     MemTxAttrs attrs)
+{
+    AM13EMachineState *s = opaque;
+    CPUARMState *env;
+    bool active_psp;
+    uint32_t msp, psp;
+    if (!s->esc_sim || size != 4U || (off & 3U) ||
+        !s->armv7m.cpu) {
+        return MEMTX_ERROR;
+    }
+    env = &s->armv7m.cpu->env;
+    active_psp = (env->v7m.exception == 0) &&
+                 !!(env->v7m.control[M_REG_NS] & 2U);
+    msp = active_psp ? env->v7m.other_sp : env->regs[13];
+    psp = active_psp ? env->regs[13] : env->v7m.other_sp;
+    switch (off) {
+    case 0x00U: *value = 0x47313101U; return MEMTX_OK; /* G11 v1 */
+    case 0x04U: *value = env->v7m.primask[M_REG_NS]; return MEMTX_OK;
+    case 0x08U: *value = env->v7m.basepri[M_REG_NS]; return MEMTX_OK;
+    case 0x0cU: *value = env->v7m.faultmask[M_REG_NS]; return MEMTX_OK;
+    case 0x10U: *value = env->v7m.control[M_REG_NS]; return MEMTX_OK;
+    case 0x14U: *value = msp; return MEMTX_OK;
+    case 0x18U: *value = psp; return MEMTX_OK;
+    case 0x1cU: *value = env->v7m.exception; return MEMTX_OK;
+    case 0x20U: *value = env->regs[14]; return MEMTX_OK;
+    case 0x24U: *value = env->regs[15]; return MEMTX_OK;
+    case 0x28U: *value = xpsr_read(env); return MEMTX_OK;
+    default: return MEMTX_ERROR;
+    }
+}
+static MemTxResult am13e_g11_arch_write(void *opaque, hwaddr off,
+                                      uint64_t value, unsigned size,
+                                      MemTxAttrs attrs)
+{
+    return MEMTX_ERROR; /* observation only, never a CPU state setter */
+}
+static const MemoryRegionOps am13e_g11_arch_ops = {
+    .read_with_attrs = am13e_g11_arch_read,
+    .write_with_attrs = am13e_g11_arch_write,
+    .endianness = DEVICE_LITTLE_ENDIAN,
+    .valid = { .min_access_size = 4, .max_access_size = 4 },
+};
 
 /* ESC-SIM: opt-in functional PLL timer; no physical trim/PLL model. */
 static void am13e_sim_pll_ready(void *opaque)
@@ -3254,6 +3307,13 @@ static void am13e_init(MachineState *machine)
     memory_region_init_io(&s->sysctl, NULL, &am13e_sysctl_ops, s,
                           "am13e-sysctl-g2a", AM13E_SYSCTL_SIZE);
     memory_region_add_subregion(sysmem, AM13E_SYSCTL_BASE, &s->sysctl);
+
+    /* G11 diagnostic viewport stays read-only and off in strict mode. */
+    memory_region_init_io(&s->g11_arch_obs, NULL, &am13e_g11_arch_ops,
+                          s, "esc-sim-cortex-m33-state-read-only",
+                          AM13E_G11_ARCH_OBS_SIZE);
+    memory_region_add_subregion(sysmem, AM13E_G11_ARCH_OBS_BASE,
+                                &s->g11_arch_obs);
 
     /* FACTORY G2i: only caller-provided per-chip PLL startup words. */
     am13e_load_factory_pll_fixture(s);
