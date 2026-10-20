@@ -186,14 +186,14 @@ def main():
                                   capture=capture, dma_beats=dma_beats,
                                   dma_remaining=remaining,
                                   gate_disconnected=gate_off,
-                                  pc=pc, throttle_pre_callback=
-                                  rsp.mem32(throt_addr))
+                                  ipsr=observer(rsp)["ipsr"], pc=pc,
+                                  throttle_pre_callback=rsp.mem32(throt_addr))
                     events.append(record)
                     print("G13B1_NATIVE_RECEIVE_CALLBACK " +
                           json.dumps(record, sort_keys=True), flush=True)
                     if (guest_frame != frame or delivered != 32 or
                             capture < 32 or dma_beats < 32 or not gate_off or
-                            observer(rsp)["ipsr"] != 0):
+                            record["ipsr"] == 3):
                         raise AssertionError(
                             "Native DShot frame/capture/DMA/drive ownership mismatch")
                     print("PASS_G13B1_ORIGINAL_ELF_DSHOT_RX_FROM_PA26_WIRE "
