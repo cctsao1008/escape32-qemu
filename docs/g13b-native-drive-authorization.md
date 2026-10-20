@@ -92,7 +92,24 @@ now uses a **separate QTest socket** for genuinely dispatched
 `writel` commands while TCG/GDB runs the unchanged native guest.
 GDB retains read-only observation/breakpoint responsibilities.
 
-**Native callback acceptance is pending a passing CI/native ELF log.**
+**Original ELF callback entry is now verified** by
+[CI run 39517608065](https://github.com/cctsao1008/escape32-qemu/actions/runs/39517608065).
+Unlike the first GDB-write attempt, QTest on a separate socket really
+committed 32 external physical PA26 level changes, and QEMU TCG
+executed the original guest ISR/decoder. The genuine native
+`am13e_app_io_dshot_packet` function was reached with:
+
+```text
+G13B1_REAL_INPUT_FRAME=0x7d0a PA26_EDGES_SCHEDULED=32
+G13B1_NATIVE_RECEIVE_CALLBACK capture=32 delivered=32 dma_beats=32 dma_remaining=0 guest_frame=0x7d0a inverted=0 ipsr=56 gate_disconnected=true throttle_pre_callback=0
+PASS_G13B1_ORIGINAL_ELF_DSHOT_RX_FROM_PA26_WIRE
+```
+
+The next stricter acceptance separately executes the **real callback
+body and return** and requires CRC return-value success and a change to
+the original firmware-owned `throt` global with gate still isolated.
+Merely entering that function is **not proof of CRC acceptance**.
+
 Even a real
 callback proves only command **ingress**, not successful arming,
 positive PWM gate authorization, valid BEMF zero-cross consumption,
