@@ -909,3 +909,32 @@ comparator feedback consumption, firmware commutation adjustments
 and real electrical safety qualification remain OPEN.
 
 See [G13A methods/limits](docs/g13a-mcpwm-bldc-bemf-bridge.md).
+
+## G13B — Original ELF native motor ownership, PA26 ingress
+
+The **original unmodified ESCape32 Rel17.3 Reference ELF** is
+deliberately fail-closed: `AM13E_MOTOR_OUTPUT_CONFIGURED=0` unless
+the hardware board declares qualified gate polarity, nFAULT and
+independent overcurrent/Trip topology. The project must not turn
+on a power stage by setting PB13 or preloading PWM from the host.
+
+**G13B0 original-ELF negative gate PASSED**
+([Run 39516301125](https://github.com/cctsao1008/escape32-qemu/actions/runs/39516301125)):
+native IRQ release and two WFI visits advance `tick=1` to `tick=3`
+with `throt=0`, PB13 GPIO DOE off, six pads as GPIO input,
+TBCLKSYNC off and no synthesized BEMF/drive.
+
+**G13B1 PA26 virtual-time wire transport PASSED QTest**
+([Run 39516680718](https://github.com/cctsao1008/escape32-qemu/actions/runs/39516680718)):
+32 physical DShot600 transitions travel through actual modeled
+TIMG4 Capture and DMA0 CH2 and reconstruct frame `0x7D0A`.
+The native ELF DShot Callback proof is **separate/pending**;
+native ARM code must still decode the frame from the physical
+event sequence. The external wave queue is a non-silicon
+input port; it does not inject a decoded frame, a DMA buffer
+or interrupt flags.
+
+See [G13B native drive-authorization status and tests](docs/g13b-native-drive-authorization.md).
+Actual gate enable, commutation and motor closed-loop remain **OPEN**
+until a separately qualified virtual/real board electrical
+contract exists and original firmware demonstrably authorizes drive.
