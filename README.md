@@ -842,3 +842,30 @@ authorization, or physical safety has been verified.**
 
 See [G10 ECAP1/CMPSS0 scope, registers, tests and limitations](
 docs/g10-ecap1-cmpss0-feedback.md).
+
+## G11 — Cortex-M33 Exception Entry/Return and the INVPC root cause
+
+After G10, the original ELF consistently raised
+`CFSR.INVPC=1` immediately after the native IRQ-release barrier.
+The G11 original-ELF probe resolves `CPSIE i` by symbol/opcode,
+then compares timed single-stepping with continuous-run from the same
+PRIMASK=1 Thread state, capturing the real MSP/PSP, CONTROL,
+BASEPRI/FAULTMASK, IPSR and QEMU `-d int` logs. **Both** variants
+reproduced a SysTick exception return `0xFFFFFFB9` and the same
+integrity-check UsageFault: not a GDB-only artifact.
+
+An independent PendSV-only micro-firmware (not ESCape32) also raised
+INVPC in unmodified QEMU 6.2 with the custom Cortex-M33
+Security Extension absent. This isolated the CPU exception implementation
+from motor-control code. The pinned QEMU source itself set EXC_RETURN.ES
+for a no-Security ARMv8-M CPU in `v7m_exception_taken()`, while
+`do_v7m_exception_exit()` rejected precisely that bit under the same
+condition. `build.sh` now makes an **exact-anchor guarded fix** to the
+generated QEMU worktree: no Security Extension means ES=0. The existing
+exception-return integrity check remains fully enabled; no IRQ is masked
+or fabricated. The patch does not alter the upstream submodule.
+
+See [G11 lifecycle diagnostics, independent control and acceptance
+boundaries](docs/g11-cortex-m33-exception-lifecycle.md). This does not
+establish full firmware boot, ESC motor readiness or closed-loop BLDC
+behavior.
