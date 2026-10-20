@@ -35,6 +35,10 @@ def gate_and_pads_connected(
     """
     if gate_active_level not in (0, 1):
         raise ValueError("Explicit physical/simulation gate polarity required")
+    # PB13 gate-drive needs both GPIO1 power and its actual pad mux.
+    # DOE/DOUT alone do NOT prove a physical output connection.
+    if (read32(PINCM_BASE + 4 * 45) & 0xBF) != 0x81:
+        return False
     if not (read32(GPIO1_BASE + 0x800) & 1):
         return False
     if not (read32(GPIO1_BASE + 0x12C0) & GATE_EN):
