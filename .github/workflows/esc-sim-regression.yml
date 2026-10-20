@@ -114,7 +114,8 @@ jobs:
             --qemu .build/qemu-src/build/qemu-system-arm \
             --elf /tmp/e62-fw-build/AM13E-rev17.3.elf \
             --shifts 2 10 --startup-steps 32768 \
-            --slice-ms 80 --max-stops 6 \
+            --slice-ms 80 --max-stops 9 \
+            --probe-wfi-roundtrip \
             --require-no-invpc --require-shift2-progress \
             --artifact-dir artifacts \
             2>&1 | tee artifacts/g12-runtime-progress.log
