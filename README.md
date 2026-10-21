@@ -938,8 +938,33 @@ remains isolated. The external wave queue is a non-silicon
 input port; it does not inject decoded frames, guest DMA buffers
 or IRQ flags.
 
+**G13B2A SIM_ONLY virtual-board build PASS:** a separate, explicit
+opt-in original-ELF build defines *fictional simulator-only*
+PB13/RED/FED/pad/nFAULT/OC values, never an approved E62 board.
+([Run 39641209305](https://github.com/cctsao1008/escape32-qemu/actions/runs/39641209305)).
+
+**G13B2B physical Trip model and G13B2C native-ELF neutral
+protection configuration PASS**: the real native code initializes
+CMPSS1/2/3 (DACH=2048), PA22 INPUTXBAR2→TRIP2, three-phase OC
+PWMXBAR→TRIP3, MCPWM4 OST2/OST3. PB13 remains inactive and all
+six PWM pads remain disconnected until native output authorization.
+([Run 39693884065](https://github.com/cctsao1008/escape32-qemu/actions/runs/39693884065)).
+
+**G13B2D native IRQ fault/shutdown PASS**: original-ELF MCU
+responds to external PA22 nFAULT and independent U/V/W overcurrent
+by genuinely latching OST2/OST3, taking MCPWM4 IRQ28 (IPSR 44)
+and entering its own fault-shutdown function, without test-written
+guest register state.
+([Run 39694030611](https://github.com/cctsao1008/escape32-qemu/actions/runs/39694030611)).
+
+**G13B2E positive original-ELF Gate/PWM actuation is NOT YET
+ACCEPTED.** A diagnostic probe injects only genuine PA26
+DShot600 external edges and safe external current samples; it
+must witness the actual firmware `motor_output_start()`, PWM
+ZERO interrupts and `power_stage_enable()` with GPIO/PINCM/TBCLK
+readback before positive PASS. An independent virtual BLDC→BEMF
+closed-loop regression remains OPEN.
+
 See [G13B native drive-authorization status and tests](docs/g13b-native-drive-authorization.md)
-and [G13B2 exact board electrical requirements](docs/g13b2-board-electrical-contract.md).
-Actual gate enable, commutation and motor closed-loop remain **OPEN**
-until a separately qualified virtual/real board electrical
-contract exists and original firmware demonstrably authorizes drive.
+and [G13B2 exact SIM_ONLY and real-board distinction](docs/g13b2-board-electrical-contract.md).
+**Passing hypothetical simulation is never E62 physical/electrical sign-off.**
