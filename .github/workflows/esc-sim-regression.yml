@@ -176,7 +176,7 @@ jobs:
               2>&1 | tee "artifacts/g13b2d-${kind}.log"
           done
           echo PASS_G13B2D_NATIVE_SAFETY_IRQ_FOUR_PHYSICAL_FAULT_CASES
-      - name: G13B2E diagnostic only native SIM_ONLY positive DShot-to-drive
+      - name: G13B2E original uncalibrated BEMF fail-closed (nFAULT healthy)
         run: |
           set -euo pipefail
           mkdir -p artifacts
@@ -185,6 +185,7 @@ jobs:
             --elf /tmp/e62-fw-sim-only/AM13E-rev17.3.elf \
             --throttle 1000 --startup-steps 32768 \
             --slice-ms 300 --runtime-slices 20 \
+            --require-bemf-reject \
             --artifact artifacts/g13b2e-original-positive-drive.json \
             2>&1 | tee artifacts/g13b2e-original-positive-drive.log
           # Deliberately no --require-drive: until real native Gate/
