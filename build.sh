@@ -111,6 +111,12 @@ if feedback_target.is_symlink():
     sys.exit('ERROR: generated feedback path is a symlink')
 if not feedback_target.exists() or feedback_target.read_bytes() != feedback_source.read_bytes():
     feedback_target.write_bytes(feedback_source.read_bytes())
+trip_source = root / 'machine/am13e_trip_safety.inc'
+trip_target = qemu / 'hw/arm/am13e_trip_safety.inc'
+if trip_target.is_symlink():
+    sys.exit('ERROR: generated G13B2 trip safety path is a symlink')
+if not trip_target.exists() or trip_target.read_bytes() != trip_source.read_bytes():
+    trip_target.write_bytes(trip_source.read_bytes())
 wave_source = root / 'machine/am13e_pa26_waveform.inc'
 wave_target = qemu / 'hw/arm/am13e_pa26_waveform.inc'
 if wave_target.is_symlink():
