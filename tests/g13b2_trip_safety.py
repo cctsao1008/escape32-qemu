@@ -28,6 +28,10 @@ def qualified(q):
     q.write(SYS_PWR, 0x26003a00)  # PWM4 bit9; CMPSS1/2/3 bits11-13
     assert q.read(SYS_PWR) & 0x3a00 == 0x3a00
     q.write(GPIO0_PWR, 0x26000001)
+    # Native SYSCTL.CMPHPMXSEL packed fields: CMPSS1 HP1,
+    # CMPSS2 HP3, CMPSS3 HP1 (true three independent inputs).
+    q.write(0x400b0444, (1 << 3) | (3 << 6) | (1 << 9))
+    assert q.read(0x400b0444) == 0x2c8
     q.write(PINCM + 4*22, 0x00040081)  # PA22 true GPIO input
     assert q.read(PINCM + 4*22) & 0x400bf == 0x40081
     # Independently configure all three real CMPSS CTRIPH high sources.
