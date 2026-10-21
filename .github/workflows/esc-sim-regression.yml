@@ -116,6 +116,18 @@ jobs:
             2>&1 | tee artifacts/g13b2a-original-sim-only-preflight.log
           # This is deliberately a NO-UNQUALIFIED-DRIVE safety gate.
           # An unmodeled nFAULT/OC trip is a blocked motor, not success.
+      - name: G13B2C native SIM_ONLY neutral protection ready
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          python3 tests/g13b2_native_safety.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf /tmp/e62-fw-sim-only/AM13E-rev17.3.elf \
+            --startup-steps 32768 --slice-ms 150 \
+            --runtime-slices 12 \
+            --artifact artifacts/g13b2c-native-safety.json \
+            2>&1 | tee artifacts/g13b2c-native-safety.log
+
       - name: Run G0-G10 tests against real ELF
         run: |
           set -euo pipefail
