@@ -14,10 +14,13 @@
  *  - Only 3 external analog current fixture registers + one nFAULT
  *    level are synthetic; no "trip ready" shortcut exists.
  */
+/* TI hw_xbar.h XBAR_EPWM_XBAR_GXSEL_Regs is 0x40 bytes per TRIP
+ * (G0, G1, RESERVED0[14]). TRIP2 G0 +0x140, TRIP3 G0 +0x180.
+ */
 #define AM13E_G13B2_INPUTXBAR_BASE 0x40468000U
 #define AM13E_G13B2_PWMXBAR_BASE   0x40469000U
 #define AM13E_G13B2_INPUTXBAR_SIZE 0x418U
-#define AM13E_G13B2_PWMXBAR_SIZE   0x150U
+#define AM13E_G13B2_PWMXBAR_SIZE   0x188U
 #define AM13E_G13B2_CMP_BASE      0x40461000U
 #define AM13E_G13B2_CMP_STRIDE    0x1000U
 #define AM13E_G13B2_CMP_SIZE      0x74U
@@ -173,10 +176,10 @@ static MemTxResult am13e_g13b2_pwm_xbar_read(void *opaque, hwaddr off,
     if (!t->machine->esc_sim || size != 4U || (off & 3U)) return MEMTX_ERROR;
     if (off == 0x30U) { *val = t->pwm_invert; return MEMTX_OK; }
     for (unsigned i = 1U; i <= 2U; ++i) {
-        if (off == 0x100U + 8U * i) {
+        if (off == 0x100U + 0x40U * i) {
             *val = t->pwm_g0[i]; return MEMTX_OK;
         }
-        if (off == 0x104U + 8U * i) {
+        if (off == 0x104U + 0x40U * i) {
             *val = t->pwm_g1[i]; return MEMTX_OK;
         }
     }
@@ -195,10 +198,10 @@ static MemTxResult am13e_g13b2_pwm_xbar_write(void *opaque, hwaddr off,
     } else {
         bool found = false;
         for (unsigned i = 1U; i <= 2U; ++i) {
-            if (off == 0x100U + 8U * i && !(v & ~(i == 1U ? 0x00200000U : 0x54U))) {
+            if (off == 0x100U + 0x40U * i && !(v & ~(i == 1U ? 0x00200000U : 0x54U))) {
                 t->pwm_g0[i] = v; found = true; break;
             }
-            if (off == 0x104U + 8U * i && v == 0U) {
+            if (off == 0x104U + 0x40U * i && v == 0U) {
                 t->pwm_g1[i] = 0U; found = true; break;
             }
         }
