@@ -59,6 +59,46 @@ jobs:
           arm-none-eabi-objdump -d /tmp/e62-fw-build/AM13E-rev17.3.elf \
             | grep -A 4 '<DL_MCPWM_setEmulationMode>:' | head -5
 
+      - name: G13B2A compile separately guarded SIM_ONLY board
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          SIM_PROFILE="$PWD/tests/fixtures/g13b2_sim_only_board.cmake"
+          # Negative build configuration: a SIM_ONLY board may NEVER
+          # accidentally become the default production/reference target.
+          if cmake -S /tmp/e62-escape32 -B /tmp/e62-fw-sim-denied \
+              -G 'Unix Makefiles' \
+              -DESCAPE32_BUILD_AM13E=ON \
+              -DAM13E_SDK_ROOT=/tmp/e62-sdk \
+              -DAM13E_BOARD_BOARD_PROFILE_FILE="$SIM_PROFILE" \
+              -DAM13E_BOOT_LINKER_SCRIPT=/tmp/e62-escape32/boot/mcu/AM13E/config.ld \
+              > artifacts/g13b2a-no-optin.log 2>&1; then
+            echo 'ERROR: SIM_ONLY profile compiled without explicit opt-in'
+            exit 1
+          fi
+          grep -F 'G13B2 SIM_ONLY board requires' artifacts/g13b2a-no-optin.log
+          echo PASS_G13B2A_OPT_IN_FAIL_CLOSED
+          cmake -S /tmp/e62-escape32 -B /tmp/e62-fw-sim-only \
+            -G 'Unix Makefiles' \
+            -DESCAPE32_BUILD_AM13E=ON \
+            -DAM13E_SDK_ROOT=/tmp/e62-sdk \
+            -DG13B2_SIM_ONLY_OPT_IN=ON \
+            -DAM13E_BOARD_BOARD_PROFILE_FILE="$SIM_PROFILE" \
+            -DAM13E_BOOT_LINKER_SCRIPT=/tmp/e62-escape32/boot/mcu/AM13E/config.ld \
+            2>&1 | tee artifacts/g13b2a-configure.log
+          cmake --build /tmp/e62-fw-sim-only --target AM13E-rev17.3.elf -j 2 \
+            2>&1 | tee artifacts/g13b2a-build.log
+          test -s /tmp/e62-fw-sim-only/AM13E-rev17.3.elf
+          if cmp -s /tmp/e62-fw-build/AM13E-rev17.3.elf \
+                    /tmp/e62-fw-sim-only/AM13E-rev17.3.elf; then
+            echo 'ERROR: SIM_ONLY binary identical to reference (profile ignored)'
+            exit 1
+          fi
+          arm-none-eabi-readelf -h /tmp/e62-fw-sim-only/AM13E-rev17.3.elf \
+            | grep -F 'Machine:'
+          sha256sum /tmp/e62-fw-build/AM13E-rev17.3.elf \
+                    /tmp/e62-fw-sim-only/AM13E-rev17.3.elf
+          echo PASS_G13B2A_NATIVE_SIM_ONLY_PROFILE_BUILD_ONLY
       - name: Build pinned QEMU AM13E model
         run: |
           set -euo pipefail
