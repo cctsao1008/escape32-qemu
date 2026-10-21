@@ -928,13 +928,18 @@ TBCLKSYNC off and no synthesized BEMF/drive.
 ([Run 39516680718](https://github.com/cctsao1008/escape32-qemu/actions/runs/39516680718)):
 32 physical DShot600 transitions travel through actual modeled
 TIMG4 Capture and DMA0 CH2 and reconstruct frame `0x7D0A`.
-The native ELF DShot Callback proof is **separate/pending**;
-native ARM code must still decode the frame from the physical
-event sequence. The external wave queue is a non-silicon
-input port; it does not inject a decoded frame, a DMA buffer
-or interrupt flags.
+**G13B1 original-ELF DShot CRC + throttle processing also PASSED**
+([Run 39518162722](https://github.com/cctsao1008/escape32-qemu/actions/runs/39518162722)):
+the native DMA IRQ decoder reaches the real
+`am13e_app_io_dshot_packet(0x7D0A, 0)` callback, which returns
+CRC success (1) and updates the native Rel17 `throt` global
+from 0 to 953, while the unqualified Reference PB13 gate
+remains isolated. The external wave queue is a non-silicon
+input port; it does not inject decoded frames, guest DMA buffers
+or IRQ flags.
 
-See [G13B native drive-authorization status and tests](docs/g13b-native-drive-authorization.md).
+See [G13B native drive-authorization status and tests](docs/g13b-native-drive-authorization.md)
+and [G13B2 exact board electrical requirements](docs/g13b2-board-electrical-contract.md).
 Actual gate enable, commutation and motor closed-loop remain **OPEN**
 until a separately qualified virtual/real board electrical
 contract exists and original firmware demonstrably authorizes drive.
