@@ -123,10 +123,52 @@ def trace_original_start_preconditions(rsp, symbols, armed,
                 armed.remove(addr)
 
 
+def native_symbol_location(elf, address):
+    """Symbolize the actual CI-built SIM_ONLY ELF, never a reference map."""
+    try:
+        result = subprocess.run(
+            ["arm-none-eabi-addr2line", "-f", "-C", "-i",
+             "-e", str(elf), f"0x{(address & ~1):x}"],
+            capture_output=True, text=True, check=True, timeout=15)
+        return result.stdout.strip().replace("\n", " | ")
+    except (OSError, subprocess.SubprocessError):
+        return "unavailable"
+
+
+def pwm_native_event_snapshot(rsp, elf, zero_counter):
+    """Read-only native register and motor-start ISR state after DShot."""
+    base = PWM4
+    stat = {
+        "current_pc": rsp.reg(15),
+        "current_lr": rsp.reg(14),
+        "pc_symbol": native_symbol_location(elf, rsp.reg(15)),
+        "lr_symbol": native_symbol_location(elf, (rsp.reg(14) & ~1) - 2),
+        "native_start_zero_events": rsp.mem32(zero_counter) if zero_counter else None,
+        "mcpwm_tbctl": rsp.mem32(base + 0x10),
+        "mcpwm_tbprd": rsp.mem32(base + 0x14),
+        "mcpwm_counter": rsp.mem32(base + 0x28),
+        "mcpwm_etsel": rsp.mem32(base + 0x80),
+        "mcpwm_etperiod": rsp.mem32(base + 0x84),
+        "mcpwm_etcnt": rsp.mem32(base + 0x88),
+        "mcpwm_inten": rsp.mem32(base + 0x90),
+        "mcpwm_intflag": rsp.mem32(base + 0x94),
+        "mcpwm_tzsel": rsp.mem32(base + 0xA0),
+        "mcpwm_tzflags": rsp.mem32(base + 0xB0),
+    }
+    print("G13B2E_PWM_ZERO_IRQ_NATIVE_DIAGNOSTIC " +
+          json.dumps(stat, sort_keys=True), flush=True)
+    return stat
+
+
 def run(args):
     app_vector_from_elf(args.elf)
     wfi = native_wfi_locations(args.elf, args.objdump)
     throt = symbol_address(args.elf, "throt")
+    try:
+        native_start_zero_counter = symbol_address(
+            args.elf, "start_zero_events")
+    except RuntimeError:
+        native_start_zero_counter = None  # do not fabricate guest values
     symbols = {
         name: elf_function_address(args.elf, name)[0]
         for name in ("am13e_app_io_dshot_packet", "am13e_motor_output_start",
@@ -306,6 +348,8 @@ def run(args):
                                 f"Unexpected native breakpoint PC=0x{state['pc']:08x}")
                         evidence["saw_output_start"] = saw_output_start
                         evidence["saw_gate_call"] = saw_gate_call
+                        evidence["native_pwm_zero_irq"] = pwm_native_event_snapshot(
+                            rsp, args.elf, native_start_zero_counter)
                         print("G13B2E_DIAGNOSTIC " +
                               json.dumps(evidence, sort_keys=True), flush=True)
                         if args.require_bemf_reject:
