@@ -191,3 +191,32 @@ Native closed-loop remains entirely **OPEN** after this stage;
 no native motor speed, BEMF zero-cross feedback, phase
 commutation causality or real electrical hardware approval
 has been established.
+
+### First original positive-input probe: safe native rejection
+
+[GitHub Actions #39694443423](https://github.com/cctsao1008/escape32-qemu/actions/runs/39694443423)
+completed successfully as a **diagnostic** (not gate acceptance).
+The actual physical PA26 waveform was DMA captured and CRC accepted
+by unchanged native Rel17 (frame `0x7D0A`, guest `throt` `0→953`).
+The guest genuinely entered `am13e_motor_output_start()`, but
+subsequently entered `am13e_app_motor_fault_reset()` without ever
+calling `am13e_power_stage_enable()`. At rejection,
+PB13 DOUT=0, six physical PWM pads remain GPIO input, TBCLKSYNC=0,
+TZFLAGS=0 and CFSR/HFSR=0.
+
+This proves real command-to-start *attempt* and genuine fail-closed
+software refusal, **not** positive gate permission. Candidate native
+guards in `motor_output_runtime.c` are independent
+`am13e_app_motor_nfault_trip_ready()` and
+`am13e_app_motor_bemf_reference_start_ready()`.
+The strict GDB-return tracing extension will determine which
+original function returned false; never replace these calls with a
+mock ready bit.
+
+Separately, original `motor_bemf.c` deliberately initializes CMPSS0
+DACH to 0, which is **not** a valid calibrated Vdc/2 neutral.
+The only documented non-SC5 activation is
+`am13e_app_motor_bemf_reference_set()` with a valid explicitly
+board-supplied analog reference. SIM_ONLY must keep this distinction
+clear: a future *test-only* neutral fixture is not production
+calibration evidence.
