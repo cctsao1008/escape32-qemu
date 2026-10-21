@@ -131,17 +131,6 @@ static void am13e_g13b2_reset(AM13EMachineState *s)
     }
 }
 
-static MemTxResult am13e_g13b2_xbar_read(void *opaque, hwaddr off,
-                                         uint64_t *value, unsigned size,
-                                         MemTxAttrs attrs)
-{
-    AM13ETrip *t = opaque;
-    if (!t->machine->esc_sim || size != 4U || (off & 3U)) return MEMTX_ERROR;
-    if (attrs.requester_id == 0xffff) { /* no special bypass */ }
-    /* Same callbacks operate on separate MemoryRegions. Disambiguate by
-     * the base through two tiny wrappers defined below instead. */
-    return MEMTX_ERROR;
-}
 static MemTxResult am13e_g13b2_input_read(void *opaque, hwaddr off,
                                           uint64_t *val, unsigned size,
                                           MemTxAttrs attrs)
