@@ -90,7 +90,12 @@ def main():
             q.cmd("clock_step 1")
             for i, base in enumerate(ADCS):
                 assert not q.read(base + 0x1000) & 0x2000
-                assert q.read(base + 0x101c) & 1
+                # Original Firmware's ADCx_INT1_IRQHandler requires
+                # ADCINT1[0] *and* ADCINT1RESULT[8] after genuine EOC.
+                # SDK hw_adc.h assigns masks 0x1 and 0x100.
+                assert q.read(base + 0x101c) & 0x101 == 0x101, (
+                    i, hex(q.read(base + 0x101c)))
+                assert q.read(base + 0x1018) & 0x101 == 0x101
                 val = q.read(RESULTS[i])
                 assert (val & 0xffff) == (i + 1) * 1000
                 assert (val >> 16) == (i + 1) * 1000 + 1
@@ -98,18 +103,26 @@ def main():
                 # and therefore reads before writing.
                 clear = q.read(base + 0x1024) | 1
                 assert clear == 1
-                assert q.read(base + 0x101c) == 1, (
-                    "W1C read must not clear pending IRQ")
+                assert q.read(base + 0x101c) == 0x101, (
+                    "W1C read must not clear pending IRQ/result-ready")
                 q.write(base + 0x1024, clear)
                 assert q.read(base + 0x101c) == 0
                 assert q.read(base + 0x1024) == 0
                 # Force/clear paths both need readable strobe RMW.
                 q.write(base + 0x1020, q.read(base + 0x1020) | 1)
-                assert q.read(base + 0x101c) & 1
+                # A *forced IRQ* alone must NOT claim a converted
+                # ADCRESULT; this intentionally fails the native ISR's
+                # separate Result Ready safety precondition.
+                assert q.read(base + 0x101c) == 1, (
+                    "Software-forced IRQ must not fake ADCINT1RESULT")
                 q.write(base + 0x1024, q.read(base + 0x1024) | 1)
                 assert q.read(base + 0x101c) == 0
-                print(f"G4B_ADC{i}_RESULT={val:#010x} IRQ_CLEAR=PASS")
+                print(f"G4B_ADC{i}_RESULT={val:#010x} "
+                      "EOC_READY_BIT8=PASS IRQ_CLEAR=PASS "
+                      "FORCED_IRQ_NOT_RESULT_READY=PASS")
             print("PASS_G4B_ADC_DRIVERLIB_W1S_W1C_RMW")
+            print("PASS_G4B_ADC_NATIVE_EOC_IRQ_AND_RESULT_READY_SEPARATE "
+                  "NO_PHANTOM_RESULT_FROM_FORCED_IRQ")
             print("PASS_G4B_NATIVE_ADC_CONVERSION_EVENT_NOT_ANALOG_VALIDATION")
 
         run(qemu, elf, fixture, verify)
