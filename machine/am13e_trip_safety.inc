@@ -38,11 +38,16 @@ static bool am13e_g13b2_cmp_ready(AM13EMachineState *s, unsigned n)
     const uint16_t ctrl = cmp->reg[0];
     const unsigned pin = n == 0U ? 7U : (n == 1U ? 30U : 16U);
     const uint32_t power = 1U << (n + 11U);
-    /* Firmware drives analog PINCM=0 via DL_GPIO_initPeripheralAnalog...
-     * The native comparator source must be DAC, DACH >0 and enabled.
-     * Async CTRIPH selection 0, no fabricated latency/filter bypass.
+    /* TI SYSCTL.CMPHPMXSEL has 3-bit fields per CMPSS:
+     * W=CMPSS1 HP1, V=CMPSS2 HP3, U=CMPSS3 HP1.
      */
-    return s->esc_sim && (s->sim_mc_power & power) &&
+    const unsigned mux_code = (s->sim_mc_mux[0] >> (3U * (n + 1U))) & 7U;
+    const unsigned expected_mux = n == 1U ? 3U : 1U;
+    /* Firmware drives analog PINCM=0. Native DAC source, DACH
+     * enabled and real comparator input mux are all required.
+     */
+    return s->esc_sim && mux_code == expected_mux &&
+        (s->sim_mc_power & power) &&
         (ctrl & 0x8000U) && !(ctrl & 0x0001U) &&
         (ctrl & 0x000cU) == 0U &&
         (cmp->reg[0x0e / 2U] & 0x0fffU) != 0U &&
