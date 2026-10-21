@@ -220,3 +220,36 @@ The only documented non-SC5 activation is
 board-supplied analog reference. SIM_ONLY must keep this distinction
 clear: a future *test-only* neutral fixture is not production
 calibration evidence.
+
+### G13B2E ADC0 IRQ24 original native fail-closed diagnosis
+
+In [CI #39695429331](https://github.com/cctsao1008/escape32-qemu/actions/runs/39695429331),
+opt-in ideal virtual BEMF DACH=2048 changed original
+`am13e_app_motor_bemf_reference_start_ready()` **0→1** and
+`am13e_motor_output_start()` **0→1**, with original nFAULT
+readiness remaining 1. Nevertheless, the native code later reached
+`am13e_app_motor_fault_reset()` with IPSR=24 (ADC0_INT1_IRQn=8),
+before its own `am13e_power_stage_enable()` was called.
+PB13 remained inactive, the six pads remained isolated and
+TBCLKSYNC remained 0. This diagnostic overall CI SUCCESS is
+**not** a positive motor-output PASS.
+
+Original `mcu/AM13E/hal/analog_runtime.c::adc_complete()` explicitly
+checks **both** `DL_ADC_getInterruptStatus()` and
+`DL_ADC_getInterruptResultReadyStatus()`; if either is false it
+calls `adc_fail_closed()` and the native fault-reset path.
+TI pinned SDK `hw_adc.h` defines ADCINTFLG ADCINT1 bit0 `0x1`
+and ADCINT1RESULT bit8 `0x100`. The original G4 QEMU ADC model
+had generated only bit0 after genuine SOC completion. The QEMU
+model was corrected to latch bit8 **only after real ADCRESULTs
+are committed**, and to acknowledge the paired status on
+the native ADCINT1 W1C. A software-forced ADC IRQ continues
+to set only bit0: it cannot fake completed ADC results.
+
+`tests/g4_adc_sequencer.py` independently checks all three ADCs:
+true SOC completion asserts `0x101`, W1C releases both status
+bits, and a forced IRQ without EOC cannot set bit8. This is
+a motor safety fidelity correction, **not** an ADC analog
+calibration, power-stage safety qualification, or native Gate
+authorization. The full ideal-BEMF original-ELF regression must
+establish subsequent progress before any G13B2E positive PASS.
