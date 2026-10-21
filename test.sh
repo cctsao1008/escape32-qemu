@@ -7,6 +7,7 @@ if [[ $# -ne 1 ]]; then
 fi
 python3 "$ROOT/tests/test_rsp.py"
 python3 "$ROOT/tests/test_g12_runtime.py"
+python3 "$ROOT/tests/g13b_wfi_selection.py"
 python3 "$ROOT/tests/g0_memory.py" \
     --qemu "$ROOT/.build/qemu-src/build/qemu-system-arm" \
     --elf "$1"
