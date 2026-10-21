@@ -2601,7 +2601,13 @@ static void am13e_sim_adc_complete(void *opaque)
         if (adc->interrupt_flags & 1U) {
             adc->interrupt_overflow |= 1U;
         }
-        adc->interrupt_flags |= 1U;
+        /* TI hw_adc.h ADCINTFLG: ADCINT1[0] signals the IRQ,
+         * ADCINT1RESULT[8] means EOC results really latched.
+         * Original am13e ADC0/1/2 ISR checks BOTH flags and
+         * intentionally shuts the bridge down if RESULT is absent.
+         * Do not spoof ready on a software-forced IRQ: only a
+         * completed native SOC and real result writes set bit8. */
+        adc->interrupt_flags |= 0x0101U;
         am13e_sim_adc_irq_update(adc);
     }
 }
@@ -2670,7 +2676,11 @@ static MemTxResult am13e_adc_write(void *opaque, hwaddr offset,
         am13e_sim_adc_irq_update(adc);
         return MEMTX_OK;
     case 0x024U: /* ADCINTFLGCLR */
-        adc->interrupt_flags &= ~(data & 0x0fU);
+        /* An ADCINTx W1C acknowledges both its IRQ and the paired
+         * latched result-ready status. There is no separate SDK
+         * ADCINTxRESULT clear strobe; a future real EOC owns rearm. */
+        adc->interrupt_flags &=
+            ~((data & 0x0fU) | ((data & 0x0fU) << 8U));
         am13e_sim_adc_irq_update(adc);
         return MEMTX_OK;
     case 0x02cU: /* ADCINTOVFCLR */
