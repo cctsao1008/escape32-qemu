@@ -99,6 +99,29 @@ jobs:
           sha256sum /tmp/e62-fw-build/AM13E-rev17.3.elf \
                     /tmp/e62-fw-sim-only/AM13E-rev17.3.elf
           echo PASS_G13B2A_NATIVE_SIM_ONLY_PROFILE_BUILD_ONLY
+      - name: G13B2E separate original ELF ideal virtual BEMF reference (TEST ONLY)
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          cmake -S /tmp/e62-escape32 -B /tmp/e62-fw-sim-ideal-bemf \
+            -G 'Unix Makefiles' \
+            -DESCAPE32_BUILD_AM13E=ON \
+            -DAM13E_SDK_ROOT=/tmp/e62-sdk \
+            -DG13B2_SIM_ONLY_OPT_IN=ON \
+            -DG13B2_SIM_ONLY_IDEAL_BEMF_REFERENCE=ON \
+            -DAM13E_BOARD_BOARD_PROFILE_FILE="$PWD/tests/fixtures/g13b2_sim_only_board.cmake" \
+            -DAM13E_BOOT_LINKER_SCRIPT=/tmp/e62-escape32/boot/mcu/AM13E/config.ld \
+            2>&1 | tee artifacts/g13b2e-ideal-bemf-cmake.log
+          cmake --build /tmp/e62-fw-sim-ideal-bemf \
+            --target AM13E-rev17.3.elf -j 2 \
+            2>&1 | tee artifacts/g13b2e-ideal-bemf-build.log
+          test -s /tmp/e62-fw-sim-ideal-bemf/AM13E-rev17.3.elf
+          if cmp -s /tmp/e62-fw-sim-only/AM13E-rev17.3.elf \
+                    /tmp/e62-fw-sim-ideal-bemf/AM13E-rev17.3.elf; then
+            echo 'ERROR: ideal BEMF reference opt-in had no effect'
+            exit 1
+          fi
+          echo PASS_G13B2E_IDEAL_BEMF_REFERENCE_SEPARATE_NATIVE_ELF_ONLY
       - name: Build pinned QEMU AM13E model
         run: |
           set -euo pipefail
@@ -166,6 +189,21 @@ jobs:
             2>&1 | tee artifacts/g13b2e-original-positive-drive.log
           # Deliberately no --require-drive: until real native Gate/
           # PWM proof exists, this step is a diagnostic, NOT closed-loop PASS.
+      - name: G13B2E ideal virtual BEMF reference native positive diagnostic
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          python3 tests/g13b2_native_drive_probe.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf /tmp/e62-fw-sim-ideal-bemf/AM13E-rev17.3.elf \
+            --throttle 1000 --startup-steps 32768 \
+            --slice-ms 300 --runtime-slices 20 \
+            --artifact artifacts/g13b2e-ideal-bemf-native-drive.json \
+            2>&1 | tee artifacts/g13b2e-ideal-bemf-native-drive.log
+          # Native original HAL writes CMPSS0 DAC. The nominal 2048
+          # neutral is a virtual board hypothesis, NOT production safety.
+          # This is still diagnostic-only: G13B2E positive Gate only PASS
+          # if the explicit original-guest readback proves Gate/PWM ON.
       - name: Run G0-G10 tests against real ELF
         run: |
           set -euo pipefail
