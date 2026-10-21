@@ -154,8 +154,14 @@ def main():
                     observed_wfi = wait_for_native_main_wfi(
                         rsp, native_wfi_pcs, hardfault, args.slice_ms,
                         args.runtime_slices, stage="B1_PRE_COMMAND_WFI")
-                    if rsp.mem32(throt_addr) != 0:
-                        raise AssertionError("Reference throttle not neutral")
+                    # Native src/main.c deliberately seeds
+                    # throt=1 during its 250ms arming window; this
+                    # is not a decoded motor throttle or a safety bypass.
+                    pre_command_throt = rsp.mem32(throt_addr)
+                    if pre_command_throt not in (0, 1):
+                        raise AssertionError(
+                            "Unexpected non-neutral native throttle before "
+                            f"external DShot: {pre_command_throt}")
                     if not gate_disconnected(rsp):
                         raise AssertionError("Board unexpectedly gate-connected")
                     if ((rsp.mem32(PINCM_BASE + 26 * 4) &
@@ -255,7 +261,8 @@ def main():
                                       "throttle_after": throttle_after,
                                       "gate_still_isolated": gate_still_off}),
                           flush=True)
-                    if (crc_accepted != 1 or throttle_after <= 0 or
+                    if (crc_accepted != 1 or throttle_after <= 1 or
+                            throttle_after == record["throttle_pre_callback"] or
                             not gate_still_off or observer(rsp)["cfsr"]):
                         raise AssertionError(
                             "Native DShot CRC/throttle ownership not demonstrated")
