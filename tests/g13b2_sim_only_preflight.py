@@ -17,7 +17,10 @@ import json
 import socket
 import subprocess
 import tempfile
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from elf_image import APP_BASE, app_vector_from_elf, elf_function_address
 from g1_handoff import (
