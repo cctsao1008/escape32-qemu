@@ -77,9 +77,17 @@ def verify(state):
         raise AssertionError("No-command SIM_ONLY unexpectedly armed throttle")
     if state["pb13_dout"] or state["pwm_running"] or state["perclkcr"] & 1:
         raise AssertionError("Native SIM_ONLY neutral WFI activated physical gate/PWM")
+    # Configured SIM_ONLY native board makes PB13 a digital GPIO
+    # OUTPUT with its DATA driven to the explicitly declared inactive
+    # level. TI PINCM GPIO output is 0x00000081 (INENA=0);
+    # 0x00040081 would be GPIO input (INENA=1), which is the
+    # unqualified Reference fail-closed default, not this board.
     if (state["pb13_doe"] != GATE_EN or
-            (state["pb13_pincm"] & 0x000400bf) != 0x00040081):
-        raise AssertionError("Board inactive PB13 output pin was not initialized")
+            state["pb13_dout"] != 0 or
+            (state["pb13_pincm"] & 0x000400bf) != 0x00000081):
+        raise AssertionError(
+            "SIM_ONLY PB13 must be OUTPUT with inactive data and "
+            "output-function PINCM; no Gate authorization inferred")
     if state["pa22_pincm"] & 0x000400bf != 0x00040081:
         raise AssertionError("PA22 nFAULT pin was not made a GPIO input")
     if (state["inputxbar2_select"] != 22 or
