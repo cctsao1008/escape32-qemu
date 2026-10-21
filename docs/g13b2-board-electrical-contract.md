@@ -135,3 +135,59 @@ Native positive arming and virtual motor closed-loop therefore
 remain OPEN pending separately demonstrated hardware Trip model,
 its negative/positive regression controls, and firmware-owned
 real DShot neutral window and commutation updates.
+
+## G13B2C — Native SIM_ONLY neutral protection configuration: PASS
+
+Verified [GitHub Actions #39693884065](https://github.com/cctsao1008/escape32-qemu/actions/runs/39693884065):
+the *original ELF* initializes all three CMPSS high comparators
+(DACH=2048), PA22→INPUTXBAR2→PWMXBAR TRIP2 and
+CMPSS1/2/3→PWMXBAR TRIP3, MCPWM4 TZSEL=0x60000
+and TZCTL=0xA. On actual runtime WFI, CPU CFSR/HFSR=0,
+no OST flags, PB13 DOE=0x2000, DOUT=0, GPIO-output PINCM=0x81,
+six PWM pad PINCM remain GPIO input and TBCLKSYNC remains zero.
+The neutral-state test is read-only; test-side QTest supplied only
+explicit healthy external 12-bit current analog samples.
+
+## G13B2D — Original-ELF physical fault ISR and shutdown: PASS
+
+Verified [GitHub Actions #39694030611](https://github.com/cctsao1008/escape32-qemu/actions/runs/39694030611).
+`tests/g13b2_native_fault.py` separately asserted actual
+*external* PA22 nFAULT, W-phase, V-phase, and U-phase analog
+overcurrent while Cortex-M33 was halted at genuine native WFI.
+No peripheral status, IRQ, firmware SRAM, or gate/pad state was
+manually patched or set by the host.
+
+| External physical stimulus | Latched native TZ flags | CPU result |
+|---|---|---|
+| PA22 asserted nFAULT | OST2 = `0x20000` | MCPWM4 IRQ IPSR 44 → original shutdown |
+| CMPSS1 / W current over DACH | OST3 = `0x40000` | MCPWM4 IRQ IPSR 44 → original shutdown |
+| CMPSS2 / V current over DACH | OST3 = `0x40000` | MCPWM4 IRQ IPSR 44 → original shutdown |
+| CMPSS3 / U current over DACH | OST3 = `0x40000` | MCPWM4 IRQ IPSR 44 → original shutdown |
+
+Each fault latched **with the CPU halted**, produced native
+MCPWM4 interrupt flag `0x04`, then on CPU continuation entered
+the original firmware `MCPWM4_IRQHandler()` and ultimately the
+original `am13e_app_motor_fault_shutdown()`.
+These are **negative protection proofs with no drive active**;
+they do not yet prove Trip kills an already armed active native
+motor. G13B2B's separate QTest virtual output test establishes
+immediate PWM suppression for artificially configured QTest PWM.
+
+## G13B2E — Positive native DShot-to-gate probe: OPEN until demonstrated
+
+`tests/g13b2_native_drive_probe.py` is an experimental bounded
+original-ELF probe. It uses a genuine PA26 DShot600 waveform via
+TIMG4/real DMA to update the guest-owned throttle, waits for the
+original `am13e_motor_output_start()` and
+`am13e_power_stage_enable()` functions, then independently reads
+the actual GPIO PB13 level, six MCPWM pads, PWM TBCLK and OST flags.
+Without all of these *observed native guest actions*, the probe
+prints `G13B2E_OPEN_NO_POSITIVE_NATIVE_DRIVE_PROOF`, not PASS.
+Only `--require-drive` enforces the positive acceptance in a
+separate strict run. It must never substitute register or
+firmware state writes for a positive validation.
+
+Native closed-loop remains entirely **OPEN** after this stage;
+no native motor speed, BEMF zero-cross feedback, phase
+commutation causality or real electrical hardware approval
+has been established.
