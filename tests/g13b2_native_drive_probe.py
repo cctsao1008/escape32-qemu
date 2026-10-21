@@ -308,7 +308,21 @@ def run(args):
                         evidence["saw_gate_call"] = saw_gate_call
                         print("G13B2E_DIAGNOSTIC " +
                               json.dumps(evidence, sort_keys=True), flush=True)
-                        if evidence["status"] == "NATIVE_GATE_ON":
+                        if args.require_bemf_reject:
+                            pre = evidence.get("native_start_preconditions", {})
+                            if (evidence["status"] != "NATIVE_MOTOR_START_REJECTED" or
+                                    pre.get("am13e_app_motor_nfault_trip_ready_return") != 1 or
+                                    pre.get("am13e_app_motor_bemf_reference_start_ready_return") != 0 or
+                                    pre.get("native_start_return") != 0 or
+                                    evidence["saw_gate_call"] or
+                                    evidence["start_entry"]["pb13_dout"] != 0):
+                                raise AssertionError(
+                                    "Uncalibrated BEMF Reference failed to "
+                                    "reject motor startup independently of "
+                                    "healthy native nFAULT Trip")
+                            print("PASS_G13B2E_ORIGINAL_ELF_UNCALIBRATED_BEMF "
+                                  "REJECTS_MOTOR_START_GATE_OFF", flush=True)
+                        elif evidence["status"] == "NATIVE_GATE_ON":
                             print("PASS_G13B2E_ORIGINAL_SIM_ONLY_GATE_PWM_AUTHORIZATION "
                                   "NOT_SENSORLESS_CLOSED_LOOP", flush=True)
                         elif args.require_drive:
@@ -351,10 +365,16 @@ def main():
     p.add_argument("--slice-ms", type=int, default=300)
     p.add_argument("--runtime-slices", type=int, default=20)
     p.add_argument("--require-drive", action="store_true")
+    p.add_argument("--require-bemf-reject", action="store_true",
+                   help="Require native uncalibrated BEMF refuses start, "
+                        "while nFAULT is healthy; no spoofed ready state")
     p.add_argument("--artifact", type=Path)
     a = p.parse_args()
     if not a.qemu.is_file() or not a.elf.is_file():
         p.error("Missing QEMU or genuine SIM_ONLY ELF")
+    if a.require_drive and a.require_bemf_reject:
+        p.error("Cannot simultaneously require positive drive and "
+                "an uncalibrated BEMF rejection")
     run(a)
 
 
