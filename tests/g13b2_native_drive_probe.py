@@ -53,6 +53,76 @@ def resume_to(rsp, target, hardfault, slice_ms, slices, label):
                          f"0x{target:08x} in {slices} bounded slices")
 
 
+def trace_original_start_preconditions(rsp, symbols, armed,
+                                       hardfault, slice_ms, max_slices):
+    """Inspect actual native readiness return values; no guest mutations.
+
+    Do not assume which guard rejected motor startup. Watch calls to
+    the two separate original-ELF readiness functions, their real
+    caller-return PCs and final motor_output_start return register.
+    """
+    original_return = rsp.reg(14) & ~1
+    if not 0x6000 <= original_return < 0x80000:
+        raise AssertionError("Original motor start LR outside app text")
+    watched = ("am13e_app_motor_nfault_trip_ready",
+               "am13e_app_motor_bemf_reference_start_ready")
+    entrances = {symbols[name]: name for name in watched}
+    pending = {}
+    result = {}
+    add_bp(rsp, original_return)
+    armed.add(original_return)
+    for addr in sorted(entrances):
+        add_bp(rsp, addr)
+        armed.add(addr)
+    try:
+        for i in range(max_slices * 8):
+            stop, paused = continue_bounded(rsp, slice_ms)
+            if not stop.startswith(("S02", "T02", "S05", "T05")):
+                raise RuntimeError(f"Native start trace stop={stop!r}")
+            cpu = observer(rsp)
+            pc = cpu["pc"]
+            if pc == hardfault or cpu["cfsr"] or cpu["hfsr"]:
+                raise AssertionError(f"CPU fault during native start {cpu}")
+            if paused:
+                continue
+            if pc == original_return:
+                result["native_start_return"] = rsp.reg(0)
+                print("G13B2E_NATIVE_START_FUNCTION_RETURNS " +
+                      json.dumps(result, sort_keys=True), flush=True)
+                return result
+            if pc == symbols[FAULT_FN]:
+                result["status"] = "FAULT_RESET_INSIDE_START"
+                return result
+            if pc in entrances:
+                name = entrances[pc]
+                lr = rsp.reg(14) & ~1
+                if not 0x6000 <= lr < 0x80000 or lr in pending or lr == original_return:
+                    raise AssertionError(f"Invalid native readiness return: {name}, {lr:x}")
+                del_bp(rsp, pc)
+                armed.remove(pc)
+                add_bp(rsp, lr)
+                armed.add(lr)
+                pending[lr] = name
+                result[name + "_called"] = 1
+                continue
+            if pc in pending:
+                name = pending.pop(pc)
+                result[name + "_return"] = rsp.reg(0)
+                print(f"G13B2E_NATIVE_PRECONDITION {name} "
+                      f"return_value={rsp.reg(0)}", flush=True)
+                del_bp(rsp, pc)
+                armed.remove(pc)
+                continue
+            raise AssertionError(f"Native start trace unexpected PC={pc:08x}")
+        result["status"] = "START_TRACE_TIMEOUT"
+        return result
+    finally:
+        for addr in (original_return, *entrances.keys(), *pending.keys()):
+            if addr in armed:
+                del_bp(rsp, addr)
+                armed.remove(addr)
+
+
 def run(args):
     app_vector_from_elf(args.elf)
     wfi = native_wfi_locations(args.elf, args.objdump)
@@ -60,7 +130,9 @@ def run(args):
     symbols = {
         name: elf_function_address(args.elf, name)[0]
         for name in ("am13e_app_io_dshot_packet", "am13e_motor_output_start",
-                     "am13e_power_stage_enable", FAULT_FN)
+                     "am13e_power_stage_enable", FAULT_FN,
+                     "am13e_app_motor_nfault_trip_ready",
+                     "am13e_app_motor_bemf_reference_start_ready")
     }
     evidence = {"status": "OPEN_NOT_NATIVE_DRIVE", "native_elf": str(args.elf)}
     with tempfile.TemporaryDirectory(prefix="g13b2e-probe-") as tmp:
@@ -188,6 +260,16 @@ def run(args):
                                       "GUEST_ORIGINAL_FIRMWARE", flush=True)
                                 del_bp(rsp, state["pc"])
                                 armed.remove(state["pc"])
+                                preconditions = trace_original_start_preconditions(
+                                    rsp, symbols, armed, hardfault,
+                                    args.slice_ms, args.runtime_slices)
+                                evidence["native_start_preconditions"] = preconditions
+                                if preconditions.get("status"):
+                                    evidence["status"] = preconditions["status"]
+                                    break
+                                if preconditions.get("native_start_return") != 1:
+                                    evidence["status"] = "NATIVE_MOTOR_START_REJECTED"
+                                    break
                                 continue
                             if state["pc"] == symbols["am13e_power_stage_enable"]:
                                 saw_gate_call = True
