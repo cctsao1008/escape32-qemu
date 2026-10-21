@@ -22,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from elf_image import elf_function_address, app_vector_from_elf
 from g13b_native_no_drive import symbol_address
 from g12_runtime_progress import native_wfi_locations
+from g13b_native_wfi import wait_for_native_main_wfi
 from g11_exception_lifecycle import (
     RSP, wait_for_socket, reach_release, observer,
     add_bp, del_bp, continue_bounded
@@ -91,20 +92,21 @@ def main():
     p.add_argument("--throttle", type=int, default=1000)
     p.add_argument("--startup-steps", type=int, default=32768)
     p.add_argument("--slice-ms", type=int, default=300)
+    p.add_argument("--runtime-slices", type=int, default=12)
     p.add_argument("--artifact", type=Path)
     args = p.parse_args()
     if not args.qemu.is_file() or not args.elf.is_file():
         p.error("Missing QEMU or original native ELF")
-    if not 10 <= args.slice_ms <= 1500:
-        p.error("Bounded slice invalid")
+    if not 10 <= args.slice_ms <= 1500 or not 1 <= args.runtime_slices <= 30:
+        p.error("Bounded slice or runtime-slices invalid")
     app_vector_from_elf(args.elf)
 
     # Target must be an actual firmware function address from the ELF,
     # never a simulator-specified callback or hardcoded magic PC.
     native_callback = elf_function_address(
         args.elf, "am13e_app_io_dshot_packet")[0]
-    original_wfi = native_wfi_locations(
-        args.elf, "arm-none-eabi-objdump")[0]
+    native_wfi_pcs = native_wfi_locations(
+        args.elf, "arm-none-eabi-objdump")
     throt_addr = symbol_address(args.elf, "throt")
     events = []
     with tempfile.TemporaryDirectory(prefix="e62-g13b1-native-") as tmp:
@@ -145,15 +147,13 @@ def main():
                     raise RuntimeError("Timed IRQ stepping unavailable")
                 release, hardfault, scans = reach_release(
                     rsp, args.elf, args.startup_steps)
-                armed = {original_wfi, hardfault}
-                for pc in armed:
+                armed = {*native_wfi_pcs, hardfault}
+                for pc in sorted(armed):
                     add_bp(rsp, pc)
                 try:
-                    stop, interrupted = continue_bounded(rsp, args.slice_ms)
-                    if interrupted or not stop.startswith(("S05", "T05")):
-                        raise AssertionError("Original main WFI not reached")
-                    if rsp.reg(15) != original_wfi:
-                        raise AssertionError("Fault or unexpected pre-WFI stop")
+                    observed_wfi = wait_for_native_main_wfi(
+                        rsp, native_wfi_pcs, hardfault, args.slice_ms,
+                        args.runtime_slices, stage="B1_PRE_COMMAND_WFI")
                     if rsp.mem32(throt_addr) != 0:
                         raise AssertionError("Reference throttle not neutral")
                     if not gate_disconnected(rsp):
@@ -163,8 +163,14 @@ def main():
                         raise AssertionError("Native TIMG4 PA26 pinmux absent")
                     if rsp.mem32(WAVE + 0x08) != 0:
                         raise AssertionError("PA26 waveform fixture not clear")
-                    del_bp(rsp, original_wfi)
-                    armed.remove(original_wfi)
+                    # All WFI breakpoints must be removed before
+                    # command ingress: firmware may follow either
+                    # real WFI branch while decoding the external wire.
+                    for native_wfi in native_wfi_pcs:
+                        del_bp(rsp, native_wfi)
+                        armed.remove(native_wfi)
+                    print(f"G13B1_PRE_COMMAND_NATIVE_WFI=0x{observed_wfi:08x}",
+                          flush=True)
                     frame = queue_dshot600_wire(qtest, args.throttle)
                     add_bp(rsp, native_callback)
                     armed.add(native_callback)
