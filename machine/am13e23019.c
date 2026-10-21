@@ -317,6 +317,22 @@ typedef struct AM13ESimFeedback {
 } AM13ESimFeedback;
 
 /* G13B1 waveform scheduling only; PA26 physical capture stays G7B-owned. */
+typedef struct AM13ETripCMP {
+    MemoryRegion mmio;
+    struct AM13ETrip *trip;
+    unsigned index;
+    uint16_t reg[0x74U / 2U];
+} AM13ETripCMP;
+typedef struct AM13ETrip {
+    MemoryRegion input_xbar, pwm_xbar, stimulus;
+    struct AM13EMachineState *machine;
+    uint32_t input_sel[28], input_pa_raw;
+    uint32_t pwm_g0[8], pwm_g1[8], pwm_invert;
+    AM13ETripCMP cmps[3];
+    uint16_t oc_input[3];
+    bool oc_valid[3];
+} AM13ETrip;
+
 typedef struct AM13EPA26Wave {
     MemoryRegion mmio;
     QEMUTimer *timer;
@@ -432,6 +448,7 @@ struct AM13EMachineState {
     AM13ESimTimer gtimer[AM13E_SIM_TIMER_COUNT];
     AM13EDMA dma0;
     AM13ESimPWM pwm4;
+    AM13ETrip trip;
     AM13ESimFeedback feedback;
     MemoryRegion sim_pa26_inject;
     AM13EPA26Wave pa26_wave;
@@ -1457,6 +1474,8 @@ static void am13e_pwm4_irq_update(AM13ESimPWM *p)
     }
 }
 
+#include "am13e_trip_safety.inc"
+
 static bool am13e_pwm4_clock_allowed(const AM13ESimPWM *p)
 {
     const AM13EMachineState *s = p->machine;
@@ -1654,6 +1673,16 @@ static uint32_t am13e_pwm4_raw_aq(AM13ESimPWM *p, unsigned out,
         *valid = false; /* unsupported PRD/down-AQ or TOGGLE */
         return 0;
     }
+    /* A real asynchronous OST overrides effective output levels.
+     * Only modeled LOW/LOW TZA/TZB is considered safe/valid.
+     */
+    if (p->reg[0xb0U / 4U] & (AM13E_G13B2_TZ_OST2 |
+                              AM13E_G13B2_TZ_OST3)) {
+        if ((p->reg[0xacU / 4U] & 0xfU) != 0xaU) {
+            *valid = false;
+        }
+        return 0U;
+    }
     result = zro == 2U ? 1U : 0U;
     if (ca && ca <= c && ca <= p->reg[0x14U / 4U]) {
         uint32_t action = (aq >> 4U) & 3U;
@@ -1790,7 +1819,7 @@ static MemTxResult am13e_pwm4_write(void *opaque, hwaddr off,
         am13e_pwm4_rearm(p);
         return MEMTX_OK;
     case 0x90U:
-        p->reg[off / 4U] = data & 0x18U;
+        p->reg[off / 4U] = data & 0x1cU;
         am13e_pwm4_irq_update(p);
         return MEMTX_OK;
     case 0x98U:
@@ -1801,12 +1830,30 @@ static MemTxResult am13e_pwm4_write(void *opaque, hwaddr off,
         p->irqs |= data & 0x18U;
         am13e_pwm4_irq_update(p);
         return MEMTX_OK;
+    case 0xa0U:
+        if (data & ~(AM13E_G13B2_TZ_OST2 | AM13E_G13B2_TZ_OST3)) {
+            return am13e_pwm4_invalid(p, off, true, size);
+        }
+        p->reg[off / 4U] = data;
+        am13e_g13b2_trip_update(p->machine);
+        return MEMTX_OK;
+    case 0xb4U:
+        /* Guest W1C never clears a physically active Trip source. */
+        p->reg[0xb0U / 4U] &= ~(data & (AM13E_G13B2_TZ_OST2 |
+                                         AM13E_G13B2_TZ_OST3));
+        if (!(p->reg[0xb0U / 4U] & (AM13E_G13B2_TZ_OST2 |
+                                    AM13E_G13B2_TZ_OST3))) {
+            p->irqs &= ~AM13E_G13B2_INT_OST;
+        }
+        am13e_g13b2_trip_update(p->machine);
+        am13e_pwm4_irq_update(p);
+        return MEMTX_OK;
     case 0xf4U:
         if (data & 2U) p->latch = false;
         if (data & 1U) p->latch = true;
         if (data & 4U) am13e_pwm4_shadow_load(p);
         return MEMTX_OK;
-    case 0xf8U: case 0x94U: case 0x20U: case 0x88U:
+    case 0xf8U: case 0x94U: case 0x20U: case 0x88U: case 0xb0U:
         return am13e_pwm4_invalid(p, off, true, size);
     default:
         p->reg[off / 4U] = data;
@@ -1973,6 +2020,7 @@ static MemTxResult am13e_sim_motor_sysctl_write(AM13EMachineState *s,
             am13e_g10_stop_counter(&s->feedback);
         }
         s->sim_mc_power = data & AM13E_SIM_MCPERIPH_MASK;
+        am13e_g13b2_trip_update(s);
         if (s->feedback.ecctl2 & 0x10U) {
             am13e_g10_ovf_rearm(&s->feedback);
         }
@@ -3290,6 +3338,7 @@ static void am13e_handoff_reset(void *opaque)
     s->sysctl_mclkcfg = AM13E_SYSCTL_MCLKCFG_INITIAL;
     s->sysctl_systemcfg = 0U;
     am13e_sim_motor_sysctl_reset(s);
+    am13e_g13b2_reset(s);
     s->sysctl_xtalcr = AM13E_SYSCTL_XTALCR_INITIAL;
     s->sysctl_hsclken = AM13E_SYSCTL_HSCLKEN_INITIAL;
     s->sysctl_hsclkcfg = 0;
@@ -3445,6 +3494,34 @@ static void am13e_init(MachineState *machine)
                           AM13E_SIM_PWM_OBS_SIZE);
     memory_region_add_subregion(sysmem, AM13E_SIM_PWM_OBSERVER,
                                 &s->pwm4.observer);
+
+    /* G13B2: native independent physical fault routing + analog OC. */
+    s->trip.machine = s;
+    am13e_g13b2_reset(s);
+    memory_region_init_io(&s->trip.input_xbar, NULL,
+                          &am13e_g13b2_input_ops, &s->trip,
+                          "am13e-inputxbar-native", AM13E_G13B2_INPUTXBAR_SIZE);
+    memory_region_add_subregion(sysmem, AM13E_G13B2_INPUTXBAR_BASE,
+                                &s->trip.input_xbar);
+    memory_region_init_io(&s->trip.pwm_xbar, NULL,
+                          &am13e_g13b2_pwm_xbar_ops, &s->trip,
+                          "am13e-pwmxbar-native", AM13E_G13B2_PWMXBAR_SIZE);
+    memory_region_add_subregion(sysmem, AM13E_G13B2_PWMXBAR_BASE,
+                                &s->trip.pwm_xbar);
+    for (unsigned i = 0; i < 3U; ++i) {
+        AM13ETripCMP *c = &s->trip.cmps[i];
+        c->trip = &s->trip;
+        c->index = i;
+        memory_region_init_io(&c->mmio, NULL, &am13e_g13b2_cmp_ops, c,
+                              "am13e-oc-cmpss-native", AM13E_G13B2_CMP_SIZE);
+        memory_region_add_subregion(sysmem, AM13E_G13B2_CMP_BASE +
+                                    AM13E_G13B2_CMP_STRIDE * i, &c->mmio);
+    }
+    memory_region_init_io(&s->trip.stimulus, NULL,
+                          &am13e_g13b2_stim_ops, &s->trip,
+                          "esc-sim-external-current-samples", 0x1cU);
+    memory_region_add_subregion(sysmem, AM13E_G13B2_SOURCE_BASE,
+                                &s->trip.stimulus);
 
     /* G10 functional ECAP1/CMPSS0, powered by real SYSCTL bits.
      * The simulator-only analog port supplies explicit test voltages.
