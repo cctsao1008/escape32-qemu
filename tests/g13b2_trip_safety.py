@@ -42,14 +42,14 @@ def qualified(q):
     # PA22 / INPUTXBAR2 / PWM TRIP2 OST2
     q.write(XBAR_IN + 0x04, 22)
     q.write(XBAR_IN + 0x410, 1 << 22)
-    q.write(XBAR_PWM + 0x108, 1 << 21)
-    q.write(XBAR_PWM + 0x110, 0x54)  # CMPSS1+2+3 CTRIPH
+    q.write(XBAR_PWM + 0x140, 1 << 21)
+    q.write(XBAR_PWM + 0x180, 0x54)  # CMPSS1+2+3 CTRIPH
     q.write(XBAR_PWM + 0x30, 1 << 1) # active-low PA22 inverted
     q.write(PWM + 0xac, 0xa)         # TZA=B LOW physical trip override
     q.write(PWM + 0x90, 0x04)        # OST actual native interrupt enable
     q.write(PWM + 0xa0, OST2 | OST3)
-    assert q.read(XBAR_PWM + 0x108) == 0x200000
-    assert q.read(XBAR_PWM + 0x110) == 0x54
+    assert q.read(XBAR_PWM + 0x140) == 0x200000
+    assert q.read(XBAR_PWM + 0x180) == 0x54
     assert q.read(PWM + 0xa0) == (OST2 | OST3)
     assert q.read(PWM + 0xb0) == 0
     assert q.read(STIM + 0x10) == 0  # all external levels healthy
