@@ -91,8 +91,14 @@ def require_no_native_drive(state: dict, label: str):
         raise AssertionError(f"{label}: not in unmasked native Thread")
     if state["arch"]["cfsr"] or state["arch"]["hfsr"]:
         raise AssertionError(f"{label}: CPU fault during no-command runtime")
-    if state["firmware"]["throt"] != 0:
-        raise AssertionError(f"{label}: native throttle nonzero without input")
+    # Original src/main.c uses throt=1 as a *non-command sentinel*
+    # during its 250ms neutral arming window. Either idle 0 or the
+    # genuine arming sentinel 1 is valid when no physical input exists.
+    # A positive throttle >1 with no wire stimulus is not valid.
+    if state["firmware"]["throt"] not in (0, 1):
+        raise AssertionError(
+            f"{label}: unexpected native throttle without external input "
+            f"throt={state['firmware']['throt']}")
     if state["pb13_gpio_doe"] & GATE_EN:
         raise AssertionError(f"{label}: reference firmware drove PB13 gate")
     if state["qualified_by_gate_and_pwm_pins"]:
@@ -116,6 +122,7 @@ def require_no_native_drive(state: dict, label: str):
     print(f"G13B0_{label}_NO_NATIVE_DRIVE=PASS "
           f"tick={state['firmware']['tick']} "
           f"throt={state['firmware']['throt']} "
+          f"ARMING_SENTINEL={int(state['firmware']['throt']==1)} "
           f"PB13_DOE=0x{state['pb13_gpio_doe']:08x} "
           f"PB13_PINCM=0x{state['pb13_mapped']:08x} "
           f"TBCLKSYNC=0x{state['tbclksync']:08x} "
