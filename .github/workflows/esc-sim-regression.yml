@@ -104,6 +104,18 @@ jobs:
           set -euo pipefail
           ./build.sh
 
+      - name: G13B2A SIM_ONLY original ELF preflight (NO DRIVE gate)
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          python3 tests/g13b2_sim_only_preflight.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf /tmp/e62-fw-sim-only/AM13E-rev17.3.elf \
+            --steps 32768 \
+            --artifact artifacts/g13b2a-original-sim-only-preflight.json \
+            2>&1 | tee artifacts/g13b2a-original-sim-only-preflight.log
+          # This is deliberately a NO-UNQUALIFIED-DRIVE safety gate.
+          # An unmodeled nFAULT/OC trip is a blocked motor, not success.
       - name: Run G0-G10 tests against real ELF
         run: |
           set -euo pipefail
