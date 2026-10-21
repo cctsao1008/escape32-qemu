@@ -105,10 +105,23 @@ G13B1_NATIVE_RECEIVE_CALLBACK capture=32 delivered=32 dma_beats=32 dma_remaining
 PASS_G13B1_ORIGINAL_ELF_DSHOT_RX_FROM_PA26_WIRE
 ```
 
-The next stricter acceptance separately executes the **real callback
-body and return** and requires CRC return-value success and a change to
-the original firmware-owned `throt` global with gate still isolated.
-Merely entering that function is **not proof of CRC acceptance**.
+The stricter callback-return acceptance passed
+[CI run 39518162722](https://github.com/cctsao1008/escape32-qemu/actions/runs/39518162722):
+the *original* callback executed to its caller's real return PC,
+its native CRC check returned **1**, and the unchanged Rel17 code
+updated the original SRAM `throt` from **0 to 953** for DShot1000.
+PB13 gate remained disconnected:
+
+```text
+G13B1_NATIVE_CRC_THROTTLE_POLICY {"return_value": 1, "throttle_before": 0, "throttle_after": 953, "gate_still_isolated": true}
+PASS_G13B1_ORIGINAL_ELF_DSHOT_RX_CRC_THROTTLE GATE_STILL_ISOLATED_NOT_CLOSED_LOOP
+```
+
+The host writes only external physical PA26 edge queue state
+through its independent QTest socket, not guest `throt`,
+receiver SRAM, DMA interrupt status, PWM duty, gate or BEMF.
+**Native ingress and CRC/throttle command processing are established,
+but positive motor drive authorization and closed-loop are not.**
 
 Even a real
 callback proves only command **ingress**, not successful arming,
