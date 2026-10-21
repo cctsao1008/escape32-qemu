@@ -24,6 +24,7 @@ from g11_exception_lifecycle import (
     wait_for_socket
 )
 from g12_runtime_progress import native_wfi_locations
+from g13b_native_wfi import wait_for_native_main_wfi
 from tools.virtual_bldc import (
     OBS_BASE, GATE_EN, GPIO1_BASE, PINCM_BASE, MCPWM4_ROUTES,
     gate_and_pads_connected
@@ -125,10 +126,8 @@ def test_no_command(args):
     elf = args.elf.resolve()
     qemu = args.qemu.resolve()
     wfi = native_wfi_locations(elf, args.objdump)
-    # Original Rel17 has multiple real WFI instructions. The first
-    # one was independently shown by G12 to be reached/revisited with
-    # no command; do not invent a different main loop milestone.
-    wfi_pc = wfi[0]
+    # Every disassembled native-main WFI is only a candidate.
+    # Choose the actual executed WFI dynamically, not wfi[0].
     native_symbols = {name: symbol_address(elf, name, args.nm)
                       for name in ("throt", "tick")}
     with tempfile.TemporaryDirectory(prefix="g13b0-native-") as td:
@@ -167,37 +166,35 @@ def test_no_command(args):
                     raise AssertionError("Native reference armed before CPSIE")
                 print("G13B0_NATIVE_PRE_CPSIE_GATE_AND_PADS_ISOLATED=PASS",
                       flush=True)
-                armed = {wfi_pc, hardfault}
-                for pc in armed:
+                armed = {*wfi, hardfault}
+                for pc in sorted(armed):
                     add_bp(rsp, pc)
                 try:
                     for n in range(2):
-                        stop, interrupted = continue_bounded(rsp, args.slice_ms)
-                        if interrupted:
-                            raise AssertionError(
-                                f"Native main WFI not reached within "
-                                f"bounded run #{n} (not a PASS)")
-                        if not stop.startswith(("S05", "T05")):
-                            raise RuntimeError(f"Unexpected GDB stop: {stop}")
-                        pc = rsp.reg(15)
-                        if pc == hardfault:
-                            raise AssertionError(
-                                "Native firmware HardFault before no-drive proof")
-                        if pc != wfi_pc:
-                            raise AssertionError(f"Unexpected stop 0x{pc:08x}")
+                        observed_wfi = wait_for_native_main_wfi(
+                            rsp, wfi, hardfault, args.slice_ms,
+                            args.runtime_slices, stage=f"B0_WFI_{n}")
                         state = snapshot(rsp, native_symbols)
                         require_no_native_drive(state, f"WFI_{n}")
+                        state["observed_wfi_pc"] = observed_wfi
                         samples.append(state)
                         if n == 0:
-                            del_bp(rsp, wfi_pc)
-                            armed.remove(wfi_pc)
-                            result = rsp.command("s")  # genuine WFI
+                            # Execute this *actual* native WFI and
+                            # require forward execution before rearming.
+                            del_bp(rsp, observed_wfi)
+                            armed.remove(observed_wfi)
+                            result = rsp.command("s")
                             if not result.startswith(("S05", "T05")):
-                                raise RuntimeError("WFI not stepped")
-                            if rsp.reg(15) == wfi_pc:
-                                raise AssertionError("GDB did not advance past WFI")
-                            add_bp(rsp, wfi_pc)
-                            armed.add(wfi_pc)
+                                raise RuntimeError("Native WFI was not stepped")
+                            after = observer(rsp)
+                            if after["pc"] == observed_wfi:
+                                raise AssertionError(
+                                    "Guest PC did not advance past original WFI")
+                            if after["cfsr"] or after["hfsr"]:
+                                raise AssertionError(
+                                    "Native WFI step caused a CPU fault")
+                            add_bp(rsp, observed_wfi)
+                            armed.add(observed_wfi)
                 finally:
                     for pc in sorted(armed, reverse=True):
                         del_bp(rsp, pc)
@@ -232,12 +229,14 @@ def main():
     p.add_argument("--nm", default="arm-none-eabi-nm")
     p.add_argument("--startup-steps", type=int, default=32768)
     p.add_argument("--slice-ms", type=int, default=100)
+    p.add_argument("--runtime-slices", type=int, default=12,
+                   help="Max bounded native guest resume slices per WFI")
     p.add_argument("--artifact", type=Path)
     args = p.parse_args()
     if not args.elf.is_file() or not args.qemu.is_file():
         p.error("Original native ELF and compiled QEMU required")
-    if not 10 <= args.slice_ms <= 1000:
-        p.error("Bounded slice should be 10..1000 ms")
+    if not 10 <= args.slice_ms <= 1000 or not 1 <= args.runtime_slices <= 30:
+        p.error("Bounded slice should be 10..1000 ms, count 1..30")
     app_vector_from_elf(args.elf)
     test_no_command(args)
 
