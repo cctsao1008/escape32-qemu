@@ -71,3 +71,67 @@ All values in a virtual-board fixture are **simulation assumptions**
 unless independently backed by electrical schematic, gate-driver
 datasheet, measured thresholds and actual PCB wiring. They must
 never be marketed as validated E62 hardware safety data.
+
+## G13B2A — SIM_ONLY compile/build progress
+
+The **SIM_ONLY** profile now lives at
+`tests/fixtures/g13b2_sim_only_board.cmake` in the QEMU integration
+repository, NOT in ESCape32's production Reference source tree.
+It is applied to a second build of the pinned original-ELF source:
+
+```sh
+cmake -S /tmp/e62-escape32 -B /tmp/e62-fw-sim-only \
+  -G 'Unix Makefiles' \
+  -DESCAPE32_BUILD_AM13E=ON \
+  -DAM13E_SDK_ROOT=/tmp/e62-sdk \
+  -DG13B2_SIM_ONLY_OPT_IN=ON \
+  -DAM13E_BOARD_BOARD_PROFILE_FILE="$PWD/tests/fixtures/g13b2_sim_only_board.cmake" \
+  -DAM13E_BOOT_LINKER_SCRIPT=/tmp/e62-escape32/boot/mcu/AM13E/config.ld
+cmake --build /tmp/e62-fw-sim-only --target AM13E-rev17.3.elf -j 2
+```
+
+Profile values are **purely fabricated simulator assumptions**,
+not proposed E62 electrical configuration: active-high PB13;
+un-inverted independent MCPWM A/B; RED=32 ticks at virtual 100MHz
+(320ns); FED=0; minimum gap 32 ticks; active-low PA22 nFAULT;
+simulated hardware-reset gate inactive; CMPSS1/2/3 DACH=2048
+with non-inverted OC outputs. The original runtime safety
+preconditions, `motor_output_configuration.h` static assertions
+and native nFAULT/OC Trip readiness logic are unchanged.
+
+Explicit CMake opt-in is required; the CI negative configuration
+test must fail without `-DG13B2_SIM_ONLY_OPT_IN=ON`.
+The CI compares SHA/bytes of the baseline Reference ELF and the
+separately produced `SIM_ONLY` ELF to ensure the profile was
+actually compiled.
+
+[CI #39641209305](https://github.com/cctsao1008/escape32-qemu/actions/runs/39641209305)
+passed the opt-in rejection, independent SIM_ONLY native build,
+and unchanged Reference G0–G13 regressions.
+
+The new `tests/g13b2_sim_only_preflight.py` is a distinct
+**negative** native-ELF simulator check: it traces startup
+without any guest input/register spoofing, verifies physical gate
+and six outputs remain disconnected before independent Trip
+qualification, and records the first real CPU fault/BFAR. A
+positive Gate/Trip readiness verdict is **not** implied by this
+test or by successful firmware compilation.
+
+## G13B2B — Safety hardware model still required
+
+The current QEMU contains a functional MCPWM4 engine and
+CMPSS0/ECAP1 BEMF path. Its independent three-phase OC/Trip
+hardware still lacks complete native CMPSS1/2/3, INPUTXBAR,
+PWMXBAR and PWM4 OST2/OST3 asynchronous shutdown modeling.
+QEMU must model **actual signal propagation and latching**:
+an asserted PA22 nFAULT or any comparator overcurrent must
+set the corresponding OST even if CPU interrupts are masked;
+the PWM output observer must respect the hardware kill, and
+Firmware must observe/readback/acknowledge real protection
+state. Neither constant 'ready' reads nor host forcing PB13
+active is an acceptable workaround.
+
+Native positive arming and virtual motor closed-loop therefore
+remain OPEN pending separately demonstrated hardware Trip model,
+its negative/positive regression controls, and firmware-owned
+real DShot neutral window and commutation updates.
