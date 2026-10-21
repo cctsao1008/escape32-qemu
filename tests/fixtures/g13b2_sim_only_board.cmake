@@ -39,3 +39,17 @@ set(AM13E_BOARD_BOARD_DEFINITIONS
 )
 message(STATUS
   "G13B2 SIM_ONLY test build: virtual PB13/RED/FED/nFAULT/OC; NEVER HARDWARE-QUALIFIED")
+
+# G13B2E experimental opt-in: ideal virtual neutral reference.
+# Original non-SC5 AM13E HAL explicitly supports setting DACH through
+# AM13E_BEMF_INITIAL_DAC_CODE in am13e_app_motor_bemf_init(), invoking
+# the REAL am13e_app_motor_bemf_reference_set() safety preconditions.
+# The uncalibrated baseline profile does not supply this assumption.
+# Code 2048 is a SIMULATED 12-bit midscale level, NOT measured E62
+# Vbus/2, PCB analog attenuation, offset, calibration, or motor data.
+if(G13B2_SIM_ONLY_IDEAL_BEMF_REFERENCE)
+  list(APPEND AM13E_BOARD_BOARD_DEFINITIONS
+    AM13E_BEMF_INITIAL_DAC_CODE=2048)
+  message(WARNING
+    "G13B2E IDEAL VIRTUAL BEMF DACH=2048 TEST ONLY: uncalibrated, NOT E62 hardware data")
+endif()
