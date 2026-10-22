@@ -48,6 +48,25 @@ class TestNativeClosedLoopAudit(unittest.TestCase):
                         step=2,code=3,pwm=(0,0,0,6250,0,0)))
         self.assertFalse(a.qualified)
         self.assertEqual(len(a.sectors), 0)
+        self.assertEqual(a.unpowered_native_timg12_steps,0)
+
+    def test_unpowered_startup_step_does_not_poison_later_feedback(self):
+        a = NativeClosedLoopAudit()
+        a.ingest(**snap(100, pwm=(0,0,0,6220,0,0)))
+        a.ingest(**snap(200,cap=1,c1=150,sch=2,
+                        pwm=(0,0,0,6220,0,0)))
+        a.ingest(**snap(300,cap=1,c1=150,sch=2,srv=1,
+                        step=2,code=3,pwm=(0,0,0,6220,0,0)))
+        self.assertIsNone(a.pending)
+        self.assertEqual(a.unpowered_native_timg12_steps,1)
+        self.assertEqual(len(a.sectors),0)
+        # On a later power stage, the verifier can accept NEW
+        # physical evidence without crediting the early invalid one.
+        a.ingest(**snap(400,cap=1,c1=150,sch=2,srv=1,
+                        step=2,code=3,pwm=(620,0,0,6220,0,0)))
+        a.ingest(**snap(500,cap=2,c1=470,sch=3,srv=1,
+                        step=2,code=3,pwm=(620,0,0,6220,0,0)))
+        self.assertIsNotNone(a.pending)
 
     def test_no_cap1_change_rejected(self):
         a = NativeClosedLoopAudit()

@@ -37,6 +37,7 @@ class NativeClosedLoopAudit:
         self.pending = None
         self.sectors = []
         self.early_rejections = 0
+        self.unpowered_native_timg12_steps = 0
         self.qualified_power_snapshots = 0
         self.reason = "NO_NATIVE_POWERED_FEEDBACK_YET"
 
@@ -107,8 +108,15 @@ class NativeClosedLoopAudit:
                 if (now["step"] != (pending["pre_step"] % 6) + 1 or
                     now["selected_code"] == pending["pre_selected"]):
                     raise AssertionError("Original TIMG12 serviced without nextstep")
-                if (now["path_ok"] and pending["pre_pair"] is not None and
-                    now["power_pairs"] and
+                if pending["pre_pair"] is None:
+                    # Early six-step stages can occur before the physical
+                    # high-side pulse clears deadtime. This is an original
+                    # TIMG12 ISR but NOT a powered commutation. Discard
+                    # any expectation that this alone closes the loop.
+                    self.unpowered_native_timg12_steps += 1
+                    self.pending = None
+                    self.reason = "REAL_TIMG12_UNPOWERED_SECTOR_NOT_CREDITED"
+                elif (now["path_ok"] and now["power_pairs"] and
                     now["power_pairs"][0] != pending["pre_pair"] and
                     now["pwm_high"] != pending["pre_pwm"]):
                     if not isinstance(rpm, (int, float)) or rpm == 0:
@@ -134,6 +142,7 @@ class NativeClosedLoopAudit:
                     required_sectors=self.required_sectors,
                     completed_feedback_powered_sectors=len(self.sectors),
                     original_early_rejections=self.early_rejections,
+                    original_unpowered_timg12_steps=self.unpowered_native_timg12_steps,
                     powered_pwm_samples=self.qualified_power_snapshots,
                     sector_evidence=[s.to_dict() for s in self.sectors],
                     reason=self.reason)

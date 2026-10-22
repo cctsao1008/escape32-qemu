@@ -345,3 +345,8 @@ For the **separate** SIM_ONLY native closed-loop model, replace the old star-neu
 ## G13B3L separate effective power milestone
 
 The strict original-ELF loop now prints its *independent* effective power PASS only after three consecutive native WFI observations with physical opposite-phase upper/lower PWM, clean OST2/OST3, original enabled pads/Gate, at least two real model integrations under these measured outputs and nonzero physical model RPM. It is not an accepted BEMF or repeated commutation PASS; full closed-loop still requires six native accepted timed sectors. No output is ever driven by the Host.
+
+
+### Do not count early unpowered original ISR as closed loop
+
+Native Rel17 may advance the sixstep even when RED suppresses its high source. A TIMG12 service with NO prior physical high/low cross-phase path is logged as `REAL_TIMG12_UNPOWERED_SECTOR_NOT_CREDITED`, then cleared so genuinely later powered events can be tested. It is never counted among the required full feedback-dependent electrical rotations. No guest firmware variable or event is changed.
