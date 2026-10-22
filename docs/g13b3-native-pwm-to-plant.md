@@ -119,9 +119,26 @@ The *synthetic only* motor is specified as:
 The `--require-native-pwm --require-native-plant-seed` CI
 gate requires that the native six-output PWM is physically
 qualified, then produces nonzero *virtual* phase currents and
-motion over one carrier. The result records three computed
-BEMF codes for future feedback, but these are **not**
-published to CMPSS0/ECAP1 at this stage.
+motion over one carrier. **This gate has PASSED** in
+[full Firmware-backed CI #39756971492](https://github.com/cctsao1008/escape32-qemu/actions/runs/39756971492),
+using guest PWM high ticks `[0,0,0,6220,0,0]` and an observed
+6,251-tick carrier at 100MHz:
+
+```text
+G13B3B_ORIGINAL_PWM_ONE_PERIOD_PLANT_SEED
+  pwm_period_ns=62510
+  six_duties=[0,0,0,0.9950407934730443,0,0]
+  virtual_mechanical_rpm=3.858541213545304
+  virtual_torque_nm=0.006464673356297341
+  virtual_phase_currents_a=[0.1244,-0.2488,0.1244]
+  virtual_bemf_v=[0.000010,-0.048995,0.048985]
+  frontend_words=[67584,67582,67585] # 0x10000 valid + 12-bit ADC code
+PASS_G13B3B_GUEST_PWM_TO_ONE_PERIOD VIRTUAL_BLDC_NO_FEEDBACK_INJECTION
+```
+
+These are solely the response of the explicitly fictional
+`SIM_ONLY` motor model, **not** measured motor values. The three
+computed BEMF words are **not** written to CMPSS0/ECAP1 at this stage.
 
 One time step is not an operating motor: no rotor speed
 stability, BEMF zero-cross capture, six-step sector progression
