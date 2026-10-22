@@ -286,3 +286,35 @@ native `am13e_power_stage_enable` return/physical outputs proof.**
 The optional `--require-drive` gate is intentionally not switched
 on until the actual observation supports it; a passing generic
 regression is not itself a motor-start acceptance.
+
+## G13B2E — Native BEMF timebase calibration failure and modeled ECAP clock
+
+Native ELF stop log
+[run 39727024230](https://github.com/cctsao1008/escape32-qemu/actions/runs/39727024230)
+breaks at the **original** `bemf_fault()` entry. The caller is
+`am13e_app_motor_bemf_interval_select`. Original guest calibration
+state was `calibration_done=0`, `calibration_ticks=0`,
+`capture_ticks_per_ms=0`, `capture_timeout_ticks=0`,
+`reference_ready=1`, `selected_code=5`. The subsequent shutdown is
+the native safety response, **not** a Cortex-M or Trip defect.
+
+An explicit guest-only WFI wait was tested under the previous QEMU
+clock in [run 39727130616](https://github.com/cctsao1008/escape32-qemu/actions/runs/39727130616).
+After 24 genuine WFI visits it still showed `calibration_done=0`:
+`G13B2E` positive Gate remains **OPEN**. The test failed, correctly,
+rather than writing a fake calibration flag.
+
+Separately, the QEMU `machine/am13e_motor_feedback.inc` ECAP1 TSCTR
+had been modeled at **100 MHz (10 ns/count)**. TI's official AM13E230x
+SDK `ecap_capture_pwm` example explicitly configures ECAP at
+**200 MHz**, and the original firmware `am13e_app_motor_bemf_tick`
+independently expects `200000` TSCTR ticks per 1 ms from the 200MHz
+MCLK. The simulator's prior 100 MHz counter cannot satisfy those native
+calibration checks, even after sufficient SysTick servicing.
+
+The functional ECAP timebase is now 5 ns/count (200MHz). G10 native
+QTest regression checks exactly 200000 ticks/1ms, correct 32-bit wrap,
+ECAP stop/resume and strict no-phantom edges. This is not a 200MHz
+cycle-accurate CPU model; the QEMU `-icount` host instruction timing
+remains diagnostic. **Native calibration completion and positive Gate
+will only be accepted after a separate passing CI run.**
