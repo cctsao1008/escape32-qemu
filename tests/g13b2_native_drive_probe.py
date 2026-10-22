@@ -173,6 +173,7 @@ def run(args):
         name: elf_function_address(args.elf, name)[0]
         for name in ("am13e_app_io_dshot_packet", "am13e_motor_output_start",
                      "am13e_power_stage_enable", FAULT_FN,
+                     "MCPWM4_IRQHandler",
                      "am13e_app_motor_nfault_trip_ready",
                      "am13e_app_motor_bemf_reference_start_ready")
     }
@@ -270,7 +271,8 @@ def run(args):
                         # No host-authored motor start. Discover first
                         # native motor-output start or fault-reset outcome.
                         for name in ("am13e_motor_output_start",
-                                     "am13e_power_stage_enable", FAULT_FN):
+                                     "am13e_power_stage_enable",
+                                     "MCPWM4_IRQHandler", FAULT_FN):
                             add_bp(rsp, symbols[name])
                             armed.add(symbols[name])
                         saw_output_start = False
@@ -290,6 +292,21 @@ def run(args):
                                 if n == args.runtime_slices - 1:
                                     evidence.update(status="NO_NATIVE_START_WITHIN_BOUNDS",
                                                     cpu=state, runtime=current)
+                                continue
+                            if state["pc"] == symbols["MCPWM4_IRQHandler"]:
+                                # The native ET1 carrier-ZERO interrupt is
+                                # the only legitimate owner of the driver's
+                                # delayed gate release after two ZERO events.
+                                if state["ipsr"] != 44:
+                                    raise AssertionError(
+                                        "MCPWM4 native ISR entry without IRQ28/IPSR44")
+                                evidence["native_mcpwm4_irq_entry"] = (
+                                    pwm_native_event_snapshot(
+                                        rsp, args.elf, native_start_zero_counter))
+                                print("G13B2E_NATIVE_MCPWM4_IRQ_ENTRY_REAL "
+                                      "IPSR=44", flush=True)
+                                del_bp(rsp, state["pc"])
+                                armed.remove(state["pc"])
                                 continue
                             if state["pc"] == symbols[FAULT_FN]:
                                 evidence.update(status="NATIVE_SAFETY_FAULT_RESET",
