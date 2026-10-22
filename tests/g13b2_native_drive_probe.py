@@ -31,7 +31,7 @@ from g11_exception_lifecycle import (
 from g12_runtime_progress import native_wfi_locations
 from g13b_native_wfi import wait_for_native_main_wfi
 from g13b_native_no_drive import symbol_address
-from g13b_native_dshot import queue_dshot600_wire, WAVE, PA26
+from g13b_native_dshot import queue_dshot600_wire, WAVE, PA26, DMA
 from g13b2_native_safety import snapshot, verify, EXT_OC, PWM4
 from tools.virtual_bldc import gate_and_pads_connected
 from tools.native_pwm_qualification import observe_original_pwm
