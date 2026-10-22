@@ -753,6 +753,12 @@ def run(args):
             listener.bind(qtpath)
             listener.listen(1)
             listener.settimeout(15)
+            # Do not leave QEMU stderr in an undrained PIPE. When the
+            # original guest runs beyond initial capture, an emulator
+            # diagnostic burst can exhaust the pipe and block *both*
+            # QTest readl and the GDB RSP until socket timeouts.
+            # A real file preserves the evidence without backpressure.
+            qemu_log = open(Path(tmp) / "qemu-stderr.log", "w+b")
             proc = subprocess.Popen([
                 str(args.qemu.resolve()), "-M",
                 "am13e23019,esc-sim=on,esc-sim-nfault-asserted=off",
@@ -761,7 +767,7 @@ def run(args):
                 "-chardev", f"socket,path={gdbpath},server=on,wait=off,id=gdb0",
                 "-gdb", "chardev:gdb0", "-qtest", f"unix:path={qtpath}",
                 "-icount", "shift=2,sleep=off,align=off"
-            ], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+            ], stdout=subprocess.DEVNULL, stderr=qemu_log)
             qtconn = None
             armed = set()
             try:
@@ -1312,8 +1318,21 @@ def run(args):
                             print("G13B2E_OPEN_NO_POSITIVE_NATIVE_DRIVE_PROOF",
                                   flush=True)
                     finally:
+                        # Keep the original failure visible if the
+                        # simulator's control sockets became unresponsive.
+                        # A cleanup failure must not replace the real
+                        # triggering QTest/GDB exception in traceback.
+                        primary_failure = sys.exc_info()[1]
                         for pc in sorted(armed, reverse=True):
-                            del_bp(rsp, pc)
+                            try:
+                                del_bp(rsp, pc)
+                            except (TimeoutError, ConnectionError,
+                                    OSError, RuntimeError) as cleanup_error:
+                                if primary_failure is None:
+                                    raise
+                                print("G13B3_NATIVE_BP_CLEANUP_AFTER_FAILURE " +
+                                      repr(cleanup_error), flush=True)
+                                break
             finally:
                 if qtconn is not None:
                     qtconn.close()
@@ -1324,11 +1343,28 @@ def run(args):
                 except subprocess.TimeoutExpired:
                     proc.kill()
                     proc.wait(timeout=5)
-                if proc.stderr:
-                    if proc.returncode not in (0, -15):
-                        print("G13B2E_QEMU_STDERR " +
-                              proc.stderr.read()[-3000:])
-                    proc.stderr.close()
+                # Read log after process termination; no QEMU can block
+                # on an undrained pipe while original firmware is live.
+                try:
+                    qemu_log.flush()
+                    qemu_log.seek(0, 2)
+                    log_size = qemu_log.tell()
+                    if args.artifact is not None and log_size:
+                        from shutil import copyfile
+                        destination = args.artifact.with_suffix(
+                            ".qemu-stderr.log")
+                        destination.parent.mkdir(parents=True, exist_ok=True)
+                        copyfile(qemu_log.name, destination)
+                    if log_size and (args.extended_native_feedback_visits
+                                     or proc.returncode not in (0, -15)):
+                        qemu_log.seek(max(0, log_size - 8000))
+                        print("G13B3_QEMU_DIAGNOSTIC_STDERR "
+                              f"bytes={log_size} " +
+                              qemu_log.read().decode(
+                                  "utf-8", errors="replace"),
+                              flush=True)
+                finally:
+                    qemu_log.close()
     if args.artifact:
         args.artifact.parent.mkdir(parents=True, exist_ok=True)
         args.artifact.write_text(json.dumps(evidence, indent=2) + "\n")

@@ -290,3 +290,8 @@ New independent `--require-native-early-rejection` strict gate proves the physic
 ## G13B3I no-valid-BEMF original timeout (strict negative gate)
 
 The dedicated native-ELF QEMU run allows original motor Gate/PWM/BEMF arming, then supplies **no valid analog U/V/W** (QEMU BEMF stimulus port stays invalid). Guest SysTick alone must reach the original ECAP1 32.768ms timeout. PASS requires original BEMF armed→0, crossing_epoch_valid→0, ECAP TSCTR deadline, original TIMG12 `cancelled` increment, unchanged original `captured_events` and `rejected_events`, shared Rel17 `ertm=100000000` timeout reset, clear physical Trip, and all three QEMU inputs still invalid. Every WFI/timestamp is genuine original Cortex-M33 execution. Host does not write BEMF samples, guest SRAM, clocks, ADC, PWM, CAP1, IRQ, or fault flags. Board-level qualification is separate.
+
+
+## G13B3G extended feedback QEMU liveness instrumentation
+
+CI #39796856064 and #39797253832 failed *after* two native post-capture WFI observations: a QTest MMIO `readl` timed out, then the GDB breakpoint cleanup timed out. These are QEMU/test-transport liveness errors, **not** native sensorless-commutation observations. The probe previously spawned QEMU with `stderr=PIPE` while never draining the pipe until process termination; long-running diagnostics could therefore block the emulator itself. G13B3G now sends QEMU stderr to a disk-backed file, exports the complete log with the test artifact, and prints its tail for this diagnostic. Guest SRAM, PWM, IRQ, CAP1, gate and physical Trip behavior are unchanged. The original G13B3G positive qualification remains OPEN until a native accepted TIMG12 event and measured next-sector PWM are proved.
