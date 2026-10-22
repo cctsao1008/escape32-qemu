@@ -80,7 +80,7 @@ def extract_cfgdata(elf:bytes)->bytes:
                 raise ValueError("ELF symbol name unterminated")
             if names[name:end]!=b"cfgdata":
                 continue
-            if (info&15)!=1 or not APP_START<=val<APP_END or
+            if ((info&15)!=1 or not APP_START<=val<APP_END or
                 not 256<=length<=1024 or val+length>APP_END or
                 section>=shnum):
                 raise ValueError("Invalid source cfgdata object symbol")

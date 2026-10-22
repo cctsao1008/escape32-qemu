@@ -44,7 +44,7 @@ class OriginalCfgFlash(unittest.TestCase):
         cfg=make_cfg()
         payload,meta=factory_image(make_elf(cfg))
         self.assertEqual(payload[:len(cfg)],cfg)
-        self.assertEqual(payload[len(cfg):],b"\xff"*4)
+        self.assertEqual(payload[len(cfg):],b"\xff"*((-len(cfg))%8))
         self.assertEqual(meta["flash_base"],"0x00004000")
         self.assertEqual(meta["duty_rate_tenth_pct_per_ms"],100)
     def test_one_byte_cfg_rate_mismatch_fails_closed(self):
