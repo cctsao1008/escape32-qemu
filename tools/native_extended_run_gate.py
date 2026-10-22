@@ -8,7 +8,9 @@ The output is SIM_ONLY evidence, not board-current or thermal measurement.
 import argparse
 import json
 from pathlib import Path
+import sys
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from tools.native_closed_loop_audit import ORIGINAL_REL17_ROUTE
 
 
