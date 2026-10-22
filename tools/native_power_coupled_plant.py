@@ -33,6 +33,11 @@ class NativePowerCoupledBLDC(VirtualBLDC):
         self.coasting_intervals = 0
         self.max_measured_rpm = 0.0
         self.ever_powered = False
+        self.last_dc_input_power_w = 0.0
+        self.last_electromagnetic_power_w = 0.0
+        self.net_dc_input_energy_j = 0.0
+        self.net_electromagnetic_work_j = 0.0
+        self.mechanically_productive_intervals = 0
 
     def advance(self, duties, dt_s, *, gate_enabled):
         if len(duties) != 6 or not math.isfinite(dt_s) or dt_s <= 0:
@@ -86,10 +91,27 @@ class NativePowerCoupledBLDC(VirtualBLDC):
             if not all(math.isfinite(x) for x in
                        (new_omega, *self.iabc)):
                 raise FloatingPointError("Two-terminal BLDC model diverged")
+            # Energy/power refer to the ideal DC source and the
+            # electromagnetic rotor shaft only. These are SIM_ONLY
+            # model predictions, not measured E62 electrical watts or
+            # a semiconductor loss/efficiency computation.
+            dc_power = branch_v * branch_i
+            em_power = physical.electromagnetic_torque_nm * (
+                omega + new_omega) * 0.5
+            if not all(math.isfinite(x) for x in (dc_power, em_power)):
+                raise FloatingPointError("Two-terminal electric/mechanical power invalid")
+            self.last_dc_input_power_w = dc_power
+            self.last_electromagnetic_power_w = em_power
+            self.net_dc_input_energy_j += dc_power * dt_s
+            self.net_electromagnetic_work_j += em_power * dt_s
+            if dc_power > 0 and em_power > 0:
+                self.mechanically_productive_intervals += 1
             self.energized_intervals += 1
             self.ever_powered = True
             sample = self.sample(gate_enabled=True)
         else:
+            self.last_dc_input_power_w = 0.0
+            self.last_electromagnetic_power_w = 0.0
             self.coasting_intervals += 1
             # Physically open winding: no invented bus-to-neutral voltage.
             self.iabc = [0.0, 0.0, 0.0]

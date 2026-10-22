@@ -57,6 +57,25 @@ class RealPowerPath(unittest.TestCase):
             with self.assertRaises(ValueError):
                 NativePowerCoupledBLDC(motor().p,initial_electrical_rad=v)
 
+    def test_two_terminal_positive_real_power_work(self):
+        import math
+        m=NativePowerCoupledBLDC(
+            motor().p,initial_electrical_rad=-math.pi/6)
+        for _ in range(120):
+            m.advance((0,0,0,6250/6251,.20,0),.00005,gate_enabled=True)
+        self.assertGreater(m.net_dc_input_energy_j,0)
+        self.assertGreater(m.net_electromagnetic_work_j,0)
+        self.assertGreater(m.mechanically_productive_intervals,0)
+        self.assertGreater(m.sample().mechanical_rpm,0)
+    def test_sink_only_zero_power_and_work(self):
+        m=motor()
+        for _ in range(50):
+            m.advance((0,0,0,.9,0,0),.00005,gate_enabled=True)
+        self.assertEqual(m.net_dc_input_energy_j,0)
+        self.assertEqual(m.net_electromagnetic_work_j,0)
+        self.assertEqual(m.last_dc_input_power_w,0)
+        self.assertEqual(m.last_electromagnetic_power_w,0)
+
     def test_gate_off_does_not_apply_bus(self):
         m=motor()
         for _ in range(100):

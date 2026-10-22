@@ -782,6 +782,9 @@ def probe_native_sustained_power_feedback(
             if (effective_power_proof is None and
                     consecutive_powered_wfi >= 3 and
                     motor.energized_intervals >= 2 and
+                    motor.mechanically_productive_intervals >= 2 and
+                    motor.net_dc_input_energy_j > 0.0 and
+                    motor.net_electromagnetic_work_j > 0.0 and
                     abs(sample.mechanical_rpm) > 0):
                 effective_power_proof = {
                     "native_ecap_ticks": frame.native_ecap_ticks,
@@ -791,6 +794,14 @@ def probe_native_sustained_power_feedback(
                     "physical_power_pairs": path.different_phase_pairs,
                     "motor_energized_intervals": motor.energized_intervals,
                     "motor_rpm_after_measured_power": sample.mechanical_rpm,
+                    "simulated_dc_input_power_w":
+                        motor.last_dc_input_power_w,
+                    "simulated_electromagnetic_shaft_power_w":
+                        motor.last_electromagnetic_power_w,
+                    "simulated_net_dc_energy_j":
+                        motor.net_dc_input_energy_j,
+                    "simulated_net_electromagnetic_work_j":
+                        motor.net_electromagnetic_work_j,
                     "gate_connected": real_pwm.gate_and_pads,
                     "original_ost2_clear": not real_pwm.physical_ost2,
                     "original_ost3_clear": not real_pwm.physical_ost3}
@@ -863,6 +874,12 @@ def probe_native_sustained_power_feedback(
                 "motor_rpm": sample.mechanical_rpm,
                 "motor_energized_intervals": motor.energized_intervals,
                 "motor_coast_intervals": motor.coasting_intervals,
+                "simulated_dc_input_power_w": motor.last_dc_input_power_w,
+                "simulated_electromagnetic_shaft_power_w":
+                    motor.last_electromagnetic_power_w,
+                "simulated_net_dc_energy_j": motor.net_dc_input_energy_j,
+                "simulated_net_electromagnetic_work_j":
+                    motor.net_electromagnetic_work_j,
                 "real_completed_sectors": len(audit.sectors),
                 "analog_codes": [v & 0xfff for v in analog]
             }
