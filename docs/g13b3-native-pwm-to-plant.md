@@ -300,3 +300,8 @@ CI #39796856064 and #39797253832 failed *after* two native post-capture WFI obse
 ## G13B3G read-only TIMG12 status after accepted plant CAP1
 
 Full CI #39807871887 proved a second natural plant-derived rising CAP1 was accepted at 5.375ms, increased original TIMG12 `scheduled`, but a bounded 97-WFI observation lacked proof of TIMG12 ISR `serviced` plus changed six PWM. New native diagnostics take read-only snapshots of TIMG12 clock, +0x1804 CTRCTL, +0x1808 LOAD, +0x1800 count and IRQ MASK/RAW/MASKED at 0x40188000 relative hardware offsets, both immediately upon original accepted event and at the end of the wait. They separately report original guest serviced counter and qualified six-output PWM, to identify whether the timer did not start/expire, the interrupt was unmasked, or the original ISR actually ran without native commutation. The external host never writes these timer regs.
+
+
+## G13B3G Original TIMG12 ISR serviced but no six-PWM transition
+
+Full CI #39809528852 already confirms original guest TIMG12 at 100MHz initially has CTRCTL=1, LOAD=428299, counter=422268, IRQ mask=1, then the down-counter stops with original guest `serviced` 0→1 and IRQ raw/masked cleared; nevertheless effective six PWM remains `[0,0,0,6220,0,0]`. The problem is AFTER the real timer ISR, not timer clocking. A new read-only diagnostic compares original guest `runtime_aq_updates`, `runtime_commit_count`, `step`, `sine`, `prep`, `timer_armed` with six real MCPWM4 AQCTL shadow/active, compare shadow/active, GLCTL/GLSTS, force flags, before and after original ISR and its following carrier zeroes. No firmware logic, hardware register, or motor parameter is modified to manufacture an accepted step.

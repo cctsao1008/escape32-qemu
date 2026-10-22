@@ -254,6 +254,51 @@ def native_timeline_observe(rsp, qtest, bemf_state, *,
 
 
 
+
+
+def native_sixstep_diagnostics(rsp, qtest, bemf_state):
+    """All original guest SRAM and modeled MCPWM4 reads; never writes."""
+    names = ("runtime_aq_updates", "runtime_pwm_updates",
+             "runtime_commit_count", "runtime_phase_pending",
+             "physical_shadow_dirty", "physical_runtime_image",
+             "step", "sine", "prep", "sync", "oldstep",
+             "pending_code", "pending_interval",
+             "selected_code", "armed", "timer_armed", "scheduled",
+             "serviced", "ival")
+    guest = {
+        k: (rsp.mem32(bemf_state[k]) if k in bemf_state else None)
+        for k in names
+    }
+    # SDK MCPWM4 TI registers, not QEMU synthetic values. Observe
+    # ACTIVE AQCTL and their SHADOW pairs, six channel outputs.
+    active, shadow, compare_active, compare_shadow = [], [], [], []
+    for module in range(3):
+        base = PWM4 + 0x100 + module * 0x200
+        for sub in (0x20, 0x28):
+            active.append(qtest.read(base + sub))
+            shadow.append(qtest.read(base + sub + 4))
+        for sub in (0x00, 0x08):
+            compare_active.append(qtest.read(base + sub))
+            compare_shadow.append(qtest.read(base + sub + 4))
+    return {
+        "guest": guest,
+        "mcpwm4_glctl": qtest.read(PWM4 + 0xf0),
+        "mcpwm4_glsts": qtest.read(PWM4 + 0xf8),
+        "mcpwm4_software_force": [
+            qtest.read(PWM4 + 0x130 + module*0x200)
+            for module in range(3)
+        ],
+        "aq_active_six": active,
+        "aq_shadow_six": shadow,
+        "aq_active_equals_shadow": active == shadow,
+        "compare_active_six": compare_active,
+        "compare_shadow_six": compare_shadow,
+        "compare_active_equals_shadow": compare_active == compare_shadow,
+        "mcpwm4_period_active": qtest.read(PWM4 + 0x14),
+        "mcpwm4_period_shadow": qtest.read(PWM4 + 0x18),
+    }
+
+
 def step_unchanged_native_wfi(rsp, pc, *, armed_breakpoints, wfi,
                                hardfault, slice_ms, runtime_slices, stage):
     """Debugger-only step of original WFI; never edit firmware or QEMU clock."""
@@ -335,8 +380,13 @@ def seek_later_physical_bemf_commutation(
                     observe_native_timg12(
                         qtest.read,
                         native_ecap_ticks=qtest.read(ECAP1_TSCTR)).to_dict())
+                result["sixstep_at_acceptance"] = (
+                    native_sixstep_diagnostics(rsp, qtest, bemf_state))
                 print("G13B3G_NATIVE_TIMG12_AT_REAL_BEMF_ACCEPTANCE " +
                       json.dumps(result["native_timg12_at_acceptance"],
+                                 sort_keys=True), flush=True)
+                print("G13B3G_NATIVE_AQ_AT_REAL_BEMF_ACCEPTANCE " +
+                      json.dumps(result["sixstep_at_acceptance"],
                                  sort_keys=True), flush=True)
                 last_pwm_image = None
                 last_serviced = serviced_before
@@ -366,6 +416,11 @@ def seek_later_physical_bemf_commutation(
                         stage=f"G13B3G_TIMG12_WAIT_{wait+1}")
                 result["original_timg12_serviced_after_wait"] = last_serviced
                 result["native_pwm_after_wait"] = last_pwm_image
+                result["sixstep_after_wait"] = (
+                    native_sixstep_diagnostics(rsp, qtest, bemf_state))
+                print("G13B3G_NATIVE_AQ_AFTER_TIMG12_SERVICE " +
+                      json.dumps(result["sixstep_after_wait"],
+                                 sort_keys=True), flush=True)
                 result["native_timg12_after_wait"] = (
                     observe_native_timg12(
                         qtest.read,
@@ -776,7 +831,11 @@ def run(args):
                  "captured_events", "rejected_events",
                  "scheduled", "serviced", "ival",
                  "crossing_epoch", "crossing_epoch_valid",
-                 "cancelled", "ertm"):
+                 "cancelled", "ertm", "runtime_aq_updates",
+                 "runtime_pwm_updates", "runtime_commit_count",
+                 "runtime_phase_pending", "physical_shadow_dirty",
+                 "physical_runtime_image", "step", "sine", "prep",
+                 "sync", "oldstep", "timer_armed"):
         try:
             bemf_state[name] = symbol_address(args.elf, name)
         except RuntimeError:
