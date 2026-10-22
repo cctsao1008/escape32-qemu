@@ -154,7 +154,12 @@ def native_original_zero_throttle_arm(rsp, qtest, *, wfi, hardfault,
     # feed it. Retry the actual physical wire promptly; do not reset,
     # pause, feed, or reconfigure the firmware watchdog.
     first_zero_tick = rsp.mem32(bemf_state["tick"])
-    neutral_poll_ms = min(slice_ms, 80)
+    # Native CI evidence: two 80ms Host polls advanced up to 5228
+    # actual 16kHz Guest ticks before a second physical zero packet.
+    # That can consume the genuine input-WWDT window before the CRC
+    # callback. Poll the already-scheduled PA26 wave in shorter bounded
+    # intervals; no Guest clock or watchdog manipulation is permitted.
+    neutral_poll_ms = min(slice_ms, 25)
     neutral_poll_slices = 2
     max_physical_zero_packets = 4
     for attempt in range(max_physical_zero_packets):
@@ -1641,7 +1646,7 @@ def run(args):
                             try:
                                 resume_to(
                                     rsp, callback, hardfault,
-                                    min(args.slice_ms, 60)
+                                    min(args.slice_ms, 25)
                                     if positive_retransmit else args.slice_ms,
                                     2 if positive_retransmit
                                     else args.runtime_slices,
