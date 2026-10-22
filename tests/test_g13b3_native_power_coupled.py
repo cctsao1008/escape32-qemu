@@ -28,6 +28,23 @@ class RealPowerPath(unittest.TestCase):
         self.assertGreater(m.energized_intervals,0)
         self.assertTrue(m.ever_powered)
         self.assertGreater(abs(m.sample().mechanical_rpm),0)
+    def test_floating_third_phase_carries_no_fictitious_current(self):
+        m=motor()
+        m.advance((.3,0,0,.9,0,0),.00005,gate_enabled=True)
+        self.assertAlmostEqual(m.iabc[2],0.0,places=12)
+        self.assertAlmostEqual(m.iabc[0]+m.iabc[1],0.0,places=12)
+    def test_two_terminal_fraction_is_high_pwm_not_sink_bias(self):
+        m=motor()
+        m.advance((.01,0,0,.99,0,0),.00005,gate_enabled=True)
+        self.assertGreater(m.iabc[0],0)
+        # Expected branch current from VBUS * .01 across two windings
+        ideal=(24*.01/(2*.002))*.00005
+        self.assertAlmostEqual(m.iabc[0],ideal,places=9)
+    def test_nonqualified_multiple_sources_rejected(self):
+        m=motor()
+        with self.assertRaisesRegex(ValueError,"single-source"):
+            m.advance((.1,0,.2,0,0,1),.00005,gate_enabled=True)
+
     def test_gate_off_does_not_apply_bus(self):
         m=motor()
         for _ in range(100):

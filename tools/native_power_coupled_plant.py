@@ -34,9 +34,52 @@ class NativePowerCoupledBLDC(VirtualBLDC):
                  if i != j and duties[2*i] > 0 and duties[2*j+1] > 0]
         energized = bool(gate_enabled and pairs)
         if energized:
+            if (len(pairs) != 1 or
+                    duties[2*pairs[0][1]+1] < 0.9):
+                raise ValueError(
+                    "Original six-step source/return conduction window "
+                    "not a qualified single-source static sink")
+            hi, lo = pairs[0]
+            if any(duties[2*i] + duties[2*i+1] > 1.0+1e-9
+                   for i in range(3)):
+                raise ValueError("Overlapping high/low output in one phase")
+            # Two energized windings are in SERIES across the pulsed
+            # DC bus. The third floating winding is OPEN; it cannot
+            # carry fictitious star-neutral current or torque.
+            # The sink has essentially constant conduction in the
+            # SIM_ONLY non-PWM_ENABLE topology. min(upper,sink) is an
+            # ideal average overlapping conduction fraction, not a
+            # switching/diode recovery model.
+            fraction = min(duties[2*hi], duties[2*lo+1])
+            old = self.sample(gate_enabled=True)
+            branch_i = (self.iabc[hi]-self.iabc[lo])*0.5
+            branch_v = self.p.vbus_v * fraction
+            line_bemf = old.bemf_phase_v[hi]-old.bemf_phase_v[lo]
+            branch_i += (
+                (branch_v-line_bemf-2*self.p.phase_resistance_ohm*branch_i)
+                /(2*self.p.phase_inductance_h) * dt_s)
+            self.iabc = [0.0, 0.0, 0.0]
+            self.iabc[hi] = branch_i
+            self.iabc[lo] = -branch_i
+            physical = self.sample(gate_enabled=True)
+            omega = self.omega_mech_rad_s
+            sign = math.copysign(1.0, omega) if omega else 0.0
+            accel = (
+                physical.electromagnetic_torque_nm -
+                self.p.viscous_friction_nm_per_rad_s*omega -
+                self.p.load_torque_nm*sign
+            )/self.p.inertia_kg_m2
+            new_omega = omega + accel*dt_s
+            self.omega_mech_rad_s = new_omega
+            self.angle_mech_rad = (
+                self.angle_mech_rad+(omega+new_omega)*0.5*dt_s
+            ) % (2.0*math.pi)
+            if not all(math.isfinite(x) for x in
+                       (new_omega, *self.iabc)):
+                raise FloatingPointError("Two-terminal BLDC model diverged")
             self.energized_intervals += 1
             self.ever_powered = True
-            sample = super().advance(duties, dt_s, gate_enabled=True)
+            sample = self.sample(gate_enabled=True)
         else:
             self.coasting_intervals += 1
             # Physically open winding: no invented bus-to-neutral voltage.
