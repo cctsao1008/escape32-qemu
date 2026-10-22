@@ -957,13 +957,28 @@ and entering its own fault-shutdown function, without test-written
 guest register state.
 ([Run 39694030611](https://github.com/cctsao1008/escape32-qemu/actions/runs/39694030611)).
 
-**G13B2E positive original-ELF Gate/PWM actuation is NOT YET
-ACCEPTED.** A diagnostic probe injects only genuine PA26
-DShot600 external edges and safe external current samples; it
-must witness the actual firmware `motor_output_start()`, PWM
-ZERO interrupts and `power_stage_enable()` with GPIO/PINCM/TBCLK
-readback before positive PASS. An independent virtual BLDC→BEMF
-closed-loop regression remains OPEN.
+**G13B2E positive original-ELF Gate/PWM authorization PASS in
+SIM_ONLY profile**, with a separate original-calibrated virtual BEMF
+reference (explicit test-only assumption). Native DShot600 CRC maps
+throttle to 953, native SysTick/ECAP sets calibration_done=1,
+original `motor_output_start()` passes independent nFAULT and BEMF
+guards, true MCPWM4 ET1 ZERO IRQs consume the required two carrier
+events, and original `power_stage_enable()` drives PB13 HIGH with
+six PWM pad routes connected, running TBCLKSYNC and no Trip. A
+separate physical PA22 nFAULT test asserts OST2 and forces **all
+six physical PWM outputs LOW with the CPU halted**, after which
+the original fault handler shuts down Gate. These are enforced CI
+gates in [run 39728279382](https://github.com/cctsao1008/escape32-qemu/actions/runs/39728279382).
+They do not qualify E62 hardware.
+
+**G13B3A read-only native PWM qualification is being measured**:
+`tools/native_pwm_qualification.py` inspects the genuine original
+AQ/DB six HIGH-tick output image after Gate ON along with physical
+GPIO/PINCM, clock and OST state; an all-zero phase differential is
+not enough for VirtualBLDC power. The independent closed-loop
+Virtual BLDC → calculated BEMF → CMPSS0/ECAP1 → native repeated
+commutation validation remains **OPEN**.
+See [G13B3 qualification and motor-coupling boundaries](docs/g13b3-native-pwm-to-plant.md).
 
 See [G13B native drive-authorization status and tests](docs/g13b-native-drive-authorization.md)
 and [G13B2 exact SIM_ONLY and real-board distinction](docs/g13b2-board-electrical-contract.md).
