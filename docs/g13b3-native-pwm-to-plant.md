@@ -395,3 +395,8 @@ With original Cfg correctly factory-programmed into simulated Flash, ARM=1 is no
 ## G13B3N original zero-DShot ARM input diagnostics
 
 Full CI #39830150198 proved original cfgdata Flash source and provisioned Flash readback, but a zero DShot600 frame scheduled during original ARM WFI did not reach the native `am13e_app_io_dshot_packet()` callback in 20 bounded debugger slices. A read-only physical ingress probe now reports queued versus **delivered** physical PA26 transitions, capture and DMA beats, original Guest throt/tick and native Cfg words at bounded CPU-paused intervals. This distinguishes a stuck external QEMU edge scheduler, disabled capture/DMA, bad original configuration, or unexpected CPU state; no fake neutral packet, Guest SRAM patch, IRQ, GPIO or timer register override is permitted. Strict native six sector Gate/Trip qualification is unchanged.
+
+
+## G13B3N bounded genuine neutral DShot retransmission
+
+The original Rel17 ARM path requires a neutral DShot600 signal then 4,000 real SysTick events of continuous zero throttle. One physical zero packet is not proof of robust receiver acquisition. If its original callback is not entered within a bounded interval, the Host may send at most **three additional genuine external PA26 zero-throttle frames**, each only after the previous 32 transitions were physically delivered and the PA26 line returned to idle. No Guest SRAM throttle, flags, ISR, DMA, SysTick, ARM window or motor registers are bypassed or authored. Any real CPU fault, unexpected breakpoint or incomplete original physical frame remains terminal. Every trial logs actual PA26 captures and DMA beats; the strict six-sector native motor proof remains completely unchanged.

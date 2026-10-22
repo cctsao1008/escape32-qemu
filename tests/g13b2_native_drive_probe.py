@@ -127,17 +127,52 @@ def native_original_zero_throttle_arm(rsp, qtest, *, wfi, hardfault,
                   json.dumps(sample_physical_neutral_ingress(n, state),
                              sort_keys=True), flush=True)
 
-    try:
-        resume_to(rsp, callback, hardfault, slice_ms,
-                  runtime_slices, "G13B3N_NATIVE_NEUTRAL_DSHOT_CALLBACK",
-                  on_pause=report_physical_ingress)
-    except AssertionError:
-        print("G13B3N_NEUTRAL_RX_BLOCKER_SOURCE_AND_PHYSICAL_STATUS " +
-              json.dumps(
-                  sample_physical_neutral_ingress(
-                      runtime_slices, observer(rsp)), sort_keys=True),
-              flush=True)
-        raise
+    # A DShot ESC is normally driven by a continuing physical neutral
+    # signal during the original 250ms arming window. If the very first
+    # complete pulse train was lost while the Guest receiver entered
+    # its native RX state, resend a NEW physical zero packet. Neither
+    # helper alters Guest DMA, throttle, vector, SysTick or ARM window.
+    max_physical_zero_packets = 4
+    for attempt in range(max_physical_zero_packets):
+        if attempt:
+            if (qtest.read(WAVE + 0x10) != 0 or
+                    qtest.read(WAVE + 0x08) != 32 or
+                    qtest.read(WAVE + 0x0c) != 32):
+                raise AssertionError(
+                    "Cannot requeue neutral while real PA26 waveform "
+                    "is still busy or missing delivered wire edges")
+            if qtest.read(WAVE + 0x14) != 0:
+                raise AssertionError("Neutral PA26 must return low at frame end")
+            new_frame = queue_dshot600_wire(
+                qtest, 0, allow_zero=True, reset_completed_wave=True)
+            if new_frame != frame:
+                raise AssertionError("Retransmitted genuine neutral mismatch")
+            print("G13B3N_PHYSICAL_ZERO_DSHOT_RETRANSMISSION " +
+                  json.dumps({"attempt": attempt + 1,
+                              "frame": new_frame,
+                              "previous_delivered": 32,
+                              "guest_writes": False}, sort_keys=True),
+                  flush=True)
+        try:
+            resume_to(
+                rsp, callback, hardfault, slice_ms,
+                runtime_slices,
+                "G13B3N_NATIVE_NEUTRAL_DSHOT_CALLBACK",
+                on_pause=report_physical_ingress)
+            break
+        except AssertionError as exc:
+            print("G13B3N_NEUTRAL_RX_ATTEMPT_BLOCKER " +
+                  json.dumps(
+                      dict(attempt=attempt + 1, error=str(exc),
+                           physical=sample_physical_neutral_ingress(
+                               runtime_slices, observer(rsp))),
+                      sort_keys=True), flush=True)
+            # Only an actual callback timeout may be retried. A
+            # HardFault, unexpected breakpoint or any unsafe wire state
+            # is terminal. Never bypass original Rel17 ARM policy.
+            if ("native guest did not reach" not in str(exc) or
+                    attempt + 1 == max_physical_zero_packets):
+                raise
     if (rsp.reg(0) & 0xffff) != 0:
         raise AssertionError("Original callback did not decode DShot neutral")
     if (qtest.read(WAVE + 0x0c) != 32 or
