@@ -128,3 +128,34 @@ stability, BEMF zero-cross capture, six-step sector progression
 or guest consumption of that feedback is demonstrated.
 **G13B3C** must explicitly prove repeated causally coupled
 native PWM → plant → comparator ECAP → native commutation events.
+
+## G13B3C preflight — Native BEMF capture eligibility (read-only)
+
+The next isolated prerequisite is **not to create an ECAP1 edge**.
+First ensure the actual original guest has selected/armed an
+appropriate comparator/capture path. The current code supplies
+`tools/native_bemf_qualification.py`, whose inputs include the
+read-only original ELF `selected_code` and `armed` globals.
+
+Per pinned `motor_bemf.c::compctl(x)` the logical `(x&3)=1..3`
+maps to CMPSS0 HPMUX 0..2. `x&4` selects an ECAP rising edge
+and otherwise a falling edge. The eligibility check requires:
+
+- Original guest `armed=1` and valid selected phase;
+- The actual CMPHPMXSEL matching the native selected phase;
+- Powered CMPSS0/ECAP1, active nonzero DAC reference and enabled
+  high-comparator majority-filter output;
+- ECAP1 Input45, CAPLDEN, running native TSCTR, CEVT1 interrupt
+  and correct guest-selected event polarity.
+
+The `--probe-native-bemf` flag reports actual register values at
+the first native Gate return. If the original firmware has **not**
+armed its BEMF capture yet, the output must remain *Not Ready*;
+host BEMF injection or a synthetic ECAP event would be invalid.
+This is a read-only diagnostic, not a new positive capture PASS.
+
+Actual closed-loop G13B3C will be accepted only upon repeated
+native ECAP CEVT1 IRQs caused by *computed motor* BEMF samples,
+and subsequent original firmware commutation/duty changes.
+Do not force capture flags, stage firmware variables, or write
+the MCPWM AQ output registers from the host.
