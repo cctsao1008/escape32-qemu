@@ -1533,6 +1533,14 @@ def run(args):
                         # Native, non-synthetic DShot600 command. A second
                         # frame is legal only after the external PA26 queue
                         # delivered all 32 genuine zero-throttle edges.
+                        # PA26/TIMG4/DMA counters accumulate across genuine
+                        # neutral retransmissions. The next positive frame
+                        # must contribute its OWN complete 32-edge capture
+                        # rather than requiring the all-time totals to be 32.
+                        # This preserves the original hardware-backed ingress
+                        # and CRC acceptance as strict independent gates.
+                        positive_capture_before = qtest.read(PA26 + 0x08)
+                        positive_dma_before = qtest.read(PA26 + 0x0c)
                         frame = queue_dshot600_wire(
                             qtest, args.throttle,
                             reset_completed_wave=bool(
@@ -1546,13 +1554,34 @@ def run(args):
                         delivered = rsp.mem32(WAVE + 0x0c)
                         capture = rsp.mem32(PA26 + 0x08)
                         dma = rsp.mem32(PA26 + 0x0c)
+                        positive_capture_delta = capture - positive_capture_before
+                        positive_dma_delta = dma - positive_dma_before
+                        positive_receipt = {
+                            "frame": frame,
+                            "guest_frame": guest_frame,
+                            "physical_wave_delivered_this_packet": delivered,
+                            "original_pa26_capture_before": positive_capture_before,
+                            "original_pa26_capture_after": capture,
+                            "original_pa26_capture_this_packet": positive_capture_delta,
+                            "original_dma_beat_before": positive_dma_before,
+                            "original_dma_beat_after": dma,
+                            "original_dma_beats_this_packet": positive_dma_delta,
+                            "guest_writes": False,
+                        }
                         evidence.update(frame=frame, guest_frame=guest_frame,
                                         wave_delivered=delivered,
-                                        tim_capture=capture, dma_beats=dma)
+                                        tim_capture=capture, dma_beats=dma,
+                                        positive_frame_receipt=positive_receipt)
+                        print("G13B3N_ORIGINAL_NATIVE_POSITIVE_RX_FRAME_CAUSAL_DELTA " +
+                              json.dumps(positive_receipt, sort_keys=True),
+                              flush=True)
                         if (frame != guest_frame or delivered != 32 or
-                                capture != 32 or dma != 32):
+                                positive_capture_delta != 32 or
+                                positive_dma_delta != 32):
                             raise AssertionError(
-                                "SIM_ONLY command not from genuine PA26+DMA")
+                                "SIM_ONLY command missing its own genuine "
+                                "32 PA26/TIMG4/DMA edges: " +
+                                json.dumps(positive_receipt, sort_keys=True))
                         ret = rsp.reg(14) & ~1
                         if not 0x6000 <= ret < 0x80000:
                             raise AssertionError("Unexpected native DShot LR")
