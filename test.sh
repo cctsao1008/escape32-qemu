@@ -98,6 +98,7 @@ python3 "$ROOT/tests/g13b2_trip_safety.py" \
 python3 "$ROOT/tests/test_virtual_bldc.py"
 python3 "$ROOT/tests/test_g13b3_native_pwm.py"
 python3 "$ROOT/tests/test_g13b3_native_seed.py"
+python3 "$ROOT/tests/test_g13b3_native_bemf.py"
 python3 "$ROOT/tests/g1_handoff.py" \
     --qemu "$ROOT/.build/qemu-src/build/qemu-system-arm" \
     --elf "$1"
