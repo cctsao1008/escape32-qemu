@@ -216,7 +216,7 @@ jobs:
             --slice-ms 300 --runtime-slices 20 \
             --wait-native-bemf-calibration --calibration-wfi-visits 24 \
             --require-drive --require-native-pwm \
-            --require-native-plant-seed \
+            --require-native-plant-seed --probe-native-bemf \
             --artifact artifacts/g13b2e-native-calibrated-dshot.json \
             2>&1 | tee artifacts/g13b2e-native-calibrated-dshot.log
           # Only the guest's own SysTick/ECAP calibration_done can permit
