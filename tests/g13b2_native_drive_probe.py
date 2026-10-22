@@ -51,6 +51,7 @@ from tools.native_bemf_timeout_qualification import (
 )
 from tools.native_timg12_observer import observe_native_timg12
 from tools.native_pwm_deadband_diagnostic import native_deadband_source_clamp
+from tools.native_power_path_qualification import qualify_cross_phase_bridge
 from tools.virtual_bldc_feedback import SIM_BEMF_INPUT
 
 FAULT_FN = "am13e_app_motor_fault_reset"
@@ -420,8 +421,12 @@ def seek_later_physical_bemf_commutation(
                     now_serviced = rsp.mem32(bemf_state["serviced"])
                     last_pwm_image = pwm.to_dict()
                     last_serviced = now_serviced
+                    path_proof = qualify_cross_phase_bridge(
+                        pwm.six_high_ticks, period_ticks=pwm.period_ticks,
+                        gate_trip_qualified=pwm.acceptable_for_plant)
+                    result["last_measured_cross_phase_power_path"] = path_proof.to_dict()
                     if (now_serviced > serviced_before and
-                            pwm.acceptable_for_plant and
+                            path_proof.qualifies_necessary_two_terminal_drive and
                             pwm.six_high_ticks != native_pwm_before):
                         result.update(
                             native_timg12_commutation_proved=True,
@@ -466,6 +471,8 @@ def seek_later_physical_bemf_commutation(
                       last_pwm_image["six_high_ticks"] ==
                       native_pwm_before):
                     result["reason"] = "ORIGINAL_TIMG12_SERVICED_NO_PWM_CHANGE"
+                    result["native_power_path_after_wait"] = (
+                        result.get("last_measured_cross_phase_power_path"))
                 else:
                     result["reason"] = "NATIVE_PWM_DIFFERENT_NOT_QUALIFIED"
                 print("G13B3G_NATIVE_TIMG12_AFTER_BOUNDED_WAIT " +

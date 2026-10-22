@@ -315,3 +315,8 @@ Full CI #39811079471 proved original Rel17 TIMG12 serviced=1, step 1→2, origin
 ## G13B3J original deadband/source-clamp diagnosis
 
 Full CI #39812286626 proved original guest sixstep AQ changed from `[0,0,0,2,18,0]` to `[18,0,0,2,0,0]`, with logical compare 3→9, but physical AQ remains `[1,1,1,512,1,1]`. Native backend intentionally clamps high-side PWM for compare <= DBRED−DBFED when the pulse would be shorter than deadtime. Read-only snapshots now include actual native DBCTL, DBRED and DBFED and an auditable per-source clamp classification; absent ELF locals remain unobservable, never fabricated. An additional SIM_ONLY DShot1500 test evaluates the Firmware's authentic ramp versus baseline DShot1000 without touching guest SRAM, ADC, IRQ, PWM, Trip or safety checks. A logical step or low-side-only output is not proof of energized motor closed loop.
+
+
+## G13B3K conservative two-terminal motor-power-path gate
+
+The original G13A reduced-order star-neutral model accepts a low-side-only waveform as a nonzero phase voltage; this can yield nonzero simulated angular speed/BEMF despite **no** physical high-side source. Full CI #39812286626 measured `[0,0,0,6220,0,0]`: only one low-side output had a positive duty count. That does not qualify an electrically energized BLDC bridge. New strict **G13B3G closed-loop acceptance only** requires measured upper-side PWM and measured lower-side conduction on a distinct phase, as well as original Gate/Trip safety; it is necessary but not sufficient for a realistic motor. The pre-existing G13A SIM_ONLY model regression remains unchanged, while any future claim of accepted native real commutation cannot use its single-leg plant artifact. No PWM, IRQ, DShot, ADC, DAC or firmware variable is written by this gate.
