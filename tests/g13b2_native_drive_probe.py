@@ -59,6 +59,31 @@ from tools.virtual_bldc_feedback import SIM_BEMF_INPUT
 
 FAULT_FN = "am13e_app_motor_fault_reset"
 
+def native_pa26_receiver_rearm_snapshot(qtest):
+    """Read only TI DMA0 CH2 registers; never clear a DMA IRQ or re-arm it.
+
+    A rejected wire packet cannot be counted as DShot CRC or 32-beat
+    evidence. A later *new* physical frame is permitted only if ORIGINAL
+    guest firmware has organically restarted CH2 with a fresh 32-word
+    buffer and configured TIMG4 GEN_EVENT1 trigger #34.
+    """
+    base = DMA + 0x1000
+    ctl = qtest.read(base + 0x220)
+    remaining = qtest.read(base + 0x22c)
+    trigger = qtest.read(base + 0x118) & 0xff
+    raw = qtest.read(base + 0x030)
+    return {
+        "dma_ch2_control": hex(ctl),
+        "dma_ch2_remaining": remaining,
+        "dma_ch2_trigger": trigger,
+        "dma_raw_irq": hex(raw),
+        "source_owned_fresh_rx_buffer": bool(
+            (ctl & 2) and remaining == 32 and trigger == 34
+            and not (raw & (1 << 24))),
+        "guest_register_writes": False,
+    }
+
+
 
 
 
@@ -1604,12 +1629,43 @@ def run(args):
                                     qtest.read(WAVE + 0x14) == 0)
                                 last_cap = qtest.read(PA26 + 0x08)
                                 last_dma = qtest.read(PA26 + 0x0c)
-                                if (not wave_ok or
-                                        last_cap-positive_capture_before != 32 or
-                                        last_dma-positive_dma_before != 32):
+                                rx_rearm = native_pa26_receiver_rearm_snapshot(
+                                    qtest)
+                                capture_delta = (last_cap -
+                                                 positive_capture_before)
+                                dma_delta = last_dma - positive_dma_before
+                                if not wave_ok or capture_delta != 32:
                                     raise AssertionError(
                                         "G13B3M cannot requeue incomplete "
-                                        "native PA26/DMA positive frame")
+                                        "physical PA26 positive waveform")
+                                if dma_delta != 32:
+                                    # Explicitly record this packet as
+                                    # REJECTED, never a CRC/valid-frame
+                                    # success. An ordinary DShot stream may
+                                    # send a new frame after the ORIGINAL
+                                    # firmware detects a desync and rearms
+                                    # TIMG4->DMA0 CH2. We observe this native
+                                    # register ownership, not repair it.
+                                    print(
+                                        "G13B3M_REJECTED_PARTIAL_DMA_PHYSICAL_FRAME " +
+                                        json.dumps({
+                                            "physical_capture_delta": capture_delta,
+                                            "dma_delta": dma_delta,
+                                            "native_receiver": rx_rearm,
+                                            "counted_as_valid_frame": False,
+                                            "host_guest_writes": False,
+                                        }, sort_keys=True), flush=True)
+                                    if (dma_delta < 0 or dma_delta >= 32 or
+                                            not rx_rearm[
+                                                "source_owned_fresh_rx_buffer"]):
+                                        raise AssertionError(
+                                            "G13B3M partial DMA was NOT "
+                                            "naturally rearmed by original "
+                                            "Guest; strict fail closed")
+                                elif not rx_rearm["source_owned_fresh_rx_buffer"]:
+                                    raise AssertionError(
+                                        "G13B3M even a complete wire frame "
+                                        "must wait for original DMA RX rearm")
                                 if (rsp.mem32(throt) != 0 or
                                         rsp.mem32(bemf_state["valid_frame_feeds"])
                                         != valid_feeds_start):
@@ -1640,7 +1696,9 @@ def run(args):
                                           "attempt": positive_attempt + 1,
                                           "frame": repeated,
                                           "elapsed_native_systick_since_zero_crc": elapsed,
-                                          "previous_frame_full_32_dma": True,
+                                          "previous_frame_full_32_dma": dma_delta == 32,
+                                          "previous_frame_rejected_for_dma_shortfall": dma_delta != 32,
+                                          "original_receiver_rearmed": rx_rearm,
                                           "host_guest_writes": False
                                       }, sort_keys=True), flush=True)
                             try:
@@ -1668,6 +1726,8 @@ def run(args):
                                         qtest.read(PA26 + 0x08)-positive_capture_before,
                                     "dma_beats_this_packet":
                                         qtest.read(PA26 + 0x0c)-positive_dma_before,
+                                    "native_receiver":
+                                        native_pa26_receiver_rearm_snapshot(qtest),
                                     "host_guest_writes": False,
                                 }
                                 print("G13B3M_NATIVE_POSITIVE_RX_ATTEMPT_BLOCKER " +
