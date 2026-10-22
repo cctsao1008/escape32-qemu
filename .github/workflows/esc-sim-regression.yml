@@ -315,56 +315,40 @@ jobs:
           # This is DIAGNOSTIC only, not a positive commutation gate:
           # prints G13B3G_OPEN when native Rel17 rejects an early BEMF.
           # Never rewrite Rel17 ival/timing or manufacture TIMG12 events.
-      - name: G13B3L separate SIM_ONLY source-initialized Cfg fast-ramp ELF
+      - name: G13B3N original-ELF Cfg Flash factory provisioning SIM_ONLY
         run: |
           set -euo pipefail
-          # Application-only QEMU has no production Boot config handoff.
-          # Do NOT alter the original pinned source, linker or baseline ELF.
-          cp -a /tmp/e62-escape32 /tmp/e62-escape32-simcfg
-          python3 tools/native_sim_cfg_startup.py \
-            --sim-only-opt-in \
-            --linker /tmp/e62-escape32/mcu/AM13E/config.ld \
-            --output /tmp/e62-escape32-simcfg/mcu/AM13E/config.ld
-          # The only modified source artifact is the isolated SIM_ONLY
-          # linker .cfg=>.data mapping. TI startup copies native cfgdata.
-          # GNU diff exits 1 for expected differences. Preserve
-          # fail-closed behavior for exit >1 (I/O or tool failure).
-          set +e
-          diff -qr /tmp/e62-escape32 /tmp/e62-escape32-simcfg \
-            > artifacts/g13b3l-source-fork-diff.txt
-          diff_status=$?
-          set -e
-          test "$diff_status" -eq 1
-          test "$(wc -l < artifacts/g13b3l-source-fork-diff.txt)" -eq 1
-          grep -F 'mcu/AM13E/config.ld' artifacts/g13b3l-source-fork-diff.txt
-          cmake -S /tmp/e62-escape32-simcfg -B /tmp/e62-fw-fast-ramp \
+          # Original main.c:792 unconditionally copies 0x4000 Flash Cfg
+          # into Guest SRAM. Keep original linker .cfg NOLOAD untouched.
+          cmake -S /tmp/e62-escape32 -B /tmp/e62-fw-fast-ramp \
             -G 'Unix Makefiles' -DESCAPE32_BUILD_AM13E=ON \
             -DAM13E_SDK_ROOT=/tmp/e62-sdk \
             -DG13B2_SIM_ONLY_OPT_IN=ON \
             -DG13B2_SIM_ONLY_IDEAL_BEMF_REFERENCE=ON \
             -DAM13E_BOARD_BOARD_PROFILE_FILE="$PWD/tests/fixtures/g13b3l_sim_only_ramp.cmake" \
-            -DAM13E_BOOT_LINKER_SCRIPT=/tmp/e62-escape32-simcfg/boot/mcu/AM13E/config.ld \
+            -DAM13E_BOOT_LINKER_SCRIPT=/tmp/e62-escape32/boot/mcu/AM13E/config.ld \
             2>&1 | tee artifacts/g13b3l-fast-ramp-configure.log
           cmake --build /tmp/e62-fw-fast-ramp \
             --target AM13E-rev17.3.elf -j 2 \
             2>&1 | tee artifacts/g13b3l-fast-ramp-build.log
           test -s /tmp/e62-fw-fast-ramp/AM13E-rev17.3.elf
-          # Actual cfg must now belong to a load-initialized .data image,
-          # not an uninitialized .cfg. Fail if linker made an empty cfg.
           arm-none-eabi-readelf -SW /tmp/e62-fw-fast-ramp/AM13E-rev17.3.elf \
             | tee artifacts/g13b3l-fast-ramp-elf-sections.txt
-          if grep -E '^[[:space:]]*\[[[:space:]]*[0-9]+\][[:space:]]+\.cfg[[:space:]]' \
-            artifacts/g13b3l-fast-ramp-elf-sections.txt; then
-            echo 'ERROR: SIM_ONLY Native Cfg was still a NOLOAD section'
-            exit 1
-          fi
-          echo PASS_G13B3L_ORIGINAL_CFG_INITIALIZED_BY_TI_STARTUP
+          grep -E '\.cfg[[:space:]]+NOBITS' \
+            artifacts/g13b3l-fast-ramp-elf-sections.txt
+          # Derive genuine Rel17 Cfg bytes from source cfgdata in ELF
+          # and factory-program only QEMU pre-reset FLASH_CFG1.
+          python3 tools/native_sim_cfg_flash.py \
+            --sim-only-opt-in \
+            --elf /tmp/e62-fw-fast-ramp/AM13E-rev17.3.elf \
+            --output artifacts/g13b3n-original-cfg-flash.bin \
+            2>&1 | tee artifacts/g13b3n-original-cfg-flash.log
           if cmp -s /tmp/e62-fw-fast-ramp/AM13E-rev17.3.elf \
             /tmp/e62-fw-sim-ideal-bemf/AM13E-rev17.3.elf; then
-            echo 'ERROR: SIM_ONLY DUTY_RATE change not represented in ELF'
+            echo 'ERROR: SIM_ONLY DUTY_RATE not represented in original ELF'
             exit 1
           fi
-          echo PASS_G13B3L_SEPARATE_NATIVE_REL17_DUTY_RATE_100_ELF
+          echo PASS_G13B3N_ORIGINAL_ELF_AND_PREBOOT_FLASH_CFG_PROVISIONING
       - name: G13B3L original ELF physically powered continuous motor-loop diagnostic
         run: |
           set -euo pipefail
@@ -377,6 +361,7 @@ jobs:
             --wait-native-bemf-calibration --calibration-wfi-visits 24 \
             --require-drive --require-native-pwm \
             --require-native-bemf-arm --require-native-sustained-loop \
+            --sim-only-cfg-flash artifacts/g13b3n-original-cfg-flash.bin \
             --sustained-wfi-visits 1500 --sustained-sectors 6 \
             --initial-electrical-degrees -30 \
             --artifact artifacts/g13b3l-native-six-powered-sector-loop.json \

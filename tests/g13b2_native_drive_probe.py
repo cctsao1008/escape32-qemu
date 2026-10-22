@@ -1197,7 +1197,7 @@ def run(args):
             # QTest readl and the GDB RSP until socket timeouts.
             # A real file preserves the evidence without backpressure.
             qemu_log = open(Path(tmp) / "qemu-stderr.log", "w+b")
-            proc = subprocess.Popen([
+            command = [
                 str(args.qemu.resolve()), "-M",
                 "am13e23019,esc-sim=on,esc-sim-nfault-asserted=off",
                 "-kernel", str(args.elf.resolve()), "-S",
@@ -1205,7 +1205,17 @@ def run(args):
                 "-chardev", f"socket,path={gdbpath},server=on,wait=off,id=gdb0",
                 "-gdb", "chardev:gdb0", "-qtest", f"unix:path={qtpath}",
                 "-icount", "shift=2,sleep=off,align=off"
-            ], stdout=subprocess.DEVNULL, stderr=qemu_log)
+            ]
+            if args.sim_only_cfg_flash:
+                # QEMU generic firmware loader programs factory Cfg
+                # into real modeled Flash 0x4000 BEFORE CPU runs.
+                # No debugger/QTest write to Guest SRAM or active motor.
+                command += [
+                    "-device",
+                    "loader,file="+str(args.sim_only_cfg_flash.resolve())+
+                    ",addr=0x4000,force-raw=on"]
+            proc = subprocess.Popen(
+                command,stdout=subprocess.DEVNULL,stderr=qemu_log)
             qtconn = None
             armed = set()
             try:
@@ -1225,6 +1235,21 @@ def run(args):
                         raise RuntimeError("Missing CPU XML")
                     if rsp.command("Qqemu.sstep:1") != "OK":
                         raise RuntimeError("Native virtual-time stepping not enabled")
+                    if args.sim_only_cfg_flash:
+                        expected=args.sim_only_cfg_flash.read_bytes()
+                        # Read actual guest FLASH, not Guest mutable Cfg.
+                        # This is the original Rel17 memcpy source.
+                        for offset in (0,28,32):
+                            actual=rsp.mem32(0x4000+offset)
+                            want=int.from_bytes(expected[offset:offset+4],
+                                                "little")
+                            if actual!=want:
+                                raise AssertionError(
+                                    "QEMU factory cfg Flash did not provision "
+                                    f"0x{0x4000+offset:08x}: "
+                                    f"observed=0x{actual:08x} expected=0x{want:08x}")
+                        print("PASS_G13B3N_ORIGINAL_FIRMWARE_FLASH_CFG_SOURCE_"
+                              "PRE_CPU_READBACK 0x4000",flush=True)
                     _, hardfault, _ = reach_release(
                         rsp, args.elf, args.startup_steps)
                     armed = {*wfi, hardfault}
@@ -1925,10 +1950,21 @@ def main():
     p.add_argument("--require-bemf-reject", action="store_true",
                    help="Require native uncalibrated BEMF refuses start, "
                         "while nFAULT is healthy; no spoofed ready state")
+    p.add_argument("--sim-only-cfg-flash",type=Path,
+                   help="G13B3N pre-boot factory Cfg Flash 0x4000 loader; "
+                        "strict SIM_ONLY only, not Guest RAM or production Flash")
     p.add_argument("--artifact", type=Path)
     a = p.parse_args()
     if not a.qemu.is_file() or not a.elf.is_file():
         p.error("Missing QEMU or genuine SIM_ONLY ELF")
+    if a.require_native_sustained_loop and not a.sim_only_cfg_flash:
+        p.error("Strict G13B3L requires provisioned original Flash Cfg")
+    if a.sim_only_cfg_flash:
+        if (not a.require_native_sustained_loop or
+            not a.sim_only_cfg_flash.is_file() or
+            not 256 <= a.sim_only_cfg_flash.stat().st_size <= 4096):
+            p.error("SIM_ONLY Flash factory Cfg only with strict native "
+                    "loop and a bounded binary image")
     if not 1 <= a.calibration_wfi_visits <= 64:
         p.error("BEMF calibration wait visits must be 1..64")
     if (a.trip_after_native_bemf_injection and
