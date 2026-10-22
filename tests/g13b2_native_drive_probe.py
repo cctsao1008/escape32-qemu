@@ -60,6 +60,79 @@ from tools.virtual_bldc_feedback import SIM_BEMF_INPUT
 FAULT_FN = "am13e_app_motor_fault_reset"
 
 
+
+
+
+def native_original_zero_throttle_arm(rsp, qtest, *, wfi, hardfault,
+                                     armed_breakpoints, throt,
+                                     callback, slice_ms, runtime_slices):
+    """Complete original ARM=1 250ms neutral by physical DShot600=0.
+
+    Enter only at source-owned arming __WFI. The receiver must accept
+    an actual physical PA26->TIMG4->DMA0->CRC packet and set original
+    throt=0. Then the native 16kHz SysTick must truly elapse >=4000
+    ticks and the original Rel17 main reaches its running-loop WFI.
+    No fake Guest throttle, timer fast-forward, or bypass of ARM.
+    """
+    if len(wfi) != 2 or not wfi[0] < wfi[1]:
+        raise AssertionError(
+            "Pinned original Rel17 WFI layout cannot locate arming vs run")
+    before = rsp.mem32(throt)
+    if before != 1:
+        raise AssertionError(
+            "Expected source original ARM window to force throttle=1; "
+            f"actual={before}")
+    # Stop at original actual callback, not a Host-created decoder.
+    frame = queue_dshot600_wire(qtest, 0, allow_zero=True)
+    if frame != 0:
+        raise AssertionError("Not an actual DShot600 neutral packet")
+    add_bp(rsp, callback)
+    armed_breakpoints.add(callback)
+    resume_to(rsp, callback, hardfault, slice_ms,
+              runtime_slices, "G13B3N_NATIVE_NEUTRAL_DSHOT_CALLBACK")
+    if (rsp.reg(0) & 0xffff) != 0:
+        raise AssertionError("Original callback did not decode DShot neutral")
+    if (qtest.read(WAVE + 0x0c) != 32 or
+            rsp.mem32(PA26 + 0x08) != 32 or
+            rsp.mem32(PA26 + 0x0c) != 32):
+        raise AssertionError("Neutral packet not from actual PA26/DMA")
+    ret = rsp.reg(14) & ~1
+    if not 0x6000 <= ret < 0x80000:
+        raise AssertionError("Original DShot zero callback LR invalid")
+    del_bp(rsp, callback)
+    armed_breakpoints.remove(callback)
+    add_bp(rsp, ret)
+    armed_breakpoints.add(ret)
+    resume_to(rsp, ret, hardfault, slice_ms,
+              runtime_slices, "G13B3N_NATIVE_NEUTRAL_CRC_RETURN")
+    if rsp.reg(0) != 1 or rsp.mem32(throt) != 0:
+        raise AssertionError("Rel17 CRC did not accept physical DShot neutral")
+    del_bp(rsp, ret)
+    armed_breakpoints.remove(ret)
+    # Only real original release of ARM after genuine SysTick continuity
+    # can reach the main control loop. Never step over/cancel its deadline.
+    from g13b_native_no_drive import symbol_address
+    # Pinned ELF maps first of two WFI to control loop; later = ARM loop.
+    add_bp(rsp, wfi[0])
+    armed_breakpoints.add(wfi[0])
+    normal = wait_for_native_main_wfi(
+        rsp, (wfi[0],), hardfault, slice_ms,
+        max_slices=max(runtime_slices, 72),
+        stage="G13B3N_ORIGINAL_ZERO_THROTTLE_ARM_RELEASE")
+    if rsp.mem32(throt) != 0:
+        raise AssertionError("Rel17 arm release changed neutral throttle")
+    del_bp(rsp, wfi[0])
+    armed_breakpoints.remove(wfi[0])
+    # Caller supplies the following real 1500-throttle command only
+    # after all 32 physical neutral edges have completed.
+    if qtest.read(WAVE + 0x10) != 0:
+        raise AssertionError("Neutral physical waveform remains active")
+    return dict(qualified=True, physical_zero_frame=frame,
+                physical_zero_edges=32, original_callback_crc_accepted=True,
+                source_arm_window_released=True,
+                native_original_run_wfi_pc=normal)
+
+
 def resume_to(rsp, target, hardfault, slice_ms, slices, label):
     for n in range(slices):
         stop, interrupted = continue_bounded(rsp, slice_ms)
@@ -1294,8 +1367,35 @@ def run(args):
                         for pc in wfi:
                             del_bp(rsp, pc)
                             armed.remove(pc)
-                        # Native, non-synthetic DShot600 command.
-                        frame = queue_dshot600_wire(qtest, args.throttle)
+                        if args.sim_only_cfg_flash:
+                            if rendezvous not in wfi:
+                                raise AssertionError("Not an original native WFI")
+                            if rendezvous == wfi[1]:
+                                # Respect original ARM=1 source policy.
+                                # A nonzero DShot sent during ARM cannot
+                                # become authorized motor running throttle.
+                                unlock = native_original_zero_throttle_arm(
+                                    rsp, qtest, wfi=wfi,
+                                    hardfault=hardfault,
+                                    armed_breakpoints=armed,
+                                    throt=throt,
+                                    callback=symbols["am13e_app_io_dshot_packet"],
+                                    slice_ms=args.slice_ms,
+                                    runtime_slices=args.runtime_slices)
+                                evidence["g13b3n_original_zero_arming"] = unlock
+                                print("PASS_G13B3N_ORIGINAL_ARM_250MS_AFTER_"
+                                      "GENUINE_DSHOT_ZERO " +
+                                      json.dumps(unlock,sort_keys=True),
+                                      flush=True)
+                            elif rendezvous != wfi[0]:
+                                raise AssertionError("Unknown original WFI")
+                        # Native, non-synthetic DShot600 command. A second
+                        # frame is legal only after the external PA26 queue
+                        # delivered all 32 genuine zero-throttle edges.
+                        frame = queue_dshot600_wire(
+                            qtest, args.throttle,
+                            reset_completed_wave=bool(
+                                args.sim_only_cfg_flash and rendezvous==wfi[1]))
                         callback = symbols["am13e_app_io_dshot_packet"]
                         add_bp(rsp, callback)
                         armed.add(callback)

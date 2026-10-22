@@ -54,9 +54,21 @@ def queue_edge(qtest, delay_ns, level):
                              f"before={before}, after={after}, level={level}")
 
 
-def queue_dshot600_wire(qtest, throttle):
-    if not 48 <= throttle <= 2047:
-        raise ValueError("Only genuine DShot throttle data frames")
+def queue_dshot600_wire(qtest, throttle, *, allow_zero=False,
+                         reset_completed_wave=False):
+    if not (48 <= throttle <= 2047 or (throttle == 0 and allow_zero)):
+        raise ValueError("Only genuine DShot throttle or opt-in zero frames")
+    if reset_completed_wave:
+        # Reset ONLY the simulator's external PA26 waveform queue, and
+        # only once its previous physical edges fully reached PA26.
+        # Never touch Guest's timer, DMA, ISR, SRAM, or decoded throttle.
+        if (qtest.read(WAVE + 0x10) != 0 or
+                qtest.read(WAVE + 0x08) != 32 or
+                qtest.read(WAVE + 0x0c) != 32):
+            raise AssertionError("Cannot reset active/undelivered PA26 wire")
+        qtest.write(WAVE + 0x20, 1)
+        if qtest.read(WAVE + 0x08) != 0 or qtest.read(WAVE + 0x0c) != 0:
+            raise AssertionError("SIM_ONLY PA26 wire queue did not reset")
     frame = dshot_frame(throttle)
     assert qtest.read(WAVE + 0x08) == 0
     # DShot600 100MHz TIMG4: high bit1=125 ticks, bit0=63 ticks,
