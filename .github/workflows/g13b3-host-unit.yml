@@ -18,6 +18,7 @@ on:
       - 'tests/test_g13b3_native_power_path.py'
       - 'tests/test_g13b3_native_power_coupled.py'
       - 'tests/test_g13b3_native_closed_loop_audit.py'
+      - 'tests/test_g13b3_native_sim_cfg_startup.py'
       - 'tests/test_virtual_bldc.py'
       - '.github/workflows/g13b3-host-unit.yml'
   workflow_dispatch:
@@ -50,6 +51,7 @@ jobs:
           python3 tests/test_g13b3_native_power_path.py
           python3 tests/test_g13b3_native_power_coupled.py
           python3 tests/test_g13b3_native_closed_loop_audit.py
+          python3 tests/test_g13b3_native_sim_cfg_startup.py
           echo PASS_G13B3_HOST_ONLY_UNIT_REGRESSIONS
 
       # No QEMU or original ELF here. Positive motor-closed-loop
