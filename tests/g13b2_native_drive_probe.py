@@ -40,6 +40,9 @@ from tools.native_bemf_qualification import (
 )
 from tools.virtual_bldc import MotorParameters, VirtualBLDC
 from tools.virtual_bldc_feedback import AnalogFrontend
+from tools.native_runtime_timeline import (
+    NativePwmTimeline, ECAP1_TSCTR, NATIVE_ECAP_CLOCK_HZ
+)
 
 FAULT_FN = "am13e_app_motor_fault_reset"
 
@@ -205,6 +208,91 @@ def native_wait_for_bemf_calibration(rsp, wfi, observed_wfi, hardfault,
         f"{max_visits} actual WFI cycles; final calibrated flag="
         f"{rsp.mem32(cal_addr)}")
 
+
+
+
+def native_timeline_observe(rsp, qtest, bemf_state, *,
+                            timeline, checkpoint, hardfault):
+    """Read the real halted guest, native TSCTR and six hardware PWM pads."""
+    state = observer(rsp)
+    if (state["pc"] == hardfault or state["cfsr"] or state["hfsr"] or
+            state["ipsr"] == 3):
+        raise AssertionError("Original Firmware CPU fault in timeline: " +
+                             json.dumps(state, sort_keys=True))
+    required = ("armed", "selected_code", "calibration_done",
+                "capture_ticks_per_ms")
+    if any(name not in bemf_state for name in required):
+        raise AssertionError("Native timeline missing original-ELF BEMF symbols")
+    done = rsp.mem32(bemf_state["calibration_done"])
+    ticks_per_ms = rsp.mem32(bemf_state["capture_ticks_per_ms"])
+    arm = rsp.mem32(bemf_state["armed"])
+    selected = rsp.mem32(bemf_state["selected_code"])
+    if done != 1 or ticks_per_ms != NATIVE_ECAP_CLOCK_HZ // 1000:
+        raise AssertionError(
+            f"Native SysTick/ECAP calibration not qualified: "
+            f"done={done} ticks_per_ms={ticks_per_ms}")
+    bemf = observe_original_bemf_route(
+        qtest.read, selected_code=selected, native_armed=(arm == 1))
+    if not bemf.channel_ready_for_voltage_samples:
+        raise AssertionError("Original native BEMF arm lost during timeline: " +
+                             bemf.reason)
+    frame = timeline.observe(
+        qtest.read, native_ticks=qtest.read(ECAP1_TSCTR),
+        checkpoint=checkpoint)
+    print("G13B3D_NATIVE_PWM_TIMELINE_FRAME " +
+          json.dumps(frame.to_dict(), sort_keys=True), flush=True)
+    return frame
+
+
+def collect_native_pwm_timeline(
+    rsp, qtest, *, hardfault, armed_breakpoints, wfi, bemf_state,
+    slice_ms, runtime_slices, visits, motor):
+    """GDB WFI rendezvous samples genuine guest time, never clock_step.
+
+    Guest continues to execute between *original* WFI instructions.
+    ECAP1's actual 200MHz TSCTR timestamps each sample. QTest performs
+    readl only throughout this function. Nothing is injected into CMPSS.
+    """
+    timeline = NativePwmTimeline(motor)
+    # Remove legacy gate/start/IRQ observation breakpoints before
+    # sampling: those would arrest the CPU at unrelated native events.
+    # Keep the original HardFault breakpoint as an explicit safety trip.
+    for pc in sorted(armed_breakpoints - {hardfault}):
+        del_bp(rsp, pc)
+        armed_breakpoints.remove(pc)
+    for pc in wfi:
+        if pc not in armed_breakpoints:
+            add_bp(rsp, pc)
+            armed_breakpoints.add(pc)
+    native_timeline_observe(
+        rsp, qtest, bemf_state, timeline=timeline,
+        checkpoint="native_gate_return", hardfault=hardfault)
+    for visit in range(visits):
+        checkpoint = wait_for_native_main_wfi(
+            rsp, wfi, hardfault, slice_ms, runtime_slices,
+            stage=f"G13B3D_TIMELINE_{visit + 1}")
+        native_timeline_observe(
+            rsp, qtest, bemf_state, timeline=timeline,
+            checkpoint=f"original_main_wfi_{visit + 1}",
+            hardfault=hardfault)
+        if visit + 1 != visits:
+            # Execute the actual WFI opcode once so the next observation
+            # is a new genuine entry, not the same halted breakpoint.
+            if rsp.mem16(checkpoint) != 0xbf30:
+                raise AssertionError("Observed main WFI opcode changed")
+            del_bp(rsp, checkpoint)
+            armed_breakpoints.remove(checkpoint)
+            stopped = rsp.command("s")
+            if not stopped.startswith(("S05", "T05")):
+                raise RuntimeError("Original native WFI step did not stop")
+            st = observer(rsp)
+            if st["pc"] == hardfault or st["cfsr"] or st["hfsr"]:
+                raise AssertionError("Original CPU fault after WFI")
+            if st["pc"] == checkpoint:
+                raise AssertionError("Original WFI failed to advance")
+            add_bp(rsp, checkpoint)
+            armed_breakpoints.add(checkpoint)
+    return timeline.require_progress(min_frames=visits + 1)
 
 def run(args):
     app_vector_from_elf(args.elf)
@@ -587,6 +675,40 @@ def run(args):
                                         "GUEST_OWNED_ELF_SYMBOL_AND_REAL_REGISTERS "
                                         "NOT_CAPTURE_IRQ_NOT_CLOSED_LOOP",
                                         flush=True)
+                                if args.probe_native_timeline:
+                                    if evidence["status"] != "NATIVE_GATE_ON":
+                                        raise AssertionError(
+                                            "Native timeline needs original Gate ON")
+                                    # This *additional* plant starts at the
+                                    # measured Gate return and NEVER writes
+                                    # BEMF/IRQ/PWM or advances QEMU clock.
+                                    timeline_motor = VirtualBLDC(MotorParameters(
+                                        vbus_v=24.0,
+                                        phase_resistance_ohm=.3,
+                                        phase_inductance_h=.002,
+                                        bemf_constant_v_per_rad_s=.02,
+                                        torque_constant_nm_per_a=.02,
+                                        inertia_kg_m2=1e-6,
+                                        viscous_friction_nm_per_rad_s=.0001,
+                                        load_torque_nm=0,
+                                        pole_pairs=7))
+                                    summary = collect_native_pwm_timeline(
+                                        rsp, qtest, hardfault=hardfault,
+                                        armed_breakpoints=armed, wfi=wfi,
+                                        bemf_state=bemf_state,
+                                        slice_ms=args.slice_ms,
+                                        runtime_slices=args.runtime_slices,
+                                        visits=args.timeline_visits,
+                                        motor=timeline_motor)
+                                    evidence["g13b3d_native_timeline"] = summary
+                                    print("G13B3D_NATIVE_RUNTIME_TIMELINE_READ_ONLY " +
+                                          json.dumps(summary, sort_keys=True),
+                                          flush=True)
+                                    if args.require_native_timeline:
+                                        print("PASS_G13B3D_NATIVE_CONTINUOUS_PWM "
+                                              "ECAP_CLOCK_TIME_COUPLED_PLANT "
+                                              "NO_BEMF_FEEDBACK_INJECTION",
+                                              flush=True)
                                 if args.trip_after_native_gate:
                                     if evidence["status"] != "NATIVE_GATE_ON":
                                         raise AssertionError(
@@ -737,6 +859,14 @@ def main():
     p.add_argument("--require-native-plant-seed", action="store_true",
                    help="Gate one native PWM carrier -> independent host "
                         "motor current and motion, with no feedback injection")
+    p.add_argument("--probe-native-timeline", action="store_true",
+                   help="G13B3D: sampled read-only native PWM/ECAP1 time "
+                        "coupling into independent host VirtualBLDC; "
+                        "no QEMU clock manipulation or BEMF injection")
+    p.add_argument("--require-native-timeline", action="store_true",
+                   help="Require multiple real native WFI PWM observations "
+                        "with bounded ECAP intervals and motor progress")
+    p.add_argument("--timeline-visits", type=int, default=4)
     p.add_argument("--trip-after-native-gate", action="store_true",
                    help="After native Gate ON, assert only external nFAULT "
                         "while CPU halted; require asynchronous OST2 "
@@ -770,6 +900,17 @@ def main():
             p.error("--require-native-bemf-arm requires --require-drive "
                     "--require-native-pwm --wait-native-bemf-calibration")
         a.probe_native_bemf = True
+    if a.require_native_timeline:
+        a.probe_native_timeline = True
+    if a.probe_native_timeline:
+        if (not a.require_native_bemf_arm or
+                not a.require_native_pwm or
+                a.trip_after_native_gate or a.require_bemf_reject):
+            p.error("--probe-native-timeline requires "
+                    "--require-native-bemf-arm --require-native-pwm "
+                    "and no post-gate trip or BEMF reject")
+        if not 3 <= a.timeline_visits <= 8:
+            p.error("--timeline-visits must be 3..8")
     if a.require_native_plant_seed:
         a.probe_native_plant_seed = True
     if a.probe_native_plant_seed:

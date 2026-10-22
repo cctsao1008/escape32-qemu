@@ -221,6 +221,13 @@ jobs:
             2>&1 | tee artifacts/g13b2e-native-calibrated-dshot.log
           # Only the guest's own SysTick/ECAP calibration_done can permit
           # progress. Never fake the BEMF-ready bit or force motor outputs.
+      - name: G13B3D native runtime ECAP clock + continuous six-PWM plant sampling
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          python3 tests/g13b2_native_drive_probe.py             --qemu .build/qemu-src/build/qemu-system-arm             --elf /tmp/e62-fw-sim-ideal-bemf/AM13E-rev17.3.elf             --throttle 1000 --startup-steps 32768             --slice-ms 300 --runtime-slices 20             --wait-native-bemf-calibration --calibration-wfi-visits 24             --require-drive --require-native-pwm             --require-native-bemf-arm             --require-native-timeline --timeline-visits 4             --artifact artifacts/g13b3d-native-pwm-timeline.json             2>&1 | tee artifacts/g13b3d-native-pwm-timeline.log
+          # Read-only original ELF/GDB WFI snapshots and ECAP1 TSCTR
+          # timestamps. No firmware/IRQ/PWM/clock_step/BEMF stimulus.
       - name: G13B2E post native Gate active physical nFAULT Trip/ISR
         run: |
           set -euo pipefail

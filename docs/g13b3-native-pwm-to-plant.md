@@ -203,3 +203,49 @@ opt-in gate. No host code writes guest SRAM, IRQ flags, PWM or CAP1.
 injection, actual ECAP zero-cross events and sustained feedback-dependent
 original Firmware commutation are still OPEN, not a closed-loop PASS.
 The SIM_ONLY electrical profile remains a fictional test fixture.
+
+
+## G13B3D — Native PWM/Plant sampled timeline (read-only, no BEMF)
+
+The next two implementation tasks are *native runtime time coupling* and
+*continuous native six-output PWM observation*. The G13B3D opt-in gate
+uses the original ECAP1 TSCTR at 200MHz (from the original guest-owned
+16kHz SysTick/ECAP calibration). Every observation is at a distinct
+actual original-main WFI breakpoint reached through real GDB continue.
+QEMU virtual time is **never advanced by the host** using clock_step.
+
+At the first legitimate Gate-return and each subsequent native main-WFI
+stop, the test reads the original six AQ/DB observed HIGH ticks and
+period, PB13/pad/power/Trip qualifiers, BEMF arm/route and ECAP1 TSCTR.
+Each bounded positive delta of ECAP ticks is converted to virtual ns;
+the Host VirtualBLDC advances only when consecutive sampled six-PWM
+images are identical. Changed images are retained as observations but
+their intervening interval is marked *unresolved* and NOT integrated
+using a fabricated transition time. Even when sampled endpoints
+match, the model assumes zero-order hold and does NOT prove no hidden
+intermediate transitions.
+
+The command is isolated from previous PASS gates, uses the distinct
+SIM_ONLY ideal-reference ELF, and never writes any BEMF stimuli, guest
+SRAM, Gate, native MCPWM AQ/DB, ECAP or IRQ flags. Its result is a
+**sampled time-coupled plant and repeated native PWM observation**, not
+ECAP comparator feedback or native sensorless closed-loop control.
+
+\`\`\`sh
+python3 tests/g13b2_native_drive_probe.py \
+  --qemu .build/qemu-src/build/qemu-system-arm \
+  --elf /tmp/e62-fw-sim-ideal-bemf/AM13E-rev17.3.elf \
+  --throttle 1000 --startup-steps 32768 \
+  --slice-ms 300 --runtime-slices 20 \
+  --wait-native-bemf-calibration --calibration-wfi-visits 24 \
+  --require-drive --require-native-pwm --require-native-bemf-arm \
+  --require-native-timeline --timeline-visits 4
+\`\`\`
+
+**Acceptance** requires >=5 chronological native observations and >=2
+nonzero integrated host intervals. Each step must preserve valid
+original Gate/pads, no OST2/OST3, original comparator/capture-arm
+readiness, native 200MHz calibrated timebase, and a bounded
+strictly positive original ECAP counter delta. All unknown intervals
+and unresolved waveform transitions remain disclosed. Feedback
+injection and any claim of native closed-loop commutation stay OPEN.
