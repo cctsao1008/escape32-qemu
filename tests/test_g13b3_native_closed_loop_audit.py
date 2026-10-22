@@ -2,7 +2,9 @@
 import sys, unittest
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from tools.native_closed_loop_audit import NativeClosedLoopAudit
+from tools.native_closed_loop_audit import (
+    NativeClosedLoopAudit, ORIGINAL_REL17_ROUTE, REL17_COMMUTATION_SEQUENCE
+)
 
 
 def snap(t, *, cap=0, c1=0, rej=0, sch=1, srv=0, step=1, code=5,
@@ -14,13 +16,31 @@ def snap(t, *, cap=0, c1=0, rej=0, sch=1, srv=0, step=1, code=5,
 
 
 class TestNativeClosedLoopAudit(unittest.TestCase):
+    def test_source_derived_original_rel17_six_step_route(self):
+        # Check against the actual six immutable words in Rel17
+        # src/commutation.h, not the previous incorrect audit table.
+        self.assertEqual(
+            REL17_COMMUTATION_SEQUENCE,
+            (0x175, 0xd9, 0x1ab, 0x72, 0x1de, 0xac))
+        self.assertEqual(
+            ORIGINAL_REL17_ROUTE,
+            (None, (5, (2, 1)), (3, (0, 1)), (6, (0, 2)),
+             (1, (1, 2)), (7, (1, 0)), (2, (2, 0))))
+        a = NativeClosedLoopAudit()
+        a.ingest(**snap(100, step=3, code=6,
+                        pwm=(620, 0, 0, 0, 0, 6250)))
+        with self.assertRaisesRegex(
+                AssertionError, "Armed original BEMF phase differs"):
+            a.ingest(**snap(200, step=3, code=7,
+                            pwm=(620, 0, 0, 0, 0, 6250)))
+
     def test_six_actual_feedback_orderings(self):
         a = NativeClosedLoopAudit()
         phases = [
             (0,0,0,6250,620,0), (620,0,0,6250,0,0),
             (620,0,0,0,0,6250), (0,0,620,0,0,6250),
             (0,6250,620,0,0,0), (0,6250,0,0,620,0)]
-        codes = [5,3,7,2,6,1]
+        codes = [5,3,6,1,7,2]
         t = 100
         a.ingest(**snap(t,pwm=phases[0]))
         for k in range(6):

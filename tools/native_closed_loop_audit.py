@@ -9,6 +9,33 @@ from dataclasses import dataclass, asdict
 from .native_power_path_qualification import qualify_cross_phase_bridge
 
 
+# Canonical original firmware: ESCape32/src/commutation.h at pinned
+# b0204670515d2de0b2480b52273038f1ee13d30a.
+# Original src/main.c computes m=x>>3, comparator_code=m>>3, and
+# passes (x&m),(~x&m) as the actual sixstep phase masks.
+# Do NOT infer the COMP route from a rotor phase order or a reversed
+# handwritten BEMF table. In particular steps 3..6 are 6,1,7,2,
+# not 7,2,6,1. This is a strict original-source correspondence gate.
+REL17_COMMUTATION_SEQUENCE = (0x175, 0xd9, 0x1ab, 0x72, 0x1de, 0xac)
+
+
+def _original_rel17_route():
+    route = [None]
+    for x in REL17_COMMUTATION_SEQUENCE:
+        m = x >> 3
+        upper = (x & m) & 0x7
+        lower = ((~x) & m) & 0x7
+        if (upper.bit_count() != 1 or lower.bit_count() != 1 or
+                upper & lower or not 1 <= (m >> 3) <= 7):
+            raise AssertionError("Pinned original Rel17 sector route invalid")
+        route.append((m >> 3,
+                      (upper.bit_length() - 1, lower.bit_length() - 1)))
+    return tuple(route)
+
+
+ORIGINAL_REL17_ROUTE = _original_rel17_route()
+
+
 @dataclass(frozen=True)
 class NativeSectorEvidence:
     accepted_cap1_ticks: int
@@ -58,9 +85,7 @@ class NativeClosedLoopAudit:
         # clears selected_code during AQ global-load, then only the
         # native MCPWM ZERO carrier IRQ publishes and arms the next phase.
         # Waiting for this source-authored transient is mandatory.
-        route = (None, (5, (2, 1)), (3, (0, 1)),
-                 (7, (0, 2)), (2, (1, 2)), (6, (1, 0)),
-                 (1, (2, 0)))
+        route = ORIGINAL_REL17_ROUTE
         if not 1 <= step <= 6 or selected_code not in (0, 1, 2, 3, 5, 6, 7):
             raise AssertionError("Original sixstep/phase invalid")
         if selected_code == 0:
