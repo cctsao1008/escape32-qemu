@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Pure audit tests. Synthetic sector fixtures are NOT hardware or ELF evidence."""
-import copy
 import unittest
+import sys
+from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from tools.native_closed_loop_audit import ORIGINAL_REL17_ROUTE
 from tools.native_extended_run_gate import check_native_extended_run, ExtendedRunError
 
