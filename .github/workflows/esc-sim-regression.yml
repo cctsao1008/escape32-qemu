@@ -370,6 +370,34 @@ jobs:
           # physical CAP1->native TIMG12->powered six-step transitions
           # AND an independently qualified multi-WFI power path pass.
           # No one-event or non-driven virtual RPM can satisfy the gate.
+      - name: G13B3M extended twelve native feedback-powered sectors (separate strict gate)
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          # Preserve the previously passing six-sector G13B3L unchanged.
+          # Use the SAME original Rel17 ELF, factory Cfg and strict protection.
+          python3 tests/g13b2_native_drive_probe.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf /tmp/e62-fw-fast-ramp/AM13E-rev17.3.elf \
+            --throttle 1500 --startup-steps 32768 \
+            --slice-ms 300 --runtime-slices 20 \
+            --wait-native-bemf-calibration --calibration-wfi-visits 24 \
+            --require-drive --require-native-pwm \
+            --require-native-bemf-arm --require-native-sustained-loop \
+            --sim-only-cfg-flash artifacts/g13b3n-original-cfg-flash.bin \
+            --sustained-wfi-visits 2800 --sustained-sectors 12 \
+            --initial-electrical-degrees -30 \
+            --artifact artifacts/g13b3m-extended-twelve-sector.json \
+            2>&1 | tee artifacts/g13b3m-extended-twelve-sector.log
+          python3 tools/native_extended_run_gate.py \
+            --artifact artifacts/g13b3m-extended-twelve-sector.json \
+            --min-sectors 12 --min-integrated-ns 90000000 \
+            --min-powered-pwm-samples 600 \
+            --output artifacts/g13b3m-extended-strict-verdict.json \
+            2>&1 | tee artifacts/g13b3m-extended-strict-verdict.log
+          # Separate positive gate: two unbroken source-derived cycles,
+          # original CAP1/TIMG12, native PWM and ECAP-time evidence.
+          # All evidence stays SIM_ONLY; no actual E62 current/thermal PASS.
       - name: G13B3J alternate genuine DShot throttle, original deadtime unchanged
         run: |
           set -euo pipefail
