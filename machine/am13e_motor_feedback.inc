@@ -11,7 +11,13 @@
 #define AM13E_G10_CMPSS_SIZE   0x74U
 #define AM13E_G10_ECAP_POWER   (1U << 4)
 #define AM13E_G10_CMPSS_POWER  (1U << 10)
-#define AM13E_G10_ECAP_TICK_NS INT64_C(10) /* functional 100 MHz clock */
+/* AM13E230x ECAP capture TSCTR is clocked at MCLK (200MHz in
+ * original ESCape32 Rel17 firmware + TI ECAP SDK examples).
+ * This is the 5ns counter timebase, NOT a cycle-accurate Cortex-M33.
+ * Previously 10ns/100MHz prevented original SysTick/ECAP calibration
+ * (firmware expects 200000 TSCTR counts per 1ms).
+ */
+#define AM13E_G10_ECAP_TICK_NS INT64_C(5) /* MCLK 200MHz */
 #define AM13E_G10_ECAP_EVENT_MASK 0x00feU
 
 static bool am13e_g10_ecap_powered(AM13ESimFeedback *f)
