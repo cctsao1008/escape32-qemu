@@ -62,7 +62,7 @@ class TestNativeClosedLoopAudit(unittest.TestCase):
         a.ingest(**snap(200,cap=1,c1=170,sch=2))
         with self.assertRaisesRegex(AssertionError,"sixstep vector"):
             a.ingest(**snap(300,cap=1,c1=170,sch=2,srv=1,step=2,
-                            code=3,pwm=(0,0,620,6250,0,0)))
+                            code=3,pwm=(620,0,0,0,0,6250)))
 
     def test_early_reject_is_not_sector(self):
         a = NativeClosedLoopAudit()
