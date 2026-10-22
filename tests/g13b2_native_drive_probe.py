@@ -662,7 +662,9 @@ def native_pwm_duty_progress(rsp, bemf_state, qtest):
             rsp.mem16(bemf_state["logical_compare"]+2*i)
             for i in range(6)]
     report["ecap1_tsctr"] = qtest.read(ECAP1_TSCTR)
-    report["ecap1_ecctl2"] = qtest.read(ECAP1_TSCTR+0x1c)
+    # ECCTL1/ECCTL2 are packed at actual ECAP1 +0x28, bits [31:16]
+    # carry ECCTL2. +0x1c is CTRPHS, NOT ECCTL2.
+    report["ecap1_ecctl2"] = (qtest.read(ECAP1_TSCTR+0x28)>>16)&0xffff
     report["mcpwm_active_compare"] = [
         qtest.read(PWM4+0x100+0x200*i+0x4*j)
         for i in range(3) for j in (0,2)]
@@ -680,7 +682,8 @@ def evidence_power(proof):
 
 def probe_native_sustained_power_feedback(
         rsp, qtest, *, bemf_state, armed_breakpoints, wfi, hardfault,
-        slice_ms, runtime_slices, max_visits, required_sectors):
+        slice_ms, runtime_slices, max_visits, required_sectors,
+        require_sim_only_cfg=False):
     """Full native WFI-to-WFI physical bridge -> plant -> BEMF feedback loop.
 
     No native program counter, firmware SRAM, PWM, TIMG12, CAP1, or IRQ
@@ -727,6 +730,24 @@ def probe_native_sustained_power_feedback(
     duty_first = native_pwm_duty_progress(rsp, bemf_state, qtest)
     print("G13B3L_GUEST_DUTY_AT_GATE " +
           json.dumps(duty_first, sort_keys=True), flush=True)
+    if require_sim_only_cfg:
+        # Exact pinned ESCape32 Cfg ABI and isolated SIM_ONLY Rel17 profile.
+        # Application-only QEMU must not silently use zeroed .cfg NOLOAD RAM.
+        # No Host/firmware variable writes are permitted to make this pass.
+        expected = {
+            "duty_rate_tenth_pct_per_ms": 100,
+            "duty_max_pct": 100,
+            "duty_spup_pct": 15,
+            "freq_max_khz": 48,
+        }
+        wrong = {k: {"expected": v, "native": duty_first[k]}
+                 for k,v in expected.items() if duty_first[k] != v}
+        if wrong:
+            raise AssertionError(
+                "G13B3L_SOURCE_DEFINED_CFG_NOT_ACTUALLY_INITIALIZED_IN_GUEST: "
+                + json.dumps(wrong, sort_keys=True))
+        print("PASS_G13B3L_SOURCE_CFG_ACTUAL_GUEST_VALUES " +
+              json.dumps(expected, sort_keys=True), flush=True)
     for visit in range(1, max_visits + 1):
         checkpoint = wait_for_native_main_wfi(
             rsp, wfi, hardfault, slice_ms, runtime_slices,
@@ -837,6 +858,10 @@ def probe_native_sustained_power_feedback(
                   json.dumps(report, sort_keys=True), flush=True)
             record_last["sectors"] = len(audit.sectors)
         if audit.qualified:
+            if effective_power_proof is None:
+                raise AssertionError(
+                    "Six guest sectors cannot pass without three measured "
+                    "consecutive physically powered WFI and model RPM")
             result = audit.result()
             result.update(
                 original_guest_wfi_visits=visit,
@@ -1506,7 +1531,9 @@ def run(args):
                                         slice_ms=args.slice_ms,
                                         runtime_slices=args.runtime_slices,
                                         max_visits=args.sustained_wfi_visits,
-                                        required_sectors=args.sustained_sectors)
+                                        required_sectors=args.sustained_sectors,
+                                        require_sim_only_cfg=(
+                                            args.require_native_sustained_loop))
                                     evidence["g13b3l_native_sustained_loop"] = (
                                         loop_result)
                                     if args.require_native_sustained_loop and (

@@ -376,13 +376,14 @@ jobs:
             --slice-ms 300 --runtime-slices 20 \
             --wait-native-bemf-calibration --calibration-wfi-visits 24 \
             --require-drive --require-native-pwm \
-            --require-native-bemf-arm --probe-native-sustained-loop \
+            --require-native-bemf-arm --require-native-sustained-loop \
             --sustained-wfi-visits 1500 --sustained-sectors 6 \
             --artifact artifacts/g13b3l-native-six-powered-sector-loop.json \
             2>&1 | tee artifacts/g13b3l-native-six-powered-sector-loop.log
-          # DIAGNOSTIC until six original accepted CAP1->TIMG12 service
-          # -> changed physical cross-phase bridge images pass.
-          # Never allow one-CAP1 or sink-only virtual RPM to pass.
+          # STRICT: fail this firmware-backed CI unless six accepted
+          # physical CAP1->native TIMG12->powered six-step transitions
+          # AND an independently qualified multi-WFI power path pass.
+          # No one-event or non-driven virtual RPM can satisfy the gate.
       - name: G13B3J alternate genuine DShot throttle, original deadtime unchanged
         run: |
           set -euo pipefail
