@@ -77,6 +77,13 @@ def observe_original_pwm(
         obs.high_ticks[2*i] != obs.high_ticks[2*i+1]
         for i in range(3)
     ))
+    # The reduced-order plant accepts nonoverlapping high/low averaged
+    # commands only. A model image with both gates HIGH for more than a
+    # carrier period is physically unsafe even when each tick is valid.
+    phase_overlap = bool(obs and any(
+        obs.high_ticks[2*i] + obs.high_ticks[2*i+1] >
+        obs.period_ticks for i in range(3)
+    ))
     reasons = []
     if not gate:
         reasons.append("PB13 gate or one of six PINCM routes not qualified")
@@ -88,6 +95,8 @@ def observe_original_pwm(
         reasons.append("hardware Trip OST2/OST3 is latched")
     if not obs:
         reasons.append("invalid original six-channel PWM observer: " + invalid)
+    if phase_overlap:
+        reasons.append("unsafe overlapping high/low phase command")
     if not phase_drive:
         reasons.append("no native nonzero differential phase command yet")
     return NativeOutputEvidence(
