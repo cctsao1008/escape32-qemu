@@ -176,3 +176,30 @@ native ECAP CEVT1 IRQs caused by *computed motor* BEMF samples,
 and subsequent original firmware commutation/duty changes.
 Do not force capture flags, stage firmware variables, or write
 the MCPWM AQ output registers from the host.
+
+## G13B3C — Original native BEMF capture-arm observability (qualified)
+
+[Full Firmware-backed CI #39759757725](https://github.com/cctsao1008/escape32-qemu/actions/runs/39759757725)
+verified the first **read-only** original Firmware BEMF capture-arm diagnostic.
+The earlier `missing=armed` was a local-symbol ambiguity: two distinct
+4-byte objects named `armed` were present in the pinned ELF:
+
+- `motor_bemf.c:63`: `0x200005A8` (original BEMF capture state);
+- `input_watchdog.c:29`: `0x200015BC` (unrelated watchdog state).
+
+The source-scoped `arm-none-eabi-nm -a -S -l` audit uniquely selects
+the first symbol or fails closed. CI read the **actual native guest armed=1**,
+`selected_code=5` (phase U, rising), CMPSS0 high mux=0,
+DACH=2048, high comparator/filter enabled, ECAP1 Input45, CAPLDEN,
+running TSCTR and matching enabled CEVT1 interrupt/polarity.
+
+`--require-native-bemf-arm` enforces positive original-guest BEMF arm
+**and** qualified original six-PWM, PB13 physical Gate, no latched
+Trip and powered/native comparator/capture routes at the same GDB-halted
+breakpoint. Missing/ambiguous native state is a hard failure of this
+opt-in gate. No host code writes guest SRAM, IRQ flags, PWM or CAP1.
+
+**Scope:** Arm/route *eligibility* is qualified; physical BEMF
+injection, actual ECAP zero-cross events and sustained feedback-dependent
+original Firmware commutation are still OPEN, not a closed-loop PASS.
+The SIM_ONLY electrical profile remains a fictional test fixture.

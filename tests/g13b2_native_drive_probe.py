@@ -483,6 +483,7 @@ def run(args):
                                 native_pwm = observe_original_pwm(
                                     qtest.read, gate_active_level=1)
                                 evidence["g13b3a_native_pwm"] = native_pwm.to_dict()
+                                bemf_cfg = None
                                 if args.probe_native_bemf and (
                                         "selected_code" in bemf_state and
                                         "armed" in bemf_state):
@@ -569,6 +570,23 @@ def run(args):
                                         "G13B3A native output is not yet "
                                         "physically qualified for the VirtualBLDC: "
                                         + native_pwm.reason)
+                                if args.require_native_bemf_arm:
+                                    # Guest SRAM + CMPSS/ECAP route and hardware
+                                    # Gate/Trip, all read only; NO QTest BEMF.
+                                    if (evidence["status"] != "NATIVE_GATE_ON"
+                                            or not native_pwm.acceptable_for_plant
+                                            or bemf_cfg is None
+                                            or not bemf_cfg.channel_ready_for_voltage_samples):
+                                        raise AssertionError(
+                                            "G13B3C native BEMF arm not "
+                                            "qualified; fail closed: "
+                                            + (bemf_cfg.reason if bemf_cfg else
+                                               "guest state unobservable"))
+                                    print(
+                                        "PASS_G13B3C_NATIVE_BEMF_CAPTURE_ARM "
+                                        "GUEST_OWNED_ELF_SYMBOL_AND_REAL_REGISTERS "
+                                        "NOT_CAPTURE_IRQ_NOT_CLOSED_LOOP",
+                                        flush=True)
                                 if args.trip_after_native_gate:
                                     if evidence["status"] != "NATIVE_GATE_ON":
                                         raise AssertionError(
@@ -710,6 +728,9 @@ def main():
     p.add_argument("--probe-native-bemf", action="store_true",
                    help="Read-only original CMPSS0/ECAP1 selected phase, "
                         "DAC, capture arm and native IRQ config")
+    p.add_argument("--require-native-bemf-arm", action="store_true",
+                   help="Strict G13B3C native armed/phase/CMPSS0/ECAP1 "
+                        "and physical PWM/Gate/Trip read-only gate; no IRQ")
     p.add_argument("--probe-native-plant-seed", action="store_true",
                    help="G13B3B: integrate *one* guest PWM carrier into "
                         "explicitly synthetic test motor; NEVER feed BEMF")
@@ -743,6 +764,12 @@ def main():
         p.error("--require-native-pwm needs --require-drive")
     if a.require_native_pwm:
         a.probe_native_pwm = True
+    if a.require_native_bemf_arm:
+        if (not a.require_drive or not a.require_native_pwm or
+                not a.wait_native_bemf_calibration or a.require_bemf_reject):
+            p.error("--require-native-bemf-arm requires --require-drive "
+                    "--require-native-pwm --wait-native-bemf-calibration")
+        a.probe_native_bemf = True
     if a.require_native_plant_seed:
         a.probe_native_plant_seed = True
     if a.probe_native_plant_seed:
