@@ -980,12 +980,18 @@ and native PWM power/clock are connected; OST2/OST3 remain clear.
 This is an actual first nonzero phase-voltage command, **not**
 repeated commutation.
 
-**G13B3B single-carrier original PWM→VirtualBLDC seed is being
-validated**: `tools/native_bldc_seed.py` advances exactly one
-62,510ns PWM carrier using the guest's observed six duties and an
-explicitly fictional 24V virtual motor; it writes **no** simulated
-BEMF to the guest at this stage. Original firmware repeated
-BEMF/ECAP-triggered commutation remains **OPEN**.
+**G13B3B single-carrier original PWM→VirtualBLDC seed PASSED**
+([full CI #39756971492](https://github.com/cctsao1008/escape32-qemu/actions/runs/39756971492)).
+Using only guest-observed PWM duty (V-low 6220/6251 ticks),
+`tools/native_bldc_seed.py` advanced an explicitly fictional
+24V VirtualBLDC for exactly 62,510ns, producing an idealized
+3.86 RPM first step, 0.00646Nm torque and three BEMF codes.
+It writes **no** motor, PWM, SRAM or feedback MMIO to the guest.
+
+**G13B3C native BEMF arm/readiness diagnostics are now implemented**
+but still distinct from physical zero-cross capture. Original
+Firmware repeated CMPSS0/ECAP1 feedback-triggered commutation,
+rotating motor and closed-loop stability remain **OPEN**.
 See [G13B3 original PWM, motor-seed and feedback boundaries](docs/g13b3-native-pwm-to-plant.md).
 
 See [G13B native drive-authorization status and tests](docs/g13b-native-drive-authorization.md)
