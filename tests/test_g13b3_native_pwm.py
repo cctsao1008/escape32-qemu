@@ -81,6 +81,15 @@ class NativePWMQualification(unittest.TestCase):
         self.assertFalse(x.nonzero_phase_voltage_command)
         self.assertFalse(x.acceptable_for_plant)
 
+    def test_reject_overlapping_original_high_low(self):
+        f = fixture()
+        f[OBS_BASE + 0x18] = 90
+        f[OBS_BASE + 0x1c] = 75
+        x = observe_original_pwm(lambda a: f.get(a, 0))
+        self.assertTrue(x.native_pwm_valid)
+        self.assertFalse(x.acceptable_for_plant)
+        self.assertIn("overlapping", x.reason)
+
     def test_active_low_requires_matching_polarity(self):
         f = fixture()
         f[GPIO1_BASE + 0x1280] = 0
