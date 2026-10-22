@@ -30,3 +30,18 @@ def native_deadband_source_clamp(logical_aq,logical_compare,aq_active,*,red_tick
             'AT_LEAST_ONE_SOURCE_ABOVE_DEADBAND' if any(c>floor for c in compares) else
             'NO_PHYSICAL_HIGH_SIDE_SOURCE_PROVED')
     return SourceClamp(red_ticks,fed_ticks if fed_enabled else 0,floor,src,compares,clamped,active,reason)
+
+
+def read_native_deadband(read32, pwm_base:int):
+    """Read the actual TI MCPWM DBCTL, DBRED and DBFED registers only.
+
+    AM13E/QEMU: DBCTL +0xc0, DBFED +0xd0, DBRED +0xd4.
+    Do not swap RED/FED; doing so can misreport a valid native gate
+    deadtime as an invalid electrical configuration.
+    """
+    if pwm_base<0 or pwm_base>0xffffffff-0xd4:
+        raise ValueError("Invalid original native MCPWM4 base")
+    ctl=read32(pwm_base+0xc0)
+    fed=read32(pwm_base+0xd0)&0x3fff
+    red=read32(pwm_base+0xd4)&0x3fff
+    return ctl,red,fed

@@ -50,7 +50,7 @@ from tools.native_bemf_timeout_qualification import (
     prove_native_no_feedback_timeout
 )
 from tools.native_timg12_observer import observe_native_timg12
-from tools.native_pwm_deadband_diagnostic import native_deadband_source_clamp
+from tools.native_pwm_deadband_diagnostic import native_deadband_source_clamp, read_native_deadband
 from tools.native_power_path_qualification import qualify_cross_phase_bridge
 from tools.virtual_bldc_feedback import SIM_BEMF_INPUT
 
@@ -291,9 +291,10 @@ def native_sixstep_diagnostics(rsp, qtest, bemf_state):
         guest_arrays[name] = (
             [rsp.mem16(bemf_state[name]+2*i) for i in range(6)]
             if name in bemf_state else None)
-    dbctl = qtest.read(PWM4 + 0xc0)
-    dbred = qtest.read(PWM4 + 0xd0) & 0x3fff
-    dbfed = qtest.read(PWM4 + 0xd4) & 0x3fff
+    # Actual TI/AM13E model layout: DBFED=+0xd0, DBRED=+0xd4.
+    # The previous G13B3J diagnostic reversed these 16-bit fields,
+    # resulting in a false red<fed error for the original virtual board.
+    dbctl, dbred, dbfed = read_native_deadband(qtest.read, PWM4)
     suppression = (
         native_deadband_source_clamp(
             guest_arrays["logical_aq"], guest_arrays["logical_compare"],

@@ -320,3 +320,8 @@ Full CI #39812286626 proved original guest sixstep AQ changed from `[0,0,0,2,18,
 ## G13B3K conservative two-terminal motor-power-path gate
 
 The original G13A reduced-order star-neutral model accepts a low-side-only waveform as a nonzero phase voltage; this can yield nonzero simulated angular speed/BEMF despite **no** physical high-side source. Full CI #39812286626 measured `[0,0,0,6220,0,0]`: only one low-side output had a positive duty count. That does not qualify an electrically energized BLDC bridge. New strict **G13B3G closed-loop acceptance only** requires measured upper-side PWM and measured lower-side conduction on a distinct phase, as well as original Gate/Trip safety; it is necessary but not sufficient for a realistic motor. The pre-existing G13A SIM_ONLY model regression remains unchanged, while any future claim of accepted native real commutation cannot use its single-leg plant artifact. No PWM, IRQ, DShot, ADC, DAC or firmware variable is written by this gate.
+
+
+## Correction: native DBRED/DBFED register offsets
+
+G13B3J CI #39817058959 failed because the newly added **diagnostic** reversed the native MCPWM4 register offset mapping. The modeled register readback was DBFED at +0xD0 = 1, DBRED at +0xD4 = 32, DBCTL at +0xC0 = 0x0F0022. This is **not** a Firmware fault or a Trip. The observer now reads those locations with a unit-tested helper, yielding original non-PWM_ENABLE minimum source compare 32−1=31 ticks when the FED path is enabled. Recorded original logical compare 3 and 9 therefore remain below that threshold and the intentional source pulse suppression is expected. No electrical timing, gate, fault, firmware or PWM write was changed.
