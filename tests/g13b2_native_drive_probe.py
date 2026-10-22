@@ -45,6 +45,7 @@ from tools.native_runtime_timeline import (
 )
 from tools.native_bemf_injection import NativeBemfInjector
 from tools.native_bemf_capture import prove_capture_from_native_samples
+from tools.native_bemf_policy_audit import prove_original_early_rejection
 
 FAULT_FN = "am13e_app_motor_fault_reset"
 
@@ -249,7 +250,8 @@ def native_timeline_observe(rsp, qtest, bemf_state, *,
 def collect_native_pwm_timeline(
     rsp, qtest, *, hardfault, armed_breakpoints, wfi, bemf_state,
     slice_ms, runtime_slices, visits, motor, frontend=None,
-    require_capture=False, probe_commutation=False):
+    require_capture=False, probe_commutation=False,
+    require_early_rejection=False):
     """GDB WFI rendezvous samples genuine guest time, never clock_step.
 
     Guest continues to execute between *original* WFI instructions.
@@ -265,12 +267,26 @@ def collect_native_pwm_timeline(
     initial_cap1 = qtest.read(ECAP1_TSCTR + 8) if require_capture else 0
     capture_proof = None
     commutation_proof = None
-    if probe_commutation and not require_capture:
-        raise ValueError("Native commutation monitor requires true CAP1 evidence")
+    if (probe_commutation or require_early_rejection) and not require_capture:
+        raise ValueError("Native commutation/policy audit requires real CAP1")
     scheduled_before = (
         rsp.mem32(bemf_state["scheduled"]) if probe_commutation else None)
     serviced_before = (
         rsp.mem32(bemf_state["serviced"]) if probe_commutation else None)
+    if require_early_rejection:
+        required = ("ival", "crossing_epoch", "crossing_epoch_valid",
+                    "rejected_events", "scheduled", "armed", "selected_code")
+        if any(name not in bemf_state for name in required):
+            raise AssertionError(
+                "Original ELF has ambiguous/missing Rel17 policy symbols")
+        policy_before = {
+            name: rsp.mem32(bemf_state[name])
+            for name in ("ival", "crossing_epoch", "crossing_epoch_valid",
+                         "rejected_events", "scheduled", "selected_code")
+        }
+    else:
+        policy_before = None
+    early_rejection = None
 
     def feed_if_requested():
         if injector is None:
@@ -315,6 +331,29 @@ def collect_native_pwm_timeline(
                 print("G13B3F_NATIVE_CAPTURE_ECAP_IRQ_CAUSAL " +
                       json.dumps(capture_proof.to_dict(), sort_keys=True),
                       flush=True)
+                if require_early_rejection:
+                    early_rejection = prove_original_early_rejection(
+                        cap1_ticks=cap1,
+                        epoch_ticks=policy_before["crossing_epoch"],
+                        ticks_per_ms=rsp.mem32(
+                            bemf_state["capture_ticks_per_ms"]),
+                        original_ival_us=policy_before["ival"],
+                        rejected_before=policy_before["rejected_events"],
+                        rejected_after=rsp.mem32(
+                            bemf_state["rejected_events"]),
+                        scheduled_before=policy_before["scheduled"],
+                        scheduled_after=rsp.mem32(
+                            bemf_state["scheduled"]),
+                        armed_after=rsp.mem32(bemf_state["armed"]),
+                        selected_after=rsp.mem32(
+                            bemf_state["selected_code"]),
+                        selected_before=policy_before["selected_code"],
+                        epoch_valid_before=policy_before[
+                            "crossing_epoch_valid"])
+                    print("PASS_G13B3G_ORIGINAL_REL17_EARLY_BEMF_REJECT "
+                          "REAL_CAP1_ISR_NO_TIMG12_SCHEDULE_ARM_PRESERVED " +
+                          json.dumps(early_rejection.to_dict(),
+                                     sort_keys=True), flush=True)
                 if probe_commutation:
                     # Guest-owned schedule/dispatch counters are never
                     # written by the test. A captured *early* edge may
@@ -411,6 +450,8 @@ def collect_native_pwm_timeline(
         result["native_bemf_capture"] = capture_proof.to_dict()
     if commutation_proof is not None:
         result["original_commutation"] = commutation_proof
+    if early_rejection is not None:
+        result["original_early_rejection"] = early_rejection.to_dict()
     return result
 
 def run(args):
@@ -440,7 +481,8 @@ def run(args):
                  "pending_code", "pending_interval",
                  "reference_ready", "selected_code", "armed",
                  "captured_events", "rejected_events",
-                 "scheduled", "serviced"):
+                 "scheduled", "serviced", "ival",
+                 "crossing_epoch", "crossing_epoch_valid"):
         try:
             bemf_state[name] = symbol_address(args.elf, name)
         except RuntimeError:
@@ -823,6 +865,8 @@ def run(args):
                                         motor=timeline_motor,
                                         require_capture=args.require_native_bemf_capture,
                                         probe_commutation=args.probe_native_commutation,
+                                        require_early_rejection=(
+                                            args.require_native_early_rejection),
                                         frontend=(AnalogFrontend(
                                             reference_v=3.3,
                                             zero_bemf_bias_v=1.65,
@@ -1061,6 +1105,10 @@ def main():
                    help="Require multiple real native WFI PWM observations "
                         "with bounded ECAP intervals and motor progress")
     p.add_argument("--timeline-visits", type=int, default=4)
+    p.add_argument("--require-native-early-rejection", action="store_true",
+                   help="G13B3G negative control: only a real early "
+                        "CAP1+ISR may be rejected by original Rel17, "
+                        "with no TIMG12 schedule and native arm preserved")
     p.add_argument("--probe-native-commutation", action="store_true",
                    help="G13B3G: inspect original guest TIMG12 scheduling "
                         "and service after physically derived ECAP1 CAP1; "
@@ -1120,6 +1168,8 @@ def main():
             p.error("--require-native-bemf-arm requires --require-drive "
                     "--require-native-pwm --wait-native-bemf-calibration")
         a.probe_native_bemf = True
+    if a.require_native_early_rejection:
+        a.require_native_bemf_capture = True
     if a.require_native_commutation:
         a.probe_native_commutation = True
     if a.probe_native_commutation:

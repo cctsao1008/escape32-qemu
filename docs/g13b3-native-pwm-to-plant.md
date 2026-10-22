@@ -275,3 +275,8 @@ motor-start/Gate/fault-reset debugger breakpoints, the coupled fault test
 reinstalls **only** the read-only GDB breakpoint on original
 `am13e_app_motor_fault_reset`, before continuing real firmware execution.
 No guest SRAM/PC/IRQ/PRIMASK or native safety register is changed.
+
+
+## G13B3G original Rel17 early-edge negative control
+
+New independent `--require-native-early-rejection` strict gate proves the physically derived phase voltage created a real CAP1/ISR, but the original firmware correctly refused this too-early crossing. It observes original guest `ival`, original ECAP crossing_epoch and calibrated ticks, rejected_events +1, unchanged TIMG12 scheduled and BEMF armed/phase unchanged. If any original information is unobservable or disagrees, fail closed. The early-edge negative control PASS must never be presented as acceptance, native commutation, or sustained closed loop. Subsequent realistic native later-edge timing remains OPEN.
