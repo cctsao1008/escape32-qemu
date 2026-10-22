@@ -615,6 +615,63 @@ def observe_original_no_bemf_timeout(
 
 
 
+
+def original_duty_config_audit(rsp, bemf_state):
+    """Read-only ABI source-audited ESCape32 src/common.h Cfg structure.
+
+    Pinned Cfg: id[0..1], revision[2], revpatch[3], name[4..18],
+    _null[19], arm[20], ... freq_max[28], duty_min[29],
+    duty_max[30], duty_spup[31], duty_ramp[32], duty_rate[33].
+    Reads two 32-bit naturally aligned original Guest cfg words only.
+    """
+    cfg = bemf_state.get("cfg")
+    if cfg is None:
+        raise AssertionError("Original ELF cfg symbol missing")
+    x = rsp.mem32(cfg+28)
+    y = rsp.mem32(cfg+32)
+    rates = {
+        "freq_max_khz": x&0xff,
+        "duty_min_pct": (x>>8)&0xff,
+        "duty_max_pct": (x>>16)&0xff,
+        "duty_spup_pct": (x>>24)&0xff,
+        "duty_ramp_kerpm": y&0xff,
+        "duty_rate_tenth_pct_per_ms": (y>>8)&0xff,
+        "duty_drag_pct": (y>>16)&0xff,
+        "duty_lock_mode": (y>>24)&0xff,
+    }
+    if not (16<=rates["freq_max_khz"]<=96 and
+            1<=rates["duty_min_pct"]<=100 and
+            1<=rates["duty_max_pct"]<=100 and
+            1<=rates["duty_spup_pct"]<=100 and
+            1<=rates["duty_rate_tenth_pct_per_ms"]<=100):
+        raise AssertionError("Original native Cfg ABI not qualified: " +
+                             repr(rates))
+    return rates
+
+
+def native_pwm_duty_progress(rsp, bemf_state, qtest):
+    """Guest tick/throt/ertm and original active/shadow compares, no writes."""
+    report = original_duty_config_audit(rsp, bemf_state)
+    for key in ("tick","throt","erpm","ertm","runtime_pwm_updates",
+                "runtime_aq_updates","runtime_commit_count",
+                "armed","cancelled","crossing_epoch_valid"):
+        report[key] = (rsp.mem32(bemf_state[key])
+                       if key in bemf_state else None)
+    if "logical_compare" in bemf_state:
+        report["original_logical_compare"] = [
+            rsp.mem16(bemf_state["logical_compare"]+2*i)
+            for i in range(6)]
+    report["ecap1_tsctr"] = qtest.read(ECAP1_TSCTR)
+    report["ecap1_ecctl2"] = qtest.read(ECAP1_TSCTR+0x1c)
+    report["mcpwm_active_compare"] = [
+        qtest.read(PWM4+0x100+0x200*i+0x4*j)
+        for i in range(3) for j in (0,2)]
+    report["mcpwm_shadow_compare"] = [
+        qtest.read(PWM4+0x100+0x200*i+0x4*j)
+        for i in range(3) for j in (1,3)]
+    return report
+
+
 def evidence_power(proof):
     """Do not claim effective power from only one PWM read or mock speed."""
     return proof if proof is not None else {
@@ -667,6 +724,9 @@ def probe_native_sustained_power_feedback(
     total_written = 0
     record_last = {}
     result = {}
+    duty_first = native_pwm_duty_progress(rsp, bemf_state, qtest)
+    print("G13B3L_GUEST_DUTY_AT_GATE " +
+          json.dumps(duty_first, sort_keys=True), flush=True)
     for visit in range(1, max_visits + 1):
         checkpoint = wait_for_native_main_wfi(
             rsp, wfi, hardfault, slice_ms, runtime_slices,
@@ -709,9 +769,16 @@ def probe_native_sustained_power_feedback(
                       flush=True)
             analog = frontend.words(sample)
         except (ValueError, FloatingPointError) as exc:
-            result = dict(qualified=False,
-                          reason="UNQUALIFIED_PHYSICAL_MOTOR_OR_ANALOG",
-                          details=str(exc), original_guest_wfi_visits=visit)
+            at_failure = native_pwm_duty_progress(rsp, bemf_state, qtest)
+            reason = ("NATIVE_ECAP_TIMEBASE_STALLED" if
+                      "delta_ticks=0" in str(exc) else
+                      "UNQUALIFIED_PHYSICAL_MOTOR_OR_ANALOG")
+            result = dict(qualified=False, reason=reason,
+                          details=str(exc), original_guest_wfi_visits=visit,
+                          guest_duty_at_gate=duty_first,
+                          original_duty_and_timer_at_failure=at_failure)
+            print("G13B3L_REAL_DUTY_AND_ECAP_BLOCKER " +
+                  json.dumps(result, sort_keys=True), flush=True)
             break
         # Real analog lines remain present even when guest ECAP is
         # unarmed. The guest alone selects/arms comparator and timer.
@@ -740,6 +807,13 @@ def probe_native_sustained_power_feedback(
             pwm_period=real_pwm.period_ticks,
             gate_trip_qualified=real_pwm.acceptable_for_plant,
             rpm=sample.mechanical_rpm)
+        if visit <= 3 or visit % 16 == 0:
+            print("G13B3L_NATIVE_GUEST_DUTY_PROGRESS " +
+                  json.dumps({
+                      "visit": visit,
+                      "state": native_pwm_duty_progress(
+                          rsp, bemf_state, qtest)
+                  }, sort_keys=True), flush=True)
         if (visit <= 3 or visit % 32 == 0 or
                 audit.qualified or
                 len(audit.sectors) != record_last.get("sectors", 0)):
@@ -1046,7 +1120,8 @@ def run(args):
     except ValueError:
         symbols["bemf_fault"] = None
     bemf_state = {}
-    for name in ("calibration_done", "calibration_ticks",
+    for name in ("cfg","tick","throt","erpm",
+                  "calibration_done", "calibration_ticks",
                  "capture_ticks_per_ms", "capture_timeout_ticks",
                  "pending_code", "pending_interval",
                  "reference_ready", "selected_code", "armed",

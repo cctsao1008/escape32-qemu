@@ -350,3 +350,8 @@ The strict original-ELF loop now prints its *independent* effective power PASS o
 ### Do not count early unpowered original ISR as closed loop
 
 Native Rel17 may advance the sixstep even when RED suppresses its high source. A TIMG12 service with NO prior physical high/low cross-phase path is logged as `REAL_TIMG12_UNPOWERED_SECTOR_NOT_CREDITED`, then cleared so genuinely later powered events can be tested. It is never counted among the required full feedback-dependent electrical rotations. No guest firmware variable or event is changed.
+
+
+## G13B3L original guest duty/ramp and ECAP stall diagnosis
+
+The independent strict model Full CI #39822305393 observed no measured High-side output, zero RPM, zero CAP1 for 256 native WFI despite a distinct valid DUTY_RATE=100 ELF, ending when ECAP1 TSCTR stopped advancing at visit 278. The follow-up evidence reads original Guest cfg fields by exact pinned `src/common.h:Cfg` ABI offsets (freq_max[28], duty_min[29], duty_spup[31], duty_ramp[32], duty_rate[33]), guest tick/throt, logical six compares, active/shadow physical compare and original ECAP control/armed/timeout state. These are read-only source-proven symbols and real modeled TI registers; a stale-clock or genuine original BEMF timeout cannot silently pass as motor progress. The model is not permitted to spin from a lone sink. 
