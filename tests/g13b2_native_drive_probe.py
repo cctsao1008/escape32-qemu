@@ -11,6 +11,7 @@ actuation is not observed. --require-drive makes these conditions a strict
 acceptance gate. Not a sensorless closed-loop or real-board safety claim.
 """
 import argparse
+from dataclasses import asdict
 import json
 import socket
 import subprocess
@@ -33,6 +34,9 @@ from g13b_native_dshot import queue_dshot600_wire, WAVE, PA26
 from g13b2_native_safety import snapshot, verify, EXT_OC, PWM4
 from tools.virtual_bldc import gate_and_pads_connected
 from tools.native_pwm_qualification import observe_original_pwm
+from tools.native_bldc_seed import one_native_pwm_period
+from tools.virtual_bldc import MotorParameters, VirtualBLDC
+from tools.virtual_bldc_feedback import AnalogFrontend
 
 FAULT_FN = "am13e_app_motor_fault_reset"
 
@@ -468,6 +472,51 @@ def run(args):
                                 native_pwm = observe_original_pwm(
                                     qtest.read, gate_active_level=1)
                                 evidence["g13b3a_native_pwm"] = native_pwm.to_dict()
+                                if args.probe_native_plant_seed:
+                                    # Purely synthetic G13A test motor, never
+                                    # a Quanta production winding/BOM value.
+                                    sim_motor = VirtualBLDC(MotorParameters(
+                                        vbus_v=24.0,
+                                        phase_resistance_ohm=.3,
+                                        phase_inductance_h=.002,
+                                        bemf_constant_v_per_rad_s=.02,
+                                        torque_constant_nm_per_a=.02,
+                                        inertia_kg_m2=1e-6,
+                                        viscous_friction_nm_per_rad_s=.0001,
+                                        load_torque_nm=0,
+                                        pole_pairs=7))
+                                    sim_frontend = AnalogFrontend(
+                                        reference_v=3.3,
+                                        zero_bemf_bias_v=1.65,
+                                        input_gain_v_per_bemf_v=.02)
+                                    if not native_pwm.acceptable_for_plant:
+                                        raise AssertionError(
+                                            "Cannot seed a virtual motor from "
+                                            "unqualified original PWM: "
+                                            + native_pwm.reason)
+                                    seed = one_native_pwm_period(
+                                        sim_motor, sim_frontend, qtest.read,
+                                        gate_active_level=1,
+                                        timer_hz=100_000_000)
+                                    evidence["g13b3b_plant_seed"] = asdict(seed)
+                                    print("G13B3B_ORIGINAL_PWM_ONE_PERIOD_PLANT_SEED " +
+                                          json.dumps(asdict(seed),
+                                                     sort_keys=True), flush=True)
+                                    # QTest writes NO BEMF, ADC, PWM or guest SRAM.
+                                    # The motor sample is a standalone physical
+                                    # feasibility preflight, NOT live feedback.
+                                    if args.require_native_plant_seed and (
+                                            not seed.motor.drive_enabled or
+                                            seed.motor.mechanical_rpm <= 0 or
+                                            not any(abs(i) > 0 for i in
+                                                    seed.motor.phase_currents_a)):
+                                        raise AssertionError(
+                                            "Original output did not move "
+                                            "simulated motor in one carrier")
+                                    if args.require_native_plant_seed:
+                                        print("PASS_G13B3B_GUEST_PWM_TO_ONE_PERIOD "
+                                              "VIRTUAL_BLDC_NO_FEEDBACK_INJECTION",
+                                              flush=True)
                                 if args.probe_native_pwm:
                                     print("G13B3A_NATIVE_OUTPUT_READ_ONLY " +
                                           json.dumps(native_pwm.to_dict(),
@@ -625,6 +674,12 @@ def main():
     p.add_argument("--require-native-pwm", action="store_true",
                    help="Opt-in: assert native six-output nonzero phase "
                         "drive and actual Gate/PINCM/power/Trip safety")
+    p.add_argument("--probe-native-plant-seed", action="store_true",
+                   help="G13B3B: integrate *one* guest PWM carrier into "
+                        "explicitly synthetic test motor; NEVER feed BEMF")
+    p.add_argument("--require-native-plant-seed", action="store_true",
+                   help="Gate one native PWM carrier -> independent host "
+                        "motor current and motion, with no feedback injection")
     p.add_argument("--trip-after-native-gate", action="store_true",
                    help="After native Gate ON, assert only external nFAULT "
                         "while CPU halted; require asynchronous OST2 "
@@ -651,6 +706,12 @@ def main():
     if a.require_native_pwm and not a.require_drive:
         p.error("--require-native-pwm needs --require-drive")
     if a.require_native_pwm:
+        a.probe_native_pwm = True
+    if a.require_native_plant_seed:
+        a.probe_native_plant_seed = True
+    if a.probe_native_plant_seed:
+        if not a.require_drive:
+            p.error("--probe-native-plant-seed needs --require-drive")
         a.probe_native_pwm = True
     if a.require_drive and a.require_bemf_reject:
         p.error("Cannot simultaneously require positive drive and "
