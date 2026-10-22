@@ -177,6 +177,19 @@ def run(args):
                      "am13e_app_motor_nfault_trip_ready",
                      "am13e_app_motor_bemf_reference_start_ready")
     }
+    try:
+        symbols["bemf_fault"] = elf_function_address(args.elf, "bemf_fault")[0]
+    except ValueError:
+        symbols["bemf_fault"] = None
+    bemf_state = {}
+    for name in ("calibration_done", "calibration_ticks",
+                 "capture_ticks_per_ms", "capture_timeout_ticks",
+                 "pending_code", "pending_interval",
+                 "reference_ready", "selected_code"):
+        try:
+            bemf_state[name] = symbol_address(args.elf, name)
+        except RuntimeError:
+            continue
     evidence = {"status": "OPEN_NOT_NATIVE_DRIVE", "native_elf": str(args.elf)}
     with tempfile.TemporaryDirectory(prefix="g13b2e-probe-") as tmp:
         qtpath = str(Path(tmp) / "qtest.sock")
@@ -272,9 +285,11 @@ def run(args):
                         # native motor-output start or fault-reset outcome.
                         for name in ("am13e_motor_output_start",
                                      "am13e_power_stage_enable",
-                                     "MCPWM4_IRQHandler", FAULT_FN):
-                            add_bp(rsp, symbols[name])
-                            armed.add(symbols[name])
+                                     "MCPWM4_IRQHandler", FAULT_FN,
+                                     "bemf_fault"):
+                            if symbols.get(name) is not None:
+                                add_bp(rsp, symbols[name])
+                                armed.add(symbols[name])
                         saw_output_start = False
                         saw_gate_call = False
                         for n in range(args.runtime_slices):
@@ -316,6 +331,27 @@ def run(args):
                                         "MCPWM4 ET1 TBCTR_ZERO event")
                                 print("G13B2E_NATIVE_MCPWM4_IRQ_ENTRY_REAL "
                                       "IPSR=44 ET1_SOURCE=2 INTFLAG_ET1=1", flush=True)
+                                del_bp(rsp, state["pc"])
+                                armed.remove(state["pc"])
+                                continue
+                            if (symbols.get("bemf_fault") is not None and
+                                    state["pc"] == symbols["bemf_fault"]):
+                                caller = (rsp.reg(14) & ~1) - 2
+                                context = {
+                                    "caller_pc": caller,
+                                    "caller_symbol":
+                                        native_symbol_location(args.elf, caller),
+                                    "firmware_bemf_state": {
+                                        name: rsp.mem32(addr)
+                                        for name, addr in bemf_state.items()
+                                    }
+                                }
+                                evidence["bemf_fault_context"] = context
+                                print("G13B2E_ORIGINAL_BEMF_FAULT_CALLSITE " +
+                                      json.dumps(context, sort_keys=True),
+                                      flush=True)
+                                # Observe only, then permit the genuine
+                                # firmware's safety shutdown/reset to run.
                                 del_bp(rsp, state["pc"])
                                 armed.remove(state["pc"])
                                 continue
