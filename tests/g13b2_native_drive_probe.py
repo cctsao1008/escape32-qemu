@@ -247,11 +247,153 @@ def native_timeline_observe(rsp, qtest, bemf_state, *,
     return frame
 
 
+
+
+def step_unchanged_native_wfi(rsp, pc, *, armed_breakpoints, wfi,
+                               hardfault, slice_ms, runtime_slices, stage):
+    """Debugger-only step of original WFI; never edit firmware or QEMU clock."""
+    if rsp.mem16(pc) != 0xbf30:
+        raise AssertionError("Original native main WFI opcode changed")
+    del_bp(rsp, pc)
+    armed_breakpoints.remove(pc)
+    response = rsp.command("s")
+    if not response.startswith(("S05", "T05")):
+        raise RuntimeError("Original native WFI did not single step")
+    cpu = observer(rsp)
+    if cpu["pc"] == pc or cpu["pc"] == hardfault or cpu["cfsr"] or cpu["hfsr"]:
+        raise AssertionError("Original native WFI failed/faulted")
+    add_bp(rsp, pc)
+    armed_breakpoints.add(pc)
+    return wait_for_native_main_wfi(
+        rsp, wfi, hardfault, slice_ms, runtime_slices, stage=stage)
+
+
+def seek_later_physical_bemf_commutation(
+        rsp, qtest, *, timeline, injector, bemf_state, checkpoint,
+        armed_breakpoints, wfi, hardfault, slice_ms, runtime_slices, visits,
+        capture_before, cap1_before, rejected_before, scheduled_before,
+        serviced_before, native_pwm_before):
+    """Bounded continuation after real early CAP1 rejection.
+
+    Host may change ONLY QEMU synthetic U/V/W voltage. Never spoof native
+    comparator/CAP1/IRQ/commutation/PWM/SRAM or force a clock tick.
+    """
+    if injector is None:
+        raise ValueError("No physically integrated three-phase BEMF source")
+    result = dict(
+        extended_wfi_visits=0, subsequent_real_captures=0,
+        subsequent_real_rejections=0,
+        native_timg12_commutation_proved=False,
+        reason="BOUNDED_NO_LATER_NATIVE_BEMF_EVENT")
+    previous_count = capture_before
+    previous_cap1 = cap1_before
+    previous_rejected = rejected_before
+    last_record_index = max(0, len(injector.records) - 1)
+    starting_code = rsp.mem32(bemf_state["selected_code"])
+    for visit in range(1, visits + 1):
+        checkpoint = step_unchanged_native_wfi(
+            rsp, checkpoint, armed_breakpoints=armed_breakpoints, wfi=wfi,
+            hardfault=hardfault, slice_ms=slice_ms,
+            runtime_slices=runtime_slices,
+            stage=f"G13B3G_LATER_BEMF_{visit}")
+        result["extended_wfi_visits"] = visit
+        count = rsp.mem32(bemf_state["captured_events"])
+        rejected = rsp.mem32(bemf_state["rejected_events"])
+        scheduled = rsp.mem32(bemf_state["scheduled"])
+        serviced = rsp.mem32(bemf_state["serviced"])
+        armed = rsp.mem32(bemf_state["armed"])
+        selected = rsp.mem32(bemf_state["selected_code"])
+        if count != previous_count:
+            if count != previous_count + 1:
+                result["reason"] = "MULTIPLE_CAPTURES_BETWEEN_OBSERVATIONS"
+                break
+            cap1 = qtest.read(ECAP1_TSCTR + 8)
+            proof = prove_capture_from_native_samples(
+                injector.records[last_record_index:],
+                cap1_before=previous_cap1,
+                cap1_after=cap1, native_now=qtest.read(ECAP1_TSCTR),
+                guest_count_before=previous_count,
+                guest_count_after=count)
+            result["subsequent_real_captures"] += 1
+            result["last_later_cap1_proof"] = proof.to_dict()
+            print("G13B3G_LATER_PHYSICAL_CAP1 " +
+                  json.dumps(proof.to_dict(), sort_keys=True), flush=True)
+            if scheduled > scheduled_before and rejected == previous_rejected:
+                # The original Rel17 accepted a non-early real CAP1.
+                # Only native TIMG12 ISR and distinct measured output PWM
+                # can complete this gate. No additional synthetic edges.
+                result["reason"] = "GUEST_ACCEPTED_BEMF_WAITING_TIMG12"
+                result["accepted_at_extended_visit"] = visit
+                for wait in range(97):
+                    pwm = observe_original_pwm(qtest.read, gate_active_level=1)
+                    now_serviced = rsp.mem32(bemf_state["serviced"])
+                    if (now_serviced > serviced_before and
+                            pwm.acceptable_for_plant and
+                            pwm.six_high_ticks != native_pwm_before):
+                        result.update(
+                            native_timg12_commutation_proved=True,
+                            reason="REAL_BEMF_ACCEPTED_NATIVE_TIMG12_PWM_CHANGED",
+                            native_timg12_scheduled_after=scheduled,
+                            native_timg12_serviced_after=now_serviced,
+                            six_high_ticks_before=native_pwm_before,
+                            six_high_ticks_after=pwm.six_high_ticks,
+                            wait_after_acceptance=wait)
+                        return result
+                    if wait == 96:
+                        break
+                    checkpoint = step_unchanged_native_wfi(
+                        rsp, checkpoint, armed_breakpoints=armed_breakpoints,
+                        wfi=wfi, hardfault=hardfault, slice_ms=slice_ms,
+                        runtime_slices=runtime_slices,
+                        stage=f"G13B3G_TIMG12_WAIT_{wait+1}")
+                result["reason"] = "ACCEPTED_CAPTURE_NO_NATIVE_PWM_CHANGE"
+                return result
+            if (rejected != previous_rejected + 1 or
+                    scheduled != scheduled_before or armed != 1 or
+                    selected != starting_code):
+                result["reason"] = "NONQUALIFYING_ORIGINAL_BEMF_POLICY_STATE"
+                return result
+            result["subsequent_real_rejections"] += 1
+            previous_count, previous_cap1 = count, cap1
+            previous_rejected = rejected
+            last_record_index = max(0, len(injector.records) - 1)
+        if armed != 1 or selected != starting_code:
+            result["reason"] = "ORIGINAL_GUEST_DISARMED_OR_RESELECTED"
+            break
+        try:
+            native_timeline_observe(
+                rsp, qtest, bemf_state, timeline=timeline,
+                checkpoint=f"extended_native_main_wfi_{visit}",
+                hardfault=hardfault)
+            analog = injector.inject(
+                timeline, qtest.read, qtest.write,
+                selected_code=selected, native_armed=True)
+        except ValueError as exc:
+            result["reason"] = "NATIVE_PWM_OR_MOTOR_ANALOG_UNQUALIFIED"
+            result["details"] = str(exc)
+            break
+        if visit % 16 == 0:
+            print("G13B3G_EXTENDED_NATIVE_FEEDBACK_PROGRESS " +
+                  json.dumps({
+                      "visit":visit,
+                      "motor_elapsed_ns":analog.motor_elapsed_ns,
+                      "guest_captures":count, "guest_rejections":rejected,
+                      "timg12_scheduled":scheduled,
+                      "timg12_serviced":serviced,
+                      "rpm":round(timeline.frames[-1].mechanical_rpm,3),
+                      "six_high_ticks":timeline.frames[-1].six_high_ticks,
+                      "analog_codes":[v & 0xfff for v in analog.sample_words]
+                  },sort_keys=True), flush=True)
+    result["motor_elapsed_ns"] = timeline.frames[-1].elapsed_ns
+    result["integrated_plant_ns"] = timeline.frames[-1].total_integrated_ns
+    return result
+
+
 def collect_native_pwm_timeline(
     rsp, qtest, *, hardfault, armed_breakpoints, wfi, bemf_state,
     slice_ms, runtime_slices, visits, motor, frontend=None,
     require_capture=False, probe_commutation=False,
-    require_early_rejection=False):
+    require_early_rejection=False, extended_feedback_visits=0):
     """GDB WFI rendezvous samples genuine guest time, never clock_step.
 
     Guest continues to execute between *original* WFI instructions.
@@ -371,6 +513,23 @@ def collect_native_pwm_timeline(
                         "native_timg12_commutation_proved": False,
                         "reason": "REJECTED_OR_NOT_SCHEDULED"
                     }
+                    if (scheduled_at_capture == scheduled_before and
+                            extended_feedback_visits > 0 and
+                            rejected_at_capture > 0 and
+                            rsp.mem32(bemf_state["armed"]) == 1):
+                        continuation = seek_later_physical_bemf_commutation(
+                            rsp, qtest, timeline=timeline, injector=injector,
+                            bemf_state=bemf_state, checkpoint=checkpoint,
+                            armed_breakpoints=armed_breakpoints, wfi=wfi,
+                            hardfault=hardfault, slice_ms=slice_ms,
+                            runtime_slices=runtime_slices,
+                            visits=extended_feedback_visits,
+                            capture_before=count, cap1_before=cap1,
+                            rejected_before=rejected_at_capture,
+                            scheduled_before=scheduled_at_capture,
+                            serviced_before=serviced_before,
+                            native_pwm_before=timeline.frames[-1].six_high_ticks)
+                        commutation_proof.update(continuation)
                     if scheduled_at_capture > scheduled_before:
                         # Only a real original TIMG12 ISR may increment
                         # serviced. Continue original CPU after native WFI,
@@ -867,6 +1026,8 @@ def run(args):
                                         probe_commutation=args.probe_native_commutation,
                                         require_early_rejection=(
                                             args.require_native_early_rejection),
+                                        extended_feedback_visits=(
+                                            args.extended_native_feedback_visits),
                                         frontend=(AnalogFrontend(
                                             reference_v=3.3,
                                             zero_bemf_bias_v=1.65,
@@ -1109,6 +1270,11 @@ def main():
                    help="G13B3G negative control: only a real early "
                         "CAP1+ISR may be rejected by original Rel17, "
                         "with no TIMG12 schedule and native arm preserved")
+    p.add_argument("--extended-native-feedback-visits",
+                   type=int, default=0,
+                   help="Continue original guest WFI+ECAP clock and actual "
+                        "VirtualBLDC analog feedback after the first "
+                        "early-rejected native CAP1; bounded, no forced edge")
     p.add_argument("--probe-native-commutation", action="store_true",
                    help="G13B3G: inspect original guest TIMG12 scheduling "
                         "and service after physically derived ECAP1 CAP1; "
@@ -1168,6 +1334,13 @@ def main():
             p.error("--require-native-bemf-arm requires --require-drive "
                     "--require-native-pwm --wait-native-bemf-calibration")
         a.probe_native_bemf = True
+    if not 0 <= a.extended_native_feedback_visits <= 512:
+        p.error("--extended-native-feedback-visits must be 0..512")
+    if (a.extended_native_feedback_visits and
+            not (a.probe_native_commutation or
+                 a.require_native_commutation)):
+        p.error("--extended-native-feedback-visits requires "
+                "--probe-native-commutation")
     if a.require_native_early_rejection:
         a.require_native_bemf_capture = True
     if a.require_native_commutation:

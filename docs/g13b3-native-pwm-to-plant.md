@@ -280,3 +280,8 @@ No guest SRAM/PC/IRQ/PRIMASK or native safety register is changed.
 ## G13B3G original Rel17 early-edge negative control
 
 New independent `--require-native-early-rejection` strict gate proves the physically derived phase voltage created a real CAP1/ISR, but the original firmware correctly refused this too-early crossing. It observes original guest `ival`, original ECAP crossing_epoch and calibrated ticks, rejected_events +1, unchanged TIMG12 scheduled and BEMF armed/phase unchanged. If any original information is unobservable or disagrees, fail closed. The early-edge negative control PASS must never be presented as acceptance, native commutation, or sustained closed loop. Subsequent realistic native later-edge timing remains OPEN.
+
+
+## G13B3G bounded continued native analog-feedback diagnostic
+
+`--extended-native-feedback-visits 384` keeps the original Cortex-M33 running through actual WFI instructions after Rel17 rejects the first real CAP1. On each observed ECAP timestamp, physical Gate/pads/PWM and BEMF arm remain qualified and the Host VirtualBLDC advances only by the real clock delta. It writes ONLY actual motor-derived three-phase QEMU analog stimulus, and may observe subsequent genuine CMPSS0/ECAP1 CAP1/native ISR counts. Original rejection leaves native capture armed. An **accepted** later BEMF must increase native TIMG12 `scheduled` with no guest reject, and a genuinely serviced TIMG12 and different qualified six PWM must follow to prove the *first* feedback-derived commutation. Saturation, safety loss, no later crossing, or incomplete PWM changes stay OPEN with reasons; the test never writes firmware SRAM, CAP1, IRQ flags, PWM or virtual clock. Even one accepted event is NOT sustained sensorless closed-loop.

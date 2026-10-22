@@ -291,7 +291,7 @@ jobs:
             --wait-native-bemf-calibration --calibration-wfi-visits 24 \
             --require-drive --require-native-pwm \
             --require-native-bemf-arm --probe-native-commutation \
-            --timeline-visits 8 \
+            --timeline-visits 8 --extended-native-feedback-visits 384 \
             --artifact artifacts/g13b3g-native-commutation-diagnostic.json \
             2>&1 | tee artifacts/g13b3g-native-commutation-diagnostic.log
           # This is DIAGNOSTIC only, not a positive commutation gate:
