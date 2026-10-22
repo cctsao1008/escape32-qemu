@@ -310,3 +310,8 @@ Full CI #39809528852 already confirms original guest TIMG12 at 100MHz initially 
 ## G13B3G original HAL six-output image ownership diagnostics
 
 Full CI #39811079471 proved original Rel17 TIMG12 serviced=1, step 1→2, original selected_code 5→3, runtime_aq_updates 2→3, but measured original MCPWM4 AQ active/shadow both retained `[1,1,1,512,1,1]` and GLSTS latch became 1. The original guest's internally owned `runtime_aq_last[6]`, `logical_aq[6]`, and `logical_compare[6]` are now read via GDB RSP **only** at accepted event and after serviced TIMG12. All values are original ELF SRAM, with no test writes; if a source-local symbol is absent from the pinned ELF, report UNOBSERVABLE rather than inventing an AQ vector. This disambiguates a real nextstep output image from a QEMU shadow/publication emulator error. No status claim of native six-output commutation is made yet.
+
+
+## G13B3J original deadband/source-clamp diagnosis
+
+Full CI #39812286626 proved original guest sixstep AQ changed from `[0,0,0,2,18,0]` to `[18,0,0,2,0,0]`, with logical compare 3→9, but physical AQ remains `[1,1,1,512,1,1]`. Native backend intentionally clamps high-side PWM for compare <= DBRED−DBFED when the pulse would be shorter than deadtime. Read-only snapshots now include actual native DBCTL, DBRED and DBFED and an auditable per-source clamp classification; absent ELF locals remain unobservable, never fabricated. An additional SIM_ONLY DShot1500 test evaluates the Firmware's authentic ramp versus baseline DShot1000 without touching guest SRAM, ADC, IRQ, PWM, Trip or safety checks. A logical step or low-side-only output is not proof of energized motor closed loop.

@@ -50,6 +50,7 @@ from tools.native_bemf_timeout_qualification import (
     prove_native_no_feedback_timeout
 )
 from tools.native_timg12_observer import observe_native_timg12
+from tools.native_pwm_deadband_diagnostic import native_deadband_source_clamp
 from tools.virtual_bldc_feedback import SIM_BEMF_INPUT
 
 FAULT_FN = "am13e_app_motor_fault_reset"
@@ -289,9 +290,23 @@ def native_sixstep_diagnostics(rsp, qtest, bemf_state):
         guest_arrays[name] = (
             [rsp.mem16(bemf_state[name]+2*i) for i in range(6)]
             if name in bemf_state else None)
+    dbctl = qtest.read(PWM4 + 0xc0)
+    dbred = qtest.read(PWM4 + 0xd0) & 0x3fff
+    dbfed = qtest.read(PWM4 + 0xd4) & 0x3fff
+    suppression = (
+        native_deadband_source_clamp(
+            guest_arrays["logical_aq"], guest_arrays["logical_compare"],
+            active, red_ticks=dbred, fed_ticks=dbfed,
+            fed_enabled=bool(dbctl & 2)).to_dict()
+        if (guest_arrays["logical_aq"] is not None and
+            guest_arrays["logical_compare"] is not None) else None)
     return {
         "guest": guest,
         "original_elf_guest_six_output_arrays": guest_arrays,
+        "native_dbctl": dbctl,
+        "native_dbred": dbred,
+        "native_dbfed": dbfed,
+        "source_pwm_deadband": suppression,
         "mcpwm4_glctl": qtest.read(PWM4 + 0xf0),
         "mcpwm4_glsts": qtest.read(PWM4 + 0xf8),
         "mcpwm4_software_force": [
