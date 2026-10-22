@@ -300,11 +300,22 @@ def run(args):
                                 if state["ipsr"] != 44:
                                     raise AssertionError(
                                         "MCPWM4 native ISR entry without IRQ28/IPSR44")
-                                evidence["native_mcpwm4_irq_entry"] = (
-                                    pwm_native_event_snapshot(
-                                        rsp, args.elf, native_start_zero_counter))
+                                irq_evidence = pwm_native_event_snapshot(
+                                    rsp, args.elf, native_start_zero_counter)
+                                evidence["native_mcpwm4_irq_entry"] = irq_evidence
+                                # Distinguish a REAL configured ET1 counter
+                                # ZERO from a Trip (OST) interrupt sharing
+                                # this vector. TI SDK uses ZERO=2, not 0.
+                                if (irq_evidence["mcpwm_etsel"] & 0x1f) != 2 or (
+                                        irq_evidence["mcpwm_etperiod"] & 7) == 0 or (
+                                        irq_evidence["mcpwm_intflag"] & 8) == 0 or (
+                                        irq_evidence["mcpwm_tzflags"] &
+                                        (0x00020000 | 0x00040000)):
+                                    raise AssertionError(
+                                        "Native IRQ28 was not a qualified "
+                                        "MCPWM4 ET1 TBCTR_ZERO event")
                                 print("G13B2E_NATIVE_MCPWM4_IRQ_ENTRY_REAL "
-                                      "IPSR=44", flush=True)
+                                      "IPSR=44 ET1_SOURCE=2 INTFLAG_ET1=1", flush=True)
                                 del_bp(rsp, state["pc"])
                                 armed.remove(state["pc"])
                                 continue
