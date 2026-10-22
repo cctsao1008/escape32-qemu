@@ -160,6 +160,44 @@ def pwm_native_event_snapshot(rsp, elf, zero_counter):
     return stat
 
 
+def native_wait_for_bemf_calibration(rsp, wfi, observed_wfi, hardfault,
+                                     armed, cal_addr, slice_ms, slices,
+                                     max_visits):
+    """Let original SysTick calibrate ECAP; NEVER set calibration_done."""
+    for visit in range(max_visits):
+        done = rsp.mem32(cal_addr)
+        if done == 1:
+            print(f"G13B2E_NATIVE_BEMF_ECAP_CALIBRATION_COMPLETE "
+                  f"wfi_visits={visit} ORIGINAL_ELF_GUEST_WRITES_ONLY",
+                  flush=True)
+            return observed_wfi
+        if done not in (0, 1):
+            raise AssertionError(f"Invalid guest calibration_done={done}")
+        del_bp(rsp, observed_wfi)
+        armed.remove(observed_wfi)
+        stop = rsp.command("s")  # Native instruction: original WFI
+        if not stop.startswith(("S05", "T05")):
+            raise RuntimeError("Native calibration WFI not stepped")
+        cpu = observer(rsp)
+        if cpu["cfsr"] or cpu["hfsr"] or cpu["pc"] == hardfault:
+            raise AssertionError("Original firmware fault during BEMF calibration")
+        if cpu["pc"] == observed_wfi:
+            raise AssertionError("Guest did not execute original calibration WFI")
+        add_bp(rsp, observed_wfi)
+        armed.add(observed_wfi)
+        observed_wfi = wait_for_native_main_wfi(
+            rsp, wfi, hardfault, slice_ms, slices,
+            stage=f"B2E_BEMF_CALIBRATION_{visit}")
+        if visit in (0, 4, 8, 12, 16):
+            print(f"G13B2E_NATIVE_CALIBRATION_PROGRESS "
+                  f"visit={visit+1} done={rsp.mem32(cal_addr)} "
+                  f"pc=0x{observed_wfi:08x}", flush=True)
+    raise AssertionError(
+        f"Native ECAP/SysTick BEMF calibration incomplete after "
+        f"{max_visits} actual WFI cycles; final calibrated flag="
+        f"{rsp.mem32(cal_addr)}")
+
+
 def run(args):
     app_vector_from_elf(args.elf)
     wfi = native_wfi_locations(args.elf, args.objdump)
@@ -238,6 +276,18 @@ def run(args):
                         neutral = snapshot(rsp, throt)
                         verify(neutral)
                         evidence["neutral_wfi"] = rendezvous
+                        if args.wait_native_bemf_calibration:
+                            if "calibration_done" not in bemf_state:
+                                raise AssertionError(
+                                    "Original ELF lacks readable native BEMF "
+                                    "calibration_done state")
+                            rendezvous = native_wait_for_bemf_calibration(
+                                rsp, wfi, rendezvous, hardfault, armed,
+                                bemf_state["calibration_done"],
+                                args.slice_ms, args.runtime_slices,
+                                args.calibration_wfi_visits)
+                            evidence["native_bemf_calibration_done"] = rsp.mem32(
+                                bemf_state["calibration_done"])
                         for pc in wfi:
                             del_bp(rsp, pc)
                             armed.remove(pc)
@@ -486,6 +536,10 @@ def main():
     p.add_argument("--slice-ms", type=int, default=300)
     p.add_argument("--runtime-slices", type=int, default=20)
     p.add_argument("--require-drive", action="store_true")
+    p.add_argument("--wait-native-bemf-calibration", action="store_true",
+                   help="Before DShot, wait for real original ECAP/SysTick "
+                        "calibration_done via genuine WFI, no SRAM writes")
+    p.add_argument("--calibration-wfi-visits", type=int, default=24)
     p.add_argument("--require-bemf-reject", action="store_true",
                    help="Require native uncalibrated BEMF refuses start, "
                         "while nFAULT is healthy; no spoofed ready state")
@@ -493,6 +547,8 @@ def main():
     a = p.parse_args()
     if not a.qemu.is_file() or not a.elf.is_file():
         p.error("Missing QEMU or genuine SIM_ONLY ELF")
+    if not 1 <= a.calibration_wfi_visits <= 64:
+        p.error("BEMF calibration wait visits must be 1..64")
     if a.require_drive and a.require_bemf_reject:
         p.error("Cannot simultaneously require positive drive and "
                 "an uncalibrated BEMF rejection")
