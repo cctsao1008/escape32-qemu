@@ -13,6 +13,7 @@ on:
       - 'tests/test_g13b3_native_capture.py'
       - 'tests/test_g13b3_native_policy.py'
       - 'tests/test_g13b3_native_timeout.py'
+      - 'tests/test_g13b3_native_timg12.py'
       - 'tests/test_virtual_bldc.py'
       - '.github/workflows/g13b3-host-unit.yml'
   workflow_dispatch:
@@ -40,6 +41,7 @@ jobs:
           python3 tests/test_g13b3_native_capture.py
           python3 tests/test_g13b3_native_policy.py
           python3 tests/test_g13b3_native_timeout.py
+          python3 tests/test_g13b3_native_timg12.py
           echo PASS_G13B3_HOST_ONLY_UNIT_REGRESSIONS
 
       # No QEMU or original ELF here. Positive motor-closed-loop

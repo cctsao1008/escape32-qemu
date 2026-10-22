@@ -49,6 +49,7 @@ from tools.native_bemf_policy_audit import prove_original_early_rejection
 from tools.native_bemf_timeout_qualification import (
     prove_native_no_feedback_timeout
 )
+from tools.native_timg12_observer import observe_native_timg12
 from tools.virtual_bldc_feedback import SIM_BEMF_INPUT
 
 FAULT_FN = "am13e_app_motor_fault_reset"
@@ -328,9 +329,22 @@ def seek_later_physical_bemf_commutation(
                 # can complete this gate. No additional synthetic edges.
                 result["reason"] = "GUEST_ACCEPTED_BEMF_WAITING_TIMG12"
                 result["accepted_at_extended_visit"] = visit
+                result["original_ival_after_acceptance"] = rsp.mem32(
+                    bemf_state["ival"])
+                result["native_timg12_at_acceptance"] = (
+                    observe_native_timg12(
+                        qtest.read,
+                        native_ecap_ticks=qtest.read(ECAP1_TSCTR)).to_dict())
+                print("G13B3G_NATIVE_TIMG12_AT_REAL_BEMF_ACCEPTANCE " +
+                      json.dumps(result["native_timg12_at_acceptance"],
+                                 sort_keys=True), flush=True)
+                last_pwm_image = None
+                last_serviced = serviced_before
                 for wait in range(97):
                     pwm = observe_original_pwm(qtest.read, gate_active_level=1)
                     now_serviced = rsp.mem32(bemf_state["serviced"])
+                    last_pwm_image = pwm.to_dict()
+                    last_serviced = now_serviced
                     if (now_serviced > serviced_before and
                             pwm.acceptable_for_plant and
                             pwm.six_high_ticks != native_pwm_before):
@@ -350,7 +364,37 @@ def seek_later_physical_bemf_commutation(
                         wfi=wfi, hardfault=hardfault, slice_ms=slice_ms,
                         runtime_slices=runtime_slices,
                         stage=f"G13B3G_TIMG12_WAIT_{wait+1}")
-                result["reason"] = "ACCEPTED_CAPTURE_NO_NATIVE_PWM_CHANGE"
+                result["original_timg12_serviced_after_wait"] = last_serviced
+                result["native_pwm_after_wait"] = last_pwm_image
+                result["native_timg12_after_wait"] = (
+                    observe_native_timg12(
+                        qtest.read,
+                        native_ecap_ticks=qtest.read(ECAP1_TSCTR)).to_dict())
+                before = result["native_timg12_at_acceptance"]
+                after = result["native_timg12_after_wait"]
+                if last_serviced <= serviced_before:
+                    if not (before["irq_mask"] & 1):
+                        result["reason"] = "NATIVE_TIMG12_IRQ_NOT_ENABLED"
+                    elif before["counter_enabled"] and (
+                            after["native_ecap_ticks"] -
+                            before["native_ecap_ticks"]) & 0xffffffff < (
+                                before["remaining_ticks"] * 2):
+                        result["reason"] = "ORIGINAL_TIMER_DELAY_NOT_YET_ELAPSED"
+                    else:
+                        result["reason"] = "ORIGINAL_TIMG12_TIMER_NOT_SERVICED"
+                elif (last_pwm_image is None or
+                      last_pwm_image["six_high_ticks"] ==
+                      native_pwm_before):
+                    result["reason"] = "ORIGINAL_TIMG12_SERVICED_NO_PWM_CHANGE"
+                else:
+                    result["reason"] = "NATIVE_PWM_DIFFERENT_NOT_QUALIFIED"
+                print("G13B3G_NATIVE_TIMG12_AFTER_BOUNDED_WAIT " +
+                      json.dumps({
+                          "reason":result["reason"],
+                          "start":before,"end":after,
+                          "native_original_serviced":last_serviced,
+                          "last_pwm":last_pwm_image
+                      },sort_keys=True),flush=True)
                 return result
             if (rejected != previous_rejected + 1 or
                     scheduled != scheduled_before or armed != 1 or

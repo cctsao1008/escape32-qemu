@@ -295,3 +295,8 @@ The dedicated native-ELF QEMU run allows original motor Gate/PWM/BEMF arming, th
 ## G13B3G extended feedback QEMU liveness instrumentation
 
 CI #39796856064 and #39797253832 failed *after* two native post-capture WFI observations: a QTest MMIO `readl` timed out, then the GDB breakpoint cleanup timed out. These are QEMU/test-transport liveness errors, **not** native sensorless-commutation observations. The probe previously spawned QEMU with `stderr=PIPE` while never draining the pipe until process termination; long-running diagnostics could therefore block the emulator itself. G13B3G now sends QEMU stderr to a disk-backed file, exports the complete log with the test artifact, and prints its tail for this diagnostic. Guest SRAM, PWM, IRQ, CAP1, gate and physical Trip behavior are unchanged. The original G13B3G positive qualification remains OPEN until a native accepted TIMG12 event and measured next-sector PWM are proved.
+
+
+## G13B3G read-only TIMG12 status after accepted plant CAP1
+
+Full CI #39807871887 proved a second natural plant-derived rising CAP1 was accepted at 5.375ms, increased original TIMG12 `scheduled`, but a bounded 97-WFI observation lacked proof of TIMG12 ISR `serviced` plus changed six PWM. New native diagnostics take read-only snapshots of TIMG12 clock, +0x1804 CTRCTL, +0x1808 LOAD, +0x1800 count and IRQ MASK/RAW/MASKED at 0x40188000 relative hardware offsets, both immediately upon original accepted event and at the end of the wait. They separately report original guest serviced counter and qualified six-output PWM, to identify whether the timer did not start/expire, the interrupt was unmasked, or the original ISR actually ran without native commutation. The external host never writes these timer regs.
