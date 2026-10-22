@@ -1576,11 +1576,14 @@ static void am13e_pwm4_zero_event(void *opaque)
     am13e_pwm4_shadow_load(p);
     am13e_g10_pwm_sync(&p->machine->feedback);
     ++p->zero_events;
-    /* The firmware programs ET1/ET2 source as TBCTR ZERO (0).
-     * Never generate an interrupt just because time advanced if
-     * the programmed event source does not match.
+    /* TI SDK dl_mcpwm.h: DL_MCPWM_EVT_DISABLED=0 and
+     * DL_MCPWM_EVT_TBCTR_ZERO=2. ETSEL=0 must NEVER emit an IRQ.
+     * The original G13B2E native firmware programs ET1=2; the
+     * earlier simulator mistakenly tested 0 and starved its
+     * startup two-zero gate release while TBCLK was running.
+     * Do not synthesize event flags from INTEN or timer start.
      */
-    if ((p->reg[0x80U / 4U] & 0x1fU) == 0U &&
+    if ((p->reg[0x80U / 4U] & 0x1fU) == 2U &&
         (p->reg[0x84U / 4U] & 7U) != 0U) {
         p->irqs |= 8U;
     }
