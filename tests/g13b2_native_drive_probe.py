@@ -615,6 +615,12 @@ def observe_original_no_bemf_timeout(
 
 
 
+def evidence_power(proof):
+    """Do not claim effective power from only one PWM read or mock speed."""
+    return proof if proof is not None else {
+        "qualified": False,
+        "reason": "NO_THREE_CONSECUTIVE_CROSS_PHASE_POWERED_WFI"}
+
 def probe_native_sustained_power_feedback(
         rsp, qtest, *, bemf_state, armed_breakpoints, wfi, hardfault,
         slice_ms, runtime_slices, max_visits, required_sectors):
@@ -656,6 +662,8 @@ def probe_native_sustained_power_feedback(
     if motor.sample().mechanical_rpm != 0:
         raise AssertionError("Synthetic motor did not start at zero RPM")
     last_qualified_path = False
+    consecutive_powered_wfi = 0
+    effective_power_proof = None
     total_written = 0
     record_last = {}
     result = {}
@@ -677,7 +685,28 @@ def probe_native_sustained_power_feedback(
                 gate_trip_qualified=real_pwm.acceptable_for_plant)
             last_qualified_path = (
                 path.qualifies_necessary_two_terminal_drive)
+            consecutive_powered_wfi = (consecutive_powered_wfi + 1
+                if last_qualified_path else 0)
             sample = motor.sample(gate_enabled=last_qualified_path)
+            if (effective_power_proof is None and
+                    consecutive_powered_wfi >= 3 and
+                    motor.energized_intervals >= 2 and
+                    abs(sample.mechanical_rpm) > 0):
+                effective_power_proof = {
+                    "native_ecap_ticks": frame.native_ecap_ticks,
+                    "original_wfi_visit": visit,
+                    "qualified_consecutive_wfi": consecutive_powered_wfi,
+                    "native_six_high_ticks": real_pwm.six_high_ticks,
+                    "physical_power_pairs": path.different_phase_pairs,
+                    "motor_energized_intervals": motor.energized_intervals,
+                    "motor_rpm_after_measured_power": sample.mechanical_rpm,
+                    "gate_connected": real_pwm.gate_and_pads,
+                    "original_ost2_clear": not real_pwm.physical_ost2,
+                    "original_ost3_clear": not real_pwm.physical_ost3}
+                print("PASS_G13B3L_NATIVE_MEASURED_TWO_TERMINAL_POWER_"
+                      "DRIVES_SIM_ONLY_MOTOR " +
+                      json.dumps(effective_power_proof, sort_keys=True),
+                      flush=True)
             analog = frontend.words(sample)
         except (ValueError, FloatingPointError) as exc:
             result = dict(qualified=False,
@@ -742,7 +771,8 @@ def probe_native_sustained_power_feedback(
                 simulator_analog_frames=total_written,
                 motor_started_only_after_cross_phase=(
                     motor.ever_powered and
-                    motor.energized_intervals > 0))
+                    motor.energized_intervals > 0),
+                native_effective_power=evidence_power(effective_power_proof))
             print("PASS_G13B3L_ORIGINAL_NATIVE_SIX_FEEDBACK_POWERED_"
                   "COMMUTATIONS_SIM_ONLY " +
                   json.dumps(result, sort_keys=True), flush=True)
@@ -763,6 +793,7 @@ def probe_native_sustained_power_feedback(
             simulator_analog_frames=total_written,
             motor_started_only_after_cross_phase=(
                 motor.ever_powered and motor.energized_intervals > 0),
+            native_effective_power=evidence_power(effective_power_proof),
             last_measured_power_path=last_qualified_path)
     print("G13B3L_OPEN_SUSTAINED_NATIVE_CLOSED_LOOP " +
           json.dumps(result, sort_keys=True), flush=True)

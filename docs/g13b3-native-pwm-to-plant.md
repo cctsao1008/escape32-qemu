@@ -340,3 +340,8 @@ A standalone native WFI-loop runner now drives the separate DUTY_RATE=100 SIM_ON
 ## G13B3L physically grounded two-terminal ideal sixstep current
 
 For the **separate** SIM_ONLY native closed-loop model, replace the old star-neutral voltage shortcut with a two-terminal conduction equation: Vline = Vbus * min(upper PWM duty, static sink duty), Lline=2L and Rline=2R, and Ie of the floating third phase exactly 0. Torque comes from the difference of the two populated phase BEMFs. With only one sink, with Gate OFF, or with no high-side source, no DC-bus energy can create initial RPM. With any non-single-source or nonstatic sink topology, fail rather than silently model unknown recirculation. This ideal approximation omits FET diode conduction and ripple, so it remains SIM_ONLY and cannot replace board/motor qualification. All guest firmware, controls, and BEMF injection privileges are unchanged.
+
+
+## G13B3L separate effective power milestone
+
+The strict original-ELF loop now prints its *independent* effective power PASS only after three consecutive native WFI observations with physical opposite-phase upper/lower PWM, clean OST2/OST3, original enabled pads/Gate, at least two real model integrations under these measured outputs and nonzero physical model RPM. It is not an accepted BEMF or repeated commutation PASS; full closed-loop still requires six native accepted timed sectors. No output is ever driven by the Host.
