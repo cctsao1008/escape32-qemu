@@ -253,3 +253,36 @@ a motor safety fidelity correction, **not** an ADC analog
 calibration, power-stage safety qualification, or native Gate
 authorization. The full ideal-BEMF original-ELF regression must
 establish subsequent progress before any G13B2E positive PASS.
+
+## G13B2E — MCPWM4 ET1 ZERO-source decoding (SDK-confirmed)
+
+Original G13B2E positive trace (CI
+[#39697006404](https://github.com/cctsao1008/escape32-qemu/actions/runs/39697006404))
+showed real native `am13e_motor_output_start()` succeeded under a
+separately opt-in *ideal BEMF reference* test build, but retained
+`start_zero_events=2` and never called `am13e_power_stage_enable()`.
+QEMU readback showed `TBCTL` running, `TBPRD=6250`,
+`ETSEL=2`, `ETPERIOD=1`, `INTEN=0x0c`, `INTFLAG=0`.
+
+The **pinned TI AM13E SDK**,
+`source/driverlib/am13e230x/dl_mcpwm.h`, states
+`DL_MCPWM_EVT_DISABLED=0`, `DL_MCPWM_EVT_TBCTR_ZERO=2`.
+The previous QEMU `am13e_pwm4_zero_event()` mistakenly generated
+ET1 on `ETSEL=0`, while the original firmware correctly wrote 2.
+This is a simulator event-source decoding defect, **not** a reason
+to disable two-carrier startup gating or patch firmware safety.
+
+QEMU now emits the modeled ET1 IRQ only when the physical counter
+actually reaches ZERO and the programmed `ETSEL` equals 2 with
+ET1 prescale enabled. G9 regression covers disabled source 0,
+reserved source 1, enabled ZERO source 2, W1C of INTFLAG,
+and disabled prescale. In particular, GDB/QTest tests may **not**
+force INTFLAG to satisfy startup. The independent PWM/Trip paths
+remain enabled.
+
+**Positive Gate/Pad authorization is still OPEN pending a new
+original-ELF G13B2E result with real ET1 IRQ and a subsequent
+native `am13e_power_stage_enable` return/physical outputs proof.**
+The optional `--require-drive` gate is intentionally not switched
+on until the actual observation supports it; a passing generic
+regression is not itself a motor-start acceptance.
