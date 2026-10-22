@@ -6,6 +6,8 @@ from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"tests"))
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from g13b_native_dshot import WAVE,queue_dshot600_wire
+from g13b2_native_drive_probe import native_pa26_receiver_rearm_snapshot
+from g13b_native_dshot import DMA
 
 
 class ExternalPA26Fixture:
@@ -79,6 +81,31 @@ class OriginalArmZeroWireTests(unittest.TestCase):
         self.assertEqual(q.arm_calls, 3)
         self.assertEqual(q.queued, 32)
         self.assertEqual(q.staged[-1][1], 0)
+    def test_original_dma_rearm_requires_full_32_word_buffer(self):
+        class ReadOnlyDma:
+            def __init__(self, size, ctrl, trig, raw=0):
+                self.values={
+                    DMA+0x1000+0x220: ctrl,
+                    DMA+0x1000+0x22c: size,
+                    DMA+0x1000+0x118: trig,
+                    DMA+0x1000+0x030: raw,
+                }
+                self.reads=[]
+            def read(self, address):
+                self.reads.append(address)
+                return self.values[address]
+        for size, ctrl, trig, raw, expected in (
+                (32, 2, 34, 0, True),
+                (7, 2, 34, 0, False),
+                (32, 0, 34, 0, False),
+                (32, 2, 35, 0, False),
+                (32, 2, 34, 1<<24, False)):
+            q=ReadOnlyDma(size,ctrl,trig,raw)
+            snap=native_pa26_receiver_rearm_snapshot(q)
+            self.assertEqual(snap["source_owned_fresh_rx_buffer"],expected)
+            self.assertFalse(snap["guest_register_writes"])
+            self.assertEqual(len(q.reads),4)
+
     def test_neutral_requires_explicit_arm_permission(self):
         q=ExternalPA26Fixture()
         with self.assertRaisesRegex(ValueError,"opt-in zero"):
