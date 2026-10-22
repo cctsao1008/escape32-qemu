@@ -147,6 +147,15 @@ def native_original_zero_throttle_arm(rsp, qtest, *, wfi, hardfault,
     # complete pulse train was lost while the Guest receiver entered
     # its native RX state, resend a NEW physical zero packet. Neither
     # helper alters Guest DMA, throttle, vector, SysTick or ARM window.
+    # The selected Rel17 receiver starts a genuine ~1 s WWDT.
+    # Waiting twenty long host polling slices for the first undecoded
+    # training packet advances several SECONDS of native SysTick time:
+    # WWDT expires BEFORE a second, otherwise valid, zero packet can
+    # feed it. Retry the actual physical wire promptly; do not reset,
+    # pause, feed, or reconfigure the firmware watchdog.
+    first_zero_tick = rsp.mem32(bemf_state["tick"])
+    neutral_poll_ms = min(slice_ms, 80)
+    neutral_poll_slices = 2
     max_physical_zero_packets = 4
     for attempt in range(max_physical_zero_packets):
         if attempt:
@@ -164,16 +173,27 @@ def native_original_zero_throttle_arm(rsp, qtest, *, wfi, hardfault,
                 qtest, 0, allow_zero=True, reset_completed_wave=True)
             if new_frame != frame:
                 raise AssertionError("Retransmitted genuine neutral mismatch")
+            retry_tick = rsp.mem32(bemf_state["tick"])
+            elapsed_native_ticks = (retry_tick - first_zero_tick) & 0xffffffff
+            # This is a fail-closed deadline, NOT a simulated watchdog
+            # feed. Keep retransmissions within the original selected
+            # input WWDT period, nominally 16000 real 16kHz SysTicks.
+            if elapsed_native_ticks >= 12000:
+                raise AssertionError(
+                    "G13B3N zero-DShot retransmission missed native "
+                    "WWDT deadline; not authorized to recover expired "
+                    f"watchdog: ticks={elapsed_native_ticks}")
             print("G13B3N_PHYSICAL_ZERO_DSHOT_RETRANSMISSION " +
                   json.dumps({"attempt": attempt + 1,
                               "frame": new_frame,
                               "previous_delivered": 32,
+                              "elapsed_native_systick": elapsed_native_ticks,
                               "guest_writes": False}, sort_keys=True),
                   flush=True)
         try:
             resume_to(
-                rsp, callback, hardfault, slice_ms,
-                runtime_slices,
+                rsp, callback, hardfault, neutral_poll_ms,
+                neutral_poll_slices,
                 "G13B3N_NATIVE_NEUTRAL_DSHOT_CALLBACK",
                 on_pause=report_physical_ingress)
             break
@@ -184,9 +204,10 @@ def native_original_zero_throttle_arm(rsp, qtest, *, wfi, hardfault,
                            physical=sample_physical_neutral_ingress(
                                runtime_slices, observer(rsp))),
                       sort_keys=True), flush=True)
-            # Only an actual callback timeout may be retried. A
-            # HardFault, unexpected breakpoint or any unsafe wire state
-            # is terminal. Never bypass original Rel17 ARM policy.
+            # Only an actual callback timeout may be retried, and only
+            # while a new physical packet can arrive BEFORE the native
+            # input WWDT deadline. Never bypass original Rel17 ARM policy.
+            # A fault or a lost/undelivered wire packet is terminal.
             if ("native guest did not reach" not in str(exc) or
                     attempt + 1 == max_physical_zero_packets):
                 raise
