@@ -269,3 +269,9 @@ After five original native timeline voltage samples (including nonneutral Virtua
 ## G13B3G native Rel17 commutation diagnostic and strict gate
 
 After a physically derived BEMF crossing produces native CAP1 and original captured_events, optionally inspect original motor_event_timer scheduled and serviced data, then continue real original WFI / TIMG12 execution. Only a true original guest one-shot service AND a different still-qualified native six-output PWM image can report the isolated G13B3G PASS. Original firmware may correctly reject an early edge; diagnostic then prints G13B3G_OPEN, never a simulated pass. Separate strict --require-native-commutation exists but is not enabled in CI until real positive evidence. Even a first accepted commutation would not prove sustained closed loop or physical E62 qualification.
+
+G13B3H late native WFI note: after the timeline probe has cleared its
+motor-start/Gate/fault-reset debugger breakpoints, the coupled fault test
+reinstalls **only** the read-only GDB breakpoint on original
+`am13e_app_motor_fault_reset`, before continuing real firmware execution.
+No guest SRAM/PC/IRQ/PRIMASK or native safety register is changed.

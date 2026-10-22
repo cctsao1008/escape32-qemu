@@ -922,6 +922,13 @@ def run(args):
                                     for pc in sorted(armed - {hardfault}):
                                         del_bp(rsp, pc)
                                         armed.remove(pc)
+                                    # The native-timeline probe removed the
+                                    # original fault-reset *debugger* BP.
+                                    # Re-install only this observation BP;
+                                    # NEVER force a guest PC/IRQ/fault path.
+                                    if symbols[FAULT_FN] not in armed:
+                                        add_bp(rsp, symbols[FAULT_FN])
+                                        armed.add(symbols[FAULT_FN])
                                     # Let the original ISR finish executing
                                     # its nFAULT readiness and nonreturning
                                     # fault-reset policy. No host mutation of
