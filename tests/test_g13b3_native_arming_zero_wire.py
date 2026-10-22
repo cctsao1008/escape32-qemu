@@ -66,6 +66,19 @@ class OriginalArmZeroWireTests(unittest.TestCase):
         self.assertEqual(q.reset_calls,1)
         self.assertEqual(q.queued,32)
         self.assertEqual(q.arm_calls,2)
+    def test_repeated_actual_positive_packets_keep_wire_history(self):
+        # This only checks the simulator's external physical input
+        # queue. A native ARM/CRC PASS still requires original ELF CI.
+        q = ExternalPA26Fixture()
+        queue_dshot600_wire(q, 0, allow_zero=True)
+        q.finish()
+        queue_dshot600_wire(q, 1500, reset_completed_wave=True)
+        q.finish()
+        queue_dshot600_wire(q, 1500, reset_completed_wave=True)
+        self.assertEqual(q.reset_calls, 2)
+        self.assertEqual(q.arm_calls, 3)
+        self.assertEqual(q.queued, 32)
+        self.assertEqual(q.staged[-1][1], 0)
     def test_neutral_requires_explicit_arm_permission(self):
         q=ExternalPA26Fixture()
         with self.assertRaisesRegex(ValueError,"opt-in zero"):

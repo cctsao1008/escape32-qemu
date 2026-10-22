@@ -1569,8 +1569,110 @@ def run(args):
                         callback = symbols["am13e_app_io_dshot_packet"]
                         add_bp(rsp, callback)
                         armed.add(callback)
-                        resume_to(rsp, callback, hardfault, args.slice_ms,
-                                  args.runtime_slices, "NATIVE_DSHOT_CALLBACK")
+                        # Selected input WWDT was first genuinely fed by
+                        # the zero-DShot CRC inside original Rel17. A real
+                        # streaming DShot transmitter repeats a throttle
+                        # packet. If receiver acquisition misses ONE wave,
+                        # permit a bounded NEW physical PA26 frame only.
+                        # Never bypass original CRC/ARM, fabricate Guest
+                        # SRAM/IRQ, or feed/disable WWDT on the Host.
+                        positive_retransmit = bool(
+                            args.sim_only_cfg_flash and rendezvous == wfi[1])
+                        valid_feeds_start = (
+                            rsp.mem32(bemf_state["valid_frame_feeds"])
+                            if positive_retransmit else None)
+                        last_zero_feed_tick = (
+                            evidence["g13b3n_original_zero_arming"]
+                            ["original_crc_arm_policy"]
+                            ["original_systick_at_zero_callback"]
+                            if positive_retransmit else None)
+                        max_positive_packets = 4 if positive_retransmit else 1
+                        for positive_attempt in range(max_positive_packets):
+                            if positive_attempt:
+                                # Retry ONLY after the entire last external
+                                # 32-edge physical waveform reached the GPIO
+                                # and DMA; cumulative counters are expected.
+                                wave_ok = (
+                                    qtest.read(WAVE + 0x10) == 0 and
+                                    qtest.read(WAVE + 0x08) == 32 and
+                                    qtest.read(WAVE + 0x0c) == 32 and
+                                    qtest.read(WAVE + 0x14) == 0)
+                                last_cap = qtest.read(PA26 + 0x08)
+                                last_dma = qtest.read(PA26 + 0x0c)
+                                if (not wave_ok or
+                                        last_cap-positive_capture_before != 32 or
+                                        last_dma-positive_dma_before != 32):
+                                    raise AssertionError(
+                                        "G13B3M cannot requeue incomplete "
+                                        "native PA26/DMA positive frame")
+                                if (rsp.mem32(throt) != 0 or
+                                        rsp.mem32(bemf_state["valid_frame_feeds"])
+                                        != valid_feeds_start):
+                                    raise AssertionError(
+                                        "G13B3M positive original Guest state "
+                                        "changed without observed callback; "
+                                        "refuse forged acceptance/retransmission")
+                                # 16kHz source clock, conservative bound
+                                # strictly before nominal WWDT expiration.
+                                elapsed = (
+                                    rsp.mem32(bemf_state["tick"]) -
+                                    last_zero_feed_tick) & 0xffffffff
+                                if elapsed >= 12000:
+                                    raise AssertionError(
+                                        "G13B3M positive retransmission "
+                                        "too late for original WWDT deadline "
+                                        f"ticks={elapsed}")
+                                positive_capture_before = last_cap
+                                positive_dma_before = last_dma
+                                repeated = queue_dshot600_wire(
+                                    qtest, args.throttle,
+                                    reset_completed_wave=True)
+                                if repeated != frame:
+                                    raise AssertionError(
+                                        "G13B3M positive DShot CRC waveform changed")
+                                print("G13B3M_PHYSICAL_POSITIVE_DSHOT_RETRANSMISSION " +
+                                      json.dumps({
+                                          "attempt": positive_attempt + 1,
+                                          "frame": repeated,
+                                          "elapsed_native_systick_since_zero_crc": elapsed,
+                                          "previous_frame_full_32_dma": True,
+                                          "host_guest_writes": False
+                                      }, sort_keys=True), flush=True)
+                            try:
+                                resume_to(
+                                    rsp, callback, hardfault,
+                                    min(args.slice_ms, 60)
+                                    if positive_retransmit else args.slice_ms,
+                                    2 if positive_retransmit
+                                    else args.runtime_slices,
+                                    "NATIVE_DSHOT_CALLBACK")
+                                break
+                            except AssertionError as exc:
+                                if not positive_retransmit:
+                                    raise
+                                state = observer(rsp)
+                                port = {
+                                    "attempt": positive_attempt + 1,
+                                    "error": str(exc),
+                                    "cpu": state,
+                                    "guest_throt": rsp.mem32(throt),
+                                    "valid_feeds": rsp.mem32(
+                                        bemf_state["valid_frame_feeds"]),
+                                    "physical_wave_delivered": qtest.read(WAVE + 0x0c),
+                                    "pa26_captures_this_packet":
+                                        qtest.read(PA26 + 0x08)-positive_capture_before,
+                                    "dma_beats_this_packet":
+                                        qtest.read(PA26 + 0x0c)-positive_dma_before,
+                                    "host_guest_writes": False,
+                                }
+                                print("G13B3M_NATIVE_POSITIVE_RX_ATTEMPT_BLOCKER " +
+                                      json.dumps(port, sort_keys=True),
+                                      flush=True)
+                                # CPU faults, unexpected breakpoints or
+                                # exhausted physical attempts are terminal.
+                                if ("native guest did not reach" not in str(exc) or
+                                        positive_attempt + 1 == max_positive_packets):
+                                    raise
                         guest_frame = rsp.reg(0) & 0xffff
                         delivered = rsp.mem32(WAVE + 0x0c)
                         capture = rsp.mem32(PA26 + 0x08)
