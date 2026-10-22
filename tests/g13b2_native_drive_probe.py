@@ -692,8 +692,8 @@ def probe_native_sustained_power_feedback(
     Only original guest CAP1 + TIMG12 service + powered six-vector can
     result in a completed sector. SIM_ONLY assumptions stay explicit.
     """
-    needed = ("armed", "selected_code", "step", "captured_events",
-              "rejected_events", "scheduled", "serviced")
+    needed = ("armed", "pending_code", "selected_code", "step",
+              "captured_events", "rejected_events", "scheduled", "serviced")
     missing = [x for x in needed if x not in bemf_state]
     if missing:
         raise AssertionError("Original ELF missing native loop symbols: " +
@@ -837,7 +837,9 @@ def probe_native_sustained_power_feedback(
             pwm_high=real_pwm.six_high_ticks,
             pwm_period=real_pwm.period_ticks,
             gate_trip_qualified=real_pwm.acceptable_for_plant,
-            rpm=sample.mechanical_rpm)
+            rpm=sample.mechanical_rpm,
+            armed=(guest["armed"] == 1),
+            pending_code=guest["pending_code"])
         if visit <= 3 or visit % 16 == 0:
             print("G13B3L_NATIVE_GUEST_DUTY_PROGRESS " +
                   json.dumps({

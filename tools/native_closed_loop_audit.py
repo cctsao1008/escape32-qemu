@@ -47,14 +47,33 @@ class NativeClosedLoopAudit:
 
     def ingest(self, *, ecap_ticks, cap1_ticks, captured, rejected,
                scheduled, serviced, step, selected_code, pwm_high,
-               pwm_period, gate_trip_qualified, rpm):
+               pwm_period, gate_trip_qualified, rpm,
+               armed=True, pending_code=0):
         if not 0 <= ecap_ticks <= 0xffffffff or not 0 <= cap1_ticks <= 0xffffffff:
             raise AssertionError("Native ECAP ticks invalid")
         if any(not 0 <= x <= 0xffffffff for x in
                (captured, rejected, scheduled, serviced)):
             raise AssertionError("Original counters invalid")
-        if not 1 <= step <= 6 or selected_code not in (1, 2, 3, 5, 6, 7):
+        # Original Rel17 am13e_app_motor_bemf_stage() temporarily
+        # clears selected_code during AQ global-load, then only the
+        # native MCPWM ZERO carrier IRQ publishes and arms the next phase.
+        # Waiting for this source-authored transient is mandatory.
+        route = (None, (5, (2, 1)), (3, (0, 1)),
+                 (7, (0, 2)), (2, (1, 2)), (6, (1, 0)),
+                 (1, (2, 0)))
+        if not 1 <= step <= 6 or selected_code not in (0, 1, 2, 3, 5, 6, 7):
             raise AssertionError("Original sixstep/phase invalid")
+        if selected_code == 0:
+            if armed or pending_code not in (1, 2, 3, 5, 6, 7):
+                raise AssertionError("Native BEMF code0 without legitimate pending publication")
+        elif selected_code != route[step][0]:
+            # A just-serviced original TIMG12 IRQ may leave the new
+            # Guest selected_code unpublished until a later real PWM ZERO;
+            # old code is allowed only while the Guest is disarmed.
+            if armed:
+                raise AssertionError("Armed original BEMF phase differs from guest step")
+        if pending_code and pending_code not in (1, 2, 3, 5, 6, 7):
+            raise AssertionError("Unknown original pending BEMF code")
         path = qualify_cross_phase_bridge(
             pwm_high, period_ticks=pwm_period,
             gate_trip_qualified=gate_trip_qualified)
@@ -63,6 +82,7 @@ class NativeClosedLoopAudit:
         now = dict(ecap_ticks=ecap_ticks, cap1_ticks=cap1_ticks,
                    captured=captured, rejected=rejected, scheduled=scheduled,
                    serviced=serviced, step=step, selected_code=selected_code,
+                   armed=bool(armed), pending_code=pending_code,
                    pwm_high=tuple(pwm_high),
                    power_pairs=path.different_phase_pairs,
                    path_ok=path.qualifies_necessary_two_terminal_drive, rpm=rpm)
@@ -105,8 +125,7 @@ class NativeClosedLoopAudit:
             if serviced > pending["original_serviced_before"]:
                 if pending["service_tick"] is None:
                     pending["service_tick"] = ecap_ticks
-                if (now["step"] != (pending["pre_step"] % 6) + 1 or
-                    now["selected_code"] == pending["pre_selected"]):
+                if now["step"] != (pending["pre_step"] % 6) + 1:
                     raise AssertionError("Original TIMG12 serviced without nextstep")
                 if pending["pre_pair"] is None:
                     # Early six-step stages can occur before the physical
@@ -118,7 +137,11 @@ class NativeClosedLoopAudit:
                     self.reason = "REAL_TIMG12_UNPOWERED_SECTOR_NOT_CREDITED"
                 elif (now["path_ok"] and now["power_pairs"] and
                     now["power_pairs"][0] != pending["pre_pair"] and
-                    now["pwm_high"] != pending["pre_pwm"]):
+                    now["pwm_high"] != pending["pre_pwm"] and
+                    now["armed"] and now["pending_code"] == 0 and
+                    now["selected_code"] == route[now["step"]][0]):
+                    if now["power_pairs"] != (route[now["step"]][1],):
+                        raise AssertionError("Measured powered PWM not original sixstep vector")
                     if not isinstance(rpm, (int, float)) or rpm == 0:
                         raise AssertionError("No plant RPM at original powered step")
                     self.sectors.append(NativeSectorEvidence(
@@ -134,7 +157,8 @@ class NativeClosedLoopAudit:
                     self.pending = None
                     self.reason = "POWERED_ORIGINAL_NATIVE_SECTOR_COMPLETED"
                 else:
-                    self.reason = "ORIGINAL_TIMG12_SERVED_NO_PHYSICAL_VECTOR_YET"
+                    self.reason = (
+                        "WAIT_ORIGINAL_CARRIER_ZERO_BEMF_PUBLICATION_OR_POWERED_VECTOR")
         self.last = now
 
     def result(self):

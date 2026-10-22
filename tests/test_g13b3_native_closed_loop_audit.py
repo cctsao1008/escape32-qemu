@@ -6,10 +6,11 @@ from tools.native_closed_loop_audit import NativeClosedLoopAudit
 
 
 def snap(t, *, cap=0, c1=0, rej=0, sch=1, srv=0, step=1, code=5,
-         pwm=(0,0,0,6250,620,0), rpm=123):
+         pwm=(0,0,0,6250,620,0), rpm=123, armed=True, pending=0):
     return dict(ecap_ticks=t, cap1_ticks=c1, captured=cap, rejected=rej,
                 scheduled=sch, serviced=srv, step=step, selected_code=code,
-                pwm_high=pwm, pwm_period=6251, gate_trip_qualified=True, rpm=rpm)
+                pwm_high=pwm, pwm_period=6251, gate_trip_qualified=True,
+                rpm=rpm, armed=armed, pending_code=pending)
 
 
 class TestNativeClosedLoopAudit(unittest.TestCase):
@@ -32,6 +33,36 @@ class TestNativeClosedLoopAudit(unittest.TestCase):
                             pwm=phases[(k+1)%6]))
         self.assertTrue(a.qualified)
         self.assertEqual(len(a.sectors), 6)
+
+    def test_native_carrier_zero_must_publish_bemf_after_timer(self):
+        a=NativeClosedLoopAudit()
+        before=(0,0,0,6250,620,0)
+        after=(620,0,0,6250,0,0)
+        a.ingest(**snap(100,pwm=before))
+        a.ingest(**snap(200,cap=1,c1=170,sch=2,pwm=before))
+        # TIMG12 ran and original nextstep staged AQ, but the
+        # original BEMF phase has not yet been published by PWM ZERO.
+        a.ingest(**snap(300,cap=1,c1=170,sch=2,srv=1,step=2,
+                        code=0,armed=False,pending=3,pwm=before))
+        self.assertEqual(len(a.sectors),0)
+        self.assertIsNotNone(a.pending)
+        # Firmware-controlled MCPWM carrier ZERO publishes new mux,
+        # physically changed high/low vector, rearmed comparator.
+        a.ingest(**snap(400,cap=1,c1=170,sch=2,srv=1,step=2,
+                        code=3,armed=True,pending=0,pwm=after))
+        self.assertEqual(len(a.sectors),1)
+        self.assertIsNone(a.pending)
+    def test_unpublished_bemf_without_pending_rejected(self):
+        a=NativeClosedLoopAudit()
+        with self.assertRaisesRegex(AssertionError,"code0"):
+            a.ingest(**snap(100,code=0,armed=False,pending=0))
+    def test_wrong_measured_guest_vector_rejected(self):
+        a=NativeClosedLoopAudit()
+        a.ingest(**snap(100))
+        a.ingest(**snap(200,cap=1,c1=170,sch=2))
+        with self.assertRaisesRegex(AssertionError,"sixstep vector"):
+            a.ingest(**snap(300,cap=1,c1=170,sch=2,srv=1,step=2,
+                            code=3,pwm=(0,0,620,6250,0,0)))
 
     def test_early_reject_is_not_sector(self):
         a = NativeClosedLoopAudit()
