@@ -327,8 +327,14 @@ jobs:
             --output /tmp/e62-escape32-simcfg/mcu/AM13E/config.ld
           # The only modified source artifact is the isolated SIM_ONLY
           # linker .cfg=>.data mapping. TI startup copies native cfgdata.
-          diff -qr /tmp/e62-escape32 /tmp/e62-escape32-simcfg | \
-            tee artifacts/g13b3l-source-fork-diff.txt
+          # GNU diff exits 1 for expected differences. Preserve
+          # fail-closed behavior for exit >1 (I/O or tool failure).
+          set +e
+          diff -qr /tmp/e62-escape32 /tmp/e62-escape32-simcfg \
+            > artifacts/g13b3l-source-fork-diff.txt
+          diff_status=$?
+          set -e
+          test "$diff_status" -eq 1
           test "$(wc -l < artifacts/g13b3l-source-fork-diff.txt)" -eq 1
           grep -F 'mcu/AM13E/config.ld' artifacts/g13b3l-source-fork-diff.txt
           cmake -S /tmp/e62-escape32-simcfg -B /tmp/e62-fw-fast-ramp \
