@@ -35,6 +35,7 @@ from g13b2_native_safety import snapshot, verify, EXT_OC, PWM4
 from tools.virtual_bldc import gate_and_pads_connected
 from tools.native_pwm_qualification import observe_original_pwm
 from tools.native_bldc_seed import one_native_pwm_period
+from tools.native_bemf_qualification import observe_original_bemf_route
 from tools.virtual_bldc import MotorParameters, VirtualBLDC
 from tools.virtual_bldc_feedback import AnalogFrontend
 
@@ -228,7 +229,7 @@ def run(args):
     for name in ("calibration_done", "calibration_ticks",
                  "capture_ticks_per_ms", "capture_timeout_ticks",
                  "pending_code", "pending_interval",
-                 "reference_ready", "selected_code"):
+                 "reference_ready", "selected_code", "armed"):
         try:
             bemf_state[name] = symbol_address(args.elf, name)
         except RuntimeError:
@@ -472,6 +473,27 @@ def run(args):
                                 native_pwm = observe_original_pwm(
                                     qtest.read, gate_active_level=1)
                                 evidence["g13b3a_native_pwm"] = native_pwm.to_dict()
+                                if args.probe_native_bemf and (
+                                        "selected_code" in bemf_state and
+                                        "armed" in bemf_state):
+                                    selected = rsp.mem32(bemf_state["selected_code"])
+                                    arm_state = rsp.mem32(bemf_state["armed"])
+                                    bemf_cfg = observe_original_bemf_route(
+                                        qtest.read, selected_code=selected,
+                                        native_armed=(arm_state == 1))
+                                    evidence["g13b3c_bemf_readiness"] = (
+                                        bemf_cfg.to_dict())
+                                    print("G13B3C_NATIVE_BEMF_ARM_READ_ONLY " +
+                                          json.dumps(bemf_cfg.to_dict(),
+                                                     sort_keys=True), flush=True)
+                                elif args.probe_native_bemf:
+                                    missing = [
+                                        x for x in ("selected_code", "armed")
+                                        if x not in bemf_state
+                                    ]
+                                    print("G13B3C_NATIVE_BEMF_ARM_UNOBSERVABLE "
+                                          "no false Ready claim; missing="
+                                          + ",".join(missing), flush=True)
                                 if args.probe_native_plant_seed:
                                     # Purely synthetic G13A test motor, never
                                     # a Quanta production winding/BOM value.
@@ -674,6 +696,9 @@ def main():
     p.add_argument("--require-native-pwm", action="store_true",
                    help="Opt-in: assert native six-output nonzero phase "
                         "drive and actual Gate/PINCM/power/Trip safety")
+    p.add_argument("--probe-native-bemf", action="store_true",
+                   help="Read-only original CMPSS0/ECAP1 selected phase, "
+                        "DAC, capture arm and native IRQ config")
     p.add_argument("--probe-native-plant-seed", action="store_true",
                    help="G13B3B: integrate *one* guest PWM carrier into "
                         "explicitly synthetic test motor; NEVER feed BEMF")
