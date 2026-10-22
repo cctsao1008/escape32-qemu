@@ -83,6 +83,10 @@ def native_original_zero_throttle_arm(rsp, qtest, *, wfi, hardfault,
         raise AssertionError(
             "Expected source original ARM window to force throttle=1; "
             f"actual={before}")
+    # PA26/DMA counters are cumulative; snapshot before EACH physical
+    # packet and later verify exactly one 32-edge contribution.
+    capture_start = qtest.read(PA26 + 0x08)
+    dma_start = qtest.read(PA26 + 0x0c)
     # Stop at original actual callback, not a Host-created decoder.
     frame = queue_dshot600_wire(qtest, 0, allow_zero=True)
     if frame != 0:
@@ -116,7 +120,12 @@ def native_original_zero_throttle_arm(rsp, qtest, *, wfi, hardfault,
                         rsp.mem32(address + 28))
                     port["native_cfg_rate_32"] = hex(
                         rsp.mem32(address + 32))
-                    port["native_cfg_inputmode_word_?"] = "UNREAD_NOT_VERIFIED_ABI"
+                    # Pinned src/common.h Cfg: input_mode byte +52,
+                    # arm byte +20, from verified source ABI.
+                    port["native_cfg_input_mode"] = (
+                        rsp.mem32(address + 52) & 0xff)
+                    port["native_cfg_arm"] = (
+                        rsp.mem32(address + 20) & 0xff)
                 else:
                     port["native_tick"] = rsp.mem32(address)
         return port
@@ -143,6 +152,8 @@ def native_original_zero_throttle_arm(rsp, qtest, *, wfi, hardfault,
                     "is still busy or missing delivered wire edges")
             if qtest.read(WAVE + 0x14) != 0:
                 raise AssertionError("Neutral PA26 must return low at frame end")
+            capture_start = qtest.read(PA26 + 0x08)
+            dma_start = qtest.read(PA26 + 0x0c)
             new_frame = queue_dshot600_wire(
                 qtest, 0, allow_zero=True, reset_completed_wave=True)
             if new_frame != frame:
@@ -175,10 +186,27 @@ def native_original_zero_throttle_arm(rsp, qtest, *, wfi, hardfault,
                 raise
     if (rsp.reg(0) & 0xffff) != 0:
         raise AssertionError("Original callback did not decode DShot neutral")
-    if (qtest.read(WAVE + 0x0c) != 32 or
-            rsp.mem32(PA26 + 0x08) != 32 or
-            rsp.mem32(PA26 + 0x0c) != 32):
-        raise AssertionError("Neutral packet not from actual PA26/DMA")
+    captures = qtest.read(PA26 + 0x08)
+    dma_beats = qtest.read(PA26 + 0x0c)
+    delivered = qtest.read(WAVE + 0x0c)
+    neutral_receipt = {
+        "zero_packet_attempt": attempt + 1,
+        "native_guest_frame_at_callback": rsp.reg(0) & 0xffff,
+        "physical_wave_delivered_this_packet": delivered,
+        "original_pa26_capture_total": captures,
+        "original_pa26_capture_this_packet": captures - capture_start,
+        "original_dma_beat_total": dma_beats,
+        "original_dma_beats_this_packet": dma_beats - dma_start,
+        "guest_writes": False
+    }
+    print("G13B3N_ORIGINAL_NATIVE_ZERO_RX_FRAME_CAUSAL_DELTA " +
+          json.dumps(neutral_receipt, sort_keys=True), flush=True)
+    if (delivered != 32 or
+            captures - capture_start != 32 or
+            dma_beats - dma_start != 32):
+        raise AssertionError(
+            "Latest neutral packet missing genuine 32 PA26/DMA edges: " +
+            json.dumps(neutral_receipt, sort_keys=True))
     ret = rsp.reg(14) & ~1
     if not 0x6000 <= ret < 0x80000:
         raise AssertionError("Original DShot zero callback LR invalid")
@@ -211,7 +239,9 @@ def native_original_zero_throttle_arm(rsp, qtest, *, wfi, hardfault,
     if qtest.read(WAVE + 0x10) != 0:
         raise AssertionError("Neutral physical waveform remains active")
     return dict(qualified=True, physical_zero_frame=frame,
-                physical_zero_edges=32, original_callback_crc_accepted=True,
+                physical_zero_edges=32, physically_sent_zero_packets=attempt+1,
+                 original_packet_causal_delta=neutral_receipt,
+                 original_callback_crc_accepted=True,
                 source_arm_window_released=True,
                 native_original_run_wfi_pc=normal)
 
