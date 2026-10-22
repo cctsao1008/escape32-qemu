@@ -315,6 +315,27 @@ jobs:
           # This is DIAGNOSTIC only, not a positive commutation gate:
           # prints G13B3G_OPEN when native Rel17 rejects an early BEMF.
           # Never rewrite Rel17 ival/timing or manufacture TIMG12 events.
+      - name: G13B3L separate SIM_ONLY original-Rel17 fast-ramp ELF
+        run: |
+          set -euo pipefail
+          cmake -S /tmp/e62-escape32 -B /tmp/e62-fw-fast-ramp \
+            -G 'Unix Makefiles' -DESCAPE32_BUILD_AM13E=ON \
+            -DAM13E_SDK_ROOT=/tmp/e62-sdk \
+            -DG13B2_SIM_ONLY_OPT_IN=ON \
+            -DG13B2_SIM_ONLY_IDEAL_BEMF_REFERENCE=ON \
+            -DAM13E_BOARD_BOARD_PROFILE_FILE="$PWD/tests/fixtures/g13b3l_sim_only_ramp.cmake" \
+            -DAM13E_BOOT_LINKER_SCRIPT=/tmp/e62-escape32/boot/mcu/AM13E/config.ld \
+            2>&1 | tee artifacts/g13b3l-fast-ramp-configure.log
+          cmake --build /tmp/e62-fw-fast-ramp \
+            --target AM13E-rev17.3.elf -j 2 \
+            2>&1 | tee artifacts/g13b3l-fast-ramp-build.log
+          test -s /tmp/e62-fw-fast-ramp/AM13E-rev17.3.elf
+          if cmp -s /tmp/e62-fw-fast-ramp/AM13E-rev17.3.elf \
+            /tmp/e62-fw-sim-ideal-bemf/AM13E-rev17.3.elf; then
+            echo 'ERROR: SIM_ONLY DUTY_RATE change not represented in ELF'
+            exit 1
+          fi
+          echo PASS_G13B3L_SEPARATE_NATIVE_REL17_DUTY_RATE_100_ELF
       - name: G13B3J alternate genuine DShot throttle, original deadtime unchanged
         run: |
           set -euo pipefail
