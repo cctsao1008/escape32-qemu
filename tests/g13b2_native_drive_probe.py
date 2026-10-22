@@ -280,8 +280,18 @@ def native_sixstep_diagnostics(rsp, qtest, bemf_state):
         for sub in (0x00, 0x08):
             compare_active.append(qtest.read(base + sub))
             compare_shadow.append(qtest.read(base + sub + 4))
+    # These are original ELF internal cached logical images (six
+    # uint16_t), NOT values supplied/modified by the test harness.
+    # If a local symbol was optimized away, mark it unobservable
+    # instead of fabricating expected phase vectors.
+    guest_arrays = {}
+    for name in ("runtime_aq_last", "logical_aq", "logical_compare"):
+        guest_arrays[name] = (
+            [rsp.mem16(bemf_state[name]+2*i) for i in range(6)]
+            if name in bemf_state else None)
     return {
         "guest": guest,
+        "original_elf_guest_six_output_arrays": guest_arrays,
         "mcpwm4_glctl": qtest.read(PWM4 + 0xf0),
         "mcpwm4_glsts": qtest.read(PWM4 + 0xf8),
         "mcpwm4_software_force": [
@@ -835,7 +845,8 @@ def run(args):
                  "runtime_pwm_updates", "runtime_commit_count",
                  "runtime_phase_pending", "physical_shadow_dirty",
                  "physical_runtime_image", "step", "sine", "prep",
-                 "sync", "oldstep", "timer_armed"):
+                 "sync", "oldstep", "timer_armed",
+                 "runtime_aq_last", "logical_aq", "logical_compare"):
         try:
             bemf_state[name] = symbol_address(args.elf, name)
         except RuntimeError:

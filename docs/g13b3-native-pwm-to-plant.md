@@ -305,3 +305,8 @@ Full CI #39807871887 proved a second natural plant-derived rising CAP1 was accep
 ## G13B3G Original TIMG12 ISR serviced but no six-PWM transition
 
 Full CI #39809528852 already confirms original guest TIMG12 at 100MHz initially has CTRCTL=1, LOAD=428299, counter=422268, IRQ mask=1, then the down-counter stops with original guest `serviced` 0→1 and IRQ raw/masked cleared; nevertheless effective six PWM remains `[0,0,0,6220,0,0]`. The problem is AFTER the real timer ISR, not timer clocking. A new read-only diagnostic compares original guest `runtime_aq_updates`, `runtime_commit_count`, `step`, `sine`, `prep`, `timer_armed` with six real MCPWM4 AQCTL shadow/active, compare shadow/active, GLCTL/GLSTS, force flags, before and after original ISR and its following carrier zeroes. No firmware logic, hardware register, or motor parameter is modified to manufacture an accepted step.
+
+
+## G13B3G original HAL six-output image ownership diagnostics
+
+Full CI #39811079471 proved original Rel17 TIMG12 serviced=1, step 1→2, original selected_code 5→3, runtime_aq_updates 2→3, but measured original MCPWM4 AQ active/shadow both retained `[1,1,1,512,1,1]` and GLSTS latch became 1. The original guest's internally owned `runtime_aq_last[6]`, `logical_aq[6]`, and `logical_compare[6]` are now read via GDB RSP **only** at accepted event and after serviced TIMG12. All values are original ELF SRAM, with no test writes; if a source-local symbol is absent from the pinned ELF, report UNOBSERVABLE rather than inventing an AQ vector. This disambiguates a real nextstep output image from a QEMU shadow/publication emulator error. No status claim of native six-output commutation is made yet.
