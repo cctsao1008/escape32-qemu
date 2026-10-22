@@ -262,6 +262,24 @@ jobs:
             2>&1 | tee artifacts/g13b3f-native-capture.log
           # Native CAP1, original guest captured_events and selected-phase
           # plant code crossing must all agree. No forced capture/IRQ.
+      - name: G13B3I original native SysTick ECAP no-feedback timeout
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          python3 tests/g13b2_native_drive_probe.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf /tmp/e62-fw-sim-ideal-bemf/AM13E-rev17.3.elf \
+            --throttle 1000 --startup-steps 32768 \
+            --slice-ms 300 --runtime-slices 20 \
+            --wait-native-bemf-calibration --calibration-wfi-visits 24 \
+            --require-drive --require-native-pwm \
+            --require-native-bemf-arm --require-native-no-bemf-timeout \
+            --no-bemf-timeout-visits 640 \
+            --artifact artifacts/g13b3i-original-no-bemf-timeout.json \
+            2>&1 | tee artifacts/g13b3i-original-no-bemf-timeout.log
+          # No BEMF sample ever marked valid. Require native 32.768 ms
+          # ECAP deadline, original SysTick abort, TIMG12 cancel,
+          # Rel17 timeout reset and no physical Trip.
       - name: G13B3G original Rel17 *early* BEMF rejection negative control
         run: |
           set -euo pipefail

@@ -46,6 +46,10 @@ from tools.native_runtime_timeline import (
 from tools.native_bemf_injection import NativeBemfInjector
 from tools.native_bemf_capture import prove_capture_from_native_samples
 from tools.native_bemf_policy_audit import prove_original_early_rejection
+from tools.native_bemf_timeout_qualification import (
+    prove_native_no_feedback_timeout
+)
+from tools.virtual_bldc_feedback import SIM_BEMF_INPUT
 
 FAULT_FN = "am13e_app_motor_fault_reset"
 
@@ -389,6 +393,92 @@ def seek_later_physical_bemf_commutation(
     return result
 
 
+
+
+def observe_original_no_bemf_timeout(
+        rsp, qtest, *, bemf_state, armed_breakpoints, wfi, hardfault,
+        slice_ms, runtime_slices, max_visits):
+    """No host analog writes. Wait for native SysTick to disarm ECAP1."""
+    fields = ("armed", "crossing_epoch", "crossing_epoch_valid",
+              "capture_timeout_ticks", "capture_ticks_per_ms",
+              "calibration_done", "captured_events", "rejected_events",
+              "cancelled", "ertm")
+    if any(k not in bemf_state for k in fields):
+        raise AssertionError("Cannot audit original no-BEMF symbols")
+    guest = lambda name: rsp.mem32(bemf_state[name])
+    if guest("calibration_done") != 1:
+        raise AssertionError("Original 200MHz ECAP SysTick uncalibrated")
+    start = {name:guest(name) for name in fields}
+    if (start["armed"] != 1 or
+            start["crossing_epoch_valid"] != 1 or
+            start["capture_ticks_per_ms"] != 200000 or
+            not 0 < start["capture_timeout_ticks"] < 0x80000000):
+        raise AssertionError("Original native BEMF capture not ready")
+    def voltage_words():
+        return tuple(qtest.read(SIM_BEMF_INPUT+4*i) for i in range(3))
+    if any(v & 0x10000 for v in voltage_words()):
+        raise AssertionError("QEMU already has valid BEMF input")
+    for pc in sorted(armed_breakpoints-{hardfault}):
+        del_bp(rsp, pc)
+        armed_breakpoints.remove(pc)
+    for pc in wfi:
+        if pc not in armed_breakpoints:
+            add_bp(rsp, pc)
+            armed_breakpoints.add(pc)
+    checkpoint = wait_for_native_main_wfi(
+        rsp, wfi, hardfault, slice_ms, runtime_slices,
+        stage="G13B3I_NO_VALID_BEMF_FIRST_WFI")
+    for visit in range(1, max_visits+1):
+        if observer(rsp)["cfsr"] or observer(rsp)["hfsr"]:
+            raise AssertionError("Original CPU fault during no-BEMF supervision")
+        if guest("captured_events") != start["captured_events"] or (
+                guest("rejected_events") != start["rejected_events"]):
+            raise AssertionError("Native capture without a valid BEMF sample")
+        if guest("armed") == 0:
+            result = prove_native_no_feedback_timeout(
+                epoch=start["crossing_epoch"],
+                timeout_ticks=start["capture_timeout_ticks"],
+                cap_end_ticks=qtest.read(ECAP1_TSCTR),
+                armed_before=start["armed"],
+                armed_after=guest("armed"),
+                epoch_valid_before=start["crossing_epoch_valid"],
+                epoch_valid_after=guest("crossing_epoch_valid"),
+                ticks_per_ms=guest("capture_ticks_per_ms"),
+                captured_before=start["captured_events"],
+                captured_after=guest("captured_events"),
+                rejected_before=start["rejected_events"],
+                rejected_after=guest("rejected_events"),
+                cancelled_before=start["cancelled"],
+                cancelled_after=guest("cancelled"),
+                ertm_after=guest("ertm"),
+                simulator_bemf_words=voltage_words(),
+                physical_tz_flags=qtest.read(PWM4+0xb0))
+            report = result.to_dict()
+            report["original_wfi_visits"]=visit
+            report["simulator_feedback_injected"]=False
+            print("PASS_G13B3I_ORIGINAL_ECAP_SYSTICK_NO_BEMF_TIMEOUT " +
+                  json.dumps(report,sort_keys=True),flush=True)
+            return report
+        if visit % 64 == 0:
+            print("G13B3I_ORIGINAL_NO_BEMF_WAIT " +
+                  json.dumps({"visit":visit,
+                              "original_armed":guest("armed"),
+                              "elapsed_ecap_ticks":(
+                                  qtest.read(ECAP1_TSCTR)-
+                                  start["crossing_epoch"]) & 0xffffffff,
+                              "required_timeout_ticks":
+                                  start["capture_timeout_ticks"]},
+                             sort_keys=True),flush=True)
+        checkpoint = step_unchanged_native_wfi(
+            rsp, checkpoint, armed_breakpoints=armed_breakpoints,
+            wfi=wfi, hardfault=hardfault,
+            slice_ms=slice_ms, runtime_slices=runtime_slices,
+            stage=f"G13B3I_NO_BEMF_NATIVE_WFI_{visit}")
+    raise AssertionError(
+        "No original SysTick/ECAP capture timeout within bounded native "
+        f"WFI visits={max_visits}; original_armed={guest('armed')}")
+
+
 def collect_native_pwm_timeline(
     rsp, qtest, *, hardfault, armed_breakpoints, wfi, bemf_state,
     slice_ms, runtime_slices, visits, motor, frontend=None,
@@ -641,7 +731,8 @@ def run(args):
                  "reference_ready", "selected_code", "armed",
                  "captured_events", "rejected_events",
                  "scheduled", "serviced", "ival",
-                 "crossing_epoch", "crossing_epoch_valid"):
+                 "crossing_epoch", "crossing_epoch_valid",
+                 "cancelled", "ertm"):
         try:
             bemf_state[name] = symbol_address(args.elf, name)
         except RuntimeError:
@@ -997,6 +1088,19 @@ def run(args):
                                         "GUEST_OWNED_ELF_SYMBOL_AND_REAL_REGISTERS "
                                         "NOT_CAPTURE_IRQ_NOT_CLOSED_LOOP",
                                         flush=True)
+                                if args.require_native_no_bemf_timeout:
+                                    if evidence["status"] != "NATIVE_GATE_ON":
+                                        raise AssertionError(
+                                            "No-feedback timeout requires native Gate ON")
+                                    timeout_evidence = observe_original_no_bemf_timeout(
+                                        rsp, qtest, bemf_state=bemf_state,
+                                        armed_breakpoints=armed, wfi=wfi,
+                                        hardfault=hardfault,
+                                        slice_ms=args.slice_ms,
+                                        runtime_slices=args.runtime_slices,
+                                        max_visits=args.no_bemf_timeout_visits)
+                                    evidence["g13b3i_original_no_bemf_timeout"] = (
+                                        timeout_evidence)
                                 if args.probe_native_timeline:
                                     if evidence["status"] != "NATIVE_GATE_ON":
                                         raise AssertionError(
@@ -1266,6 +1370,11 @@ def main():
                    help="Require multiple real native WFI PWM observations "
                         "with bounded ECAP intervals and motor progress")
     p.add_argument("--timeline-visits", type=int, default=4)
+    p.add_argument("--require-native-no-bemf-timeout",
+                   action="store_true",
+                   help="G13B3I original native ECAP/SysTick no-valid-BEMF "
+                        "timeout; no analog/MMIO/IRQ/PWM stimulus written")
+    p.add_argument("--no-bemf-timeout-visits", type=int, default=640)
     p.add_argument("--require-native-early-rejection", action="store_true",
                    help="G13B3G negative control: only a real early "
                         "CAP1+ISR may be rejected by original Rel17, "
@@ -1334,6 +1443,17 @@ def main():
             p.error("--require-native-bemf-arm requires --require-drive "
                     "--require-native-pwm --wait-native-bemf-calibration")
         a.probe_native_bemf = True
+    if not 520 <= a.no_bemf_timeout_visits <= 1024:
+        p.error("--no-bemf-timeout-visits must be 520..1024")
+    if a.require_native_no_bemf_timeout:
+        if (not a.require_native_bemf_arm or
+                a.require_native_bemf_injection or
+                a.probe_native_commutation or
+                a.require_native_bemf_capture or
+                a.trip_after_native_gate or
+                a.trip_after_native_bemf_injection):
+            p.error("--require-native-no-bemf-timeout needs positive "
+                    "native Gate/PWM/BEMF arm but NO feedback/Trip injection")
     if not 0 <= a.extended_native_feedback_visits <= 512:
         p.error("--extended-native-feedback-visits must be 0..512")
     if (a.extended_native_feedback_visits and
