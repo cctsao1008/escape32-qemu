@@ -32,6 +32,7 @@ from g13b_native_no_drive import symbol_address
 from g13b_native_dshot import queue_dshot600_wire, WAVE, PA26
 from g13b2_native_safety import snapshot, verify, EXT_OC, PWM4
 from tools.virtual_bldc import gate_and_pads_connected
+from tools.native_pwm_qualification import observe_original_pwm
 
 FAULT_FN = "am13e_app_motor_fault_reset"
 
@@ -461,6 +462,16 @@ def run(args):
                                 after = snapshot(rsp, throt)
                                 connected = gate_and_pads_connected(
                                     rsp.mem32, gate_active_level=1)
+                                # G13B3A observes the six *guest-authored*
+                                # PWM outputs and native physical Gate/Trip
+                                # state; it never writes PWM or BEMF.
+                                native_pwm = observe_original_pwm(
+                                    qtest.read, gate_active_level=1)
+                                evidence["g13b3a_native_pwm"] = native_pwm.to_dict()
+                                if args.probe_native_pwm:
+                                    print("G13B3A_NATIVE_OUTPUT_READ_ONLY " +
+                                          json.dumps(native_pwm.to_dict(),
+                                                     sort_keys=True), flush=True)
                                 evidence.update(gate_return=rsp.reg(0),
                                                 gate_connected=connected,
                                                 gate_post=after,
@@ -470,6 +481,12 @@ def run(args):
                                                 after["perclkcr"] & 1 and
                                                 not after["tzflags"] else
                                                 "NATIVE_GATE_NOT_FULLY_AUTHORIZED")
+                                if args.require_native_pwm and (
+                                        not native_pwm.acceptable_for_plant):
+                                    raise AssertionError(
+                                        "G13B3A native output is not yet "
+                                        "physically qualified for the VirtualBLDC: "
+                                        + native_pwm.reason)
                                 if args.trip_after_native_gate:
                                     if evidence["status"] != "NATIVE_GATE_ON":
                                         raise AssertionError(
@@ -602,6 +619,12 @@ def main():
     p.add_argument("--slice-ms", type=int, default=300)
     p.add_argument("--runtime-slices", type=int, default=20)
     p.add_argument("--require-drive", action="store_true")
+    p.add_argument("--probe-native-pwm", action="store_true",
+                   help="Read-only original six MCPWM duties and safety "
+                        "qualification at Native Gate on, no motor feedback")
+    p.add_argument("--require-native-pwm", action="store_true",
+                   help="Opt-in: assert native six-output nonzero phase "
+                        "drive and actual Gate/PINCM/power/Trip safety")
     p.add_argument("--trip-after-native-gate", action="store_true",
                    help="After native Gate ON, assert only external nFAULT "
                         "while CPU halted; require asynchronous OST2 "
@@ -625,6 +648,10 @@ def main():
         p.error("--trip-after-native-gate requires --require-drive "
                 "and --wait-native-bemf-calibration; incompatible "
                 "with BEMF negative test")
+    if a.require_native_pwm and not a.require_drive:
+        p.error("--require-native-pwm needs --require-drive")
+    if a.require_native_pwm:
+        a.probe_native_pwm = True
     if a.require_drive and a.require_bemf_reject:
         p.error("Cannot simultaneously require positive drive and "
                 "an uncalibrated BEMF rejection")
