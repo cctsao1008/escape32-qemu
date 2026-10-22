@@ -79,6 +79,12 @@ def native_original_zero_throttle_arm(rsp, qtest, *, wfi, hardfault,
         raise AssertionError(
             "Pinned original Rel17 WFI layout cannot locate arming vs run")
     before = rsp.mem32(throt)
+    if ("valid_frame_feeds" not in bemf_state or
+            "tick" not in bemf_state):
+        raise AssertionError(
+            "Original input watchdog and SysTick symbols required "
+            "for strict physical CRC/ARM proof")
+    valid_feeds_before = rsp.mem32(bemf_state["valid_frame_feeds"])
     if before != 1:
         raise AssertionError(
             "Expected source original ARM window to force throttle=1; "
@@ -207,31 +213,48 @@ def native_original_zero_throttle_arm(rsp, qtest, *, wfi, hardfault,
         raise AssertionError(
             "Latest neutral packet missing genuine 32 PA26/DMA edges: " +
             json.dumps(neutral_receipt, sort_keys=True))
-    ret = rsp.reg(14) & ~1
-    if not 0x6000 <= ret < 0x80000:
-        raise AssertionError("Original DShot zero callback LR invalid")
+    callback_tick = rsp.mem32(bemf_state["tick"])
+    # Preserve the original native callback and IRQ return semantics.
+    # A dynamically observed LR inside decoder/IRQ is not itself a
+    # trustworthy replayable source location: verify the actual
+    # firmware-owned CRC effect and 250ms ARM release at the ORIGINAL
+    # normal-control WFI instead of fabricating or forcing a return.
     del_bp(rsp, callback)
     armed_breakpoints.remove(callback)
-    add_bp(rsp, ret)
-    armed_breakpoints.add(ret)
-    resume_to(rsp, ret, hardfault, slice_ms,
-              runtime_slices, "G13B3N_NATIVE_NEUTRAL_CRC_RETURN")
-    if rsp.reg(0) != 1 or rsp.mem32(throt) != 0:
-        raise AssertionError("Rel17 CRC did not accept physical DShot neutral")
-    del_bp(rsp, ret)
-    armed_breakpoints.remove(ret)
-    # Only real original release of ARM after genuine SysTick continuity
-    # can reach the main control loop. Never step over/cancel its deadline.
-    from g13b_native_no_drive import symbol_address
-    # Pinned ELF maps first of two WFI to control loop; later = ARM loop.
     add_bp(rsp, wfi[0])
     armed_breakpoints.add(wfi[0])
     normal = wait_for_native_main_wfi(
         rsp, (wfi[0],), hardfault, slice_ms,
         max_slices=max(runtime_slices, 72),
         stage="G13B3N_ORIGINAL_ZERO_THROTTLE_ARM_RELEASE")
-    if rsp.mem32(throt) != 0:
-        raise AssertionError("Rel17 arm release changed neutral throttle")
+    original_feeds_after = rsp.mem32(bemf_state["valid_frame_feeds"])
+    original_throt_after = rsp.mem32(throt)
+    original_tick_after = rsp.mem32(bemf_state["tick"])
+    original_arm_elapsed = (
+        original_tick_after - callback_tick) & 0xffffffff
+    neutral_policy = {
+        "original_valid_crc_feeds_before": valid_feeds_before,
+        "original_valid_crc_feeds_after": original_feeds_after,
+        "original_native_throt_after_arm": original_throt_after,
+        "original_systick_at_zero_callback": callback_tick,
+        "original_systick_at_run_wfi": original_tick_after,
+        "elapsed_native_systick_after_callback": original_arm_elapsed,
+        "minimum_native_arm_systick": 4000,
+        "original_running_wfi_pc": hex(normal),
+        "host_forged_throttle_timer_or_crc": False
+    }
+    print("G13B3N_ORIGINAL_ZERO_CRC_AND_250MS_ARM_RELEASE " +
+          json.dumps(neutral_policy, sort_keys=True), flush=True)
+    # Source am13e_app_io_dshot_packet feeds the watchdog only AFTER
+    # dshotcrc() succeeds, then dshot_apply_packet(0) writes throt=0.
+    # Source main.c enters wfi[0] only AFTER the unchanged arm window.
+    if (original_feeds_after <= valid_feeds_before or
+            original_throt_after != 0 or
+            original_arm_elapsed < 4000 or
+            original_arm_elapsed >= 0x80000000):
+        raise AssertionError(
+            "Native zero-DShot CRC or original 250ms ARM proof failed: " +
+            json.dumps(neutral_policy, sort_keys=True))
     del_bp(rsp, wfi[0])
     armed_breakpoints.remove(wfi[0])
     # Caller supplies the following real 1500-throttle command only
@@ -241,6 +264,7 @@ def native_original_zero_throttle_arm(rsp, qtest, *, wfi, hardfault,
     return dict(qualified=True, physical_zero_frame=frame,
                 physical_zero_edges=32, physically_sent_zero_packets=attempt+1,
                  original_packet_causal_delta=neutral_receipt,
+                 original_crc_arm_policy=neutral_policy,
                  original_callback_crc_accepted=True,
                 source_arm_window_released=True,
                 native_original_run_wfi_pc=normal)
@@ -1363,7 +1387,7 @@ def run(args):
     except ValueError:
         symbols["bemf_fault"] = None
     bemf_state = {}
-    for name in ("cfg","tick","throt","erpm",
+    for name in ("cfg","tick","throt","erpm","valid_frame_feeds",
                   "calibration_done", "calibration_ticks",
                  "capture_ticks_per_ms", "capture_timeout_ticks",
                  "pending_code", "pending_interval",
