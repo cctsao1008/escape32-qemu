@@ -9,6 +9,7 @@ on:
       - 'tests/test_g13b3_native_seed.py'
       - 'tests/test_g13b3_native_bemf.py'
       - 'tests/test_g13b3_native_runtime.py'
+      - 'tests/test_g13b3_native_injection.py'
       - 'tests/test_virtual_bldc.py'
       - '.github/workflows/g13b3-host-unit.yml'
   workflow_dispatch:
@@ -32,6 +33,7 @@ jobs:
           python3 tests/test_g13b3_native_seed.py
           python3 tests/test_g13b3_native_bemf.py
           python3 tests/test_g13b3_native_runtime.py
+          python3 tests/test_g13b3_native_injection.py
           echo PASS_G13B3_HOST_ONLY_UNIT_REGRESSIONS
 
       # No QEMU or original ELF here. Positive motor-closed-loop

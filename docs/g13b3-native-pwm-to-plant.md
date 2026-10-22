@@ -249,3 +249,8 @@ readiness, native 200MHz calibrated timebase, and a bounded
 strictly positive original ECAP counter delta. All unknown intervals
 and unresolved waveform transitions remain disclosed. Feedback
 injection and any claim of native closed-loop commutation stay OPEN.
+
+
+## G13B3E native BEMF injection (guarded test)
+
+Original Guest Gate/Trip/PWM/ECAP-BEMF capture-arm and calibrated timestamp are verified before every three-phase BEMF injection. The synthetic AnalogFrontend converts actual Host VirtualBLDC currents/velocity/angle into U/V/W samples without clipping. Only simulator-only MMIO 0x5FFE2000/04/08 are written and read back. The original ARM ELF retains control of Gate, six PWM, CMPSS0/ECAP1/IRQ and motor policy. No ECAP capture or native closed-loop status is implied by this gate; G13B3F/H remain OPEN pending actual native evidence.

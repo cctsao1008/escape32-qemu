@@ -43,6 +43,7 @@ from tools.virtual_bldc_feedback import AnalogFrontend
 from tools.native_runtime_timeline import (
     NativePwmTimeline, ECAP1_TSCTR, NATIVE_ECAP_CLOCK_HZ
 )
+from tools.native_bemf_injection import NativeBemfInjector
 
 FAULT_FN = "am13e_app_motor_fault_reset"
 
@@ -246,7 +247,7 @@ def native_timeline_observe(rsp, qtest, bemf_state, *,
 
 def collect_native_pwm_timeline(
     rsp, qtest, *, hardfault, armed_breakpoints, wfi, bemf_state,
-    slice_ms, runtime_slices, visits, motor):
+    slice_ms, runtime_slices, visits, motor, frontend=None):
     """GDB WFI rendezvous samples genuine guest time, never clock_step.
 
     Guest continues to execute between *original* WFI instructions.
@@ -254,6 +255,19 @@ def collect_native_pwm_timeline(
     readl only throughout this function. Nothing is injected into CMPSS.
     """
     timeline = NativePwmTimeline(motor)
+    injector = NativeBemfInjector(frontend) if frontend is not None else None
+
+    def feed_if_requested():
+        if injector is None:
+            return
+        selected = rsp.mem32(bemf_state["selected_code"])
+        native_armed = rsp.mem32(bemf_state["armed"]) == 1
+        record = injector.inject(
+            timeline, qtest.read, qtest.write,
+            selected_code=selected, native_armed=native_armed)
+        print("G13B3E_NATIVE_THREE_PHASE_PLANT_BEMF_INPUT " +
+              json.dumps(record.to_dict(), sort_keys=True), flush=True)
+
     # Remove legacy gate/start/IRQ observation breakpoints before
     # sampling: those would arrest the CPU at unrelated native events.
     # Keep the original HardFault breakpoint as an explicit safety trip.
@@ -267,6 +281,7 @@ def collect_native_pwm_timeline(
     native_timeline_observe(
         rsp, qtest, bemf_state, timeline=timeline,
         checkpoint="native_gate_return", hardfault=hardfault)
+    feed_if_requested()
     for visit in range(visits):
         checkpoint = wait_for_native_main_wfi(
             rsp, wfi, hardfault, slice_ms, runtime_slices,
@@ -275,6 +290,7 @@ def collect_native_pwm_timeline(
             rsp, qtest, bemf_state, timeline=timeline,
             checkpoint=f"original_main_wfi_{visit + 1}",
             hardfault=hardfault)
+        feed_if_requested()
         if visit + 1 != visits:
             # Execute the actual WFI opcode once so the next observation
             # is a new genuine entry, not the same halted breakpoint.
@@ -292,7 +308,11 @@ def collect_native_pwm_timeline(
                 raise AssertionError("Original WFI failed to advance")
             add_bp(rsp, checkpoint)
             armed_breakpoints.add(checkpoint)
-    return timeline.require_progress(min_frames=visits + 1)
+    result = timeline.require_progress(min_frames=visits + 1)
+    if injector is not None:
+        result["bemf_injection"] = injector.require_samples(
+            min_samples=visits + 1)
+    return result
 
 def run(args):
     app_vector_from_elf(args.elf)
@@ -699,11 +719,22 @@ def run(args):
                                         slice_ms=args.slice_ms,
                                         runtime_slices=args.runtime_slices,
                                         visits=args.timeline_visits,
-                                        motor=timeline_motor)
+                                        motor=timeline_motor,
+                                        frontend=(AnalogFrontend(
+                                            reference_v=3.3,
+                                            zero_bemf_bias_v=1.65,
+                                            input_gain_v_per_bemf_v=.02)
+                                            if args.require_native_bemf_injection
+                                            else None))
                                     evidence["g13b3d_native_timeline"] = summary
                                     print("G13B3D_NATIVE_RUNTIME_TIMELINE_READ_ONLY " +
                                           json.dumps(summary, sort_keys=True),
                                           flush=True)
+                                    if args.require_native_bemf_injection:
+                                        print("PASS_G13B3E_NATIVE_PLANT_DERIVED_"
+                                              "THREE_PHASE_BEMF_STIMULUS "
+                                              "NOT_ECAP_IRQ_NOT_CLOSED_LOOP",
+                                              flush=True)
                                     if args.require_native_timeline:
                                         print("PASS_G13B3D_NATIVE_CONTINUOUS_PWM "
                                               "ECAP_CLOCK_TIME_COUPLED_PLANT "
@@ -867,6 +898,10 @@ def main():
                    help="Require multiple real native WFI PWM observations "
                         "with bounded ECAP intervals and motor progress")
     p.add_argument("--timeline-visits", type=int, default=4)
+    p.add_argument("--require-native-bemf-injection", action="store_true",
+                   help="G13B3E: inject only physically calculated U/V/W "
+                        "voltages via QEMU SIM_ONLY MMIO after qualified "
+                        "native Gate/PWM/ECAP/BEMF arm observations")
     p.add_argument("--trip-after-native-gate", action="store_true",
                    help="After native Gate ON, assert only external nFAULT "
                         "while CPU halted; require asynchronous OST2 "
@@ -900,6 +935,8 @@ def main():
             p.error("--require-native-bemf-arm requires --require-drive "
                     "--require-native-pwm --wait-native-bemf-calibration")
         a.probe_native_bemf = True
+    if a.require_native_bemf_injection:
+        a.require_native_timeline = True
     if a.require_native_timeline:
         a.probe_native_timeline = True
     if a.probe_native_timeline:
