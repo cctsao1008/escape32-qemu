@@ -264,3 +264,8 @@ Separate strict opt-in positive gate. A previously injected original host-motor 
 ## G13B3H fault-under-feedback subset (physical nFAULT)
 
 After five original native timeline voltage samples (including nonneutral VirtualBLDC-derived U/V/W), a separate QEMU run asserts only physical external PA22 nFAULT, while Cortex-M33 is stopped. Hardware OST2 must force all six PWM low asynchronously, and the original Firmware must enter its fault reset/shutdown path when resumed. This is a fault case after model injection, not sustained closed-loop operation or evidence of accepted BEMF commutation. Original fault gate remains unchanged and additionally runs separately.
+
+
+## G13B3G native Rel17 commutation diagnostic and strict gate
+
+After a physically derived BEMF crossing produces native CAP1 and original captured_events, optionally inspect original motor_event_timer scheduled and serviced data, then continue real original WFI / TIMG12 execution. Only a true original guest one-shot service AND a different still-qualified native six-output PWM image can report the isolated G13B3G PASS. Original firmware may correctly reject an early edge; diagnostic then prints G13B3G_OPEN, never a simulated pass. Separate strict --require-native-commutation exists but is not enabled in CI until real positive evidence. Even a first accepted commutation would not prove sustained closed loop or physical E62 qualification.

@@ -249,7 +249,7 @@ def native_timeline_observe(rsp, qtest, bemf_state, *,
 def collect_native_pwm_timeline(
     rsp, qtest, *, hardfault, armed_breakpoints, wfi, bemf_state,
     slice_ms, runtime_slices, visits, motor, frontend=None,
-    require_capture=False):
+    require_capture=False, probe_commutation=False):
     """GDB WFI rendezvous samples genuine guest time, never clock_step.
 
     Guest continues to execute between *original* WFI instructions.
@@ -264,6 +264,13 @@ def collect_native_pwm_timeline(
         rsp.mem32(bemf_state["captured_events"]) if require_capture else 0)
     initial_cap1 = qtest.read(ECAP1_TSCTR + 8) if require_capture else 0
     capture_proof = None
+    commutation_proof = None
+    if probe_commutation and not require_capture:
+        raise ValueError("Native commutation monitor requires true CAP1 evidence")
+    scheduled_before = (
+        rsp.mem32(bemf_state["scheduled"]) if probe_commutation else None)
+    serviced_before = (
+        rsp.mem32(bemf_state["serviced"]) if probe_commutation else None)
 
     def feed_if_requested():
         if injector is None:
@@ -308,6 +315,65 @@ def collect_native_pwm_timeline(
                 print("G13B3F_NATIVE_CAPTURE_ECAP_IRQ_CAUSAL " +
                       json.dumps(capture_proof.to_dict(), sort_keys=True),
                       flush=True)
+                if probe_commutation:
+                    # Guest-owned schedule/dispatch counters are never
+                    # written by the test. A captured *early* edge may
+                    # correctly be rejected by unchanged Rel17 policy.
+                    scheduled_at_capture = rsp.mem32(
+                        bemf_state["scheduled"])
+                    rejected_at_capture = rsp.mem32(
+                        bemf_state["rejected_events"])
+                    commutation_proof = {
+                        "scheduled_before_capture": scheduled_before,
+                        "scheduled_after_capture": scheduled_at_capture,
+                        "serviced_before_capture": serviced_before,
+                        "rejected_edges_original": rejected_at_capture,
+                        "native_capture_count": count,
+                        "native_timg12_commutation_proved": False,
+                        "reason": "REJECTED_OR_NOT_SCHEDULED"
+                    }
+                    if scheduled_at_capture > scheduled_before:
+                        # Only a real original TIMG12 ISR may increment
+                        # serviced. Continue original CPU after native WFI,
+                        # but DO NOT feed speculative further BEMF or touch
+                        # any native register/firmware state.
+                        original_pwm = timeline.frames[-1].six_high_ticks
+                        for extra in range(96):
+                            if rsp.mem16(checkpoint) != 0xbf30:
+                                raise AssertionError("Native WFI opcode changed")
+                            del_bp(rsp, checkpoint)
+                            armed_breakpoints.remove(checkpoint)
+                            stp = rsp.command("s")
+                            if not stp.startswith(("S05", "T05")):
+                                raise RuntimeError("Native WFI step failed")
+                            cpu = observer(rsp)
+                            if cpu["pc"] == hardfault or cpu["cfsr"] or cpu["hfsr"]:
+                                raise AssertionError("Original firmware fault")
+                            add_bp(rsp, checkpoint)
+                            armed_breakpoints.add(checkpoint)
+                            checkpoint = wait_for_native_main_wfi(
+                                rsp, wfi, hardfault, slice_ms, runtime_slices,
+                                stage=f"G13B3G_ORIGINAL_COMMUTATION_{extra+1}")
+                            now_image = observe_original_pwm(
+                                qtest.read, gate_active_level=1)
+                            serviced = rsp.mem32(bemf_state["serviced"])
+                            if (serviced > serviced_before and
+                                    now_image.acceptable_for_plant and
+                                    now_image.six_high_ticks != original_pwm):
+                                commutation_proof.update(
+                                    native_timg12_commutation_proved=True,
+                                    reason="ORIGINAL_TIMG12_ISR_PWM_CHANGED",
+                                    serviced_after=serviced,
+                                    six_high_ticks_before=original_pwm,
+                                    six_high_ticks_after=now_image.six_high_ticks,
+                                    post_capture_wfi_visits=extra + 1)
+                                break
+                        if not commutation_proof["native_timg12_commutation_proved"]:
+                            commutation_proof["reason"] = (
+                                "SCHEDULED_BUT_NO_QUALIFIED_NATIVE_PWM_CHANGE")
+                    print("G13B3G_ORIGINAL_CAPTURE_TO_COMMUTATION " +
+                          json.dumps(commutation_proof, sort_keys=True),
+                          flush=True)
                 break
         native_timeline_observe(
             rsp, qtest, bemf_state, timeline=timeline,
@@ -343,6 +409,8 @@ def collect_native_pwm_timeline(
             min_samples=(3 if require_capture else visits + 1))
     if capture_proof is not None:
         result["native_bemf_capture"] = capture_proof.to_dict()
+    if commutation_proof is not None:
+        result["original_commutation"] = commutation_proof
     return result
 
 def run(args):
@@ -371,7 +439,8 @@ def run(args):
                  "capture_ticks_per_ms", "capture_timeout_ticks",
                  "pending_code", "pending_interval",
                  "reference_ready", "selected_code", "armed",
-                 "captured_events", "rejected_events"):
+                 "captured_events", "rejected_events",
+                 "scheduled", "serviced"):
         try:
             bemf_state[name] = symbol_address(args.elf, name)
         except RuntimeError:
@@ -753,6 +822,7 @@ def run(args):
                                         visits=args.timeline_visits,
                                         motor=timeline_motor,
                                         require_capture=args.require_native_bemf_capture,
+                                        probe_commutation=args.probe_native_commutation,
                                         frontend=(AnalogFrontend(
                                             reference_v=3.3,
                                             zero_bemf_bias_v=1.65,
@@ -763,6 +833,24 @@ def run(args):
                                     print("G13B3D_NATIVE_RUNTIME_TIMELINE_READ_ONLY " +
                                           json.dumps(summary, sort_keys=True),
                                           flush=True)
+                                    if args.probe_native_commutation:
+                                        verdict = summary.get("original_commutation", {})
+                                        if verdict.get("native_timg12_commutation_proved"):
+                                            print("PASS_G13B3G_ORIGINAL_ECAP1_TO_"
+                                                  "TIMG12_TO_SIX_PWM_CHANGE "
+                                                  "NOT_SUSTAINED_CLOSED_LOOP",
+                                                  flush=True)
+                                        elif args.require_native_commutation:
+                                            raise AssertionError(
+                                                "G13B3G original ELF did not "
+                                                "accept/schedule/service "
+                                                "plant BEMF event: " +
+                                                json.dumps(verdict))
+                                        else:
+                                            print("G13B3G_OPEN_NOT_NATIVE_"
+                                                  "COMMUTATION_QUALIFIED " +
+                                                  json.dumps(verdict),
+                                                  flush=True)
                                     if args.require_native_bemf_capture:
                                         print("PASS_G13B3F_NATIVE_CMPSS0_ECAP1_"
                                               "CAP1_ORIGINAL_ISR_FROM_PLANT_"
@@ -966,6 +1054,14 @@ def main():
                    help="Require multiple real native WFI PWM observations "
                         "with bounded ECAP intervals and motor progress")
     p.add_argument("--timeline-visits", type=int, default=4)
+    p.add_argument("--probe-native-commutation", action="store_true",
+                   help="G13B3G: inspect original guest TIMG12 scheduling "
+                        "and service after physically derived ECAP1 CAP1; "
+                        "diagnostic is explicitly OPEN if guest rejects")
+    p.add_argument("--require-native-commutation", action="store_true",
+                   help="Require original guest ISR schedules and services "
+                        "TIMG12 plus a distinct physically qualified native "
+                        "six PWM output after model-driven BEMF")
     p.add_argument("--require-native-bemf-capture", action="store_true",
                    help="G13B3F: require modeled BEMF threshold crossing "
                         "followed by hardware CAP1 and original IRQ counter")
@@ -1017,6 +1113,10 @@ def main():
             p.error("--require-native-bemf-arm requires --require-drive "
                     "--require-native-pwm --wait-native-bemf-calibration")
         a.probe_native_bemf = True
+    if a.require_native_commutation:
+        a.probe_native_commutation = True
+    if a.probe_native_commutation:
+        a.require_native_bemf_capture = True
     if a.require_native_bemf_capture:
         a.require_native_bemf_injection = True
     if a.require_native_bemf_injection:
