@@ -139,17 +139,30 @@ def main():
         set_pwm_pair(q, 0, (80, 1), (0x12, 0x1), shadow=True)
         q.cmd("clock_step 1000")
         assert q.read(PWM + 0x100) == 50
-        # Re-arm, verify pending interrupt cannot appear merely
-        # because INTEN was written; ZERO event asserts it.
+        # SDK enum (dl_mcpwm.h): ETSEL 0=DISABLED, 2=TBCTR_ZERO.
+        # No ET1 interrupt from enabled INTEN, a disabled source, or
+        # a reserved source even while the real PWM counter wraps.
         q.write(PWM + 0x98, 8)
         q.write(PWM + 0x90, 8)
         q.write(PWM + 0x84, 1)
+        q.write(PWM + 0x80, 0)       # DL_MCPWM_EVT_DISABLED
         assert q.read(PWM + 0x94) == 0
         q.cmd("clock_step 1000")
-        assert q.read(PWM + 0x94) & 8
+        assert q.read(PWM + 0x94) == 0, "Disabled ETSEL produced a phantom IRQ"
+        q.write(PWM + 0x80, 1)       # reserved, NOT ZERO
+        q.cmd("clock_step 1000")
+        assert q.read(PWM + 0x94) == 0, "Reserved ETSEL produced a phantom IRQ"
+        q.write(PWM + 0x80, 2)       # DL_MCPWM_EVT_TBCTR_ZERO
+        assert q.read(PWM + 0x94) == 0, "ET source configuration alone raised IRQ"
+        q.cmd("clock_step 1000")
+        assert q.read(PWM + 0x94) & 8, "Actual TBCTR_ZERO did not assert ET1"
         q.write(PWM + 0x98, q.read(PWM + 0x98) | 8)
         assert q.read(PWM + 0x94) == 0
+        q.write(PWM + 0x84, 0)      # disabled ET1 prescale
+        q.cmd("clock_step 1000")
+        assert q.read(PWM + 0x94) == 0, "Disabled ET1 prescale raised IRQ"
         print("G9_MCPWM4_ZERO_EVENT_IRQ_CLEAR=PASS")
+        print("PASS_G13B2E_MCPWM_ETSEL_DISABLED0_ZERO2_NO_PHANTOM_IRQ")
 
         # Disable the timebase: output observer must report zero
         # DRIVE, without altering the firmware-authored compare.
