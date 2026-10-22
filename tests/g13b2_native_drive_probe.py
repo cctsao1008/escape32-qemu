@@ -470,6 +470,70 @@ def run(args):
                                                 after["perclkcr"] & 1 and
                                                 not after["tzflags"] else
                                                 "NATIVE_GATE_NOT_FULLY_AUTHORIZED")
+                                if args.trip_after_native_gate:
+                                    if evidence["status"] != "NATIVE_GATE_ON":
+                                        raise AssertionError(
+                                            "Post-drive Trip requires qualified "
+                                            "original Firmware Gate/PWM ON")
+                                    # Independent physical nFAULT input
+                                    # changes while the original ARM33 core
+                                    # is GDB-halted *after* its gate function
+                                    # returned. No guest CSR/IRQ/gate/PWM
+                                    # fields are overwritten.
+                                    qtest.write(EXT_OC + 0x18, 1)
+                                    physical_tz = qtest.read(PWM4 + 0xb0)
+                                    physical_irq = qtest.read(PWM4 + 0x94)
+                                    from tools.virtual_bldc import OBS_BASE
+                                    output_levels = qtest.read(OBS_BASE + 0x10)
+                                    output_counts = [
+                                        qtest.read(OBS_BASE + 0x18 + 4 * i)
+                                        for i in range(6)
+                                    ]
+                                    evidence["post_gate_physical_trip"] = {
+                                        "input_nfault_asserted": qtest.read(
+                                            EXT_OC + 0x18),
+                                        "ost_status": physical_tz,
+                                        "interrupt_flags": physical_irq,
+                                        "effective_levels": output_levels,
+                                        "effective_high_ticks": output_counts,
+                                    }
+                                    if ((physical_tz & 0x20000) != 0x20000 or
+                                            not physical_irq & 4 or
+                                            output_levels != 0 or
+                                            any(output_counts)):
+                                        raise AssertionError(
+                                            "Real nFAULT did not asynchronously "
+                                            "latch OST2 and force ALL SIX "
+                                            "physical MCPWM outputs LOW "
+                                            "before native ARM executes")
+                                    print(
+                                        "PASS_G13B2E_NATIVE_GATE_ON_EXTERNAL_NFAULT "
+                                        "ASYNC_OST2_ALL_SIX_PWM_LOW_CPU_HALTED",
+                                        flush=True)
+                                    del_bp(rsp, ret_gate)
+                                    armed.remove(ret_gate)
+                                    # Let the original ISR finish executing
+                                    # its nFAULT readiness and nonreturning
+                                    # fault-reset policy. No host mutation of
+                                    # PRIMASK, main stack, or ISR return.
+                                    resume_to(
+                                        rsp, symbols[FAULT_FN], hardfault,
+                                        args.slice_ms, args.runtime_slices,
+                                        "POST_GATE_NFAULT_NATIVE_SHUTDOWN")
+                                    shutdown = snapshot(rsp, throt)
+                                    evidence["post_gate_native_shutdown"] = shutdown
+                                    if (shutdown["pb13_dout"] != 0 or
+                                            not shutdown["tzflags"] & 0x20000 or
+                                            shutdown["cfsr"] or shutdown["hfsr"]):
+                                        raise AssertionError(
+                                            "Original nFAULT shutdown did not "
+                                            "deassert PB13 with OST2 latched")
+                                    evidence["status"] = (
+                                        "NATIVE_GATE_ON_THEN_NFAULT_SHUTDOWN")
+                                    print(
+                                        "PASS_G13B2E_ORIGINAL_FIRMWARE_POST_GATE "
+                                        "NFAULT_SHUTDOWN_WITH_HARDWARE_OST2",
+                                        flush=True)
                                 break
                             raise AssertionError(
                                 f"Unexpected native breakpoint PC=0x{state['pc']:08x}")
@@ -493,7 +557,9 @@ def run(args):
                                     "healthy native nFAULT Trip")
                             print("PASS_G13B2E_ORIGINAL_ELF_UNCALIBRATED_BEMF "
                                   "REJECTS_MOTOR_START_GATE_OFF", flush=True)
-                        elif evidence["status"] == "NATIVE_GATE_ON":
+                        elif evidence["status"] in (
+                                "NATIVE_GATE_ON",
+                                "NATIVE_GATE_ON_THEN_NFAULT_SHUTDOWN"):
                             print("PASS_G13B2E_ORIGINAL_SIM_ONLY_GATE_PWM_AUTHORIZATION "
                                   "NOT_SENSORLESS_CLOSED_LOOP", flush=True)
                         elif args.require_drive:
@@ -536,6 +602,10 @@ def main():
     p.add_argument("--slice-ms", type=int, default=300)
     p.add_argument("--runtime-slices", type=int, default=20)
     p.add_argument("--require-drive", action="store_true")
+    p.add_argument("--trip-after-native-gate", action="store_true",
+                   help="After native Gate ON, assert only external nFAULT "
+                        "while CPU halted; require asynchronous OST2 "
+                        "all-six-low and original Firmware shutdown")
     p.add_argument("--wait-native-bemf-calibration", action="store_true",
                    help="Before DShot, wait for real original ECAP/SysTick "
                         "calibration_done via genuine WFI, no SRAM writes")
@@ -549,6 +619,12 @@ def main():
         p.error("Missing QEMU or genuine SIM_ONLY ELF")
     if not 1 <= a.calibration_wfi_visits <= 64:
         p.error("BEMF calibration wait visits must be 1..64")
+    if a.trip_after_native_gate and (
+            not a.require_drive or not a.wait_native_bemf_calibration or
+            a.require_bemf_reject):
+        p.error("--trip-after-native-gate requires --require-drive "
+                "and --wait-native-bemf-calibration; incompatible "
+                "with BEMF negative test")
     if a.require_drive and a.require_bemf_reject:
         p.error("Cannot simultaneously require positive drive and "
                 "an uncalibrated BEMF rejection")
