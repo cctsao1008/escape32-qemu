@@ -971,14 +971,22 @@ the original fault handler shuts down Gate. These are enforced CI
 gates in [run 39728279382](https://github.com/cctsao1008/escape32-qemu/actions/runs/39728279382).
 They do not qualify E62 hardware.
 
-**G13B3A read-only native PWM qualification is being measured**:
-`tools/native_pwm_qualification.py` inspects the genuine original
-AQ/DB six HIGH-tick output image after Gate ON along with physical
-GPIO/PINCM, clock and OST state; an all-zero phase differential is
-not enough for VirtualBLDC power. The independent closed-loop
-Virtual BLDC → calculated BEMF → CMPSS0/ECAP1 → native repeated
-commutation validation remains **OPEN**.
-See [G13B3 qualification and motor-coupling boundaries](docs/g13b3-native-pwm-to-plant.md).
+**G13B3A native PWM six-output qualification PASS**
+([CI run 39756133980](https://github.com/cctsao1008/escape32-qemu/actions/runs/39756133980)):
+after original Gate ON, the read-only MCPWM4 observer reports a
+6,251-tick carrier, all six AQ/DB output routes valid (mask 0x3F),
+and original guest high ticks `[0,0,0,6220,0,0]`. PB13/PINCM
+and native PWM power/clock are connected; OST2/OST3 remain clear.
+This is an actual first nonzero phase-voltage command, **not**
+repeated commutation.
+
+**G13B3B single-carrier original PWM→VirtualBLDC seed is being
+validated**: `tools/native_bldc_seed.py` advances exactly one
+62,510ns PWM carrier using the guest's observed six duties and an
+explicitly fictional 24V virtual motor; it writes **no** simulated
+BEMF to the guest at this stage. Original firmware repeated
+BEMF/ECAP-triggered commutation remains **OPEN**.
+See [G13B3 original PWM, motor-seed and feedback boundaries](docs/g13b3-native-pwm-to-plant.md).
 
 See [G13B native drive-authorization status and tests](docs/g13b-native-drive-authorization.md)
 and [G13B2 exact SIM_ONLY and real-board distinction](docs/g13b2-board-electrical-contract.md).
