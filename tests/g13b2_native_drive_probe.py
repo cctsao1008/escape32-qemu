@@ -13,6 +13,7 @@ acceptance gate. Not a sensorless closed-loop or real-board safety claim.
 import argparse
 from dataclasses import asdict
 import json
+import math
 import socket
 import subprocess
 import sys
@@ -683,7 +684,7 @@ def evidence_power(proof):
 def probe_native_sustained_power_feedback(
         rsp, qtest, *, bemf_state, armed_breakpoints, wfi, hardfault,
         slice_ms, runtime_slices, max_visits, required_sectors,
-        require_sim_only_cfg=False):
+        require_sim_only_cfg=False, initial_electrical_degrees=0.0):
     """Full native WFI-to-WFI physical bridge -> plant -> BEMF feedback loop.
 
     No native program counter, firmware SRAM, PWM, TIMG12, CAP1, or IRQ
@@ -702,7 +703,16 @@ def probe_native_sustained_power_feedback(
         phase_inductance_h=.002, bemf_constant_v_per_rad_s=.02,
         torque_constant_nm_per_a=.02, inertia_kg_m2=1e-6,
         viscous_friction_nm_per_rad_s=.0001, load_torque_nm=0,
-        pole_pairs=7))
+        pole_pairs=7),
+        initial_electrical_rad=math.radians(initial_electrical_degrees))
+    print("G13B3L_EXPLICIT_SIM_ONLY_ROTOR_POSE " +
+          json.dumps({
+              "initial_electrical_degrees": initial_electrical_degrees,
+              "initial_motor_rpm": motor.sample().mechanical_rpm,
+              "initial_three_phase_bemf_v": motor.sample().bemf_phase_v,
+              "applied_external_torque": False,
+              "host_forced_capture_irq": False
+          },sort_keys=True), flush=True)
     timeline = NativePwmTimeline(motor)
     frontend = AnalogFrontend(reference_v=3.3, zero_bemf_bias_v=1.65,
                               input_gain_v_per_bemf_v=.02)
@@ -1533,7 +1543,9 @@ def run(args):
                                         max_visits=args.sustained_wfi_visits,
                                         required_sectors=args.sustained_sectors,
                                         require_sim_only_cfg=(
-                                            args.require_native_sustained_loop))
+                                            args.require_native_sustained_loop),
+                                        initial_electrical_degrees=(
+                                            args.initial_electrical_degrees))
                                     evidence["g13b3l_native_sustained_loop"] = (
                                         loop_result)
                                     if args.require_native_sustained_loop and (
@@ -1862,6 +1874,10 @@ def main():
                         "commutations; fail closed if unfinished")
     p.add_argument("--sustained-wfi-visits", type=int, default=1024)
     p.add_argument("--sustained-sectors", type=int, default=6)
+    p.add_argument("--initial-electrical-degrees", type=float, default=0.0,
+                   help="G13B3L only, explicit SIM_ONLY stationary rotor "
+                        "magnetic phase relative to initial six-step sector; "
+                        "never an initial RPM or synthetic BEMF stimulus")
     p.add_argument("--require-native-no-bemf-timeout",
                    action="store_true",
                    help="G13B3I original native ECAP/SysTick no-valid-BEMF "
@@ -1935,6 +1951,11 @@ def main():
             p.error("--require-native-bemf-arm requires --require-drive "
                     "--require-native-pwm --wait-native-bemf-calibration")
         a.probe_native_bemf = True
+    if (not math.isfinite(a.initial_electrical_degrees) or
+            not -180 <= a.initial_electrical_degrees <= 180):
+        p.error("Explicit initial rotor electrical pose must be finite and within +/-180 degrees")
+    if a.initial_electrical_degrees and not a.probe_native_sustained_loop and not a.require_native_sustained_loop:
+        p.error("Nonzero initial rotor angle only belongs to G13B3L sustained SIM_ONLY motor")
     if not 6 <= a.sustained_sectors <= 24:
         p.error("--sustained-sectors must be 6..24")
     if not 64 <= a.sustained_wfi_visits <= 4096:

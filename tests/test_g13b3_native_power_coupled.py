@@ -45,6 +45,18 @@ class RealPowerPath(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"single-source"):
             m.advance((.1,0,.2,0,0,1),.00005,gate_enabled=True)
 
+    def test_physical_rotor_pose_is_not_initial_kick_or_bemf(self):
+        import math
+        m=NativePowerCoupledBLDC(motor().p,initial_electrical_rad=-math.pi/6)
+        self.assertAlmostEqual(m.sample().mechanical_rpm,0)
+        self.assertEqual(m.sample().bemf_phase_v,(0.0,0.0,0.0))
+        self.assertAlmostEqual(m.sample().electrical_rad,2*math.pi-math.pi/6)
+        self.assertFalse(m.ever_powered)
+    def test_invalid_rotor_pose_fail_closed(self):
+        for v in (float("nan"),float("inf"),float("-inf")):
+            with self.assertRaises(ValueError):
+                NativePowerCoupledBLDC(motor().p,initial_electrical_rad=v)
+
     def test_gate_off_does_not_apply_bus(self):
         m=motor()
         for _ in range(100):

@@ -378,6 +378,7 @@ jobs:
             --require-drive --require-native-pwm \
             --require-native-bemf-arm --require-native-sustained-loop \
             --sustained-wfi-visits 1500 --sustained-sectors 6 \
+            --initial-electrical-degrees -30 \
             --artifact artifacts/g13b3l-native-six-powered-sector-loop.json \
             2>&1 | tee artifacts/g13b3l-native-six-powered-sector-loop.log
           # STRICT: fail this firmware-backed CI unless six accepted

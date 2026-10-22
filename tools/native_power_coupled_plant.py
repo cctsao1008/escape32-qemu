@@ -18,8 +18,17 @@ class NativePowerCoupledBLDC(VirtualBLDC):
     in this idealized model. No diode conduction/cogging/saturation modeled.
     """
 
-    def __init__(self, parameters):
+    def __init__(self, parameters, *, initial_electrical_rad=0.0):
         super().__init__(parameters)
+        if not math.isfinite(initial_electrical_rad):
+            raise ValueError("Explicit finite physical rotor electrical pose required")
+        # A rotor at standstill has no BEMF regardless of its angular pose.
+        # Electrical pose sets the actual rotor magnetic phase, not a fake
+        # voltage edge, external kick, initial RPM, or guest control action.
+        self.angle_mech_rad = (
+            initial_electrical_rad / self.p.pole_pairs
+        ) % (2.0*math.pi)
+        self.initial_electrical_rad = initial_electrical_rad
         self.energized_intervals = 0
         self.coasting_intervals = 0
         self.max_measured_rpm = 0.0
