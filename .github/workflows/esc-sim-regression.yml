@@ -205,6 +205,20 @@ jobs:
           # neutral is a virtual board hypothesis, NOT production safety.
           # This is still diagnostic-only: G13B2E positive Gate only PASS
           # if the explicit original-guest readback proves Gate/PWM ON.
+      - name: G13B2E native SysTick-calibrated BEMF before positive DShot (diagnostic)
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          python3 tests/g13b2_native_drive_probe.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf /tmp/e62-fw-sim-ideal-bemf/AM13E-rev17.3.elf \
+            --throttle 1000 --startup-steps 32768 \
+            --slice-ms 300 --runtime-slices 20 \
+            --wait-native-bemf-calibration --calibration-wfi-visits 24 \
+            --artifact artifacts/g13b2e-native-calibrated-dshot.json \
+            2>&1 | tee artifacts/g13b2e-native-calibrated-dshot.log
+          # Only the guest's own SysTick/ECAP calibration_done can permit
+          # progress. Never fake the BEMF-ready bit or force motor outputs.
       - name: Run G0-G10 tests against real ELF
         run: |
           set -euo pipefail
