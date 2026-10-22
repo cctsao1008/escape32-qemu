@@ -1,0 +1,36 @@
+name: E62 G13B3 host-model unit regressions
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/**'
+      - 'tests/test_g13b3_native_pwm.py'
+      - 'tests/test_g13b3_native_seed.py'
+      - 'tests/test_g13b3_native_bemf.py'
+      - 'tests/test_virtual_bldc.py'
+      - '.github/workflows/g13b3-host-unit.yml'
+  workflow_dispatch:
+
+jobs:
+  host-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - name: Python model and fail-closed input validation
+        run: |
+          set -euo pipefail
+          python3 --version
+          python3 tests/test_virtual_bldc.py
+          python3 tests/test_g13b3_native_pwm.py
+          python3 tests/test_g13b3_native_seed.py
+          python3 tests/test_g13b3_native_bemf.py
+          echo PASS_G13B3_HOST_ONLY_UNIT_REGRESSIONS
+
+      # No QEMU or original ELF here. Positive motor-closed-loop
+      # acceptance must come from firmware-backed CI separately.
