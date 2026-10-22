@@ -65,7 +65,8 @@ FAULT_FN = "am13e_app_motor_fault_reset"
 
 def native_original_zero_throttle_arm(rsp, qtest, *, wfi, hardfault,
                                      armed_breakpoints, throt,
-                                     callback, slice_ms, runtime_slices):
+                                     callback, slice_ms, runtime_slices,
+                                     bemf_state):
     """Complete original ARM=1 250ms neutral by physical DShot600=0.
 
     Enter only at source-owned arming __WFI. The receiver must accept
@@ -88,8 +89,55 @@ def native_original_zero_throttle_arm(rsp, qtest, *, wfi, hardfault,
         raise AssertionError("Not an actual DShot600 neutral packet")
     add_bp(rsp, callback)
     armed_breakpoints.add(callback)
-    resume_to(rsp, callback, hardfault, slice_ms,
-              runtime_slices, "G13B3N_NATIVE_NEUTRAL_DSHOT_CALLBACK")
+    def sample_physical_neutral_ingress(n, state):
+        # Observe physical PA26 input and DMA capture without touching
+        # motor/Guest SRAM. Useful when callback never occurs.
+        port = {
+            "slice": n,
+            "target_native_callback": hex(callback),
+            "cpu_pc": hex(state["pc"]),
+            "cpu_ipsr": state["ipsr"],
+            "cpu_primask": state["primask"],
+            "native_throt": rsp.mem32(throt),
+            "wave_queued": qtest.read(WAVE + 0x08),
+            "wave_delivered": qtest.read(WAVE + 0x0c),
+            "wave_busy": qtest.read(WAVE + 0x10),
+            "wave_pa26_transitions": qtest.read(PA26 + 0x04),
+            "wave_pa26_capture": qtest.read(PA26 + 0x08),
+            "wave_dma_beats": qtest.read(PA26 + 0x0c),
+        }
+        for name in ("tick", "cfg"):
+            if name in bemf_state:
+                address = bemf_state[name]
+                if name == "cfg":
+                    # Only original Cfg fields; map pinned src/common.h.
+                    port["native_cfg_id"] = rsp.mem32(address) & 0xffff
+                    port["native_cfg_freq_duty_28"] = hex(
+                        rsp.mem32(address + 28))
+                    port["native_cfg_rate_32"] = hex(
+                        rsp.mem32(address + 32))
+                    port["native_cfg_inputmode_word_?"] = "UNREAD_NOT_VERIFIED_ABI"
+                else:
+                    port["native_tick"] = rsp.mem32(address)
+        return port
+
+    def report_physical_ingress(n, state):
+        if n == 1 or n % 4 == 0 or n == runtime_slices:
+            print("G13B3N_ORIGINAL_NEUTRAL_RX_PROGRESS " +
+                  json.dumps(sample_physical_neutral_ingress(n, state),
+                             sort_keys=True), flush=True)
+
+    try:
+        resume_to(rsp, callback, hardfault, slice_ms,
+                  runtime_slices, "G13B3N_NATIVE_NEUTRAL_DSHOT_CALLBACK",
+                  on_pause=report_physical_ingress)
+    except AssertionError:
+        print("G13B3N_NEUTRAL_RX_BLOCKER_SOURCE_AND_PHYSICAL_STATUS " +
+              json.dumps(
+                  sample_physical_neutral_ingress(
+                      runtime_slices, observer(rsp)), sort_keys=True),
+              flush=True)
+        raise
     if (rsp.reg(0) & 0xffff) != 0:
         raise AssertionError("Original callback did not decode DShot neutral")
     if (qtest.read(WAVE + 0x0c) != 32 or
@@ -133,7 +181,8 @@ def native_original_zero_throttle_arm(rsp, qtest, *, wfi, hardfault,
                 native_original_run_wfi_pc=normal)
 
 
-def resume_to(rsp, target, hardfault, slice_ms, slices, label):
+def resume_to(rsp, target, hardfault, slice_ms, slices, label,
+              on_pause=None):
     for n in range(slices):
         stop, interrupted = continue_bounded(rsp, slice_ms)
         if not stop.startswith(("S02", "T02", "S05", "T05")):
@@ -141,6 +190,8 @@ def resume_to(rsp, target, hardfault, slice_ms, slices, label):
         state = observer(rsp)
         if (state["pc"] == hardfault or state["cfsr"] or state["hfsr"]):
             raise AssertionError(f"{label} original firmware CPU fault: {state}")
+        if interrupted and on_pause is not None:
+            on_pause(n + 1, state)
         if not interrupted:
             if state["pc"] != target:
                 raise AssertionError(
@@ -1381,7 +1432,8 @@ def run(args):
                                     throt=throt,
                                     callback=symbols["am13e_app_io_dshot_packet"],
                                     slice_ms=args.slice_ms,
-                                    runtime_slices=args.runtime_slices)
+                                    runtime_slices=args.runtime_slices,
+                                    bemf_state=bemf_state)
                                 evidence["g13b3n_original_zero_arming"] = unlock
                                 print("PASS_G13B3N_ORIGINAL_ARM_250MS_AFTER_"
                                       "GENUINE_DSHOT_ZERO " +
