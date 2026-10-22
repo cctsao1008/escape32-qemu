@@ -51,6 +51,8 @@ from tools.native_bemf_timeout_qualification import (
 )
 from tools.native_timg12_observer import observe_native_timg12
 from tools.native_pwm_deadband_diagnostic import native_deadband_source_clamp, read_native_deadband
+from tools.native_power_coupled_plant import NativePowerCoupledBLDC
+from tools.native_closed_loop_audit import NativeClosedLoopAudit
 from tools.native_power_path_qualification import qualify_cross_phase_bridge
 from tools.virtual_bldc_feedback import SIM_BEMF_INPUT
 
@@ -609,6 +611,162 @@ def observe_original_no_bemf_timeout(
     raise AssertionError(
         "No original SysTick/ECAP capture timeout within bounded native "
         f"WFI visits={max_visits}; original_armed={guest('armed')}")
+
+
+
+
+def probe_native_sustained_power_feedback(
+        rsp, qtest, *, bemf_state, armed_breakpoints, wfi, hardfault,
+        slice_ms, runtime_slices, max_visits, required_sectors):
+    """Full native WFI-to-WFI physical bridge -> plant -> BEMF feedback loop.
+
+    No native program counter, firmware SRAM, PWM, TIMG12, CAP1, or IRQ
+    writes. Only physical voltage stimulus (NON-SILICON QTest port).
+    Only original guest CAP1 + TIMG12 service + powered six-vector can
+    result in a completed sector. SIM_ONLY assumptions stay explicit.
+    """
+    needed = ("armed", "selected_code", "step", "captured_events",
+              "rejected_events", "scheduled", "serviced")
+    missing = [x for x in needed if x not in bemf_state]
+    if missing:
+        raise AssertionError("Original ELF missing native loop symbols: " +
+                             ",".join(missing))
+    motor = NativePowerCoupledBLDC(MotorParameters(
+        vbus_v=24.0, phase_resistance_ohm=.3,
+        phase_inductance_h=.002, bemf_constant_v_per_rad_s=.02,
+        torque_constant_nm_per_a=.02, inertia_kg_m2=1e-6,
+        viscous_friction_nm_per_rad_s=.0001, load_torque_nm=0,
+        pole_pairs=7))
+    timeline = NativePwmTimeline(motor)
+    frontend = AnalogFrontend(reference_v=3.3, zero_bemf_bias_v=1.65,
+                              input_gain_v_per_bemf_v=.02)
+    audit = NativeClosedLoopAudit(required_sectors=required_sectors)
+    for pc in sorted(armed_breakpoints - {hardfault}):
+        del_bp(rsp, pc)
+        armed_breakpoints.remove(pc)
+    for pc in wfi:
+        if pc not in armed_breakpoints:
+            add_bp(rsp, pc)
+            armed_breakpoints.add(pc)
+
+    # The original motor is stationary: no fabricated initial speed.
+    initial = timeline.observe(
+        qtest.read, native_ticks=qtest.read(ECAP1_TSCTR),
+        checkpoint="native_gate_return_before_sustained_motor")
+    if motor.sample().mechanical_rpm != 0:
+        raise AssertionError("Synthetic motor did not start at zero RPM")
+    last_qualified_path = False
+    total_written = 0
+    record_last = {}
+    result = {}
+    for visit in range(1, max_visits + 1):
+        checkpoint = wait_for_native_main_wfi(
+            rsp, wfi, hardfault, slice_ms, runtime_slices,
+            stage=f"G13B3L_NATIVE_MOTOR_LOOP_{visit}")
+        cpu = observer(rsp)
+        if cpu["pc"] == hardfault or cpu["cfsr"] or cpu["hfsr"]:
+            raise AssertionError("Original ELF fault in sustained motor")
+        try:
+            frame = timeline.observe(
+                qtest.read, native_ticks=qtest.read(ECAP1_TSCTR),
+                checkpoint=f"native_sustained_wfi_{visit}")
+            real_pwm = observe_original_pwm(qtest.read, gate_active_level=1)
+            path = qualify_cross_phase_bridge(
+                real_pwm.six_high_ticks,
+                period_ticks=real_pwm.period_ticks,
+                gate_trip_qualified=real_pwm.acceptable_for_plant)
+            last_qualified_path = (
+                path.qualifies_necessary_two_terminal_drive)
+            sample = motor.sample(gate_enabled=last_qualified_path)
+            analog = frontend.words(sample)
+        except (ValueError, FloatingPointError) as exc:
+            result = dict(qualified=False,
+                          reason="UNQUALIFIED_PHYSICAL_MOTOR_OR_ANALOG",
+                          details=str(exc), original_guest_wfi_visits=visit)
+            break
+        # Real analog lines remain present even when guest ECAP is
+        # unarmed. The guest alone selects/arms comparator and timer.
+        # Never gate or spoof IRQ by writing an enable/flag bit.
+        for phase, word in enumerate(analog):
+            qtest.write(SIM_BEMF_INPUT + 4 * phase, word)
+        for phase, word in enumerate(analog):
+            if qtest.read(SIM_BEMF_INPUT + 4 * phase) != word:
+                raise AssertionError("Native analog input MMIO corrupted")
+        total_written += 1
+        guest = {
+            name: rsp.mem32(bemf_state[name])
+            for name in needed
+        }
+        cap1 = qtest.read(ECAP1_TSCTR + 8)
+        audit.ingest(
+            ecap_ticks=frame.native_ecap_ticks,
+            cap1_ticks=cap1,
+            captured=guest["captured_events"],
+            rejected=guest["rejected_events"],
+            scheduled=guest["scheduled"],
+            serviced=guest["serviced"],
+            step=guest["step"],
+            selected_code=guest["selected_code"],
+            pwm_high=real_pwm.six_high_ticks,
+            pwm_period=real_pwm.period_ticks,
+            gate_trip_qualified=real_pwm.acceptable_for_plant,
+            rpm=sample.mechanical_rpm)
+        if (visit <= 3 or visit % 32 == 0 or
+                audit.qualified or
+                len(audit.sectors) != record_last.get("sectors", 0)):
+            report = {
+                "visit": visit,
+                "native_guest_step": guest["step"],
+                "native_guest_armed": guest["armed"],
+                "original_captured": guest["captured_events"],
+                "original_rejected": guest["rejected_events"],
+                "original_scheduled": guest["scheduled"],
+                "original_serviced": guest["serviced"],
+                "measured_six_high_ticks": real_pwm.six_high_ticks,
+                "physical_source_return_pairs": path.different_phase_pairs,
+                "motor_rpm": sample.mechanical_rpm,
+                "motor_energized_intervals": motor.energized_intervals,
+                "motor_coast_intervals": motor.coasting_intervals,
+                "real_completed_sectors": len(audit.sectors),
+                "analog_codes": [v & 0xfff for v in analog]
+            }
+            print("G13B3L_NATIVE_POWERED_MOTOR_LOOP " +
+                  json.dumps(report, sort_keys=True), flush=True)
+            record_last["sectors"] = len(audit.sectors)
+        if audit.qualified:
+            result = audit.result()
+            result.update(
+                original_guest_wfi_visits=visit,
+                plant_max_rpm=motor.max_measured_rpm,
+                plant_integrated_ns=timeline.frames[-1].total_integrated_ns,
+                simulator_analog_frames=total_written,
+                motor_started_only_after_cross_phase=(
+                    motor.ever_powered and
+                    motor.energized_intervals > 0))
+            print("PASS_G13B3L_ORIGINAL_NATIVE_SIX_FEEDBACK_POWERED_"
+                  "COMMUTATIONS_SIM_ONLY " +
+                  json.dumps(result, sort_keys=True), flush=True)
+            return result
+        if visit == max_visits:
+            break
+        checkpoint = step_unchanged_native_wfi(
+            rsp, checkpoint, armed_breakpoints=armed_breakpoints,
+            wfi=wfi, hardfault=hardfault,
+            slice_ms=slice_ms, runtime_slices=runtime_slices,
+            stage=f"G13B3L_NEXT_ORIGINAL_WFI_{visit}")
+    if not result:
+        result = audit.result()
+        result.update(
+            original_guest_wfi_visits=max_visits,
+            plant_max_rpm=motor.max_measured_rpm,
+            plant_integrated_ns=timeline.frames[-1].total_integrated_ns,
+            simulator_analog_frames=total_written,
+            motor_started_only_after_cross_phase=(
+                motor.ever_powered and motor.energized_intervals > 0),
+            last_measured_power_path=last_qualified_path)
+    print("G13B3L_OPEN_SUSTAINED_NATIVE_CLOSED_LOOP " +
+          json.dumps(result, sort_keys=True), flush=True)
+    return result
 
 
 def collect_native_pwm_timeline(
@@ -1231,6 +1389,26 @@ def run(args):
                                         "GUEST_OWNED_ELF_SYMBOL_AND_REAL_REGISTERS "
                                         "NOT_CAPTURE_IRQ_NOT_CLOSED_LOOP",
                                         flush=True)
+                                if args.probe_native_sustained_loop:
+                                    if evidence["status"] != "NATIVE_GATE_ON":
+                                        raise AssertionError(
+                                            "Native sustained motor needs original Gate ON")
+                                    loop_result = probe_native_sustained_power_feedback(
+                                        rsp, qtest, bemf_state=bemf_state,
+                                        armed_breakpoints=armed, wfi=wfi,
+                                        hardfault=hardfault,
+                                        slice_ms=args.slice_ms,
+                                        runtime_slices=args.runtime_slices,
+                                        max_visits=args.sustained_wfi_visits,
+                                        required_sectors=args.sustained_sectors)
+                                    evidence["g13b3l_native_sustained_loop"] = (
+                                        loop_result)
+                                    if args.require_native_sustained_loop and (
+                                            not loop_result.get("qualified")):
+                                        raise AssertionError(
+                                            "G13B3L sustained original native "
+                                            "powered six-sector loop remains OPEN: "
+                                            + json.dumps(loop_result))
                                 if args.require_native_no_bemf_timeout:
                                     if evidence["status"] != "NATIVE_GATE_ON":
                                         raise AssertionError(
@@ -1543,6 +1721,14 @@ def main():
                    help="Require multiple real native WFI PWM observations "
                         "with bounded ECAP intervals and motor progress")
     p.add_argument("--timeline-visits", type=int, default=4)
+    p.add_argument("--probe-native-sustained-loop", action="store_true",
+                   help="G13B3L original firmware multi-CAP1/TIMG12/real "
+                        "powered PWM with physically gated VirtualBLDC")
+    p.add_argument("--require-native-sustained-loop", action="store_true",
+                   help="Strict native original firmware SIX accepted powered "
+                        "commutations; fail closed if unfinished")
+    p.add_argument("--sustained-wfi-visits", type=int, default=1024)
+    p.add_argument("--sustained-sectors", type=int, default=6)
     p.add_argument("--require-native-no-bemf-timeout",
                    action="store_true",
                    help="G13B3I original native ECAP/SysTick no-valid-BEMF "
@@ -1616,6 +1802,19 @@ def main():
             p.error("--require-native-bemf-arm requires --require-drive "
                     "--require-native-pwm --wait-native-bemf-calibration")
         a.probe_native_bemf = True
+    if not 6 <= a.sustained_sectors <= 24:
+        p.error("--sustained-sectors must be 6..24")
+    if not 64 <= a.sustained_wfi_visits <= 4096:
+        p.error("--sustained-wfi-visits must be 64..4096")
+    if a.require_native_sustained_loop:
+        a.probe_native_sustained_loop = True
+    if a.probe_native_sustained_loop and (
+            not a.require_native_bemf_arm or
+            a.probe_native_timeline or a.require_native_no_bemf_timeout or
+            a.trip_after_native_gate or a.trip_after_native_bemf_injection):
+        p.error("--probe-native-sustained-loop requires real original "
+                "Gate/PWM/BEMF arm, not the legacy one-event timeline "
+                "or fault/timeout injection probe")
     if not 520 <= a.no_bemf_timeout_visits <= 1024:
         p.error("--no-bemf-timeout-visits must be 520..1024")
     if a.require_native_no_bemf_timeout:
