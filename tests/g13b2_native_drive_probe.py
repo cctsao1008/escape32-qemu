@@ -778,7 +778,15 @@ def run(args):
                                               "ECAP_CLOCK_TIME_COUPLED_PLANT "
                                               "NO_BEMF_FEEDBACK_INJECTION",
                                               flush=True)
-                                if args.trip_after_native_gate:
+                                if (args.trip_after_native_gate or
+                                        args.trip_after_native_bemf_injection):
+                                    if args.trip_after_native_bemf_injection:
+                                        injected = summary.get("bemf_injection", {})
+                                        if (injected.get("sample_count", 0) < 5 or
+                                                injected.get("nonneutral_samples", 0) < 1):
+                                            raise AssertionError(
+                                                "No active physically derived BEMF "
+                                                "before live coupled fault")
                                     if evidence["status"] != "NATIVE_GATE_ON":
                                         raise AssertionError(
                                             "Post-drive Trip requires qualified "
@@ -818,8 +826,14 @@ def run(args):
                                         "PASS_G13B2E_NATIVE_GATE_ON_EXTERNAL_NFAULT "
                                         "ASYNC_OST2_ALL_SIX_PWM_LOW_CPU_HALTED",
                                         flush=True)
-                                    del_bp(rsp, ret_gate)
-                                    armed.remove(ret_gate)
+                                    # G13B3H: timeline already removed the
+                                    # Gate-return breakpoint, and still owns
+                                    # original main-WFI stops. Clear only
+                                    # debugger breakpoints; NEVER write CPU
+                                    # masks/state or original guest code.
+                                    for pc in sorted(armed - {hardfault}):
+                                        del_bp(rsp, pc)
+                                        armed.remove(pc)
                                     # Let the original ISR finish executing
                                     # its nFAULT readiness and nonreturning
                                     # fault-reset policy. No host mutation of
@@ -842,6 +856,22 @@ def run(args):
                                         "PASS_G13B2E_ORIGINAL_FIRMWARE_POST_GATE "
                                         "NFAULT_SHUTDOWN_WITH_HARDWARE_OST2",
                                         flush=True)
+                                    if args.trip_after_native_bemf_injection:
+                                        evidence["g13b3h_live_bemf_fault"] = {
+                                            "coupled_bemf_sample_count":
+                                                injected["sample_count"],
+                                            "nonneutral_bemf_samples":
+                                                injected["nonneutral_samples"],
+                                            "physical_nfault_ost2": True,
+                                            "original_firmware_shutdown": True,
+                                            "sensorless_closed_loop_proved": False,
+                                        }
+                                        print(
+                                            "PASS_G13B3H_PHYSICAL_NFAULT_WHILE_"
+                                            "PLANT_BEMF_INJECTED_ORIGINAL_"
+                                            "FIRMWARE_SHUTDOWN "
+                                            "NOT_SUSTAINED_CLOSED_LOOP",
+                                            flush=True)
                                 break
                             raise AssertionError(
                                 f"Unexpected native breakpoint PC=0x{state['pc']:08x}")
@@ -943,6 +973,11 @@ def main():
                    help="G13B3E: inject only physically calculated U/V/W "
                         "voltages via QEMU SIM_ONLY MMIO after qualified "
                         "native Gate/PWM/ECAP/BEMF arm observations")
+    p.add_argument("--trip-after-native-bemf-injection",
+                   action="store_true",
+                   help="Fault regression: after qualified multiple native "
+                        "BEMF voltage samples, apply real external nFAULT "
+                        "and require asynchronous OST2 + guest fault reset")
     p.add_argument("--trip-after-native-gate", action="store_true",
                    help="After native Gate ON, assert only external nFAULT "
                         "while CPU halted; require asynchronous OST2 "
@@ -960,6 +995,12 @@ def main():
         p.error("Missing QEMU or genuine SIM_ONLY ELF")
     if not 1 <= a.calibration_wfi_visits <= 64:
         p.error("BEMF calibration wait visits must be 1..64")
+    if (a.trip_after_native_bemf_injection and
+            (not a.require_native_bemf_injection or
+             a.require_native_bemf_capture or a.trip_after_native_gate)):
+        p.error("--trip-after-native-bemf-injection requires positive "
+                "native BEMF injection; incompatible with capture proof "
+                "or duplicate gate trip")
     if a.trip_after_native_gate and (
             not a.require_drive or not a.wait_native_bemf_calibration or
             a.require_bemf_reject):
