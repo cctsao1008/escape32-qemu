@@ -344,12 +344,24 @@ def run(args):
                             if state["pc"] == symbols["am13e_power_stage_enable"]:
                                 saw_gate_call = True
                                 evidence["gate_enable_entry"] = current
+                                pending_zeros = (rsp.mem32(native_start_zero_counter)
+                                                 if native_start_zero_counter is not None
+                                                 else None)
+                                evidence["gate_enable_pending_zeros"] = pending_zeros
                                 if not saw_output_start:
                                     raise AssertionError(
                                         "Gate enable reached without native "
                                         "motor output start")
+                                if (state["ipsr"] != 44 or
+                                        "native_mcpwm4_irq_entry" not in evidence or
+                                        pending_zeros != 0 or
+                                        current["tzflags"]):
+                                    raise AssertionError(
+                                        "Native Gate enable not causally owned "
+                                        "by two real zero IRQs with clear Trip")
                                 print("G13B2E_NATIVE_GATE_ENABLE_CALLED "
-                                      "GUEST_ORIGINAL_FIRMWARE", flush=True)
+                                      "GUEST_ORIGINAL_FIRMWARE "
+                                      "IPSR=44 TWO_ZERO_EVENTS_CONSUMED=1", flush=True)
                                 ret_gate = rsp.reg(14) & ~1
                                 if not 0x6000 <= ret_gate < 0x80000:
                                     raise AssertionError(
@@ -367,7 +379,8 @@ def run(args):
                                                 gate_connected=connected,
                                                 gate_post=after,
                                                 status="NATIVE_GATE_ON" if connected
-                                                and after["pwm_running"] and
+                                                and rsp.reg(0) == 1 and
+                                                after["pwm_running"] and
                                                 after["perclkcr"] & 1 and
                                                 not after["tzflags"] else
                                                 "NATIVE_GATE_NOT_FULLY_AUTHORIZED")
