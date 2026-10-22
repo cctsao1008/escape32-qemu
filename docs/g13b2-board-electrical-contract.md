@@ -318,3 +318,53 @@ ECAP stop/resume and strict no-phantom edges. This is not a 200MHz
 cycle-accurate CPU model; the QEMU `-icount` host instruction timing
 remains diagnostic. **Native calibration completion and positive Gate
 will only be accepted after a separate passing CI run.**
+
+## G13B2E — Native positive Gate authorization verified (SIM_ONLY)
+
+[CI run 39727659174](https://github.com/cctsao1008/escape32-qemu/actions/runs/39727659174)
+passed a **fully native**, opt-in SIM_ONLY virtual-board positive drive
+sequence using the original ESCape32 HAL and its unchanged original
+Rel17 motor algorithm. Its test-only initial BEMF DAC code and
+electrical board profile are **not E62 hardware measurements**.
+
+At the original runtime WFI, the test allowed the unchanged
+SysTick/ECAP logic to complete calibration without modifying guest
+SRAM: `calibration_done=1` after 10 native WFI visits.
+The physical wire input delivered DShot600 frame `0x7D0A`,
+which native firmware accepted with CRC return=1 and `throt=953`.
+The native `am13e_app_motor_nfault_trip_ready()` and
+`am13e_app_motor_bemf_reference_start_ready()` independently
+returned 1; original `am13e_motor_output_start()` returned 1.
+Real MCPWM4 ET1/TBCTR_ZERO IRQ entered original `MCPWM4_IRQHandler`
+(IPSR44, `ETSEL=2`, real `INTFLAG=8`, no OST).
+After original `start_zero_events` was consumed to zero, the
+original `am13e_power_stage_enable()` function returned 1
+and the model read back native PB13 DOE/DOUT high, six connected
+MCPWM4 output pads, running TBCLKSYNC, and zero Trip flags:
+
+```text
+G13B2E_NATIVE_BEMF_ECAP_CALIBRATION_COMPLETE wfi_visits=10
+G13B2E_NATIVE_MCPWM4_IRQ_ENTRY_REAL IPSR=44 ET1_SOURCE=2 INTFLAG_ET1=1
+G13B2E_NATIVE_GATE_ENABLE_CALLED GUEST_ORIGINAL_FIRMWARE IPSR=44 TWO_ZERO_EVENTS_CONSUMED=1
+native_bemf_calibration_done=1, gate_return=1, gate_connected=true,
+status=NATIVE_GATE_ON, tzflags=0
+PASS_G13B2E_ORIGINAL_SIM_ONLY_GATE_PWM_AUTHORIZATION NOT_SENSORLESS_CLOSED_LOOP
+```
+
+The CI workflow now promotes this exact native `--require-drive`
+configuration to a **mandatory gate**, rather than reporting a
+positive result only as a diagnostic. The earlier uncalibrated
+BEMF-negative test still requires motor-start rejection and PB13 LOW.
+
+The next independent negative phase uses **only the external physical
+PA22 nFAULT stimulus after native Gate is already ON**. The QEMU
+asynchronous OST2 path must force *all six* outputs LOW while the
+Cortex-M33 is halted, then the original firmware must execute its
+own shutdown/reset procedure. This test has been added but must not
+be represented as a PASS until its own CI succeeds.
+
+None of these tests establish a continuously rotating virtual BLDC,
+a causal feedback-dependent ESCape32 commutation loop, real silicon
+PWM dead-time/switching energy, or production electrical safety
+qualification. Those are distinct G13B3 and hardware validation
+obligations.
