@@ -32,6 +32,25 @@ An IRQ or PB13 Gate signal by itself is *not* a six-channel output proof.
 Any Trip being latched makes the stage unqualified regardless of the observed duty.
 No guest register or SRAM writes are performed by this qualification.
 
+**G13B3A native positive proof**:
+[CI run 39756133980](https://github.com/cctsao1008/escape32-qemu/actions/runs/39756133980)
+captured the actual guest-owned six-channel output at original Gate return:
+
+```text
+G13B3A_NATIVE_OUTPUT_READ_ONLY
+  gate_and_pads=true pwm_powered=true pwm_tbclk_enabled=true
+  physical_ost2=false physical_ost3=false
+  pwm_status=15 valid_mask=63 period_ticks=6251
+  six_high_ticks=[0,0,0,6220,0,0]
+  six_duties=[0,0,0,0.9950407934730443,0,0]
+  acceptable_for_plant=true
+```
+
+This is the original firmware's instantaneous six-AQ/DB carrier image,
+not a host-injected PWM register profile. The CI result is a **single
+nonzero phase voltage command**, not proof that the commutation sequence
+continues across six electrical sectors.
+
 The native G13B2E probe prints an explicit
 `G13B3A_NATIVE_OUTPUT_READ_ONLY` snapshot under `--probe-native-pwm`; its
 `g13b3a_native_pwm` JSON field preserves valid mask, six measured HIGH ticks,
@@ -71,3 +90,41 @@ QEMU `-icount` is a functional virtual-time configuration, not a
 cycle-accurate 200MHz AM13E MCU performance specification.
 SIM_ONLY board threshold, PWM polarity and virtual motor values are
 fictional test assumptions, not validated E62 hardware properties.
+
+## G13B3B — one original PWM carrier seeds VirtualBLDC (read-only)
+
+`tools/native_bldc_seed.py` consumes the qualified original six
+PWM duties from the **real native Gate-return snapshot** and
+advances the existing G13A `VirtualBLDC` by **exactly one**
+native carrier period. The timebase is explicit: 100 MHz MCPWM
+and 6,251 observed ticks yield 62,510 virtual nanoseconds.
+No time, PWM, Gate, guest SRAM or BEMF registers are written
+to QEMU by this seed calculation.
+
+The *synthetic only* motor is specified as:
+
+| Parameter | Test value (NOT E62 measured) |
+|---|---:|
+| Vbus | 24 V |
+| Phase R | 0.3 ohm |
+| Phase L | 2 mH |
+| Ke, Kt | 0.02 SI-units each |
+| Inertia J | 1e-6 kg m2 |
+| Viscous friction | 0.0001 N m s/rad |
+| Pole pairs | 7 |
+| Load torque | 0 |
+| Analog Vref and bias | 3.3 V, 1.65 V |
+| Analog frontend gain | 0.02 V per phase-BEMF V |
+
+The `--require-native-pwm --require-native-plant-seed` CI
+gate requires that the native six-output PWM is physically
+qualified, then produces nonzero *virtual* phase currents and
+motion over one carrier. The result records three computed
+BEMF codes for future feedback, but these are **not**
+published to CMPSS0/ECAP1 at this stage.
+
+One time step is not an operating motor: no rotor speed
+stability, BEMF zero-cross capture, six-step sector progression
+or guest consumption of that feedback is demonstrated.
+**G13B3C** must explicitly prove repeated causally coupled
+native PWM → plant → comparator ECAP → native commutation events.
