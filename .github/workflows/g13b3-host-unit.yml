@@ -19,6 +19,8 @@ on:
       - 'tests/test_g13b3_native_power_coupled.py'
       - 'tests/test_g13b3_native_closed_loop_audit.py'
       - 'tests/test_g13b3_native_extended_run.py'
+      - 'tests/test_e62_hardware_evidence.py'
+      - 'tools/e62_hardware_evidence.py'
       - 'tools/native_extended_run_gate.py'
       - 'tests/test_g13b3_native_sim_cfg_startup.py'
       - 'tests/test_g13b3_native_sim_cfg_flash.py'
@@ -56,6 +58,9 @@ jobs:
           python3 tests/test_g13b3_native_power_coupled.py
           python3 tests/test_g13b3_native_closed_loop_audit.py
           python3 tests/test_g13b3_native_extended_run.py
+          python3 tests/test_e62_hardware_evidence.py
+          python3 tools/e62_hardware_evidence.py --csv docs/fixtures/e62-hardware-measurements.csv --output /tmp/e62-physical-evidence-open.json
+          python3 -c 'import json; x=json.load(open("/tmp/e62-physical-evidence-open.json")); assert x["hardware_qualified"] is False and x["captured_rows"] == 0'
           python3 tests/test_g13b3_native_sim_cfg_startup.py
           python3 tests/test_g13b3_native_sim_cfg_flash.py
           python3 tests/test_g13b3_native_arming_zero_wire.py
