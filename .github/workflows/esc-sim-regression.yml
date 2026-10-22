@@ -245,6 +245,23 @@ jobs:
             2>&1 | tee artifacts/g13b3e-native-bemf-injection.log
           # Only three NON-SILICON QEMU voltage stimuli may be written.
           # No forced comparator edge, CAP1, IRQ, native gate or throttle.
+      - name: G13B3F genuine native ECAP capture from plant BEMF
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          python3 tests/g13b2_native_drive_probe.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf /tmp/e62-fw-sim-ideal-bemf/AM13E-rev17.3.elf \
+            --throttle 1000 --startup-steps 32768 \
+            --slice-ms 300 --runtime-slices 20 \
+            --wait-native-bemf-calibration --calibration-wfi-visits 24 \
+            --require-drive --require-native-pwm \
+            --require-native-bemf-arm --require-native-bemf-capture \
+            --timeline-visits 8 \
+            --artifact artifacts/g13b3f-native-capture.json \
+            2>&1 | tee artifacts/g13b3f-native-capture.log
+          # Native CAP1, original guest captured_events and selected-phase
+          # plant code crossing must all agree. No forced capture/IRQ.
       - name: G13B2E post native Gate active physical nFAULT Trip/ISR
         run: |
           set -euo pipefail

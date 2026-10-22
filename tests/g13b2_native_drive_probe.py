@@ -44,6 +44,7 @@ from tools.native_runtime_timeline import (
     NativePwmTimeline, ECAP1_TSCTR, NATIVE_ECAP_CLOCK_HZ
 )
 from tools.native_bemf_injection import NativeBemfInjector
+from tools.native_bemf_capture import prove_capture_from_native_samples
 
 FAULT_FN = "am13e_app_motor_fault_reset"
 
@@ -247,7 +248,8 @@ def native_timeline_observe(rsp, qtest, bemf_state, *,
 
 def collect_native_pwm_timeline(
     rsp, qtest, *, hardfault, armed_breakpoints, wfi, bemf_state,
-    slice_ms, runtime_slices, visits, motor, frontend=None):
+    slice_ms, runtime_slices, visits, motor, frontend=None,
+    require_capture=False):
     """GDB WFI rendezvous samples genuine guest time, never clock_step.
 
     Guest continues to execute between *original* WFI instructions.
@@ -256,6 +258,12 @@ def collect_native_pwm_timeline(
     """
     timeline = NativePwmTimeline(motor)
     injector = NativeBemfInjector(frontend) if frontend is not None else None
+    if require_capture and injector is None:
+        raise ValueError("Native CAP1 proof requires real analog stimulus")
+    initial_capture_count = (
+        rsp.mem32(bemf_state["captured_events"]) if require_capture else 0)
+    initial_cap1 = qtest.read(ECAP1_TSCTR + 8) if require_capture else 0
+    capture_proof = None
 
     def feed_if_requested():
         if injector is None:
@@ -286,6 +294,21 @@ def collect_native_pwm_timeline(
         checkpoint = wait_for_native_main_wfi(
             rsp, wfi, hardfault, slice_ms, runtime_slices,
             stage=f"G13B3D_TIMELINE_{visit + 1}")
+        if require_capture:
+            # The native IRQ can legitimately consume/disarm BEMF before
+            # this WFI. Observe its own counter BEFORE requiring rearm.
+            count = rsp.mem32(bemf_state["captured_events"])
+            cap1 = qtest.read(ECAP1_TSCTR + 8)
+            if count > initial_capture_count:
+                capture_proof = prove_capture_from_native_samples(
+                    injector.records, cap1_before=initial_cap1,
+                    cap1_after=cap1, native_now=qtest.read(ECAP1_TSCTR),
+                    guest_count_before=initial_capture_count,
+                    guest_count_after=count)
+                print("G13B3F_NATIVE_CAPTURE_ECAP_IRQ_CAUSAL " +
+                      json.dumps(capture_proof.to_dict(), sort_keys=True),
+                      flush=True)
+                break
         native_timeline_observe(
             rsp, qtest, bemf_state, timeline=timeline,
             checkpoint=f"original_main_wfi_{visit + 1}",
@@ -308,10 +331,18 @@ def collect_native_pwm_timeline(
                 raise AssertionError("Original WFI failed to advance")
             add_bp(rsp, checkpoint)
             armed_breakpoints.add(checkpoint)
-    result = timeline.require_progress(min_frames=visits + 1)
+    if require_capture and capture_proof is None:
+        raise AssertionError(
+            "No genuine original ECAP1_IRQHandler captured_events and "
+            "CAP1 from modeled three-phase BEMF within bounded WFI visits")
+    result = timeline.require_progress(
+        min_frames=(3 if require_capture else visits + 1),
+        min_integrated_intervals=2)
     if injector is not None:
         result["bemf_injection"] = injector.require_samples(
-            min_samples=visits + 1)
+            min_samples=(3 if require_capture else visits + 1))
+    if capture_proof is not None:
+        result["native_bemf_capture"] = capture_proof.to_dict()
     return result
 
 def run(args):
@@ -339,7 +370,8 @@ def run(args):
     for name in ("calibration_done", "calibration_ticks",
                  "capture_ticks_per_ms", "capture_timeout_ticks",
                  "pending_code", "pending_interval",
-                 "reference_ready", "selected_code", "armed"):
+                 "reference_ready", "selected_code", "armed",
+                 "captured_events", "rejected_events"):
         try:
             bemf_state[name] = symbol_address(args.elf, name)
         except RuntimeError:
@@ -720,6 +752,7 @@ def run(args):
                                         runtime_slices=args.runtime_slices,
                                         visits=args.timeline_visits,
                                         motor=timeline_motor,
+                                        require_capture=args.require_native_bemf_capture,
                                         frontend=(AnalogFrontend(
                                             reference_v=3.3,
                                             zero_bemf_bias_v=1.65,
@@ -730,6 +763,11 @@ def run(args):
                                     print("G13B3D_NATIVE_RUNTIME_TIMELINE_READ_ONLY " +
                                           json.dumps(summary, sort_keys=True),
                                           flush=True)
+                                    if args.require_native_bemf_capture:
+                                        print("PASS_G13B3F_NATIVE_CMPSS0_ECAP1_"
+                                              "CAP1_ORIGINAL_ISR_FROM_PLANT_"
+                                              "BEMF_NOT_COMMUTATION",
+                                              flush=True)
                                     if args.require_native_bemf_injection:
                                         print("PASS_G13B3E_NATIVE_PLANT_DERIVED_"
                                               "THREE_PHASE_BEMF_STIMULUS "
@@ -898,6 +936,9 @@ def main():
                    help="Require multiple real native WFI PWM observations "
                         "with bounded ECAP intervals and motor progress")
     p.add_argument("--timeline-visits", type=int, default=4)
+    p.add_argument("--require-native-bemf-capture", action="store_true",
+                   help="G13B3F: require modeled BEMF threshold crossing "
+                        "followed by hardware CAP1 and original IRQ counter")
     p.add_argument("--require-native-bemf-injection", action="store_true",
                    help="G13B3E: inject only physically calculated U/V/W "
                         "voltages via QEMU SIM_ONLY MMIO after qualified "
@@ -935,6 +976,8 @@ def main():
             p.error("--require-native-bemf-arm requires --require-drive "
                     "--require-native-pwm --wait-native-bemf-calibration")
         a.probe_native_bemf = True
+    if a.require_native_bemf_capture:
+        a.require_native_bemf_injection = True
     if a.require_native_bemf_injection:
         a.require_native_timeline = True
     if a.require_native_timeline:

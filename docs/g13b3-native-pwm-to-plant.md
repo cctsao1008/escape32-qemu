@@ -254,3 +254,8 @@ injection and any claim of native closed-loop commutation stay OPEN.
 ## G13B3E native BEMF injection (guarded test)
 
 Original Guest Gate/Trip/PWM/ECAP-BEMF capture-arm and calibrated timestamp are verified before every three-phase BEMF injection. The synthetic AnalogFrontend converts actual Host VirtualBLDC currents/velocity/angle into U/V/W samples without clipping. Only simulator-only MMIO 0x5FFE2000/04/08 are written and read back. The original ARM ELF retains control of Gate, six PWM, CMPSS0/ECAP1/IRQ and motor policy. No ECAP capture or native closed-loop status is implied by this gate; G13B3F/H remain OPEN pending actual native evidence.
+
+
+## G13B3F native zero-cross CAP1 and original IRQ audit
+
+Separate strict opt-in positive gate. A previously injected original host-motor BEMF code must actually cross the guest-owned DAC with the selected native edge polarity. The QEMU CMPSS0 majority filter may then create a genuine ECAP1 CAP1 value. PASS requires a changed read-only CAP1 after that very injection and a strictly increased original firmware motor_bemf.c captured_events SRAM counter, which is only incremented by the original ECAP1_IRQHandler. A disarmed capture after a consumed native event is handled as real original behavior, not overridden. The gate does not imply that the native event was accepted by Rel17 for commutation; G13B3G/H remain OPEN.
