@@ -6,7 +6,10 @@ No synthetic comparator edges or guessed phase selection are emitted.
 No claim of actual zero crossing, IRQ processing, commutation or motion.
 """
 from dataclasses import dataclass, asdict
+from pathlib import Path
 from typing import Callable
+import re
+import subprocess
 
 CMPSS0 = 0x40460000
 ECAP1 = 0x40441000
@@ -14,6 +17,71 @@ SYS_HP_MUX = 0x400B0444
 ECAP_POWER = 0x400B0424
 BEMF_CMP0_POWER = 1 << 10
 BEMF_ECAP1_POWER = 1 << 4
+
+
+@dataclass(frozen=True)
+class NativeBemfArmSymbolAudit:
+    """A symbol address, never an assertion that guest capture is armed."""
+    address: int | None
+    reason: str
+    candidates: tuple[dict, ...]
+
+    def to_dict(self):
+        return asdict(self)
+
+
+def audit_native_bemf_arm_nm(output: str) -> NativeBemfArmSymbolAudit:
+    """Identify original motor_bemf.c static armed, fail closed on ambiguity.
+
+    Some GCC versions append .N to file-static names. nm -l may supply
+    source file/line; never select an ambiguous address by ordering.
+    """
+    pattern = re.compile(
+        r"^([0-9a-fA-F]{8,16})\s+([0-9a-fA-F]{8,16})\s+"
+        r"([bBdD])\s+(armed(?:\.\d+)?)(?:\s+(.*))?$"
+    )
+    candidates = []
+    for line in output.splitlines():
+        m = pattern.fullmatch(line.strip())
+        if m:
+            candidates.append(dict(
+                name=m[4], address=int(m[1], 16),
+                size=int(m[2], 16), source=(m[5] or "").strip()
+            ))
+    valid = [c for c in candidates
+             if 0x20000000 <= c["address"] < 0x20020000
+             and c["size"] == 4]
+    if not valid:
+        return NativeBemfArmSymbolAudit(
+            None, "no addressable 4-byte SRAM armed symbol",
+            tuple(candidates))
+    if len(valid) == 1:
+        chosen = valid[0]
+        if chosen["source"] and "motor_bemf.c" not in chosen["source"]:
+            return NativeBemfArmSymbolAudit(
+                None, "sole armed symbol belongs to another source",
+                tuple(candidates))
+    else:
+        scoped = [c for c in valid if "motor_bemf.c" in c["source"]]
+        if len(scoped) != 1 or not all(c["source"] for c in valid):
+            return NativeBemfArmSymbolAudit(
+                None, "multiple armed symbols; source ambiguous",
+                tuple(candidates))
+        chosen = scoped[0]
+    return NativeBemfArmSymbolAudit(
+        chosen["address"], "unique original native BEMF armed SRAM symbol",
+        tuple(candidates))
+
+
+def audit_native_bemf_arm_elf(
+    elf: str | Path, nm: str = "arm-none-eabi-nm"
+) -> NativeBemfArmSymbolAudit:
+    """Read ELF symbols only; no guest access and no firmware changes."""
+    output = subprocess.run(
+        [nm, "-a", "-S", "-l", "-n", str(elf)],
+        check=True, capture_output=True, text=True, timeout=15
+    ).stdout
+    return audit_native_bemf_arm_nm(output)
 
 
 @dataclass(frozen=True)

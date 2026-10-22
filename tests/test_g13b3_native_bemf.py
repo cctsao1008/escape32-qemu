@@ -7,7 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from tools.native_bemf_qualification import (
     CMPSS0, ECAP1, SYS_HP_MUX, ECAP_POWER,
-    observe_original_bemf_route
+    observe_original_bemf_route, audit_native_bemf_arm_nm
 )
 
 
@@ -84,6 +84,30 @@ class NativeBemfRoute(unittest.TestCase):
             selected_code=0, native_armed=False)
         self.assertIsNone(e.selected_phase)
         self.assertFalse(e.channel_ready_for_voltage_samples)
+
+    def test_compiler_suffixed_static_arm_unique(self):
+        s = "200003f0 00000004 b armed.0 /tmp/motor_bemf.c:63\n"
+        self.assertEqual(audit_native_bemf_arm_nm(s).address, 0x200003f0)
+
+    def test_unscoped_duplicates_fail_closed(self):
+        s = ("200003f0 00000004 b armed\n"
+             "20000410 00000004 b armed.0\n")
+        a = audit_native_bemf_arm_nm(s)
+        self.assertIsNone(a.address)
+        self.assertIn("ambiguous", a.reason)
+
+    def test_scoped_ambiguity_resolved_by_original_c_file(self):
+        s = ("200003f0 00000004 b armed /tmp/other.c:10\n"
+             "20000410 00000004 b armed.1 /tmp/motor_bemf.c:63\n")
+        self.assertEqual(audit_native_bemf_arm_nm(s).address, 0x20000410)
+
+    def test_invalid_or_wrong_source_does_not_resolve(self):
+        for s in ("", "200003f0 00000008 b armed\n",
+                  "200003f0 00000004 b unarmed\n",
+                  "200003f0 00000004 b armed /tmp/other.c:5\n",
+                  "000003f0 00000004 b armed /tmp/motor_bemf.c:63\n"):
+            with self.subTest(symbol_table=s):
+                self.assertIsNone(audit_native_bemf_arm_nm(s).address)
 
 
 if __name__ == "__main__":

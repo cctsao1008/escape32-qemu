@@ -35,7 +35,9 @@ from g13b2_native_safety import snapshot, verify, EXT_OC, PWM4
 from tools.virtual_bldc import gate_and_pads_connected
 from tools.native_pwm_qualification import observe_original_pwm
 from tools.native_bldc_seed import one_native_pwm_period
-from tools.native_bemf_qualification import observe_original_bemf_route
+from tools.native_bemf_qualification import (
+    observe_original_bemf_route, audit_native_bemf_arm_elf
+)
 from tools.virtual_bldc import MotorParameters, VirtualBLDC
 from tools.virtual_bldc_feedback import AnalogFrontend
 
@@ -235,6 +237,14 @@ def run(args):
         except RuntimeError:
             continue
     evidence = {"status": "OPEN_NOT_NATIVE_DRIVE", "native_elf": str(args.elf)}
+    if args.probe_native_bemf:
+        # Diagnose GCC static-symbol suffixes and scope without guessing.
+        audit = audit_native_bemf_arm_elf(args.elf)
+        evidence["g13b3c_bemf_arm_symbol_audit"] = audit.to_dict()
+        if audit.address is not None:
+            bemf_state["armed"] = audit.address
+        print("G13B3C_NATIVE_ARM_ELF_SYMBOL_AUDIT " +
+              json.dumps(audit.to_dict(), sort_keys=True), flush=True)
     with tempfile.TemporaryDirectory(prefix="g13b2e-probe-") as tmp:
         qtpath = str(Path(tmp) / "qtest.sock")
         gdbpath = str(Path(tmp) / "gdb.sock")
@@ -478,6 +488,7 @@ def run(args):
                                         "armed" in bemf_state):
                                     selected = rsp.mem32(bemf_state["selected_code"])
                                     arm_state = rsp.mem32(bemf_state["armed"])
+                                    evidence["g13b3c_native_armed_raw"] = arm_state
                                     bemf_cfg = observe_original_bemf_route(
                                         qtest.read, selected_code=selected,
                                         native_armed=(arm_state == 1))
