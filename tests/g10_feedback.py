@@ -62,7 +62,10 @@ def main():
         writew(q, EC + 0x2a, 0x10)   # TSCTRSTOP bit: free running
         step(q, 1000)
         ts1 = q.read(EC)
-        assert 100 <= ts1 <= 150, ts1
+        # Original AM13E firmware calibrates the ECAP counter against
+        # 200MHz MCLK: 1us corresponds to 200 TSCTR counts.
+        assert 200 <= ts1 <= 250, ts1
+        print("G13B2E_ECAP1_TSCTR_MCLK200MHZ_1US=PASS")
         assert q.read(EC + 8) == 0
         assert readw(q, EC + 0x2e) == 0
         writew(q, EC + 0x2a, 0)
@@ -78,13 +81,23 @@ def main():
         q.write(EC, 0xfffffff0)
         writew(q, EC + 0x2c, 0x20)
         assert readw(q, EC + 0x2e) == 0
-        step(q, 160)
+        # 16 counts to 32-bit rollover at 200MHz MCLK: 80ns.
+        step(q, 80)
         assert readw(q, EC + 0x2e) & 0x21 == 0x21
         assert q.read(EC) < 10
         writew(q, EC + 0x30, 0x21)
         assert readw(q, EC + 0x2e) == 0
         writew(q, EC + 0x2c, 0x02)
         print("G10B_NATIVE_TSCTR_OVERFLOW_IRQ_AND_W1C=PASS")
+        # Dedicated 1ms rate control, independent of any guest flags:
+        # original BEMF calibration expects exactly 200,000 counts.
+        q.write(EC, 0)
+        before_1ms = q.read(EC)
+        step(q, 1_000_000)
+        after_1ms = q.read(EC)
+        assert after_1ms - before_1ms == 200_000, (
+            before_1ms, after_1ms)
+        print("PASS_G13B2E_ECAP1_MCLK200MHZ_CALIBRATION_COUNTER_RATE")
 
         # ECFRC is a software flag force, never a timestamp capture.
         writew(q, EC + 0x32, 0x02)
