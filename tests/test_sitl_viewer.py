@@ -40,7 +40,7 @@ class TestOfflineViewer(unittest.TestCase):
         p.feed(html)
         self.assertFalse(p.external, "Offline viewer must not load CDN JS")
         self.assertEqual(len(p.inline), 1)
-        self.assertIn("SAMPLED", html)
+        self.assertIn("measured carrier-average duty at WFI checkpoints", html)
         self.assertIn("not individual PWM pin transitions", html)
         self.assertIn("SIM_ONLY", html)
         self.assertIn("CAP1_ACCEPTED", html)

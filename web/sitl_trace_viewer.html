@@ -114,9 +114,13 @@ function plot(canvasId, channels, fixedRange=null){
   const g=geometry(ctx,w,h), [t0,t1]=windowRange();
   let visible=trace.samples.filter(s=>s.t_ns>=t0&&s.t_ns<=t1);
   if(!visible.length)visible=[trace.samples[0]];
-  const allValues=visible.flatMap(s=>channels.map(ch=>ch.get(s)));
-  let min=fixedRange?fixedRange[0]:Math.min(...allValues);
-  let max=fixedRange?fixedRange[1]:Math.max(...allValues);
+  let min=fixedRange?fixedRange[0]:Infinity;
+  let max=fixedRange?fixedRange[1]:-Infinity;
+  if(!fixedRange){
+    for(const s of visible)for(const ch of channels){
+      const value=ch.get(s);if(value<min)min=value;if(value>max)max=value;
+    }
+  }
   if(max-min<1e-6){min-=1;max+=1}
   const x=t=>g.l+(t-t0)/(t1-t0)*g.cw;
   const y=v=>g.t+(max-v)/(max-min)*g.ch;
