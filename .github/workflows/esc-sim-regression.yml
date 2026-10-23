@@ -251,6 +251,96 @@ jobs:
           path: .build/qemu-src/build
           key: e62-qemu-ubuntu2404-${{ runner.arch }}-${{ hashFiles('build.sh', 'machine/**') }}-v1
 
+      # Fail-fast native acceptance order: prepare the same original
+      # firmware/Cfg and verify G13B3L (6) then G13B3M (12 / 90ms).
+      # When a strict endurance gate legitimately FAILS, avoid minutes
+      # of irrelevant independent tests. On PASS, ALL unchanged safety,
+      # protection, timing, QEMU and G0-G13 tests still run below.
+      # This reorder does not relax a single gate or suppress evidence.
+      - name: G13B3N original-ELF Cfg Flash factory provisioning SIM_ONLY
+        run: |
+          set -euo pipefail
+          # Original main.c:792 unconditionally copies 0x4000 Flash Cfg
+          # into Guest SRAM. Keep original linker .cfg NOLOAD untouched.
+          cmake -S /tmp/e62-escape32 -B /tmp/e62-fw-fast-ramp \
+            -G 'Unix Makefiles' -DESCAPE32_BUILD_AM13E=ON \
+            -DAM13E_SDK_ROOT=/tmp/e62-sdk \
+            -DG13B2_SIM_ONLY_OPT_IN=ON \
+            -DG13B2_SIM_ONLY_IDEAL_BEMF_REFERENCE=ON \
+            -DAM13E_BOARD_BOARD_PROFILE_FILE="$PWD/tests/fixtures/g13b3l_sim_only_ramp.cmake" \
+            -DAM13E_BOOT_LINKER_SCRIPT=/tmp/e62-escape32/boot/mcu/AM13E/config.ld \
+            2>&1 | tee artifacts/g13b3l-fast-ramp-configure.log
+          cmake --build /tmp/e62-fw-fast-ramp \
+            --target AM13E-rev17.3.elf -j 2 \
+            2>&1 | tee artifacts/g13b3l-fast-ramp-build.log
+          test -s /tmp/e62-fw-fast-ramp/AM13E-rev17.3.elf
+          arm-none-eabi-readelf -SW /tmp/e62-fw-fast-ramp/AM13E-rev17.3.elf \
+            | tee artifacts/g13b3l-fast-ramp-elf-sections.txt
+          grep -E '\.cfg[[:space:]]+NOBITS' \
+            artifacts/g13b3l-fast-ramp-elf-sections.txt
+          # Derive genuine Rel17 Cfg bytes from source cfgdata in ELF
+          # and factory-program only QEMU pre-reset FLASH_CFG1.
+          python3 tools/native_sim_cfg_flash.py \
+            --sim-only-opt-in \
+            --elf /tmp/e62-fw-fast-ramp/AM13E-rev17.3.elf \
+            --output artifacts/g13b3n-original-cfg-flash.bin \
+            2>&1 | tee artifacts/g13b3n-original-cfg-flash.log
+          if cmp -s /tmp/e62-fw-fast-ramp/AM13E-rev17.3.elf \
+            /tmp/e62-fw-sim-ideal-bemf/AM13E-rev17.3.elf; then
+            echo 'ERROR: SIM_ONLY DUTY_RATE not represented in original ELF'
+            exit 1
+          fi
+          echo PASS_G13B3N_ORIGINAL_ELF_AND_PREBOOT_FLASH_CFG_PROVISIONING
+      - name: G13B3L original ELF physically powered continuous motor-loop diagnostic
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          python3 tests/g13b2_native_drive_probe.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf /tmp/e62-fw-fast-ramp/AM13E-rev17.3.elf \
+            --throttle 1500 --startup-steps 32768 \
+            --slice-ms 300 --runtime-slices 20 \
+            --wait-native-bemf-calibration --calibration-wfi-visits 24 \
+            --require-drive --require-native-pwm \
+            --require-native-bemf-arm --require-native-sustained-loop \
+            --sim-only-cfg-flash artifacts/g13b3n-original-cfg-flash.bin \
+            --sustained-wfi-visits 1500 --sustained-sectors 6 \
+            --initial-electrical-degrees -30 \
+            --artifact artifacts/g13b3l-native-six-powered-sector-loop.json \
+            2>&1 | tee artifacts/g13b3l-native-six-powered-sector-loop.log
+          # STRICT: fail this firmware-backed CI unless six accepted
+          # physical CAP1->native TIMG12->powered six-step transitions
+          # AND an independently qualified multi-WFI power path pass.
+          # No one-event or non-driven virtual RPM can satisfy the gate.
+      - name: G13B3M extended twelve native feedback-powered sectors (separate strict gate)
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          # Preserve the previously passing six-sector G13B3L unchanged.
+          # Use the SAME original Rel17 ELF, factory Cfg and strict protection.
+          python3 tests/g13b2_native_drive_probe.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf /tmp/e62-fw-fast-ramp/AM13E-rev17.3.elf \
+            --throttle 1500 --startup-steps 32768 \
+            --slice-ms 300 --runtime-slices 20 \
+            --wait-native-bemf-calibration --calibration-wfi-visits 24 \
+            --require-drive --require-native-pwm \
+            --require-native-bemf-arm --require-native-sustained-loop \
+            --sim-only-cfg-flash artifacts/g13b3n-original-cfg-flash.bin \
+            --sustained-wfi-visits 2800 --sustained-sectors 12 \
+            --sustained-min-integrated-ns 90000000 \
+            --initial-electrical-degrees -30 \
+            --artifact artifacts/g13b3m-extended-twelve-sector.json \
+            2>&1 | tee artifacts/g13b3m-extended-twelve-sector.log
+          python3 tools/native_extended_run_gate.py \
+            --artifact artifacts/g13b3m-extended-twelve-sector.json \
+            --min-sectors 12 --min-integrated-ns 90000000 \
+            --min-powered-pwm-samples 600 \
+            --output artifacts/g13b3m-extended-strict-verdict.json \
+            2>&1 | tee artifacts/g13b3m-extended-strict-verdict.log
+          # Separate positive gate: two unbroken source-derived cycles,
+          # original CAP1/TIMG12, native PWM and ECAP-time evidence.
+          # All evidence stays SIM_ONLY; no actual E62 current/thermal PASS.
       - name: G13B2A SIM_ONLY original ELF preflight (NO DRIVE gate)
         run: |
           set -euo pipefail
@@ -439,90 +529,6 @@ jobs:
           # This is DIAGNOSTIC only, not a positive commutation gate:
           # prints G13B3G_OPEN when native Rel17 rejects an early BEMF.
           # Never rewrite Rel17 ival/timing or manufacture TIMG12 events.
-      - name: G13B3N original-ELF Cfg Flash factory provisioning SIM_ONLY
-        run: |
-          set -euo pipefail
-          # Original main.c:792 unconditionally copies 0x4000 Flash Cfg
-          # into Guest SRAM. Keep original linker .cfg NOLOAD untouched.
-          cmake -S /tmp/e62-escape32 -B /tmp/e62-fw-fast-ramp \
-            -G 'Unix Makefiles' -DESCAPE32_BUILD_AM13E=ON \
-            -DAM13E_SDK_ROOT=/tmp/e62-sdk \
-            -DG13B2_SIM_ONLY_OPT_IN=ON \
-            -DG13B2_SIM_ONLY_IDEAL_BEMF_REFERENCE=ON \
-            -DAM13E_BOARD_BOARD_PROFILE_FILE="$PWD/tests/fixtures/g13b3l_sim_only_ramp.cmake" \
-            -DAM13E_BOOT_LINKER_SCRIPT=/tmp/e62-escape32/boot/mcu/AM13E/config.ld \
-            2>&1 | tee artifacts/g13b3l-fast-ramp-configure.log
-          cmake --build /tmp/e62-fw-fast-ramp \
-            --target AM13E-rev17.3.elf -j 2 \
-            2>&1 | tee artifacts/g13b3l-fast-ramp-build.log
-          test -s /tmp/e62-fw-fast-ramp/AM13E-rev17.3.elf
-          arm-none-eabi-readelf -SW /tmp/e62-fw-fast-ramp/AM13E-rev17.3.elf \
-            | tee artifacts/g13b3l-fast-ramp-elf-sections.txt
-          grep -E '\.cfg[[:space:]]+NOBITS' \
-            artifacts/g13b3l-fast-ramp-elf-sections.txt
-          # Derive genuine Rel17 Cfg bytes from source cfgdata in ELF
-          # and factory-program only QEMU pre-reset FLASH_CFG1.
-          python3 tools/native_sim_cfg_flash.py \
-            --sim-only-opt-in \
-            --elf /tmp/e62-fw-fast-ramp/AM13E-rev17.3.elf \
-            --output artifacts/g13b3n-original-cfg-flash.bin \
-            2>&1 | tee artifacts/g13b3n-original-cfg-flash.log
-          if cmp -s /tmp/e62-fw-fast-ramp/AM13E-rev17.3.elf \
-            /tmp/e62-fw-sim-ideal-bemf/AM13E-rev17.3.elf; then
-            echo 'ERROR: SIM_ONLY DUTY_RATE not represented in original ELF'
-            exit 1
-          fi
-          echo PASS_G13B3N_ORIGINAL_ELF_AND_PREBOOT_FLASH_CFG_PROVISIONING
-      - name: G13B3L original ELF physically powered continuous motor-loop diagnostic
-        run: |
-          set -euo pipefail
-          mkdir -p artifacts
-          python3 tests/g13b2_native_drive_probe.py \
-            --qemu .build/qemu-src/build/qemu-system-arm \
-            --elf /tmp/e62-fw-fast-ramp/AM13E-rev17.3.elf \
-            --throttle 1500 --startup-steps 32768 \
-            --slice-ms 300 --runtime-slices 20 \
-            --wait-native-bemf-calibration --calibration-wfi-visits 24 \
-            --require-drive --require-native-pwm \
-            --require-native-bemf-arm --require-native-sustained-loop \
-            --sim-only-cfg-flash artifacts/g13b3n-original-cfg-flash.bin \
-            --sustained-wfi-visits 1500 --sustained-sectors 6 \
-            --initial-electrical-degrees -30 \
-            --artifact artifacts/g13b3l-native-six-powered-sector-loop.json \
-            2>&1 | tee artifacts/g13b3l-native-six-powered-sector-loop.log
-          # STRICT: fail this firmware-backed CI unless six accepted
-          # physical CAP1->native TIMG12->powered six-step transitions
-          # AND an independently qualified multi-WFI power path pass.
-          # No one-event or non-driven virtual RPM can satisfy the gate.
-      - name: G13B3M extended twelve native feedback-powered sectors (separate strict gate)
-        run: |
-          set -euo pipefail
-          mkdir -p artifacts
-          # Preserve the previously passing six-sector G13B3L unchanged.
-          # Use the SAME original Rel17 ELF, factory Cfg and strict protection.
-          python3 tests/g13b2_native_drive_probe.py \
-            --qemu .build/qemu-src/build/qemu-system-arm \
-            --elf /tmp/e62-fw-fast-ramp/AM13E-rev17.3.elf \
-            --throttle 1500 --startup-steps 32768 \
-            --slice-ms 300 --runtime-slices 20 \
-            --wait-native-bemf-calibration --calibration-wfi-visits 24 \
-            --require-drive --require-native-pwm \
-            --require-native-bemf-arm --require-native-sustained-loop \
-            --sim-only-cfg-flash artifacts/g13b3n-original-cfg-flash.bin \
-            --sustained-wfi-visits 2800 --sustained-sectors 12 \
-            --sustained-min-integrated-ns 90000000 \
-            --initial-electrical-degrees -30 \
-            --artifact artifacts/g13b3m-extended-twelve-sector.json \
-            2>&1 | tee artifacts/g13b3m-extended-twelve-sector.log
-          python3 tools/native_extended_run_gate.py \
-            --artifact artifacts/g13b3m-extended-twelve-sector.json \
-            --min-sectors 12 --min-integrated-ns 90000000 \
-            --min-powered-pwm-samples 600 \
-            --output artifacts/g13b3m-extended-strict-verdict.json \
-            2>&1 | tee artifacts/g13b3m-extended-strict-verdict.log
-          # Separate positive gate: two unbroken source-derived cycles,
-          # original CAP1/TIMG12, native PWM and ECAP-time evidence.
-          # All evidence stays SIM_ONLY; no actual E62 current/thermal PASS.
       - name: G13B3J alternate genuine DShot throttle, original deadtime unchanged
         run: |
           set -euo pipefail
