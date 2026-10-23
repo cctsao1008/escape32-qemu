@@ -78,14 +78,21 @@ jobs:
           path: .build/e62-host-binutils
           key: e62-host-binutils-noble-x64-GNU242-v1
 
-      # Fast FAIL-CLOSED path: all three exact-source pinned caches
+      - name: Restore verified QEMU runtime libfdt
+        id: fdt-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .build/e62-host-runtime
+          key: e62-qemu-libfdt1-noble-x64-v1
+
+      # Fast FAIL-CLOSED path: all four exact-source pinned caches
       # must hit together. No compiler/SDK download is required to observe
       # the ORIGINAL ELF's independent CAP1 -> TIMG12 -> MCPWM trajectory.
       # If this fails, stop before installing the full build environment.
       # If it passes, the standard full firmware/protection suite follows.
       - name: Fast native L+M acceptance from verified pinned caches
         id: fast-native
-        if: steps.qemu-cache.outputs.cache-hit == 'true' && steps.fw-cache.outputs.cache-hit == 'true' && steps.binutils-cache.outputs.cache-hit == 'true'
+        if: steps.qemu-cache.outputs.cache-hit == 'true' && steps.fw-cache.outputs.cache-hit == 'true' && steps.binutils-cache.outputs.cache-hit == 'true' && steps.fdt-cache.outputs.cache-hit == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -95,7 +102,15 @@ jobs:
           .build/qemu-src/build/qemu-system-arm -M help | grep -q am13e23019
           (cd .build/e62-fw-artifacts && sha256sum -c SHA256SUMS)
           (cd .build/e62-host-binutils && sha256sum -c SHA256SUMS)
+          (cd .build/e62-host-runtime && sha256sum -c SHA256SUMS)
           export PATH="$PWD/.build/e62-host-binutils:$PATH"
+          export LD_LIBRARY_PATH="$PWD/.build/e62-host-runtime:${LD_LIBRARY_PATH:-}"
+          # Do not launch a cached QEMU if any dynamic link is unresolved.
+          if ldd .build/qemu-src/build/qemu-system-arm | grep -q 'not found'; then
+            echo "E62_QEMU_MISSING_CACHED_RUNTIME_LIBRARY"
+            exit 1
+          fi
+          .build/qemu-src/build/qemu-system-arm --version | head -1
           arm-none-eabi-objdump --version | head -1
           mkdir -p artifacts
           python3 tools/native_sim_cfg_flash.py \
@@ -290,6 +305,29 @@ jobs:
         with:
           path: .build/e62-host-binutils
           key: e62-host-binutils-noble-x64-GNU242-v1
+
+      - name: Cache verified Ubuntu libfdt runtime for no-APT QEMU
+        if: steps.fdt-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          base=.build/e62-host-runtime
+          mkdir -p "$base"
+          # The official signed libfdt1 Debian package was installed by APT.
+          test "$(dpkg-query -W -f='${Status}' libfdt1)" = 'install ok installed'
+          src="$(ldconfig -p | awk '/libfdt.so.1 / { print $NF; exit }')"
+          test -n "$src"
+          test -f "$src"
+          cp -L "$src" "$base/libfdt.so.1"
+          (cd "$base" && sha256sum libfdt.so.1 > SHA256SUMS && sha256sum -c SHA256SUMS)
+          echo "E62_SIGNED_UBUNTU_LIBFDT_RUNTIME_CACHE_VALIDATED"
+
+      - name: Persist official libfdt runtime before native gate
+        if: steps.fdt-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .build/e62-host-runtime
+          key: e62-qemu-libfdt1-noble-x64-v1
 
       - name: Pin ESCape32 HAL fix and TI SDK
         run: |
