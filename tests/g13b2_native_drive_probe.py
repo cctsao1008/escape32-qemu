@@ -14,6 +14,7 @@ import argparse
 from dataclasses import asdict
 import json
 import math
+import re
 import socket
 import subprocess
 import sys
@@ -91,6 +92,56 @@ def native_pa26_receiver_rearm_snapshot(qtest):
 
 
 
+def resolve_original_rel17_wfi_roles(elf, candidates, *, addr2line="arm-none-eabi-addr2line"):
+    """Map pinned Rel17.3 ARM/run WFI by ELF DWARF source, NEVER address order.
+
+    src/main.c:910 is the original 250ms zero-throttle ARM loop;
+    src/main.c:1194 is the original 1kHz control loop. The exact line
+    contracts are tied to the pinned upstream Rel17.3 firmware revision.
+    A missing/ambiguous mapping is a hard failure, not an ARM bypass.
+    """
+    if len(candidates) != 2 or len(set(candidates)) != 2:
+        raise AssertionError("Pinned original Rel17 requires two distinct main WFI sites")
+    roles = {}
+    details = {}
+    for pc in candidates:
+        result = subprocess.run(
+            [addr2line, "-f", "-C", "-i", "-e", str(elf), f"0x{pc:x}"],
+            capture_output=True, text=True, check=True, timeout=15)
+        lines = result.stdout.strip().splitlines()
+        source_roles = set()
+        if lines and lines[0].strip() == "am13e_rel17_app_main":
+            for line in lines[1:]:
+                src_line = line.replace("\\", "/")
+                m = re.search(r"/src/main[.]c:(910|1194)(?:[^0-9]|$)", src_line)
+                if m:
+                    source_roles.add("ARM" if m.group(1) == "910" else "RUNNING")
+        details[f"0x{pc:08x}"] = result.stdout.strip().replace("\n", " | ")
+        if len(source_roles) != 1:
+            raise AssertionError(
+                "Cannot prove original Rel17 WFI ARM/run source role: " +
+                json.dumps(details, sort_keys=True))
+        role = source_roles.pop()
+        if role in roles:
+            raise AssertionError(
+                "Duplicated original Rel17 WFI role: " +
+                json.dumps(details, sort_keys=True))
+        roles[role] = pc
+    if set(roles) != {"RUNNING", "ARM"}:
+        raise AssertionError("Missing original Rel17 ARM/run WFI source evidence")
+    print("G13B3N_ORIGINAL_WFI_SOURCE_ROLE_MAP " +
+          json.dumps({
+              "running_wfi_pc": hex(roles["RUNNING"]),
+              "arming_wfi_pc": hex(roles["ARM"]),
+              "source": "PINNED_REL17_3_ELF_DWARF_MAIN_C_910_1194",
+              "wfi_address_order_assumed": False,
+              "host_guest_writes": False
+          }, sort_keys=True), flush=True)
+    # Canonical semantic order for this probe's historical wfi[0]/wfi[1]
+    # consumers. Neither caller may infer source role from numeric PC.
+    return roles["RUNNING"], roles["ARM"]
+
+
 def native_original_zero_throttle_arm(rsp, qtest, *, wfi, hardfault,
                                      armed_breakpoints, throt,
                                      callback, slice_ms, runtime_slices,
@@ -103,9 +154,9 @@ def native_original_zero_throttle_arm(rsp, qtest, *, wfi, hardfault,
     ticks and the original Rel17 main reaches its running-loop WFI.
     No fake Guest throttle, timer fast-forward, or bypass of ARM.
     """
-    if len(wfi) != 2 or not wfi[0] < wfi[1]:
+    if len(wfi) != 2 or wfi[0] == wfi[1]:
         raise AssertionError(
-            "Pinned original Rel17 WFI layout cannot locate arming vs run")
+            "Pinned original Rel17 WFI roles must be distinct and source-qualified")
     before = rsp.mem32(throt)
     if ("valid_frame_feeds" not in bemf_state or
             "tick" not in bemf_state):
@@ -1509,7 +1560,8 @@ def collect_native_pwm_timeline(
 
 def run(args):
     app_vector_from_elf(args.elf)
-    wfi = native_wfi_locations(args.elf, args.objdump)
+    wfi = resolve_original_rel17_wfi_roles(
+        args.elf, native_wfi_locations(args.elf, args.objdump))
     throt = symbol_address(args.elf, "throt")
     try:
         native_start_zero_counter = symbol_address(
