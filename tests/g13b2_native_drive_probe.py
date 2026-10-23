@@ -948,7 +948,8 @@ def evidence_power(proof):
 def probe_native_sustained_power_feedback(
         rsp, qtest, *, bemf_state, armed_breakpoints, wfi, hardfault,
         slice_ms, runtime_slices, max_visits, required_sectors,
-        require_sim_only_cfg=False, initial_electrical_degrees=0.0):
+        require_sim_only_cfg=False, initial_electrical_degrees=0.0,
+        required_integrated_ns=0):
     """Full native WFI-to-WFI physical bridge -> plant -> BEMF feedback loop.
 
     No native program counter, firmware SRAM, PWM, TIMG12, CAP1, or IRQ
@@ -1001,6 +1002,7 @@ def probe_native_sustained_power_feedback(
     total_written = 0
     record_last = {}
     result = {}
+    first_qualified_wfi = None
     duty_first = native_pwm_duty_progress(rsp, bemf_state, qtest)
     print("G13B3L_GUEST_DUTY_AT_GATE " +
           json.dumps(duty_first, sort_keys=True), flush=True)
@@ -1150,7 +1152,28 @@ def probe_native_sustained_power_feedback(
             print("G13B3L_NATIVE_POWERED_MOTOR_LOOP " +
                   json.dumps(report, sort_keys=True), flush=True)
             record_last["sectors"] = len(audit.sectors)
-        if audit.qualified:
+        if audit.qualified and first_qualified_wfi is None:
+            first_qualified_wfi = visit
+        # Only the G13B3M opt-in endpoint continues beyond sector 12.
+        # Keep the ORIGINAL native WFI/PWM/ECAP/Trip path genuinely powered.
+        if (first_qualified_wfi is not None and required_integrated_ns
+                and not last_qualified_path):
+            raise AssertionError(
+                "Original Guest powered bridge lost during native endurance tail")
+        if (first_qualified_wfi is not None and required_integrated_ns
+                and timeline.frames[-1].total_integrated_ns < required_integrated_ns
+                and visit % 32 == 0):
+            print("G13B3M_NATIVE_ENDURANCE_ECAP_TIME_PENDING " +
+                  json.dumps({
+                      "visit": visit,
+                      "accepted_powered_sectors": len(audit.sectors),
+                      "native_integrated_ns": timeline.frames[-1].total_integrated_ns,
+                      "required_integrated_ns": required_integrated_ns,
+                      "host_guest_writes": False,
+                  }, sort_keys=True), flush=True)
+        if (audit.qualified and
+                timeline.frames[-1].total_integrated_ns >= required_integrated_ns
+                and audit.pending is None):
             if effective_power_proof is None:
                 raise AssertionError(
                     "Six guest sectors cannot pass without three measured "
@@ -1158,6 +1181,10 @@ def probe_native_sustained_power_feedback(
             result = audit.result()
             result.update(
                 original_guest_wfi_visits=visit,
+                required_native_integrated_ns=required_integrated_ns,
+                first_qualified_wfi_visit=first_qualified_wfi,
+                native_powered_endurance_tail_wfi_visits=visit-first_qualified_wfi,
+                last_measured_power_path=last_qualified_path,
                 plant_max_rpm=motor.max_measured_rpm,
                 plant_integrated_ns=timeline.frames[-1].total_integrated_ns,
                 simulator_analog_frames=total_written,
@@ -1178,7 +1205,14 @@ def probe_native_sustained_power_feedback(
             stage=f"G13B3L_NEXT_ORIGINAL_WFI_{visit}")
     if not result:
         result = audit.result()
+        if required_integrated_ns and (
+                timeline.frames[-1].total_integrated_ns < required_integrated_ns
+                or audit.pending is not None or not last_qualified_path):
+            result["qualified"] = False
+            result["reason"] = "STRICT_NATIVE_ECAP_ENDURANCE_OR_POWER_INCOMPLETE"
         result.update(
+            required_native_integrated_ns=required_integrated_ns,
+            first_qualified_wfi_visit=first_qualified_wfi,
             original_guest_wfi_visits=max_visits,
             plant_max_rpm=motor.max_measured_rpm,
             plant_integrated_ns=timeline.frames[-1].total_integrated_ns,
@@ -2047,7 +2081,9 @@ def run(args):
                                         require_sim_only_cfg=(
                                             args.require_native_sustained_loop),
                                         initial_electrical_degrees=(
-                                            args.initial_electrical_degrees))
+                                            args.initial_electrical_degrees),
+                                         required_integrated_ns=(
+                                             args.sustained_min_integrated_ns))
                                     evidence["g13b3l_native_sustained_loop"] = (
                                         loop_result)
                                     if args.require_native_sustained_loop and (
@@ -2376,6 +2412,8 @@ def main():
                         "commutations; fail closed if unfinished")
     p.add_argument("--sustained-wfi-visits", type=int, default=1024)
     p.add_argument("--sustained-sectors", type=int, default=6)
+    p.add_argument("--sustained-min-integrated-ns", type=int, default=0,
+                   help="G13B3M source WFI/ECAP powered duration; 0 for six-step baseline")
     p.add_argument("--initial-electrical-degrees", type=float, default=0.0,
                    help="G13B3L only, explicit SIM_ONLY stationary rotor "
                         "magnetic phase relative to initial six-step sector; "
@@ -2471,6 +2509,11 @@ def main():
         p.error("Nonzero initial rotor angle only belongs to G13B3L sustained SIM_ONLY motor")
     if not 6 <= a.sustained_sectors <= 24:
         p.error("--sustained-sectors must be 6..24")
+    if not 0 <= a.sustained_min_integrated_ns <= 2_000_000_000:
+        p.error("Native powered ECAP integration bound out of range")
+    if a.sustained_min_integrated_ns and (
+            not a.require_native_sustained_loop or a.sustained_sectors < 12):
+        p.error("G13B3M timed endpoint requires strict >=12 native sectors")
     if not 64 <= a.sustained_wfi_visits <= 4096:
         p.error("--sustained-wfi-visits must be 64..4096")
     if a.require_native_sustained_loop:

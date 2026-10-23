@@ -386,6 +386,7 @@ jobs:
             --require-native-bemf-arm --require-native-sustained-loop \
             --sim-only-cfg-flash artifacts/g13b3n-original-cfg-flash.bin \
             --sustained-wfi-visits 2800 --sustained-sectors 12 \
+            --sustained-min-integrated-ns 90000000 \
             --initial-electrical-degrees -30 \
             --artifact artifacts/g13b3m-extended-twelve-sector.json \
             2>&1 | tee artifacts/g13b3m-extended-twelve-sector.log

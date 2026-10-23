@@ -39,7 +39,10 @@ def check_native_extended_run(data, *, min_sectors=12,
             loop.get("completed_feedback_powered_sectors") != len(sectors) or
             loop.get("required_sectors") < min_sectors):
         raise ExtendedRunError("Insufficient genuine native powered CAP1/TIMG12 sectors")
-    if (loop.get("plant_integrated_ns", 0) < min_integrated_ns or
+    if (loop.get("required_native_integrated_ns") != min_integrated_ns or
+            loop.get("native_powered_endurance_tail_wfi_visits", -1) <= 0 or
+            not loop.get("last_measured_power_path") or
+            loop.get("plant_integrated_ns", 0) < min_integrated_ns or
             loop.get("powered_pwm_samples", 0) < min_powered_pwm_samples or
             loop.get("simulator_analog_frames", 0) < min_powered_pwm_samples):
         raise ExtendedRunError("Native ECAP/WFI integrated duration or powered PWM sampling insufficient")

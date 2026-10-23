@@ -39,6 +39,10 @@ def fixture():
             "completed_feedback_powered_sectors": 12,
             "sector_evidence": sectors,
             "plant_integrated_ns": 100_000_000,
+            "required_native_integrated_ns": 90_000_000,
+            "first_qualified_wfi_visit": 805,
+            "native_powered_endurance_tail_wfi_visits": 130,
+            "last_measured_power_path": True,
             "powered_pwm_samples": 1000,
             "simulator_analog_frames": 1000,
             "original_guest_wfi_visits": 1000,
@@ -70,6 +74,17 @@ class ExtendedNativeRunUnitTests(unittest.TestCase):
         x["sector_evidence"] = x["sector_evidence"][:6]
         x["completed_feedback_powered_sectors"] = 6
         with self.assertRaises(ExtendedRunError):
+            check_native_extended_run(data)
+
+    def test_native_endurance_requires_powered_wfi_after_twelve_sectors(self):
+        data = fixture()
+        loop = data["g13b3l_native_sustained_loop"]
+        loop["native_powered_endurance_tail_wfi_visits"] = 0
+        with self.assertRaisesRegex(ExtendedRunError, "duration"):
+            check_native_extended_run(data)
+        loop["native_powered_endurance_tail_wfi_visits"] = 130
+        loop["last_measured_power_path"] = False
+        with self.assertRaisesRegex(ExtendedRunError, "duration"):
             check_native_extended_run(data)
 
     def test_no_fake_native_duration(self):
