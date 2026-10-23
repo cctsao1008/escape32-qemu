@@ -9,6 +9,7 @@ on:
       - 'tests/test_g13b3_native_transport.py'
       - 'tests/g1_handoff.py'
       - 'tests/g0_memory.py'
+      - 'tests/g11_exception_lifecycle.py'
       - 'tests/test_g13b3_native_seed.py'
       - 'tests/test_g13b3_native_bemf.py'
       - 'tests/test_g13b3_native_runtime.py'

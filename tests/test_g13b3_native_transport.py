@@ -57,6 +57,53 @@ class TestBufferedRSP(unittest.TestCase):
         self.assertFalse(worker.is_alive())
         self.assertEqual(errors, [])
 
+    def test_contiguous_g11_observer_one_rsp_packet(self):
+        client, server = socket.socketpair()
+        errors = []
+        words = tuple([0x47313101] + [0x20100000 + i for i in range(10)])
+        payload = b"".join(v.to_bytes(4, "little") for v in words).hex().encode()
+
+        def stub():
+            try:
+                raw = bytearray()
+                while not raw.endswith(b"#"):
+                    raw += server.recv(1)
+                raw += server.recv(2)
+                self.assertEqual(raw, b"$m5ffe3000,2c#" +
+                                 checksum(b"m5ffe3000,2c"))
+                server.sendall(b"+$" + payload + b"#" + checksum(payload))
+                self.assertEqual(server.recv(1), b"+")
+            except Exception as exc:
+                errors.append(exc)
+            finally:
+                server.close()
+
+        worker = threading.Thread(target=stub, daemon=True)
+        worker.start()
+        try:
+            rsp = RSP(client)
+            self.assertEqual(rsp.mem32_block(0x5ffe3000, 11), words)
+            self.assertEqual(rsp.command_count, 1)
+            self.assertEqual(rsp.recv_bytes, len(b"+$") + len(payload) + 3)
+        finally:
+            client.close()
+            worker.join(timeout=3)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(errors, [])
+
+    def test_invalid_block_dimensions_fail_before_request(self):
+        client, server = socket.socketpair()
+        try:
+            rsp = RSP(client)
+            for address, count in ((0x5ffe3001, 11), (0x5ffe3000, 0),
+                                   (0x5ffe3000, 33)):
+                with self.subTest(address=hex(address), count=count):
+                    with self.assertRaises(ValueError):
+                        rsp.mem32_block(address, count)
+        finally:
+            client.close()
+            server.close()
+
     def test_corrupt_checksum_is_rejected_with_negative_ack(self):
         client, server = socket.socketpair()
         errors = []

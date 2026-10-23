@@ -27,7 +27,9 @@ SCB_CFSR = 0xe000ed28
 SCB_HFSR = 0xe000ed2c
 
 def observer(rsp):
-    values = [rsp.mem32(OBS + i * 4) for i in range(11)]
+    # Eleven contiguous read-only observer registers: one coherent RSP
+    # memory packet. Core/SCB cross-checks below remain independent.
+    values = rsp.mem32_block(OBS, 11)
     if values[0] != 0x47313101:
         raise AssertionError("Missing G11 state observer or outdated QEMU")
     names = ("magic", "primask", "basepri", "faultmask", "control",

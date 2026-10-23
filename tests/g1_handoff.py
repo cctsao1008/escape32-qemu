@@ -82,6 +82,23 @@ class RSP:
             raise RuntimeError(f"Cannot read CPU memory 0x{address:08x}: {raw}")
         return struct.unpack("<I", bytes.fromhex(raw))[0]
 
+    def mem32_block(self, address, count):
+        """Read contiguous aligned Guest observer words in one RSP packet.
+
+        This is a fresh, checked read. No Guest state is cached or written.
+        """
+        if address & 3 or not 1 <= count <= 32:
+            raise ValueError("RSP block must be aligned and contain 1..32 words")
+        raw = self.command(f"m{address:x},{count * 4:x}")
+        if len(raw) != count * 8:
+            raise RuntimeError(
+                f"Cannot read {count} Guest words at 0x{address:08x}: "
+                f"reply length={len(raw)} expected={count * 8}")
+        try:
+            return struct.unpack("<" + "I" * count, bytes.fromhex(raw))
+        except ValueError as exc:
+            raise RuntimeError("Invalid GDB RSP word-block encoding") from exc
+
     def mem16(self, address):
         raw = self.command(f"m{address:x},2")
         if len(raw) != 4:
