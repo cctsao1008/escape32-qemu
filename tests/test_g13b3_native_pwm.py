@@ -42,6 +42,26 @@ class NativePWMQualification(unittest.TestCase):
         self.assertEqual(x.six_high_ticks, (75, 0, 0, 75, 0, 0))
         self.assertEqual(x.six_duties, (.75, 0, 0, .75, 0, 0))
 
+    def test_each_pwm_observer_register_sampled_once_per_checkpoint(self):
+        f = fixture()
+        reads = {}
+        def measured(addr):
+            reads[addr] = reads.get(addr, 0) + 1
+            return f.get(addr, 0)
+        image = observe_original_pwm(measured)
+        self.assertTrue(image.acceptable_for_plant)
+        self.assertEqual(reads[OBS_BASE], 1)
+        self.assertEqual(reads[OBS_BASE + 8], 1)
+        self.assertEqual(reads[OBS_BASE + 0x14], 1)
+        for i in range(6):
+            self.assertEqual(reads[OBS_BASE + 0x18 + i*4], 1)
+        # Every fresh call still reads new silicon/QEMU register values.
+        f[OBS_BASE + 0x18] = 0
+        second = observe_original_pwm(measured)
+        self.assertTrue(second.nonzero_phase_voltage_command)
+        self.assertEqual(second.six_high_ticks[0], 0)
+        self.assertEqual(reads[OBS_BASE + 0x18], 2)
+
     def test_reject_physical_trip_even_with_valid_native_aq(self):
         for flag in (0x20000, 0x40000, 0x60000):
             f = fixture()

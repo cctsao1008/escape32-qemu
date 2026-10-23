@@ -1037,7 +1037,14 @@ def probe_native_sustained_power_feedback(
             frame = timeline.observe(
                 qtest.read, native_ticks=qtest.read(ECAP1_TSCTR),
                 checkpoint=f"native_sustained_wfi_{visit}")
-            real_pwm = observe_original_pwm(qtest.read, gate_active_level=1)
+            # Same stopped Guest, same single observed physical output
+            # image used for BOTH motor integration and strict CAP1/PWM
+            # auditing. Do not reread an unchanged checkpoint's MMIO.
+            real_pwm = timeline.last_observation
+            if (real_pwm is None or
+                    real_pwm.six_high_ticks != frame.six_high_ticks or
+                    real_pwm.period_ticks != frame.pwm_period_ticks):
+                raise AssertionError("WFI PWM observer/frame coherence lost")
             path = qualify_cross_phase_bridge(
                 real_pwm.six_high_ticks,
                 period_ticks=real_pwm.period_ticks,

@@ -61,6 +61,7 @@ class NativePwmTimeline:
         self.max_delta_ticks = max_delta_ticks
         self.frames: list[NativePwmTimelineFrame] = []
         self._last_image = None
+        self.last_observation = None  # the current accepted guest/MMIO snapshot
         self._last_tick = None
         self._elapsed_ticks = 0
         self._integrated_ns = 0
@@ -130,6 +131,9 @@ class NativePwmTimeline:
         self.frames.append(frame)
         self._last_tick = native_ticks
         self._last_image = image
+        # The caller can reuse the already-qualified observation at this
+        # exact stopped-WFI checkpoint; no second MMIO sweep is needed.
+        self.last_observation = image
         return frame
 
     def require_progress(self, *, min_frames: int = 4,

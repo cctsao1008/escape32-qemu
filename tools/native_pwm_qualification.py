@@ -53,10 +53,19 @@ def observe_original_pwm(
     """
     if gate_active_level not in (0, 1):
         raise ValueError("Native board profile must explicitly select polarity")
+    # One physical six-output image per HALT checkpoint. The original
+    # validation routine used to reread the SAME nine observer registers
+    # to construct PWMObservation; reuse exactly these measured words
+    # instead of issuing duplicate QTest readl commands. Never cache
+    # between checkpoints, or reuse stale guest-owned duty/Trip state.
     status = read32(OBS_BASE)
     valid = read32(OBS_BASE + 0x14)
     period = read32(OBS_BASE + 8)
     high = tuple(read32(OBS_BASE + 0x18 + 4 * i) for i in range(6))
+    observed_words = {OBS_BASE: status, OBS_BASE + 8: period,
+                      OBS_BASE + 0x14: valid}
+    for i, count in enumerate(high):
+        observed_words[OBS_BASE + 0x18 + 4*i] = count
     tz = read32(MCPWM4 + 0xb0)
     ost2, ost3 = bool(tz & 0x20000), bool(tz & 0x40000)
     pwren = read32(SYSCTL_PWREN)
@@ -67,7 +76,7 @@ def observe_original_pwm(
     obs = None
     invalid = ""
     try:
-        obs = PWMObservation.from_qemu(read32)
+        obs = PWMObservation.from_qemu(observed_words.__getitem__)
     except ValueError as exc:
         invalid = str(exc)
     duties = obs.six_duties if obs else None

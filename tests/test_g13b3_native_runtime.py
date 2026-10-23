@@ -36,6 +36,25 @@ class NativeRuntimeTimelineTests(unittest.TestCase):
         self.assertTrue(any(abs(i) > 0 for i in self.motor.iabc))
         self.assertEqual(self.writes, [])
 
+    def test_stop_local_pwm_snapshot_shared_with_audit_without_reread(self):
+        reads = []
+        def measured(addr):
+            reads.append(addr)
+            return self.hardware.get(addr, 0)
+        a = self.timeline.observe(measured, native_ticks=1000,
+                                  checkpoint="guest_wfi_1")
+        image = self.timeline.last_observation
+        self.assertIsNotNone(image)
+        self.assertEqual(image.six_high_ticks, a.six_high_ticks)
+        self.assertEqual(image.period_ticks, a.pwm_period_ticks)
+        self.assertEqual(reads.count(OBS_BASE + 8), 1)
+        self.hardware[OBS_BASE + 0x18] = 0
+        b = self.timeline.observe(measured, native_ticks=13500,
+                                  checkpoint="guest_wfi_2")
+        self.assertEqual(b.six_high_ticks[0], 0)
+        self.assertNotEqual(a.six_high_ticks, b.six_high_ticks)
+        self.assertEqual(reads.count(OBS_BASE + 8), 2)
+
     def test_native_ecap_wrap_is_bounded_and_exact(self):
         self.observe(0xfffffff0, "native_gate_return")
         frame = self.observe(0x000030c0)
