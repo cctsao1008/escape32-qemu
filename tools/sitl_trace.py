@@ -38,7 +38,7 @@ class SitlTraceRecorder:
     """Zero extra Guest/MMIO queries: one immutable snapshot per observed WFI."""
 
     def __init__(self, *, elf_sha256, initial_electrical_degrees,
-                 required_sectors, required_integrated_ns):
+                 required_sectors, required_integrated_ns, motor_model=None):
         if len(elf_sha256) != 64 or any(c not in "0123456789abcdef" for c in elf_sha256):
             raise ValueError("Actual original ELF SHA256 is required")
         self.meta = {
@@ -48,6 +48,11 @@ class SitlTraceRecorder:
             "required_integrated_ns": required_integrated_ns,
             "host_guest_register_writes": False,
         }
+        if motor_model is not None:
+            if not isinstance(motor_model, dict) or motor_model.get(
+                    "scope") != "SIM_ONLY_UNCALIBRATED_AB_EXPERIMENT":
+                raise ValueError("Unknown SIM_ONLY motor model provenance")
+            self.meta["motor_model"] = dict(motor_model)
         self.origin_ecap_ticks = None
         self.samples = []
         self.events = []

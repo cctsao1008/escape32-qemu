@@ -54,6 +54,9 @@ from tools.native_bemf_timeout_qualification import (
 from tools.native_timg12_observer import observe_native_timg12
 from tools.native_pwm_deadband_diagnostic import native_deadband_source_clamp, read_native_deadband
 from tools.native_power_coupled_plant import NativePowerCoupledBLDC
+from tools.native_motor_model_profiles import (
+    native_motor_parameters, native_motor_model_metadata
+)
 from tools.native_closed_loop_audit import NativeClosedLoopAudit
 from tools.native_rotor_motion_audit import NativeRotorMotionAudit
 from tools.native_power_path_qualification import qualify_cross_phase_bridge
@@ -1003,7 +1006,8 @@ def probe_native_sustained_power_feedback(
         rsp, qtest, *, bemf_state, armed_breakpoints, wfi, hardfault,
         slice_ms, runtime_slices, max_visits, required_sectors,
         require_sim_only_cfg=False, initial_electrical_degrees=0.0,
-        required_integrated_ns=0, trace=None, live=None):
+        required_integrated_ns=0, motor_profile="legacy",
+        trace=None, live=None):
     """Full native WFI-to-WFI physical bridge -> plant -> BEMF feedback loop.
 
     No native program counter, firmware SRAM, PWM, TIMG12, CAP1, or IRQ
@@ -1017,13 +1021,14 @@ def probe_native_sustained_power_feedback(
     if missing:
         raise AssertionError("Original ELF missing native loop symbols: " +
                              ",".join(missing))
-    motor = NativePowerCoupledBLDC(MotorParameters(
-        vbus_v=24.0, phase_resistance_ohm=.3,
-        phase_inductance_h=.002, bemf_constant_v_per_rad_s=.02,
-        torque_constant_nm_per_a=.02, inertia_kg_m2=1e-6,
-        viscous_friction_nm_per_rad_s=.0001, load_torque_nm=0,
-        pole_pairs=7),
+    # The legacy profile is preserved byte-for-byte in parameter values.
+    # Reciprocal A/B changes only Ke/Kt coupling, not Guest timing or QEMU.
+    motor = NativePowerCoupledBLDC(
+        native_motor_parameters(motor_profile),
         initial_electrical_rad=math.radians(initial_electrical_degrees))
+    print("G13B3M_EXPLICIT_SIM_ONLY_EM_MODEL " +
+          json.dumps(native_motor_model_metadata(motor_profile),
+                     sort_keys=True), flush=True)
     print("G13B3L_EXPLICIT_SIM_ONLY_ROTOR_POSE " +
           json.dumps({
               "initial_electrical_degrees": initial_electrical_degrees,
@@ -1288,6 +1293,7 @@ def probe_native_sustained_power_feedback(
                 native_powered_endurance_tail_wfi_visits=visit-first_qualified_wfi,
                 last_measured_power_path=last_qualified_path,
                 sim_only_rotor_motion=rotor_motion.result(),
+                sim_only_motor_model=native_motor_model_metadata(motor_profile),
                 plant_max_rpm=motor.max_measured_rpm,
                 plant_integrated_ns=timeline.frames[-1].total_integrated_ns,
                 simulator_analog_frames=total_written,
@@ -1317,6 +1323,7 @@ def probe_native_sustained_power_feedback(
             result["reason"] = "STRICT_NATIVE_ECAP_ENDURANCE_OR_POWER_INCOMPLETE"
         result.update(
             sim_only_rotor_motion=rotor_motion.result(),
+            sim_only_motor_model=native_motor_model_metadata(motor_profile),
             required_native_integrated_ns=required_integrated_ns,
             first_qualified_wfi_visit=first_qualified_wfi,
             original_guest_wfi_visits=max_visits,
@@ -1600,12 +1607,17 @@ def run(args):
         except RuntimeError:
             continue
     evidence = {"status": "OPEN_NOT_NATIVE_DRIVE", "native_elf": str(args.elf)}
+    profile = "reciprocal" if args.sim_only_reciprocal_motor else "legacy"
+    if args.probe_native_sustained_loop:
+        evidence["g13b3m_sim_only_model_profile"] = (
+            native_motor_model_metadata(profile))
     # The offline recorder is opt-in and never owns QTest/GDB sockets.
     trace = (SitlTraceRecorder(
         elf_sha256=file_sha256(args.elf),
         initial_electrical_degrees=args.initial_electrical_degrees,
         required_sectors=args.sustained_sectors,
-        required_integrated_ns=args.sustained_min_integrated_ns)
+        required_integrated_ns=args.sustained_min_integrated_ns,
+        motor_model=native_motor_model_metadata(profile))
         if (args.sitl_trace_output or args.sitl_live_port is not None) else None)
     live = args.sitl_live_server
     if args.probe_native_bemf:
@@ -2201,6 +2213,7 @@ def run(args):
                                             args.initial_electrical_degrees),
                                          required_integrated_ns=(
                                              args.sustained_min_integrated_ns),
+                                         motor_profile=profile,
                                          trace=trace, live=live)
                                     evidence["g13b3l_native_sustained_loop"] = (
                                         loop_result)
@@ -2579,6 +2592,10 @@ def main():
     p.add_argument("--require-native-sustained-loop", action="store_true",
                    help="Strict native original firmware SIX accepted powered "
                         "commutations; fail closed if unfinished")
+    p.add_argument("--sim-only-reciprocal-motor", action="store_true",
+                   help="G13B3M A/B model only: keep Ke=.02 per electrical "
+                        "rad/s and use reciprocal Kt=.14 for 7 pole pairs; "
+                        "never changes Firmware/Guest/QEMU/strict gates")
     p.add_argument("--sustained-wfi-visits", type=int, default=1024)
     p.add_argument("--sustained-sectors", type=int, default=6)
     p.add_argument("--sustained-min-integrated-ns", type=int, default=0,
@@ -2650,6 +2667,11 @@ def main():
         p.error("Missing QEMU or genuine SIM_ONLY ELF")
     if a.require_native_sustained_loop and not a.sim_only_cfg_flash:
         p.error("Strict G13B3L requires provisioned original Flash Cfg")
+    if a.sim_only_reciprocal_motor and (
+            not a.require_native_sustained_loop or
+            not a.sim_only_cfg_flash or a.sustained_sectors < 12):
+        p.error("Reciprocal A/B motor requires strict SIM_ONLY Flash-backed "
+                "12-sector native probe; no unrelated timeline injection")
     if a.sim_only_cfg_flash:
         if (not a.require_native_sustained_loop or
             not a.sim_only_cfg_flash.is_file() or

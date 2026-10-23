@@ -39,6 +39,13 @@ on:
       - 'tests/test_g13b3_native_sim_cfg_flash.py'
       - 'tests/test_g13b3_native_arming_zero_wire.py'
       - 'tests/test_g13b3_native_wfi_roles.py'
+      - 'tests/test_native_motor_reciprocity.py'
+      - 'tests/g13b2_native_drive_probe.py'
+      - 'tools/native_motor_model_profiles.py'
+      - 'tools/native_energy_reciprocity_audit.py'
+      - 'tools/native_motor_ab_compare.py'
+      - 'tools/native_power_coupled_plant.py'
+      - 'tests/test_g13b3_native_power_coupled.py'
       - 'tests/g13b2_native_drive_probe.py'
       - 'tests/test_virtual_bldc.py'
       - '.github/workflows/g13b3-host-unit.yml'
@@ -86,6 +93,8 @@ jobs:
           python3 tests/test_g13b3_native_sim_cfg_flash.py
           python3 tests/test_g13b3_native_arming_zero_wire.py
           python3 tests/test_g13b3_native_wfi_roles.py
+          python3 tests/test_native_motor_reciprocity.py
+          python3 tests/test_g13b3_native_power_coupled.py
           echo PASS_G13B3_HOST_ONLY_UNIT_REGRESSIONS
 
       # No QEMU or original ELF here. Positive motor-closed-loop
