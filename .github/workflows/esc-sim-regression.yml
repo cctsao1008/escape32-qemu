@@ -35,8 +35,9 @@ jobs:
       # downloading 57.5MB gcc-arm-none-eabi + 49.2MB newlib via Azure APT
       # mirror retried for 27min. Cache the ORIGINAL official .deb archives,
       # not a copied installation, and let dpkg/apt resolve dependencies.
-      - name: Cache official ARM GCC and newlib .deb downloads
-        uses: actions/cache@v4
+      - name: Restore official ARM GCC and newlib .deb downloads
+        id: arm-debs-cache
+        uses: actions/cache/restore@v4
         with:
           path: ${{ runner.temp }}/e62-arm-debs
           key: e62-noble-${{ runner.arch }}-gcc13-newlib4-debs-v1
@@ -93,12 +94,22 @@ jobs:
           arm-none-eabi-gcc --version | head -1
           test -f /usr/share/doc/libnewlib-arm-none-eabi/copyright
 
+      # Save IMMEDIATELY after successful install, even if a later strict
+      # original-firmware or rotor-direction gate legitimately FAILS.
+      # A combined actions/cache action saves only after job success.
+      - name: Save verified official ARM toolchain archives
+        if: steps.arm-debs-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/e62-arm-debs
+          key: e62-noble-${{ runner.arch }}-gcc13-newlib4-debs-v1
+
       # Pin the compiled emulator to its exact QEMU revision AND all
       # in-repo machine code/build flags. A Python audit-only edit can
       # reuse it, while any machine/build change invalidates the cache.
       - name: Restore exact-source pinned QEMU compiled build
         id: qemu-cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: .build/qemu-src/build
           key: e62-qemu-ubuntu2404-${{ runner.arch }}-${{ hashFiles('build.sh', 'machine/**') }}-v1
@@ -210,6 +221,13 @@ jobs:
             echo "E62_QEMU_EXACT_SOURCE_CACHE_MISS; rebuilding"
             ./build.sh
           fi
+
+      - name: Save exact-source pinned QEMU compiled build
+        if: steps.qemu-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .build/qemu-src/build
+          key: e62-qemu-ubuntu2404-${{ runner.arch }}-${{ hashFiles('build.sh', 'machine/**') }}-v1
 
       - name: G13B2A SIM_ONLY original ELF preflight (NO DRIVE gate)
         run: |
