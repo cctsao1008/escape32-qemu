@@ -33,6 +33,144 @@ jobs:
           submodules: false
           fetch-depth: 1
 
+      # Pin the compiled emulator to its exact QEMU revision AND all
+      # in-repo machine code/build flags. A Python audit-only edit can
+      # reuse it, while any machine/build change invalidates the cache.
+      - name: Restore exact-source pinned QEMU compiled build
+        id: qemu-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .build/qemu-src/build
+          key: e62-qemu-ubuntu2404-${{ runner.arch }}-${{ hashFiles('build.sh', 'machine/**') }}-v1
+
+      # The upstream ESCape32, TI SDK and SIM_ONLY CMake profiles are
+      # pinned. Cache the four ORIGINAL firmware binaries across Python
+      # audit edits. Never cache Guest runtime or synthesize firmware.
+      - name: Restore pinned original ELF profile bundle
+        id: fw-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .build/e62-fw-artifacts
+          key: e62-fw-ubuntu2404-GCC13-ESCb0204670-SDKb872469c-${{ hashFiles('tests/fixtures/g13b2_sim_only_board.cmake', 'tests/fixtures/g13b3l_sim_only_ramp.cmake') }}-v1
+
+      - name: Verify source-keyed cached firmware before native use
+        if: steps.fw-cache.outputs.cache-hit == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd .build/e62-fw-artifacts
+          sha256sum -c SHA256SUMS
+          for variant in reference sim-only ideal-bemf fast-ramp; do
+            test -s "$variant.elf"
+          done
+          mkdir -p /tmp/e62-fw-build /tmp/e62-fw-sim-only \
+                   /tmp/e62-fw-sim-ideal-bemf /tmp/e62-fw-fast-ramp
+          cp reference.elf /tmp/e62-fw-build/AM13E-rev17.3.elf
+          cp sim-only.elf /tmp/e62-fw-sim-only/AM13E-rev17.3.elf
+          cp ideal-bemf.elf /tmp/e62-fw-sim-ideal-bemf/AM13E-rev17.3.elf
+          cp fast-ramp.elf /tmp/e62-fw-fast-ramp/AM13E-rev17.3.elf
+          echo "E62_PINNED_ORIGINAL_ELF_CACHE_HIT_VERIFIED"
+
+      - name: Restore signed-package ARM binutils host tools
+        id: binutils-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .build/e62-host-binutils
+          key: e62-host-binutils-noble-x64-GNU242-v1
+
+      # Fast FAIL-CLOSED path: all three exact-source pinned caches
+      # must hit together. No compiler/SDK download is required to observe
+      # the ORIGINAL ELF's independent CAP1 -> TIMG12 -> MCPWM trajectory.
+      # If this fails, stop before installing the full build environment.
+      # If it passes, the standard full firmware/protection suite follows.
+      - name: Fast native L+M acceptance from verified pinned caches
+        id: fast-native
+        if: steps.qemu-cache.outputs.cache-hit == 'true' && steps.fw-cache.outputs.cache-hit == 'true' && steps.binutils-cache.outputs.cache-hit == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git ls-tree HEAD qemu | awk '{print $3}')" = \
+            "44f28df24767cf9dca1ddc9b23157737c4cbb645"
+          test -x .build/qemu-src/build/qemu-system-arm
+          .build/qemu-src/build/qemu-system-arm -M help | grep -q am13e23019
+          (cd .build/e62-fw-artifacts && sha256sum -c SHA256SUMS)
+          (cd .build/e62-host-binutils && sha256sum -c SHA256SUMS)
+          export PATH="$PWD/.build/e62-host-binutils:$PATH"
+          arm-none-eabi-objdump --version | head -1
+          mkdir -p artifacts
+          python3 tools/native_sim_cfg_flash.py \
+            --sim-only-opt-in \
+            --elf /tmp/e62-fw-fast-ramp/AM13E-rev17.3.elf \
+            --output artifacts/g13b3n-original-cfg-flash.bin
+          echo "E62_FAST_PINNED_ELF_QEMU_BINUTILS_VERIFIED_NO_BUILD"
+          set -euo pipefail
+          mkdir -p artifacts
+          echo "G13B3_NATIVE_INDEPENDENT_PARALLEL_GATES_START"
+          (
+            set -euo pipefail
+            mkdir -p artifacts
+            python3 tests/g13b2_native_drive_probe.py \
+              --qemu .build/qemu-src/build/qemu-system-arm \
+              --elf /tmp/e62-fw-fast-ramp/AM13E-rev17.3.elf \
+              --throttle 1500 --startup-steps 32768 \
+              --slice-ms 300 --runtime-slices 20 \
+              --wait-native-bemf-calibration --calibration-wfi-visits 24 \
+              --require-drive --require-native-pwm \
+              --require-native-bemf-arm --require-native-sustained-loop \
+              --sim-only-cfg-flash artifacts/g13b3n-original-cfg-flash.bin \
+              --sustained-wfi-visits 1500 --sustained-sectors 6 \
+              --initial-electrical-degrees -30 \
+              --artifact artifacts/g13b3l-native-six-powered-sector-loop.json \
+              2>&1 | tee artifacts/g13b3l-native-six-powered-sector-loop.log
+            # STRICT: fail this firmware-backed CI unless six accepted
+            # physical CAP1->native TIMG12->powered six-step transitions
+            # AND an independently qualified multi-WFI power path pass.
+            # No one-event or non-driven virtual RPM can satisfy the gate.
+          ) &
+          pid_l=$!
+          (
+            set -euo pipefail
+            mkdir -p artifacts
+            # Preserve the previously passing six-sector G13B3L unchanged.
+            # Use the SAME original Rel17 ELF, factory Cfg and strict protection.
+            python3 tests/g13b2_native_drive_probe.py \
+              --qemu .build/qemu-src/build/qemu-system-arm \
+              --elf /tmp/e62-fw-fast-ramp/AM13E-rev17.3.elf \
+              --throttle 1500 --startup-steps 32768 \
+              --slice-ms 300 --runtime-slices 20 \
+              --wait-native-bemf-calibration --calibration-wfi-visits 24 \
+              --require-drive --require-native-pwm \
+              --require-native-bemf-arm --require-native-sustained-loop \
+              --sim-only-cfg-flash artifacts/g13b3n-original-cfg-flash.bin \
+              --sustained-wfi-visits 2800 --sustained-sectors 12 \
+              --sustained-min-integrated-ns 90000000 \
+              --initial-electrical-degrees -30 \
+              --artifact artifacts/g13b3m-extended-twelve-sector.json \
+              2>&1 | tee artifacts/g13b3m-extended-twelve-sector.log
+            python3 tools/native_extended_run_gate.py \
+              --artifact artifacts/g13b3m-extended-twelve-sector.json \
+              --min-sectors 12 --min-integrated-ns 90000000 \
+              --min-powered-pwm-samples 600 \
+              --output artifacts/g13b3m-extended-strict-verdict.json \
+              2>&1 | tee artifacts/g13b3m-extended-strict-verdict.log
+            # Separate positive gate: two unbroken source-derived cycles,
+            # original CAP1/TIMG12, native PWM and ECAP-time evidence.
+            # All evidence stays SIM_ONLY; no actual E62 current/thermal PASS.
+          ) &
+          pid_m=$!
+          l_status=0
+          m_status=0
+          wait "$pid_l" || l_status=$?
+          wait "$pid_m" || m_status=$?
+          echo "G13B3L_INDEPENDENT_GATE_EXIT=$l_status"
+          echo "G13B3M_INDEPENDENT_GATE_EXIT=$m_status"
+          if (( l_status != 0 || m_status != 0 )); then
+            echo "G13B3_NATIVE_PARALLEL_STRICT_GATE_FAIL"
+            exit 1
+          fi
+          echo "PASS_G13B3L_G13B3M_BOTH_INDEPENDENT_NATIVE_GATES"
+
+
       # The official ubuntu-24.04 runner is ephemeral. In a measured run,
       # downloading 57.5MB gcc-arm-none-eabi + 49.2MB newlib via Azure APT
       # mirror retried for 27min. Cache the ORIGINAL official .deb archives,
@@ -128,43 +266,30 @@ jobs:
           path: ${{ runner.temp }}/e62-arm-debs
           key: e62-noble-${{ runner.arch }}-gcc13-newlib4-debs-v1
 
-      # Pin the compiled emulator to its exact QEMU revision AND all
-      # in-repo machine code/build flags. A Python audit-only edit can
-      # reuse it, while any machine/build change invalidates the cache.
-      - name: Restore exact-source pinned QEMU compiled build
-        id: qemu-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: .build/qemu-src/build
-          key: e62-qemu-ubuntu2404-${{ runner.arch }}-${{ hashFiles('build.sh', 'machine/**') }}-v1
-
-      # The upstream ESCape32, TI SDK and SIM_ONLY CMake profiles are
-      # pinned. Cache the four ORIGINAL firmware binaries across Python
-      # audit edits. Never cache Guest runtime or synthesize firmware.
-      - name: Restore pinned original ELF profile bundle
-        id: fw-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: .build/e62-fw-artifacts
-          key: e62-fw-ubuntu2404-GCC13-ESCb0204670-SDKb872469c-${{ hashFiles('tests/fixtures/g13b2_sim_only_board.cmake', 'tests/fixtures/g13b3l_sim_only_ramp.cmake') }}-v1
-
-      - name: Verify source-keyed cached firmware before native use
-        if: steps.fw-cache.outputs.cache-hit == 'true'
+      # The full-path official /usr/bin tools are copied into a hash-
+      # validated bundle after APT has installed the signed Ubuntu package.
+      # Never cache a compiler binary or a Guest firmware state mutation.
+      - name: Cache original Ubuntu ARM binutils CLI for fast gate
+        if: steps.binutils-cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
           set -euo pipefail
-          cd .build/e62-fw-artifacts
-          sha256sum -c SHA256SUMS
-          for variant in reference sim-only ideal-bemf fast-ramp; do
-            test -s "$variant.elf"
+          base=.build/e62-host-binutils
+          mkdir -p "$base"
+          for name in objdump nm readelf addr2line; do
+            file="arm-none-eabi-$name"
+            cp "/usr/bin/$file" "$base/$file"
+            test -x "$base/$file"
           done
-          mkdir -p /tmp/e62-fw-build /tmp/e62-fw-sim-only \
-                   /tmp/e62-fw-sim-ideal-bemf /tmp/e62-fw-fast-ramp
-          cp reference.elf /tmp/e62-fw-build/AM13E-rev17.3.elf
-          cp sim-only.elf /tmp/e62-fw-sim-only/AM13E-rev17.3.elf
-          cp ideal-bemf.elf /tmp/e62-fw-sim-ideal-bemf/AM13E-rev17.3.elf
-          cp fast-ramp.elf /tmp/e62-fw-fast-ramp/AM13E-rev17.3.elf
-          echo "E62_PINNED_ORIGINAL_ELF_CACHE_HIT_VERIFIED"
+          (cd "$base" && sha256sum arm-none-eabi-* > SHA256SUMS && sha256sum -c SHA256SUMS)
+          echo "E62_SIGNED_UBUNTU_BINUTILS_CACHE_BUNDLE_VALIDATED"
+
+      - name: Persist host binutils before native gate
+        if: steps.binutils-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .build/e62-host-binutils
+          key: e62-host-binutils-noble-x64-GNU242-v1
 
       - name: Pin ESCape32 HAL fix and TI SDK
         run: |
@@ -371,6 +496,7 @@ jobs:
       # Execute BOTH unchanged positive gates concurrently, preserving
       # independent six-sector and twelve-sector/90ms CI artifacts.
       - name: G13B3L + G13B3M independent native acceptance (parallel; both strict)
+        if: steps.fast-native.outcome != 'success'
         shell: bash
         run: |
           set -euo pipefail
