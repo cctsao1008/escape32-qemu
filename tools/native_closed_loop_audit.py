@@ -64,6 +64,10 @@ class NativeClosedLoopAudit:
         self.pending = None
         self.sectors = []
         self.early_rejections = 0
+        # Rel17 motor_bemf.c:400 resets rejected_events on native
+        # interval rearm. It is NOT a lifetime monotonic counter.
+        # Still fail closed on any unexplained decrease.
+        self.original_rejection_window_resets = 0
         self.unpowered_native_timg12_steps = 0
         self.qualified_power_snapshots = 0
         self.reason = "NO_NATIVE_POWERED_FEEDBACK_YET"
@@ -118,11 +122,42 @@ class NativeClosedLoopAudit:
         delta = (ecap_ticks - old["ecap_ticks"]) & 0xffffffff
         if delta == 0 or delta >= 0x80000000:
             raise AssertionError("Native ECAP time not monotonic")
-        for field in ("captured", "rejected", "scheduled", "serviced"):
+        # Three cumulative original counters must never regress. Rel17's
+        # rejected_events is different: am13e_app_motor_bemf_interval_select()
+        # resets it when the ORIGINAL TIMG12 nextstep publishes/rearms BEMF.
+        # A rejected edge remains rejected: zeroing the interval counter
+        # cannot create/credit a sector or hide a missing CAP1/TIMG12.
+        for field in ("captured", "scheduled", "serviced"):
             if now[field] < old[field]:
                 raise AssertionError("Original guest counter backwards: " + field)
             if now[field] - old[field] > 1:
                 raise AssertionError("Missed multiple guest events: " + field)
+        if rejected < old["rejected"]:
+            expected_step = (old["step"] % 6) + 1
+            valid_pending = (
+                self.pending is not None and
+                self.pending["pre_step"] == old["step"] and
+                self.pending["original_serviced_before"] == old["serviced"]
+            )
+            # TIMG12's source-owned nextstep, not a Host counter reset.
+            # An intermediate native carrier-ZERO publication may leave
+            # the comparator temporarily disarmed with pending_code.
+            source_rearm = (
+                rejected == 0 and valid_pending and
+                serviced == old["serviced"] + 1 and
+                step == expected_step and
+                ((selected_code == 0 and not armed and
+                  pending_code == route[step][0]) or
+                 (selected_code == route[step][0] and armed and
+                  pending_code == 0))
+            )
+            if not source_rearm:
+                raise AssertionError(
+                    "Original guest rejected counter reset WITHOUT "
+                    "accepted CAP1->TIMG12 native nextstep BEMF rearm")
+            self.original_rejection_window_resets += 1
+        elif rejected - old["rejected"] > 1:
+            raise AssertionError("Missed multiple guest events: rejected")
         if captured > old["captured"]:
             if cap1_ticks == old["cap1_ticks"]:
                 raise AssertionError("Original IRQ changed without genuine CAP1")
@@ -191,6 +226,7 @@ class NativeClosedLoopAudit:
                     required_sectors=self.required_sectors,
                     completed_feedback_powered_sectors=len(self.sectors),
                     original_early_rejections=self.early_rejections,
+                    original_rejection_window_resets=self.original_rejection_window_resets,
                     original_unpowered_timg12_steps=self.unpowered_native_timg12_steps,
                     powered_pwm_samples=self.qualified_power_snapshots,
                     sector_evidence=[s.to_dict() for s in self.sectors],
