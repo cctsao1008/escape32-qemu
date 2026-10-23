@@ -25,6 +25,11 @@ on:
       - 'tests/test_g13b3_native_extended_run.py'
       - 'tests/test_g13b3_native_rotor_motion.py'
       - 'tools/native_rotor_motion_audit.py'
+      - 'tools/sitl_trace.py'
+      - 'tests/test_sitl_trace.py'
+      - 'tests/test_sitl_viewer.py'
+      - 'web/sitl_trace_viewer.html'
+      - 'docs/sitl-workbench.md'
       - 'tests/test_e62_hardware_evidence.py'
       - 'tools/e62_hardware_evidence.py'
       - 'tools/native_extended_run_gate.py'
@@ -51,6 +56,8 @@ jobs:
           python3 --version
           python3 tests/test_virtual_bldc.py
           python3 tests/test_g13b3_native_transport.py
+          python3 tests/test_sitl_trace.py
+          python3 tests/test_sitl_viewer.py
           python3 tests/test_g13b3_native_pwm.py
           python3 tests/test_g13b3_native_seed.py
           python3 tests/test_g13b3_native_bemf.py

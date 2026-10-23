@@ -57,6 +57,7 @@ from tools.native_closed_loop_audit import NativeClosedLoopAudit
 from tools.native_rotor_motion_audit import NativeRotorMotionAudit
 from tools.native_power_path_qualification import qualify_cross_phase_bridge
 from tools.virtual_bldc_feedback import SIM_BEMF_INPUT
+from tools.sitl_trace import SitlTraceRecorder, file_sha256
 
 FAULT_FN = "am13e_app_motor_fault_reset"
 
@@ -950,7 +951,7 @@ def probe_native_sustained_power_feedback(
         rsp, qtest, *, bemf_state, armed_breakpoints, wfi, hardfault,
         slice_ms, runtime_slices, max_visits, required_sectors,
         require_sim_only_cfg=False, initial_electrical_degrees=0.0,
-        required_integrated_ns=0):
+        required_integrated_ns=0, trace=None):
     """Full native WFI-to-WFI physical bridge -> plant -> BEMF feedback loop.
 
     No native program counter, firmware SRAM, PWM, TIMG12, CAP1, or IRQ
@@ -996,6 +997,8 @@ def probe_native_sustained_power_feedback(
     initial = timeline.observe(
         qtest.read, native_ticks=qtest.read(ECAP1_TSCTR),
         checkpoint="native_gate_return_before_sustained_motor")
+    if trace is not None:
+        trace.set_gate_origin(initial)  # reuse existing ECAP observation
     if motor.sample().mechanical_rpm != 0:
         raise AssertionError("Synthetic motor did not start at zero RPM")
     last_qualified_path = False
@@ -1154,6 +1157,12 @@ def probe_native_sustained_power_feedback(
             rpm=sample.mechanical_rpm,
             phase_currents_a=sample.phase_currents_a,
             dc_power_w=motor.last_dc_input_power_w)
+        if trace is not None:
+            # Consume ONLY snapshots already obtained at this native WFI.
+            # No extra QTest/RSP commands, Guest writes or virtual clock steps.
+            trace.observe(visit=visit, frame=frame, pwm=real_pwm,
+                          plant=sample, guest=guest, analog=analog,
+                          cap1_ticks=cap1, sectors=audit.sectors)
         if visit <= 3 or visit % 16 == 0:
             print("G13B3L_NATIVE_GUEST_DUTY_PROGRESS " +
                   json.dumps({
@@ -1233,6 +1242,8 @@ def probe_native_sustained_power_feedback(
             print("PASS_G13B3L_ORIGINAL_NATIVE_SIX_FEEDBACK_POWERED_"
                   "COMMUTATIONS_SIM_ONLY " +
                   json.dumps(result, sort_keys=True), flush=True)
+            if trace is not None:
+                trace.finish(result)  # never asserts extended gate PASS
             return result
         if visit == max_visits:
             break
@@ -1262,6 +1273,8 @@ def probe_native_sustained_power_feedback(
             last_measured_power_path=last_qualified_path)
     print("G13B3L_OPEN_SUSTAINED_NATIVE_CLOSED_LOOP " +
           json.dumps(result, sort_keys=True), flush=True)
+    if trace is not None:
+        trace.finish(result)
     return result
 
 
@@ -1530,6 +1543,13 @@ def run(args):
         except RuntimeError:
             continue
     evidence = {"status": "OPEN_NOT_NATIVE_DRIVE", "native_elf": str(args.elf)}
+    # The offline recorder is opt-in and never owns QTest/GDB sockets.
+    trace = (SitlTraceRecorder(
+        elf_sha256=file_sha256(args.elf),
+        initial_electrical_degrees=args.initial_electrical_degrees,
+        required_sectors=args.sustained_sectors,
+        required_integrated_ns=args.sustained_min_integrated_ns)
+        if args.sitl_trace_output else None)
     if args.probe_native_bemf:
         # Diagnose GCC static-symbol suffixes and scope without guessing.
         audit = audit_native_bemf_arm_elf(args.elf)
@@ -2122,7 +2142,8 @@ def run(args):
                                         initial_electrical_degrees=(
                                             args.initial_electrical_degrees),
                                          required_integrated_ns=(
-                                             args.sustained_min_integrated_ns))
+                                             args.sustained_min_integrated_ns),
+                                         trace=trace)
                                     evidence["g13b3l_native_sustained_loop"] = (
                                         loop_result)
                                     if args.require_native_sustained_loop and (
@@ -2371,6 +2392,23 @@ def run(args):
                                       repr(cleanup_error), flush=True)
                                 break
             finally:
+                # Persist an opt-in partial trace even when the strict native
+                # probe fails; do not turn missing motor evidence into PASS.
+                if trace is not None:
+                    primary = sys.exc_info()[1]
+                    try:
+                        trace.write(args.sitl_trace_output,
+                                    error_type=(type(primary).__name__
+                                                if primary is not None else None))
+                        print("E62_SITL_NATIVE_TRACE_RECORDED path=" +
+                              str(args.sitl_trace_output) +
+                              " samples=" + str(len(trace.samples)) +
+                              " events=" + str(len(trace.events)), flush=True)
+                    except Exception as trace_error:
+                        if primary is None:
+                            raise
+                        print("E62_SITL_TRACE_WRITE_FAILED_AFTER_NATIVE_ERROR " +
+                              repr(trace_error), flush=True)
                 # Transport-only counters: observational profiling, not
                 # motor state, Guest registers or altered acceptance gates.
                 if "rsp" in locals() and "qtest" in locals():
@@ -2520,6 +2558,9 @@ def main():
                    help="G13B3N pre-boot factory Cfg Flash 0x4000 loader; "
                         "strict SIM_ONLY only, not Guest RAM or production Flash")
     p.add_argument("--artifact", type=Path)
+    p.add_argument("--sitl-trace-output", type=Path,
+                   help="Optional offline WebGUI WFI trace JSON. Reuses "
+                        "existing native samples; no new Guest/MMIO queries")
     a = p.parse_args()
     if not a.qemu.is_file() or not a.elf.is_file():
         p.error("Missing QEMU or genuine SIM_ONLY ELF")
@@ -2571,6 +2612,11 @@ def main():
         p.error("--sustained-wfi-visits must be 64..4096")
     if a.require_native_sustained_loop:
         a.probe_native_sustained_loop = True
+    if a.sitl_trace_output and (not a.probe_native_sustained_loop or
+            (a.artifact is not None and
+             a.sitl_trace_output.resolve() == a.artifact.resolve())):
+        p.error("SITL trace requires native sustained loop and a distinct "
+                "output path from --artifact")
     if a.probe_native_sustained_loop and (
             not a.require_native_bemf_arm or
             a.probe_native_timeline or a.require_native_no_bemf_timeout or

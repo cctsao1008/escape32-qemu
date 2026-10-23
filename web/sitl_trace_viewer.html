@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>E62 SITL Workbench — Offline Native Trace</title>
+<style>
+:root{font:14px system-ui,-apple-system,"Segoe UI",sans-serif;color:#e5eaf4;background:#101722}
+*{box-sizing:border-box}body{margin:0 auto;padding:22px;max-width:1500px}
+h1{font-size:24px;margin:0 0 4px}h2{font-size:15px;margin:0 0 8px}
+p{line-height:1.55;color:#aebacf}.sub{font-size:12px;color:#9daec2}
+header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;margin-bottom:22px}
+.panel{background:#192333;border:1px solid #334255;border-radius:10px;padding:15px;margin:12px 0}
+.top{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+label{color:#b8c7db}input[type=file]{max-width:100%;color:#dce5f1}
+input[type=range]{accent-color:#7eb1f9;vertical-align:middle}
+.badge{border-radius:6px;background:#29394d;padding:5px 10px;color:#cdd8e9;font-size:12px}
+.danger{color:#ff9f9f}.ok{color:#91dbbb}.muted{color:#98a9bb}
+#status{white-space:pre-wrap}.charts{display:grid;gap:12px}
+canvas{width:100%;height:205px;display:block;background:#101a29;border-radius:7px;cursor:crosshair}
+#events{height:92px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:8px}
+.stat{background:#101a29;padding:10px;border-radius:7px}
+.stat b{display:block;font-size:18px;margin-top:7px}
+table{border-collapse:collapse;width:100%;min-width:600px;font-size:12px}
+th,td{text-align:left;padding:8px;border-bottom:1px solid #344053}
+.table-scroll{max-height:230px;overflow:auto}
+tr[data-time]{cursor:pointer}tr[data-time]:hover{background:#2d3b4f}
+#detail{font-variant-numeric:tabular-nums;min-height:36px}
+.t{color:#69e0d2}.v{color:#fac477}.w{color:#ba9cff}
+@media(max-width:650px){body{padding:10px}canvas{height:165px}}
+</style></head><body>
+<header><div><h1>E62 SITL Workbench</h1>
+<div class="sub">Offline native-Guest trace review · No network · No Guest control</div></div>
+<label class="panel">Load trace JSON <input id="file" type="file" accept=".json,application/json"></label></header>
+<div class="panel"><div class="top">
+<span class="badge" id="scope">NO TRACE LOADED</span>
+<span id="status" class="sub">Choose an actual native trace exported by --sitl-trace-output.</span>
+</div><p class="sub">Six PWM traces show <b>measured carrier-average duty at WFI checkpoints</b>, not individual PWM pin transitions.
+Motor RPM, phase current and BEMF are <b>uncalibrated host-model predictions</b>.
+Event timestamps are source-owned ECAP/TIMG12 captures from native sector evidence.</p></div>
+<div id="dashboard" hidden>
+<div class="panel"><div class="stats">
+<div class="stat">ELF SHA256<b id="sha" style="font-size:12px;overflow-wrap:anywhere"></b></div>
+<div class="stat">Guest WFI samples<b id="sample-count"></b></div>
+<div class="stat">Accepted sectors<b id="sector-count"></b></div>
+<div class="stat">ECAP plant integrated<b id="duration"></b></div>
+<div class="stat">Rotor direction<b id="direction"></b></div>
+<div class="stat">Strict extended gate<b id="strict"></b></div>
+</div></div>
+<div class="panel"><div class="top">
+<label>Zoom <input id="zoom" type="range" min="1" max="30" value="1" step="1"></label>
+<label>Pan <input id="pan" type="range" min="0" max="1000" value="0" step="1"></label>
+<button id="reset" type="button">Reset View</button>
+<span class="sub" id="window"></span>
+</div></div>
+<div class="charts">
+<div class="panel"><h2>Six MCPWM4 PWM Duties — sampled (%)</h2>
+<div class="sub">U_H <span class="t">━</span> U_L <span class="v">━</span> V_H <span class="w">━</span> V_L · W_H · W_L. Each sample represents six high-tick/period ratios.</div>
+<canvas id="pwm" width="1200" height="205"></canvas></div>
+<div class="panel"><h2>Model three-phase BEMF (V)</h2><canvas id="bemf" width="1200" height="205"></canvas></div>
+<div class="panel"><h2>Model mechanical rotor RPM</h2><canvas id="rpm" width="1200" height="205"></canvas></div>
+<div class="panel"><h2>Accepted native CAP1 / TIMG12 events</h2>
+<canvas id="events" width="1200" height="92"></canvas></div>
+</div>
+<div class="panel"><h2>Cursor — native WFI snapshot</h2><div id="detail" class="sub"></div></div>
+<div class="panel"><h2>Source-Owned Sector Events</h2>
+<div class="table-scroll"><table><thead><tr><th>Virtual time (ms)</th><th>Event</th><th>Sector</th><th>Guest transition</th><th>Observed WFI</th></tr></thead>
+<tbody id="event-list"></tbody></table></div></div>
+</div>
+<script>
+"use strict";
+let trace = null, cursor = null;
+const $ = id => document.getElementById(id);
+const COLORS=["#72d8c8","#2c8b83","#ffc778","#b48c41","#cba4ff","#7e68b0"];
+const SCOPE="SIM_ONLY_UNCALIBRATED_OPEN_STAR_MODEL";
+const FORMAT="e62.sitl.native-wfi.v1";
+const finite = x => typeof x==="number" && Number.isFinite(x);
+function validate(d){
+  if(!d || d.format!==FORMAT || d.scope!==SCOPE || !Array.isArray(d.samples)
+     || !d.samples.length || d.samples.length>200000 || !Array.isArray(d.events)
+     || d.events.length>100000 || !d.metadata || !d.data_semantics)
+    throw Error("Unsupported/empty E62 native WFI trace format");
+  let prev=-1;
+  for(const [i,s] of d.samples.entries()){
+    if(!Number.isSafeInteger(s.t_ns) || s.t_ns<=prev || s.wfi!==i+1 ||
+       !Array.isArray(s.pwm_duties) || s.pwm_duties.length!==6 ||
+       !s.pwm_duties.every(x=>finite(x)&&x>=0&&x<=1) ||
+       !Array.isArray(s.bemf_phase_v) || s.bemf_phase_v.length!==3 ||
+       !s.bemf_phase_v.every(finite) || !finite(s.motor_rpm) ||
+       !Number.isSafeInteger(s.integrated_ns) || !Number.isInteger(s.guest_step))
+       throw Error("Malformed native sample at index "+i);
+    prev=s.t_ns;
+  }
+  for(const e of d.events){
+    if(!["CAP1_ACCEPTED","TIMG12_SERVICED"].includes(e.kind) ||
+       !Number.isSafeInteger(e.t_ns) || e.t_ns<0 ||
+       !Number.isInteger(e.sector) || !Number.isInteger(e.observed_at_wfi))
+       throw Error("Malformed source-native event");
+  }
+}
+const ms = ns => (ns/1e6).toFixed(3);
+function windowRange(){
+  const ss=trace.samples, begin=ss[0].t_ns, end=ss[ss.length-1].t_ns;
+  const span=Math.max(1,end-begin), w=span/Number($("zoom").value);
+  const start=begin+(span-w)*Number($("pan").value)/1000;
+  return [start,start+w];
+}
+function geometry(ctx,w,h){
+  const l=65,r=12,t=14,b=25;
+  return {l,r,t,b,cw:w-l-r,ch:h-t-b};
+}
+function plot(canvasId, channels, fixedRange=null){
+  const c=$(canvasId),ctx=c.getContext("2d"),w=c.width,h=c.height;
+  ctx.clearRect(0,0,w,h);
+  const g=geometry(ctx,w,h), [t0,t1]=windowRange();
+  let visible=trace.samples.filter(s=>s.t_ns>=t0&&s.t_ns<=t1);
+  if(!visible.length)visible=[trace.samples[0]];
+  const allValues=visible.flatMap(s=>channels.map(ch=>ch.get(s)));
+  let min=fixedRange?fixedRange[0]:Math.min(...allValues);
+  let max=fixedRange?fixedRange[1]:Math.max(...allValues);
+  if(max-min<1e-6){min-=1;max+=1}
+  const x=t=>g.l+(t-t0)/(t1-t0)*g.cw;
+  const y=v=>g.t+(max-v)/(max-min)*g.ch;
+  ctx.font="12px system-ui";
+  ctx.strokeStyle="#34465e";ctx.fillStyle="#a6b7ca";ctx.lineWidth=1;
+  for(let i=0;i<=4;i++){
+    const yy=g.t+i*g.ch/4;
+    ctx.beginPath();ctx.moveTo(g.l,yy);ctx.lineTo(w-g.r,yy);ctx.stroke();
+    ctx.fillText((max-i*(max-min)/4).toFixed(1),3,yy+4);
+  }
+  for(let i=0;i<=5;i++){
+    const xx=g.l+i*g.cw/5;
+    ctx.beginPath();ctx.moveTo(xx,g.t);ctx.lineTo(xx,h-g.b);ctx.stroke();
+    ctx.fillText(ms(t0+i*(t1-t0)/5),Math.max(0,xx-15),h-7);
+  }
+  for(const [j,ch] of channels.entries()){
+    ctx.beginPath();ctx.strokeStyle=ch.color||COLORS[j];ctx.lineWidth=1.8;
+    for(let i=0;i<visible.length;i++){
+      const px=x(visible[i].t_ns),py=y(ch.get(visible[i]));
+      if(i===0)ctx.moveTo(px,py);else ctx.lineTo(px,py);
+    }
+    ctx.stroke();
+    ctx.fillStyle=ch.color||COLORS[j];
+    ctx.fillText(ch.name,g.l+10+j*96,g.t+13);
+  }
+  if(cursor){
+    const px=x(cursor.t_ns);
+    if(px>=g.l&&px<=w-g.r){
+      ctx.strokeStyle="#f0f3f5";ctx.setLineDash([3,4]);ctx.lineWidth=1;
+      ctx.beginPath();ctx.moveTo(px,g.t);ctx.lineTo(px,h-g.b);ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
+}
+function eventPlot(){
+  const c=$("events"),ctx=c.getContext("2d"),g=geometry(ctx,c.width,c.height);
+  const[t0,t1]=windowRange();
+  ctx.clearRect(0,0,c.width,c.height);ctx.font="12px system-ui";
+  const x=t=>g.l+(t-t0)/(t1-t0)*g.cw;
+  ctx.fillStyle="#aebbd0";ctx.fillText("CAP1",8,31);ctx.fillText("TIMG12",8,59);
+  for(const e of trace.events){
+    if(e.t_ns<t0||e.t_ns>t1)continue;
+    const isCap=e.kind==="CAP1_ACCEPTED",cx=x(e.t_ns),cy=isCap?28:56;
+    ctx.fillStyle=isCap?"#71d8ca":"#ffc478";
+    ctx.beginPath();ctx.arc(cx,cy,3.6,0,Math.PI*2);ctx.fill();
+    ctx.fillText(String(e.sector),cx+4,cy-5);
+  }
+  if(cursor){
+    const xx=x(cursor.t_ns);
+    if(xx>=g.l&&xx<=c.width-g.r){
+      ctx.strokeStyle="#fff";ctx.setLineDash([3,4]);ctx.beginPath();
+      ctx.moveTo(xx,8);ctx.lineTo(xx,c.height-10);ctx.stroke();ctx.setLineDash([]);
+    }
+  }
+}
+function nearest(t){
+  const samples=trace.samples;
+  let lo=0,hi=samples.length-1;
+  while(lo<hi){const mid=(lo+hi)>>1;if(samples[mid].t_ns<t)lo=mid+1;else hi=mid}
+  if(lo>0&&Math.abs(samples[lo-1].t_ns-t)<Math.abs(samples[lo].t_ns-t))lo--;
+  return samples[lo];
+}
+function select(t){
+  cursor=nearest(t);
+  const s=cursor;
+  $("detail").textContent="t="+ms(s.t_ns)+" ms  WFI="+s.wfi+
+    "   original step="+s.guest_step+"  selected_code="+s.guest_selected_code+
+    "  CAP1=0x"+s.cap1_ticks.toString(16)+
+    "  scheduled="+s.guest_scheduled+"  serviced="+s.guest_serviced+
+    "  RPM="+s.motor_rpm.toFixed(2)+
+    "  Trip(OST2/3)="+Number(s.ost2)+"/"+Number(s.ost3);
+  redraw();
+}
+function redraw(){
+  if(!trace)return;
+  const[t0,t1]=windowRange();
+  $("window").textContent=ms(t0)+" – "+ms(t1)+" ms (native ECAP)";
+  plot("pwm",Array.from({length:6},(_,i)=>({
+    name:["UH","UL","VH","VL","WH","WL"][i],
+    color:COLORS[i],get:s=>s.pwm_duties[i]*100
+  })),[0,100]);
+  plot("bemf",Array.from({length:3},(_,i)=>({
+    name:["U","V","W"][i],color:COLORS[i*2],get:s=>s.bemf_phase_v[i]
+  })));
+  plot("rpm",[{name:"Rotor RPM",color:"#8ec4ff",get:s=>s.motor_rpm}]);
+  eventPlot();
+}
+function eventsList(){
+  $("event-list").replaceChildren();
+  const fragment=document.createDocumentFragment();
+  for(const e of trace.events){
+    const tr=document.createElement("tr");tr.dataset.time=String(e.t_ns);
+    for(const value of [ms(e.t_ns),e.kind,e.sector,
+      e.guest_step_before+" → "+e.guest_step_after,e.observed_at_wfi]){
+      const td=document.createElement("td");td.textContent=String(value);tr.appendChild(td);
+    }
+    tr.addEventListener("click",()=>{
+      const ss=trace.samples;select(e.t_ns);
+      const span=ss[ss.length-1].t_ns-ss[0].t_ns;
+      const width=span/Number($("zoom").value);
+      const range=Math.max(1,span-width);
+      const pan=Math.max(0,Math.min(1000,
+        Math.round(1000*(e.t_ns-ss[0].t_ns-width/2)/range)));
+      $("pan").value=String(pan);redraw();
+    });
+    fragment.appendChild(tr);
+  }
+  $("event-list").appendChild(fragment);
+}
+function load(d){
+  validate(d);
+  trace=d;cursor=null;
+  $("scope").textContent="ACTUAL NATIVE WFI TRACE · SIM_ONLY";
+  $("status").textContent=d.capture_state+
+    " · sampled PWM, not pin-edge / board waveforms";
+  $("sha").textContent=d.metadata.elf_sha256;
+  $("sample-count").textContent=d.samples.length;
+  const n=d.native_result||{};
+  $("sector-count").textContent=String(n.completed_feedback_powered_sectors??"OPEN");
+  $("duration").textContent=ms(n.plant_integrated_ns??0)+" ms";
+  const dir=n.direction_continuity_qualified_sim_only===true;
+  $("direction").textContent=dir?"SIM_ONLY qualified":"FAIL / NOT QUALIFIED";
+  $("direction").className=dir?"ok":"danger";
+  $("strict").textContent="NOT EXECUTED";
+  $("dashboard").hidden=false;
+  $("zoom").value="1";$("pan").value="0";
+  eventsList();select(d.samples[0].t_ns);
+}
+$("file").addEventListener("change",async event=>{
+  const file=event.target.files?.[0];
+  if(!file)return;
+  try{
+    if(file.size>50*1024*1024)throw Error("Trace exceeds 50 MiB safety limit");
+    load(JSON.parse(await file.text()));
+  }catch(err){
+    trace=null;$("dashboard").hidden=true;$("scope").textContent="TRACE REJECTED";
+    $("status").textContent=String(err.message||err);
+  }
+});
+for(const id of ["zoom","pan"])$(id).addEventListener("input",redraw);
+$("reset").addEventListener("click",()=>{
+  $("zoom").value="1";$("pan").value="0";redraw();
+});
+for(const id of ["pwm","bemf","rpm","events"]){
+  $(id).addEventListener("mousemove",e=>{
+    if(!trace)return;
+    const c=$(id),r=c.getBoundingClientRect(),left=65/c.width,
+          width=1-(65+12)/c.width;
+    const frac=Math.max(0,Math.min(1,
+      ((e.clientX-r.left)/r.width-left)/width));
+    const[t0,t1]=windowRange();
+    select(t0+frac*(t1-t0));
+  });
+}
+</script>
+</body></html>
