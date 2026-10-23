@@ -48,10 +48,12 @@ class NativeRuntimeTimelineTests(unittest.TestCase):
         self.assertEqual(image.six_high_ticks, a.six_high_ticks)
         self.assertEqual(image.period_ticks, a.pwm_period_ticks)
         self.assertEqual(reads.count(OBS_BASE + 8), 1)
-        self.hardware[OBS_BASE + 0x18] = 0
+        # The fixture's phase-A high is already zero. Change a real
+        # nonzero original observed output to test a fresh WFI read.
+        self.hardware[OBS_BASE + 0x24] = 4000
         b = self.timeline.observe(measured, native_ticks=13500,
                                   checkpoint="guest_wfi_2")
-        self.assertEqual(b.six_high_ticks[0], 0)
+        self.assertEqual(b.six_high_ticks[3], 4000)
         self.assertNotEqual(a.six_high_ticks, b.six_high_ticks)
         self.assertEqual(reads.count(OBS_BASE + 8), 2)
 
