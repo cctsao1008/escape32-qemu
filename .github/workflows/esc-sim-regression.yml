@@ -138,6 +138,34 @@ jobs:
           path: .build/qemu-src/build
           key: e62-qemu-ubuntu2404-${{ runner.arch }}-${{ hashFiles('build.sh', 'machine/**') }}-v1
 
+      # The upstream ESCape32, TI SDK and SIM_ONLY CMake profiles are
+      # pinned. Cache the four ORIGINAL firmware binaries across Python
+      # audit edits. Never cache Guest runtime or synthesize firmware.
+      - name: Restore pinned original ELF profile bundle
+        id: fw-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .build/e62-fw-artifacts
+          key: e62-fw-ubuntu2404-GCC13-ESCb0204670-SDKb872469c-${{ hashFiles('tests/fixtures/g13b2_sim_only_board.cmake', 'tests/fixtures/g13b3l_sim_only_ramp.cmake') }}-v1
+
+      - name: Verify source-keyed cached firmware before native use
+        if: steps.fw-cache.outputs.cache-hit == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd .build/e62-fw-artifacts
+          sha256sum -c SHA256SUMS
+          for variant in reference sim-only ideal-bemf fast-ramp; do
+            test -s "$variant.elf"
+          done
+          mkdir -p /tmp/e62-fw-build /tmp/e62-fw-sim-only \
+                   /tmp/e62-fw-sim-ideal-bemf /tmp/e62-fw-fast-ramp
+          cp reference.elf /tmp/e62-fw-build/AM13E-rev17.3.elf
+          cp sim-only.elf /tmp/e62-fw-sim-only/AM13E-rev17.3.elf
+          cp ideal-bemf.elf /tmp/e62-fw-sim-ideal-bemf/AM13E-rev17.3.elf
+          cp fast-ramp.elf /tmp/e62-fw-fast-ramp/AM13E-rev17.3.elf
+          echo "E62_PINNED_ORIGINAL_ELF_CACHE_HIT_VERIFIED"
+
       - name: Pin ESCape32 HAL fix and TI SDK
         run: |
           set -euo pipefail
@@ -151,14 +179,18 @@ jobs:
       - name: Build real AM13E-rev17.3 ELF from source
         run: |
           set -euo pipefail
-          cmake -S /tmp/e62-escape32 -B /tmp/e62-fw-build \
-            -G 'Unix Makefiles' \
-            -DESCAPE32_BUILD_AM13E=ON \
-            -DAM13E_SDK_ROOT=/tmp/e62-sdk \
-            -DAM13E_BOOT_LINKER_SCRIPT=/tmp/e62-escape32/boot/mcu/AM13E/config.ld
-          # Test the actual Application ELF only; Boot firmware is a separate
-          # project and is not needed for QEMU's application handoff.
-          cmake --build /tmp/e62-fw-build --target AM13E-rev17.3.elf -j 2
+          if [[ "${{ steps.fw-cache.outputs.cache-hit }}" != "true" ]]; then
+            cmake -S /tmp/e62-escape32 -B /tmp/e62-fw-build \
+              -G 'Unix Makefiles' \
+              -DESCAPE32_BUILD_AM13E=ON \
+              -DAM13E_SDK_ROOT=/tmp/e62-sdk \
+              -DAM13E_BOOT_LINKER_SCRIPT=/tmp/e62-escape32/boot/mcu/AM13E/config.ld
+            # Test the actual Application ELF only; Boot firmware is a separate
+            # project and is not needed for QEMU's application handoff.
+            cmake --build /tmp/e62-fw-build --target AM13E-rev17.3.elf -j 2
+          else
+            echo "E62_PINNED_REFERENCE_ELF_ALREADY_CACHED"
+          fi
           test -f /tmp/e62-fw-build/AM13E-rev17.3.elf
           arm-none-eabi-objdump -d /tmp/e62-fw-build/AM13E-rev17.3.elf \
             | grep -A 4 '<DL_MCPWM_setEmulationMode>:' | head -5
@@ -182,16 +214,20 @@ jobs:
           fi
           grep -F 'G13B2 SIM_ONLY board requires' artifacts/g13b2a-no-optin.log
           echo PASS_G13B2A_OPT_IN_FAIL_CLOSED
-          cmake -S /tmp/e62-escape32 -B /tmp/e62-fw-sim-only \
-            -G 'Unix Makefiles' \
-            -DESCAPE32_BUILD_AM13E=ON \
-            -DAM13E_SDK_ROOT=/tmp/e62-sdk \
-            -DG13B2_SIM_ONLY_OPT_IN=ON \
-            -DAM13E_BOARD_BOARD_PROFILE_FILE="$SIM_PROFILE" \
-            -DAM13E_BOOT_LINKER_SCRIPT=/tmp/e62-escape32/boot/mcu/AM13E/config.ld \
-            2>&1 | tee artifacts/g13b2a-configure.log
-          cmake --build /tmp/e62-fw-sim-only --target AM13E-rev17.3.elf -j 2 \
-            2>&1 | tee artifacts/g13b2a-build.log
+          if [[ "${{ steps.fw-cache.outputs.cache-hit }}" != "true" ]]; then
+            cmake -S /tmp/e62-escape32 -B /tmp/e62-fw-sim-only \
+              -G 'Unix Makefiles' \
+              -DESCAPE32_BUILD_AM13E=ON \
+              -DAM13E_SDK_ROOT=/tmp/e62-sdk \
+              -DG13B2_SIM_ONLY_OPT_IN=ON \
+              -DAM13E_BOARD_BOARD_PROFILE_FILE="$SIM_PROFILE" \
+              -DAM13E_BOOT_LINKER_SCRIPT=/tmp/e62-escape32/boot/mcu/AM13E/config.ld \
+              2>&1 | tee artifacts/g13b2a-configure.log
+            cmake --build /tmp/e62-fw-sim-only --target AM13E-rev17.3.elf -j 2 \
+              2>&1 | tee artifacts/g13b2a-build.log
+          else
+            echo "E62_PINNED_SIM_ONLY_ELF_ALREADY_CACHED"
+          fi
           test -s /tmp/e62-fw-sim-only/AM13E-rev17.3.elf
           if cmp -s /tmp/e62-fw-build/AM13E-rev17.3.elf \
                     /tmp/e62-fw-sim-only/AM13E-rev17.3.elf; then
@@ -207,18 +243,22 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p artifacts
-          cmake -S /tmp/e62-escape32 -B /tmp/e62-fw-sim-ideal-bemf \
-            -G 'Unix Makefiles' \
-            -DESCAPE32_BUILD_AM13E=ON \
-            -DAM13E_SDK_ROOT=/tmp/e62-sdk \
-            -DG13B2_SIM_ONLY_OPT_IN=ON \
-            -DG13B2_SIM_ONLY_IDEAL_BEMF_REFERENCE=ON \
-            -DAM13E_BOARD_BOARD_PROFILE_FILE="$PWD/tests/fixtures/g13b2_sim_only_board.cmake" \
-            -DAM13E_BOOT_LINKER_SCRIPT=/tmp/e62-escape32/boot/mcu/AM13E/config.ld \
-            2>&1 | tee artifacts/g13b2e-ideal-bemf-cmake.log
-          cmake --build /tmp/e62-fw-sim-ideal-bemf \
-            --target AM13E-rev17.3.elf -j 2 \
-            2>&1 | tee artifacts/g13b2e-ideal-bemf-build.log
+          if [[ "${{ steps.fw-cache.outputs.cache-hit }}" != "true" ]]; then
+            cmake -S /tmp/e62-escape32 -B /tmp/e62-fw-sim-ideal-bemf \
+              -G 'Unix Makefiles' \
+              -DESCAPE32_BUILD_AM13E=ON \
+              -DAM13E_SDK_ROOT=/tmp/e62-sdk \
+              -DG13B2_SIM_ONLY_OPT_IN=ON \
+              -DG13B2_SIM_ONLY_IDEAL_BEMF_REFERENCE=ON \
+              -DAM13E_BOARD_BOARD_PROFILE_FILE="$PWD/tests/fixtures/g13b2_sim_only_board.cmake" \
+              -DAM13E_BOOT_LINKER_SCRIPT=/tmp/e62-escape32/boot/mcu/AM13E/config.ld \
+              2>&1 | tee artifacts/g13b2e-ideal-bemf-cmake.log
+            cmake --build /tmp/e62-fw-sim-ideal-bemf \
+              --target AM13E-rev17.3.elf -j 2 \
+              2>&1 | tee artifacts/g13b2e-ideal-bemf-build.log
+          else
+            echo "E62_PINNED_IDEAL_BEMF_ELF_ALREADY_CACHED"
+          fi
           test -s /tmp/e62-fw-sim-ideal-bemf/AM13E-rev17.3.elf
           if cmp -s /tmp/e62-fw-sim-only/AM13E-rev17.3.elf \
                     /tmp/e62-fw-sim-ideal-bemf/AM13E-rev17.3.elf; then
@@ -269,17 +309,21 @@ jobs:
           set -euo pipefail
           # Original main.c:792 unconditionally copies 0x4000 Flash Cfg
           # into Guest SRAM. Keep original linker .cfg NOLOAD untouched.
-          cmake -S /tmp/e62-escape32 -B /tmp/e62-fw-fast-ramp \
-            -G 'Unix Makefiles' -DESCAPE32_BUILD_AM13E=ON \
-            -DAM13E_SDK_ROOT=/tmp/e62-sdk \
-            -DG13B2_SIM_ONLY_OPT_IN=ON \
-            -DG13B2_SIM_ONLY_IDEAL_BEMF_REFERENCE=ON \
-            -DAM13E_BOARD_BOARD_PROFILE_FILE="$PWD/tests/fixtures/g13b3l_sim_only_ramp.cmake" \
-            -DAM13E_BOOT_LINKER_SCRIPT=/tmp/e62-escape32/boot/mcu/AM13E/config.ld \
-            2>&1 | tee artifacts/g13b3l-fast-ramp-configure.log
-          cmake --build /tmp/e62-fw-fast-ramp \
-            --target AM13E-rev17.3.elf -j 2 \
-            2>&1 | tee artifacts/g13b3l-fast-ramp-build.log
+          if [[ "${{ steps.fw-cache.outputs.cache-hit }}" != "true" ]]; then
+            cmake -S /tmp/e62-escape32 -B /tmp/e62-fw-fast-ramp \
+              -G 'Unix Makefiles' -DESCAPE32_BUILD_AM13E=ON \
+              -DAM13E_SDK_ROOT=/tmp/e62-sdk \
+              -DG13B2_SIM_ONLY_OPT_IN=ON \
+              -DG13B2_SIM_ONLY_IDEAL_BEMF_REFERENCE=ON \
+              -DAM13E_BOARD_BOARD_PROFILE_FILE="$PWD/tests/fixtures/g13b3l_sim_only_ramp.cmake" \
+              -DAM13E_BOOT_LINKER_SCRIPT=/tmp/e62-escape32/boot/mcu/AM13E/config.ld \
+              2>&1 | tee artifacts/g13b3l-fast-ramp-configure.log
+            cmake --build /tmp/e62-fw-fast-ramp \
+              --target AM13E-rev17.3.elf -j 2 \
+              2>&1 | tee artifacts/g13b3l-fast-ramp-build.log
+          else
+            echo "E62_PINNED_FAST_RAMP_ELF_ALREADY_CACHED"
+          fi
           test -s /tmp/e62-fw-fast-ramp/AM13E-rev17.3.elf
           arm-none-eabi-readelf -SW /tmp/e62-fw-fast-ramp/AM13E-rev17.3.elf \
             | tee artifacts/g13b3l-fast-ramp-elf-sections.txt
@@ -298,6 +342,30 @@ jobs:
             exit 1
           fi
           echo PASS_G13B3N_ORIGINAL_ELF_AND_PREBOOT_FLASH_CFG_PROVISIONING
+      - name: Save newly built original source-keyed ELF bundle
+        if: steps.fw-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          base=.build/e62-fw-artifacts
+          mkdir -p "$base"
+          cp /tmp/e62-fw-build/AM13E-rev17.3.elf "$base/reference.elf"
+          cp /tmp/e62-fw-sim-only/AM13E-rev17.3.elf "$base/sim-only.elf"
+          cp /tmp/e62-fw-sim-ideal-bemf/AM13E-rev17.3.elf "$base/ideal-bemf.elf"
+          cp /tmp/e62-fw-fast-ramp/AM13E-rev17.3.elf "$base/fast-ramp.elf"
+          (cd "$base" && sha256sum reference.elf sim-only.elf ideal-bemf.elf fast-ramp.elf > SHA256SUMS && sha256sum -c SHA256SUMS)
+          # Ensure the four original source-built firmware profiles differ.
+          test "$(sha256sum "$base/reference.elf" | awk '{print $1}')" != \
+            "$(sha256sum "$base/sim-only.elf" | awk '{print $1}')"
+          echo "E62_ORIGINAL_ELF_CACHE_BUNDLE_VALIDATED"
+
+      - name: Persist original ELF bundle before native gate
+        if: steps.fw-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .build/e62-fw-artifacts
+          key: e62-fw-ubuntu2404-GCC13-ESCb0204670-SDKb872469c-${{ hashFiles('tests/fixtures/g13b2_sim_only_board.cmake', 'tests/fixtures/g13b3l_sim_only_ramp.cmake') }}-v1
+
       # Each invocation launches its own QEMU+GDB Unix sockets in a
       # tempfile.TemporaryDirectory; they do not share writable Guest state.
       # Execute BOTH unchanged positive gates concurrently, preserving
