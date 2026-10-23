@@ -72,7 +72,7 @@ class SitlTraceRecorder:
         return ((tick - self.origin_ecap_ticks) & 0xffffffff) * NS_PER_ECAP_TICK
 
     def observe(self, *, visit, frame, pwm, plant, guest, analog,
-                cap1_ticks, sectors):
+                cap1_ticks, sectors, energy_balance=None):
         if self.origin_ecap_ticks is None:
             raise ValueError("Missing actual native Gate ECAP origin")
         if not isinstance(visit, int) or visit != len(self.samples) + 1:
@@ -125,6 +125,15 @@ class SitlTraceRecorder:
             "ost3": pwm.physical_ost3,
             "sampling_qualifier": frame.qualifier,
         }
+        # Reuse the host plant's existing per-integration accumulator.
+        # This does not issue another Guest/QTest read or create an event.
+        if energy_balance is not None:
+            if not isinstance(energy_balance, dict) or energy_balance.get(
+                    "scope") != "SIM_ONLY_SAMPLED_HOLD_NUMERICAL_ENERGY_DIAGNOSTIC":
+                raise ValueError("Unqualified SIM_ONLY energy ledger provenance")
+            if energy_balance.get("numerical_energy_balance_qualified") is not False:
+                raise ValueError("Energy ledger cannot assert physical qualification")
+            sample["sim_only_energy_balance"] = dict(energy_balance)
         # Fail rather than backfill or fabricate time samples and "clean" states.
         if self.samples and sample["integrated_ns"] < self.samples[-1]["integrated_ns"]:
             raise ValueError("Plant-integrated time regressed")
@@ -169,6 +178,18 @@ class SitlTraceRecorder:
                 motion.get("direction_continuity_qualified_sim_only") is True,
             "significant_direction_reversals":
                 motion.get("significant_direction_reversals"),
+            "sim_only_energy_balance":
+                result.get("sim_only_energy_balance"),
+            "sim_only_failure_diagnostics":
+                result.get("failure_diagnostics"),
+            "last_complete_analog_injected_wfi":
+                result.get("last_complete_analog_injected_wfi"),
+            "failed_native_wfi_visit":
+                result.get("failed_native_wfi_visit"),
+            "original_early_rejections":
+                result.get("original_early_rejections"),
+            "original_rejection_window_resets":
+                result.get("original_rejection_window_resets"),
             "extended_strict_verdict": "NOT_EXECUTED_BY_TRACE_RECORDER",
             "physical_motor_stability_qualified": False,
         }

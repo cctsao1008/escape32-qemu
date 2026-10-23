@@ -57,6 +57,7 @@ from tools.native_power_coupled_plant import NativePowerCoupledBLDC
 from tools.native_motor_model_profiles import (
     native_motor_parameters, native_motor_model_metadata
 )
+from tools.native_sitl_failure_diagnostics import model_failure_evidence
 from tools.native_closed_loop_audit import NativeClosedLoopAudit
 from tools.native_rotor_motion_audit import NativeRotorMotionAudit
 from tools.native_power_path_qualification import qualify_cross_phase_bridge
@@ -1095,6 +1096,9 @@ def probe_native_sustained_power_feedback(
         cpu = observer(rsp)
         if cpu["pc"] == hardfault or cpu["cfsr"] or cpu["hfsr"]:
             raise AssertionError("Original ELF fault in sustained motor")
+        frame = None
+        real_pwm = None
+        sample = None
         try:
             frame = timeline.observe(
                 qtest.read, native_ticks=qtest.read(ECAP1_TSCTR),
@@ -1148,16 +1152,50 @@ def probe_native_sustained_power_feedback(
                       flush=True)
             analog = frontend.words(sample)
         except (ValueError, FloatingPointError) as exc:
+            # Fail CLOSED while persisting the last complete causal WFI and
+            # exact failed-WFI plant/analog state; no fake accepted CAP1,
+            # no clipping, no additional analog stimulus on the failure.
             at_failure = native_pwm_duty_progress(rsp, bemf_state, qtest)
-            reason = ("NATIVE_ECAP_TIMEBASE_STALLED" if
-                      "delta_ticks=0" in str(exc) else
-                      "UNQUALIFIED_PHYSICAL_MOTOR_OR_ANALOG")
-            result = dict(qualified=False, reason=reason,
-                          details=str(exc), original_guest_wfi_visits=visit,
-                          guest_duty_at_gate=duty_first,
-                          original_duty_and_timer_at_failure=at_failure)
-            print("G13B3L_REAL_DUTY_AND_ECAP_BLOCKER " +
+            failure = model_failure_evidence(
+                exc, frontend=frontend, sample=sample)
+            last_complete_wfi = len(trace.samples) if trace is not None else (
+                visit - 1)
+            result = audit.result()
+            result.update(
+                qualified=False,
+                reason=failure["classification"],
+                details=str(exc),
+                original_guest_wfi_visits=visit,
+                last_complete_analog_injected_wfi=last_complete_wfi,
+                failed_native_wfi_visit=visit,
+                failed_wfi_ecap_ns=(
+                    frame.elapsed_ns if frame is not None else None),
+                failed_wfi_integrated_ns=(
+                    frame.total_integrated_ns if frame is not None else None),
+                guest_duty_at_gate=duty_first,
+                original_duty_and_timer_at_failure=at_failure,
+                last_complete_native_audit_guest_counters=audit.last,
+                pending_native_accepted_cap1_timg12=audit.pending,
+                sim_only_motor_model=native_motor_model_metadata(motor_profile),
+                sim_only_rotor_motion=rotor_motion.result(),
+                sim_only_energy_balance=motor.energy_balance(),
+                failure_diagnostics=failure,
+                plant_integrated_ns=(
+                    timeline.frames[-1].total_integrated_ns
+                    if timeline.frames else 0),
+                simulator_analog_frames=total_written,
+                original_early_rejections=audit.early_rejections,
+                original_rejection_window_resets=(
+                    audit.original_rejection_window_resets),
+                native_effective_power=evidence_power(effective_power_proof),
+                original_native_guest_writes=False)
+            print("G13B3M_FAIL_CLOSED_SIM_ONLY_MODEL_EXCEPTION " +
                   json.dumps(result, sort_keys=True), flush=True)
+            if trace is not None:
+                # Unlike the old exception path, persist the last valid
+                # native motion/sector counters before the outer strict
+                # required-sustained-loop assertion fails.
+                trace.finish(result)
             break
         # Real analog lines remain present even when guest ECAP is
         # unarmed. The guest alone selects/arms comparator and timer.
@@ -1221,7 +1259,8 @@ def probe_native_sustained_power_feedback(
             # The live publisher appends in-memory (no browser I/O on Guest).
             packet = trace.observe(visit=visit, frame=frame, pwm=real_pwm,
                                    plant=sample, guest=guest, analog=analog,
-                                   cap1_ticks=cap1, sectors=audit.sectors)
+                                   cap1_ticks=cap1, sectors=audit.sectors,
+                                   energy_balance=motor.energy_balance())
             if live is not None:
                 live.hub.publish(packet["sample"], packet["events"])
         if visit <= 3 or visit % 16 == 0:
@@ -1293,6 +1332,7 @@ def probe_native_sustained_power_feedback(
                 native_powered_endurance_tail_wfi_visits=visit-first_qualified_wfi,
                 last_measured_power_path=last_qualified_path,
                 sim_only_rotor_motion=rotor_motion.result(),
+                sim_only_energy_balance=motor.energy_balance(),
                 sim_only_motor_model=native_motor_model_metadata(motor_profile),
                 plant_max_rpm=motor.max_measured_rpm,
                 plant_integrated_ns=timeline.frames[-1].total_integrated_ns,
@@ -1323,6 +1363,7 @@ def probe_native_sustained_power_feedback(
             result["reason"] = "STRICT_NATIVE_ECAP_ENDURANCE_OR_POWER_INCOMPLETE"
         result.update(
             sim_only_rotor_motion=rotor_motion.result(),
+            sim_only_energy_balance=motor.energy_balance(),
             sim_only_motor_model=native_motor_model_metadata(motor_profile),
             required_native_integrated_ns=required_integrated_ns,
             first_qualified_wfi_visit=first_qualified_wfi,

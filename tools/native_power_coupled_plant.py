@@ -7,6 +7,7 @@ fabricated rotor initial RPM/BEMF, guest writes or forced captures.
 """
 import math
 from .virtual_bldc import VirtualBLDC
+from .native_model_energy_balance import NativeModelEnergyLedger
 from .native_power_path_qualification import qualify_cross_phase_bridge
 
 
@@ -38,6 +39,7 @@ class NativePowerCoupledBLDC(VirtualBLDC):
         self.net_dc_input_energy_j = 0.0
         self.net_electromagnetic_work_j = 0.0
         self.mechanically_productive_intervals = 0
+        self.energy_ledger = NativeModelEnergyLedger(self.p)
 
     def advance(self, duties, dt_s, *, gate_enabled):
         if len(duties) != 6 or not math.isfinite(dt_s) or dt_s <= 0:
@@ -65,8 +67,10 @@ class NativePowerCoupledBLDC(VirtualBLDC):
             # ideal average overlapping conduction fraction, not a
             # switching/diode recovery model.
             fraction = min(duties[2*hi], duties[2*lo+1])
+            before_currents = tuple(self.iabc)
             old = self.sample(gate_enabled=True)
             branch_i = (self.iabc[hi]-self.iabc[lo])*0.5
+            projected_branch_i = branch_i
             branch_v = self.p.vbus_v * fraction
             line_bemf = old.bemf_phase_v[hi]-old.bemf_phase_v[lo]
             branch_i += (
@@ -100,6 +104,16 @@ class NativePowerCoupledBLDC(VirtualBLDC):
                 omega + new_omega) * 0.5
             if not all(math.isfinite(x) for x in (dc_power, em_power)):
                 raise FloatingPointError("Two-terminal electric/mechanical power invalid")
+            # Passive energy audit of THIS unchanged Euler integrator.
+            # Distinguish current-projection impulses from timestep residuals.
+            self.energy_ledger.powered(
+                dt=dt_s, before_currents=before_currents,
+                after_branch_current=branch_i,
+                projected_branch_current=projected_branch_i,
+                source=hi, sink=lo, branch_voltage=branch_v,
+                old_line_bemf=line_bemf,
+                torque=physical.electromagnetic_torque_nm,
+                omega_before=omega, omega_after=new_omega)
             self.last_dc_input_power_w = dc_power
             self.last_electromagnetic_power_w = em_power
             self.net_dc_input_energy_j += dc_power * dt_s
@@ -114,6 +128,7 @@ class NativePowerCoupledBLDC(VirtualBLDC):
             self.last_electromagnetic_power_w = 0.0
             self.coasting_intervals += 1
             # Physically open winding: no invented bus-to-neutral voltage.
+            before_currents = tuple(self.iabc)
             self.iabc = [0.0, 0.0, 0.0]
             old_omega = self.omega_mech_rad_s
             if old_omega:
@@ -125,7 +140,14 @@ class NativePowerCoupledBLDC(VirtualBLDC):
                 self.angle_mech_rad = (
                     self.angle_mech_rad + (old_omega + next_omega) * 0.5 * dt_s
                 ) % (2.0*math.pi)
+            self.energy_ledger.coast(
+                dt=dt_s, before_currents=before_currents,
+                omega_before=old_omega, omega_after=self.omega_mech_rad_s)
             sample = self.sample(gate_enabled=False)
         self.max_measured_rpm = max(self.max_measured_rpm,
                                     abs(sample.mechanical_rpm))
         return sample
+
+    def energy_balance(self):
+        """Numerical audit only; never certifies a motor or strict rotor gate."""
+        return self.energy_ledger.result()
