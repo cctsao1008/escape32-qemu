@@ -35,10 +35,13 @@ def observer(rsp):
     names = ("magic", "primask", "basepri", "faultmask", "control",
              "msp", "psp", "ipsr", "lr", "pc", "xpsr")
     data = dict(zip(names, values))
-    data.update({"icsr": rsp.mem32(SCB_ICSR),
-                 "shcsr": rsp.mem32(SCB_SHCSR),
-                 "cfsr": rsp.mem32(SCB_CFSR),
-                 "hfsr": rsp.mem32(SCB_HFSR)})
+    # SCB.SHCSR/CFSR/HFSR are adjacent 32-bit architectural registers.
+    # Read all three in one checked RSP packet at the SAME stopped state.
+    # Preserve a separate ICSR sample and independent core-register checks.
+    icsr = rsp.mem32(SCB_ICSR)
+    shcsr, cfsr, hfsr = rsp.mem32_block(SCB_SHCSR, 3)
+    data.update({"icsr": icsr, "shcsr": shcsr,
+                 "cfsr": cfsr, "hfsr": hfsr})
     # Ensure observer is passive and agrees with the public GDB core view.
     if ((rsp.reg(25) & 0x1ff) != data["ipsr"] or
             rsp.reg(13) != (data["psp"] if
