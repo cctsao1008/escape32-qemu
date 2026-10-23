@@ -114,6 +114,58 @@ class TestNativeClosedLoopAudit(unittest.TestCase):
         self.assertEqual(len(a.sectors), 1)
         self.assertFalse(a.qualified)
 
+    def test_native_deferred_carrier_zero_rejection_reset(self):
+        a = NativeClosedLoopAudit(required_sectors=12)
+        first = (0,0,0,6250,620,0)
+        second = (620,0,0,6250,0,0)
+        a.ingest(**snap(100, pwm=first))
+        a.ingest(**snap(200, cap=1, c1=170, rej=1, sch=1, pwm=first))
+        a.ingest(**snap(300, cap=2, c1=270, rej=1, sch=2, pwm=first))
+        # Original TIMG12 advances Guest step, but carrier ZERO has not
+        # consumed the pending AQ image and the rejection window stays 1.
+        a.ingest(**snap(400, cap=2, c1=270, rej=1, sch=2, srv=1,
+                        step=2, code=0, armed=False, pending=3, pwm=first))
+        self.assertIsNotNone(a.pending)
+        self.assertEqual(len(a.sectors), 0)
+        # An additional genuine WFI can occur in the staged window.
+        a.ingest(**snap(450, cap=2, c1=270, rej=1, sch=2, srv=1,
+                        step=2, code=0, armed=False, pending=3, pwm=first))
+        # Only the original MCPWM ZERO publishes the next COMP+PWM
+        # phase and resets rejected_events in interval_select().
+        a.ingest(**snap(500, cap=2, c1=270, rej=0, sch=2, srv=1,
+                        step=2, code=3, armed=True, pending=0, pwm=second))
+        self.assertEqual(a.original_rejection_window_resets, 1)
+        self.assertEqual(a.early_rejections, 1)
+        self.assertEqual(len(a.sectors), 1)
+
+    def test_deferred_reset_requires_same_original_timer_and_phase(self):
+        first = (0,0,0,6250,620,0)
+        for change in ("new_capture", "wrong_code", "not_armed",
+                       "missing_pending", "no_original_timer"):
+            a = NativeClosedLoopAudit(required_sectors=12)
+            a.ingest(**snap(100, pwm=first))
+            a.ingest(**snap(200, cap=1, c1=170, rej=1, sch=1, pwm=first))
+            a.ingest(**snap(300, cap=2, c1=270, rej=1, sch=2, pwm=first))
+            a.ingest(**snap(400, cap=2, c1=270, rej=1, sch=2, srv=1,
+                            step=2, code=0, armed=False, pending=3, pwm=first))
+            after = snap(500, cap=2, c1=270, rej=0, sch=2, srv=1,
+                         step=2, code=3, armed=True, pending=0,
+                         pwm=(620,0,0,6250,0,0))
+            if change == "new_capture":
+                after["captured"] = 3
+            elif change == "wrong_code":
+                after["selected_code"] = 5
+            elif change == "not_armed":
+                after["armed"] = False
+            elif change == "missing_pending":
+                a.pending = None
+            else:
+                a.pending["service_tick"] = None
+            with self.subTest(change=change):
+                with self.assertRaises(AssertionError):
+                    a.ingest(**after)
+                self.assertEqual(a.original_rejection_window_resets, 0)
+
     def test_bemf_rejection_reset_without_native_step_stays_rejected(self):
         a=NativeClosedLoopAudit(required_sectors=12)
         a.ingest(**snap(100))
