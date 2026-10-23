@@ -47,6 +47,17 @@ jobs:
         run: |
           set -euo pipefail
           export DEBIAN_FRONTEND=noninteractive
+          # A measured warm-cache retry downloaded the 57.5MB GCC again
+          # despite apt-get being given an explicit local .deb pathname.
+          # The GitHub Azure APT mirror also took minutes for tiny libs.
+          # Prefer Ubuntu's official archive mirror (still signed APT
+          # repository metadata), without changing Ubuntu release/suite.
+          if [[ -f /etc/apt/apt-mirrors.txt ]] &&
+              grep -q 'azure.archive.ubuntu.com' /etc/apt/apt-mirrors.txt; then
+            sudo sed -i \
+              's#http://azure.archive.ubuntu.com/ubuntu#http://archive.ubuntu.com/ubuntu#g' \
+              /etc/apt/apt-mirrors.txt
+          fi
           # Rate-limited Ubuntu mirrors must not hold the entire job for
           # half an hour. Bounded network retries fail visibly, not falsely.
           sudo timeout 180s apt-get \
@@ -83,6 +94,11 @@ jobs:
             fi
             arm_debs+=( "${matches[0]}" )
           done
+          # Step 1: only small prerequisite packages through signed APT.
+          # CRITICAL: do NOT put local ARM .debs in this APT transaction.
+          # On ubuntu-24.04 APT may choose a repository candidate over a
+          # same-version local .deb; the measured retry downloaded all
+          # 116MB again despite a 102MB cache HIT.
           sudo timeout 300s apt-get \
             -o Acquire::Retries=1 \
             -o Acquire::http::Timeout=25 \
@@ -90,7 +106,13 @@ jobs:
             install -y --no-install-recommends \
             build-essential pkg-config libglib2.0-dev \
             libpixman-1-dev libfdt-dev ninja-build meson python3 git \
-            binutils-arm-none-eabi "${arm_debs[@]}"
+            binutils-arm-none-eabi libnewlib-dev
+          # Step 2: guarantee the two large compiler archives come only
+          # from the validated local cache. dpkg does not contact a mirror.
+          sudo dpkg -i "${arm_debs[@]}"
+          for pkg in gcc-arm-none-eabi libnewlib-arm-none-eabi; do
+            test "$(dpkg-query -W -f='${Status}' "$pkg")" = 'install ok installed'
+          done
           arm-none-eabi-gcc --version | head -1
           test -f /usr/share/doc/libnewlib-arm-none-eabi/copyright
 
