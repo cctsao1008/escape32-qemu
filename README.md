@@ -4,10 +4,11 @@ ESCape32 Rel17.3 on TI AM13E23019 — minimal QEMU 6.2.0 platform.
 QEMU remains pinned as an upstream Git submodule; `./build.sh` applies
 local integration only inside ignored `.build/qemu-src`.
 
-## E62 SITL Workbench — Offline Native Waveform Viewer
+## E62 SITL Workbench — Offline Trace + Live Telemetry WebGUI
 
-The opt-in native WFI trace recorder and dependency-free browser viewer
-are documented in [docs/sitl-workbench.md](docs/sitl-workbench.md).
+The opt-in native WFI trace recorder and dependency-free **localhost SSE**
+live/offline browser viewer are documented in
+[docs/sitl-workbench.md](docs/sitl-workbench.md).
 The viewer shows **sampled** original six-channel PWM high-tick duty,
 SIM_ONLY model BEMF/RPM and source-owned CAP1/TIMG12 event times;
 it does not infer pin-edge waveforms, alter Guest state or relax strict

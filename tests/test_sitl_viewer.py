@@ -46,6 +46,9 @@ class TestOfflineViewer(unittest.TestCase):
         self.assertIn("CAP1_ACCEPTED", html)
         self.assertIn("TIMG12_SERVICED", html)
         self.assertIn("No Guest control", html)
+        self.assertIn('new EventSource("/events")', html)
+        self.assertIn("DROPPED", html)
+        self.assertIn("NOT EXECUTED", html)
 
     @unittest.skipUnless(shutil.which("node"), "Node syntax checker unavailable")
     def test_inline_browser_javascript_is_syntactically_valid(self):

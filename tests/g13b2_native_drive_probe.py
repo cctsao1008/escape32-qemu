@@ -58,6 +58,7 @@ from tools.native_rotor_motion_audit import NativeRotorMotionAudit
 from tools.native_power_path_qualification import qualify_cross_phase_bridge
 from tools.virtual_bldc_feedback import SIM_BEMF_INPUT
 from tools.sitl_trace import SitlTraceRecorder, file_sha256
+from tools.sitl_live import SitlLiveServer
 
 FAULT_FN = "am13e_app_motor_fault_reset"
 
@@ -951,7 +952,7 @@ def probe_native_sustained_power_feedback(
         rsp, qtest, *, bemf_state, armed_breakpoints, wfi, hardfault,
         slice_ms, runtime_slices, max_visits, required_sectors,
         require_sim_only_cfg=False, initial_electrical_degrees=0.0,
-        required_integrated_ns=0, trace=None):
+        required_integrated_ns=0, trace=None, live=None):
     """Full native WFI-to-WFI physical bridge -> plant -> BEMF feedback loop.
 
     No native program counter, firmware SRAM, PWM, TIMG12, CAP1, or IRQ
@@ -999,6 +1000,8 @@ def probe_native_sustained_power_feedback(
         checkpoint="native_gate_return_before_sustained_motor")
     if trace is not None:
         trace.set_gate_origin(initial)  # reuse existing ECAP observation
+        if live is not None:
+            live.hub.begin(trace.meta)
     if motor.sample().mechanical_rpm != 0:
         raise AssertionError("Synthetic motor did not start at zero RPM")
     last_qualified_path = False
@@ -1158,11 +1161,13 @@ def probe_native_sustained_power_feedback(
             phase_currents_a=sample.phase_currents_a,
             dc_power_w=motor.last_dc_input_power_w)
         if trace is not None:
-            # Consume ONLY snapshots already obtained at this native WFI.
-            # No extra QTest/RSP commands, Guest writes or virtual clock steps.
-            trace.observe(visit=visit, frame=frame, pwm=real_pwm,
-                          plant=sample, guest=guest, analog=analog,
-                          cap1_ticks=cap1, sectors=audit.sectors)
+            # Both offline/live consume ONLY snapshots already obtained here.
+            # The live publisher appends in-memory (no browser I/O on Guest).
+            packet = trace.observe(visit=visit, frame=frame, pwm=real_pwm,
+                                   plant=sample, guest=guest, analog=analog,
+                                   cap1_ticks=cap1, sectors=audit.sectors)
+            if live is not None:
+                live.hub.publish(packet["sample"], packet["events"])
         if visit <= 3 or visit % 16 == 0:
             print("G13B3L_NATIVE_GUEST_DUTY_PROGRESS " +
                   json.dumps({
@@ -1549,7 +1554,8 @@ def run(args):
         initial_electrical_degrees=args.initial_electrical_degrees,
         required_sectors=args.sustained_sectors,
         required_integrated_ns=args.sustained_min_integrated_ns)
-        if args.sitl_trace_output else None)
+        if (args.sitl_trace_output or args.sitl_live_port is not None) else None)
+    live = args.sitl_live_server
     if args.probe_native_bemf:
         # Diagnose GCC static-symbol suffixes and scope without guessing.
         audit = audit_native_bemf_arm_elf(args.elf)
@@ -2143,7 +2149,7 @@ def run(args):
                                             args.initial_electrical_degrees),
                                          required_integrated_ns=(
                                              args.sustained_min_integrated_ns),
-                                         trace=trace)
+                                         trace=trace, live=live)
                                     evidence["g13b3l_native_sustained_loop"] = (
                                         loop_result)
                                     if args.require_native_sustained_loop and (
@@ -2394,7 +2400,7 @@ def run(args):
             finally:
                 # Persist an opt-in partial trace even when the strict native
                 # probe fails; do not turn missing motor evidence into PASS.
-                if trace is not None:
+                if trace is not None and args.sitl_trace_output is not None:
                     primary = sys.exc_info()[1]
                     try:
                         trace.write(args.sitl_trace_output,
@@ -2409,6 +2415,13 @@ def run(args):
                             raise
                         print("E62_SITL_TRACE_WRITE_FAILED_AFTER_NATIVE_ERROR " +
                               repr(trace_error), flush=True)
+                if live is not None:
+                    primary = sys.exc_info()[1]
+                    live.hub.finish(
+                        native_result=(trace.native_result if trace is not None
+                                       else None),
+                        error_type=(type(primary).__name__
+                                    if primary is not None else None))
                 # Transport-only counters: observational profiling, not
                 # motor state, Guest registers or altered acceptance gates.
                 if "rsp" in locals() and "qtest" in locals():
@@ -2561,6 +2574,12 @@ def main():
     p.add_argument("--sitl-trace-output", type=Path,
                    help="Optional offline WebGUI WFI trace JSON. Reuses "
                         "existing native samples; no new Guest/MMIO queries")
+    p.add_argument("--sitl-live-port", type=int, metavar="PORT",
+                   help="Opt-in read-only localhost SSE dashboard port; "
+                        "0 selects an available loopback port")
+    p.add_argument("--sitl-live-hold", action="store_true",
+                   help="Keep the browser dashboard open after native exit "
+                        "until Ctrl-C (interactive terminals only)")
     a = p.parse_args()
     if not a.qemu.is_file() or not a.elf.is_file():
         p.error("Missing QEMU or genuine SIM_ONLY ELF")
@@ -2617,6 +2636,13 @@ def main():
              a.sitl_trace_output.resolve() == a.artifact.resolve())):
         p.error("SITL trace requires native sustained loop and a distinct "
                 "output path from --artifact")
+    if a.sitl_live_hold and a.sitl_live_port is None:
+        p.error("--sitl-live-hold requires --sitl-live-port")
+    if a.sitl_live_port is not None:
+        if not a.probe_native_sustained_loop or not 0 <= a.sitl_live_port <= 65535:
+            p.error("--sitl-live-port requires native sustained loop and port 0..65535")
+        if a.sitl_live_hold and not sys.stdin.isatty():
+            p.error("--sitl-live-hold requires an interactive terminal")
     if a.probe_native_sustained_loop and (
             not a.require_native_bemf_arm or
             a.probe_native_timeline or a.require_native_no_bemf_timeout or
@@ -2672,7 +2698,31 @@ def main():
     if a.require_drive and a.require_bemf_reject:
         p.error("Cannot simultaneously require positive drive and "
                 "an uncalibrated BEMF rejection")
-    run(a)
+    live = (SitlLiveServer(port=a.sitl_live_port).start()
+            if a.sitl_live_port is not None else None)
+    a.sitl_live_server = live
+    if live is not None:
+        print("E62_SITL_LIVE_READ_ONLY_URL " + live.url, flush=True)
+    try:
+        run(a)
+    finally:
+        if live is not None:
+            error = sys.exc_info()[1]
+            # Native six-/twelve-sector probes do not run the separate
+            # G13B3M extended gate. Never imply complete CI qualification.
+            live.hub.finish(native_result=None,
+                            error_type=(type(error).__name__
+                                        if error is not None else None))
+            if a.sitl_live_hold:
+                print("E62_SITL_LIVE_VIEWER_HOLD Ctrl-C to exit (no Guest commands)",
+                      flush=True)
+                import time
+                try:
+                    while True:
+                        time.sleep(0.5)
+                except KeyboardInterrupt:
+                    pass
+            live.close()
 
 
 if __name__ == "__main__":

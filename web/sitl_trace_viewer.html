@@ -29,10 +29,13 @@ tr[data-time]{cursor:pointer}tr[data-time]:hover{background:#2d3b4f}
 @media(max-width:650px){body{padding:10px}canvas{height:165px}}
 </style></head><body>
 <header><div><h1>E62 SITL Workbench</h1>
-<div class="sub">Offline native-Guest trace review · No network · No Guest control</div></div>
+<div class="sub">Offline trace replay / localhost-only live SSE · No Guest control</div></div>
 <label class="panel">Load trace JSON <input id="file" type="file" accept=".json,application/json"></label></header>
 <div class="panel"><div class="top">
 <span class="badge" id="scope">NO TRACE LOADED</span>
+<span id="live-status" class="badge">OFFLINE FILE</span>
+<label id="live-follow" hidden><input id="follow-live" type="checkbox" checked> Follow live</label>
+<span id="loss-warning" class="danger"></span>
 <span id="status" class="sub">Choose an actual native trace exported by --sitl-trace-output.</span>
 </div><p class="sub">Six PWM traces show <b>measured carrier-average duty at WFI checkpoints</b>, not individual PWM pin transitions.
 Motor RPM, phase current and BEMF are <b>uncalibrated host-model predictions</b>.
@@ -73,22 +76,27 @@ const $ = id => document.getElementById(id);
 const COLORS=["#72d8c8","#2c8b83","#ffc778","#b48c41","#cba4ff","#7e68b0"];
 const SCOPE="SIM_ONLY_UNCALIBRATED_OPEN_STAR_MODEL";
 const FORMAT="e62.sitl.native-wfi.v1";
+const isLocalLive=location.protocol==="http:" &&
+  ["127.0.0.1","localhost"].includes(location.hostname);
+let liveMeta=null, liveLost=0, renderPending=false, liveFinished=false;
 const finite = x => typeof x==="number" && Number.isFinite(x);
 function validate(d){
   if(!d || d.format!==FORMAT || d.scope!==SCOPE || !Array.isArray(d.samples)
      || !d.samples.length || d.samples.length>200000 || !Array.isArray(d.events)
      || d.events.length>100000 || !d.metadata || !d.data_semantics)
     throw Error("Unsupported/empty E62 native WFI trace format");
-  let prev=-1;
+  let prev=-1, prevWfi=null;
   for(const [i,s] of d.samples.entries()){
-    if(!Number.isSafeInteger(s.t_ns) || s.t_ns<=prev || s.wfi!==i+1 ||
+    if(!Number.isSafeInteger(s.t_ns) || s.t_ns<=prev ||
+       !Number.isInteger(s.wfi) || s.wfi<1 ||
+       (prevWfi!==null && s.wfi!==prevWfi+1) ||
        !Array.isArray(s.pwm_duties) || s.pwm_duties.length!==6 ||
        !s.pwm_duties.every(x=>finite(x)&&x>=0&&x<=1) ||
        !Array.isArray(s.bemf_phase_v) || s.bemf_phase_v.length!==3 ||
        !s.bemf_phase_v.every(finite) || !finite(s.motor_rpm) ||
        !Number.isSafeInteger(s.integrated_ns) || !Number.isInteger(s.guest_step))
        throw Error("Malformed native sample at index "+i);
-    prev=s.t_ns;
+    prev=s.t_ns;prevWfi=s.wfi;
   }
   for(const e of d.events){
     if(!["CAP1_ACCEPTED","TIMG12_SERVICED"].includes(e.kind) ||
@@ -233,7 +241,8 @@ function eventsList(){
 function load(d){
   validate(d);
   trace=d;cursor=null;
-  $("scope").textContent="ACTUAL NATIVE WFI TRACE · SIM_ONLY";
+  $("scope").textContent=(isLocalLive?"LIVE ":"ACTUAL ")+
+    "NATIVE WFI · SIM_ONLY";
   $("status").textContent=d.capture_state+
     " · sampled PWM, not pin-edge / board waveforms";
   $("sha").textContent=d.metadata.elf_sha256;
@@ -242,9 +251,15 @@ function load(d){
   $("sector-count").textContent=String(n.completed_feedback_powered_sectors??"OPEN");
   $("duration").textContent=ms(n.plant_integrated_ns??0)+" ms";
   const dir=n.direction_continuity_qualified_sim_only===true;
-  $("direction").textContent=dir?"SIM_ONLY qualified":"FAIL / NOT QUALIFIED";
-  $("direction").className=dir?"ok":"danger";
+  $("direction").textContent=d.native_result?
+    (dir?"SIM_ONLY qualified":"FAIL / NOT QUALIFIED"):
+    "NOT YET QUALIFIED";
+  $("direction").className=d.native_result?(dir?"ok":"danger"):"muted";
   $("strict").textContent="NOT EXECUTED";
+  if(isLocalLive && !d.native_result){
+    $("direction").textContent="PENDING · NO NATIVE VERDICT";
+    $("direction").className="muted";
+  }
   $("dashboard").hidden=false;
   $("zoom").value="1";$("pan").value="0";
   eventsList();select(d.samples[0].t_ns);
@@ -260,6 +275,135 @@ $("file").addEventListener("change",async event=>{
     $("status").textContent=String(err.message||err);
   }
 });
+function setLiveStatus(message){$("live-status").textContent=message}
+function liveDocument(packets,complete){
+  const doc={
+    format:FORMAT,scope:SCOPE,metadata:liveMeta,
+    data_semantics:{pwm:"WFI sampled carrier-average duty, not pin-edge"},
+    capture_state:complete?"LIVE_NATIVE_COMPLETED":"LIVE_NATIVE_RUNNING",
+    native_result:complete?.native_result||null,
+    samples:packets.map(p=>p.sample),
+    events:packets.flatMap(p=>p.events)
+  };
+  return doc;
+}
+function renderLive(){
+  renderPending=false;
+  if(!trace||!trace.samples.length)return;
+  const s=trace.samples[trace.samples.length-1];
+  if($("follow-live").checked){
+    $("pan").value="1000";
+    select(s.t_ns);
+  }else{
+    redraw();
+  }
+  $("sample-count").textContent=String(trace.samples.length);
+  $("sector-count").textContent=String(
+    trace.events.filter(e=>e.kind==="TIMG12_SERVICED").length);
+  $("duration").textContent=ms(s.integrated_ns)+" ms";
+}
+function scheduleLiveRender(){
+  if(renderPending)return;
+  renderPending=true;
+  requestAnimationFrame(renderLive); // browser never backpressures native Guest
+}
+function applyLiveSnapshot(message){
+  liveMeta=message.metadata;
+  liveLost=message.truncated?Math.max(0,message.oldest_seq-1):0;
+  $("loss-warning").textContent=liveLost?
+    "RING TRUNCATED — "+liveLost+" older frames unavailable; use offline JSON":"";
+  if(!liveMeta||!message.packets.length){
+    $("dashboard").hidden=true;
+    $("scope").textContent="WAITING FOR NATIVE GATE";
+    $("status").textContent="SITL running; no qualified original WFI samples yet.";
+    return;
+  }
+  const doc=liveDocument(message.packets,message.complete);
+  load(doc);
+  $("live-follow").hidden=false;
+  if(message.complete)applyLiveComplete(message.complete);
+  else setLiveStatus("LIVE STREAM");
+}
+function applyLivePacket(packet){
+  if(!liveMeta||!packet||!packet.sample||!Array.isArray(packet.events))return;
+  if(!trace){
+    load(liveDocument([packet],null));
+    $("live-follow").hidden=false;
+  }else{
+    const prev=trace.samples[trace.samples.length-1];
+    if(packet.sample.wfi!==prev.wfi+1 ||
+       packet.sample.t_ns<=prev.t_ns){
+      $("loss-warning").textContent="STREAM GAP / TIME REGRESSION — reconnect to resync";
+      setLiveStatus("DATA GAP");
+      return;
+    }
+    trace.samples.push(packet.sample);
+    trace.events.push(...packet.events);
+    if(trace.samples.length>2048){
+      trace.samples.splice(0,trace.samples.length-2048);
+      liveLost++;
+      $("loss-warning").textContent=
+        "RING TRUNCATED — older frames unavailable; use offline JSON";
+    }
+    eventsList();
+  }
+  scheduleLiveRender();
+}
+function applyLiveComplete(complete){
+  liveFinished=true;
+  setLiveStatus(complete.error_type?"NATIVE ERROR":"NATIVE PROBE FINISHED");
+  $("status").textContent="Native probe ended"+
+    (complete.error_type?" ("+complete.error_type+")":"")+
+    "; separate 12-sector/90ms/rotor strict verdict NOT EXECUTED by live GUI";
+  $("strict").textContent="NOT EXECUTED";
+  $("strict").className="danger";
+  if(complete.native_result&&trace){
+    trace.native_result=complete.native_result;
+    $("sector-count").textContent=String(
+      complete.native_result.completed_feedback_powered_sectors??"OPEN");
+    $("duration").textContent=ms(
+      complete.native_result.plant_integrated_ns??0)+" ms";
+    const direction=complete.native_result.direction_continuity_qualified_sim_only===true;
+    $("direction").textContent=direction?
+      "SIM_ONLY qualified":"FAIL / NOT QUALIFIED";
+    $("direction").className=direction?"ok":"danger";
+  }
+}
+function connectLive(){
+  if(!isLocalLive)return;
+  setLiveStatus("CONNECTING");
+  $("status").textContent="Waiting for original Guest native WFI...";
+  const channel=new EventSource("/events");
+  channel.addEventListener("snapshot",event=>{
+    try{applyLiveSnapshot(JSON.parse(event.data))}
+    catch(err){setLiveStatus("INVALID TELEMETRY");$("status").textContent=String(err);
+      channel.close()}
+  });
+  channel.addEventListener("begin",event=>{
+    const msg=JSON.parse(event.data);liveMeta=msg.metadata;
+    setLiveStatus("CONNECTED · WAITING FOR WFI");
+  });
+  channel.addEventListener("frame",event=>{
+    try{applyLivePacket(JSON.parse(event.data))}
+    catch(err){setLiveStatus("INVALID TELEMETRY");$("status").textContent=String(err);
+      channel.close()}
+  });
+  channel.addEventListener("gap",event=>{
+    const missing=JSON.parse(event.data).missing_packets;
+    liveLost+=missing;
+    $("loss-warning").textContent="DROPPED "+liveLost+
+      " native WFI frames; trace incomplete (no interpolation)";
+    setLiveStatus("DATA GAP");
+  });
+  channel.addEventListener("complete",event=>applyLiveComplete(JSON.parse(event.data)));
+  channel.onerror=()=>{
+    if(!liveFinished){
+      setLiveStatus("DISCONNECTED / RETRYING");
+      $("status").textContent="Live connection lost; Guest state must not be inferred.";
+    }
+  };
+}
+if(isLocalLive)connectLive();
 for(const id of ["zoom","pan"])$(id).addEventListener("input",redraw);
 $("reset").addEventListener("click",()=>{
   $("zoom").value="1";$("pan").value="0";redraw();

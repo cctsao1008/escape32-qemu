@@ -26,6 +26,8 @@ on:
       - 'tests/test_g13b3_native_rotor_motion.py'
       - 'tools/native_rotor_motion_audit.py'
       - 'tools/sitl_trace.py'
+      - 'tools/sitl_live.py'
+      - 'tests/test_sitl_live.py'
       - 'tests/test_sitl_trace.py'
       - 'tests/test_sitl_viewer.py'
       - 'web/sitl_trace_viewer.html'
@@ -57,7 +59,9 @@ jobs:
           python3 tests/test_virtual_bldc.py
           python3 tests/test_g13b3_native_transport.py
           python3 tests/test_sitl_trace.py
+          python3 tests/test_sitl_live.py
           python3 tests/test_sitl_viewer.py
+          python3 -m py_compile tests/g13b2_native_drive_probe.py
           python3 tests/test_g13b3_native_pwm.py
           python3 tests/test_g13b3_native_seed.py
           python3 tests/test_g13b3_native_bemf.py

@@ -1,5 +1,58 @@
-# E62 SITL Workbench — Phase 1 Offline Native Trace
+# E62 SITL Workbench — Phase 1 Offline Native Trace + Phase 2 Live Telemetry
 
+The offline trace viewer and the new opt-in **localhost-only live
+telemetry** share one read-only WebGUI. Neither path controls QEMU, reads
+extra Guest state, alters native PWM, or qualifies real hardware.
+
+## Phase 2: Live telemetry on an actual native sustained run
+
+On an interactive Linux/WSL terminal, use the **existing** strict G13B3M
+`tests/g13b2_native_drive_probe.py` command from the pinned
+`.github/workflows/esc-sim-regression.yml`. Add:
+
+```bash
+--sitl-live-port 8765 --sitl-live-hold \
+--sitl-trace-output artifacts/g13b3m-native-sitl-trace.json
+```
+
+Open **http://127.0.0.1:8765/** in the browser before or during the
+run. The native probe prints `E62_SITL_LIVE_READ_ONLY_URL` with the exact
+address. If 8765 is occupied, pick an available port or use
+`--sitl-live-port 0` for an automatically assigned loopback port.
+The optional `--sitl-live-hold` keeps the read-only dashboard accessible
+after native completion until Ctrl-C. It requires an interactive TTY.
+Without hold, the listener shuts down when the native probe finishes.
+These options work **only** on the existing native sustained loop path.
+
+The WebGUI automatically detects the local SSE endpoint when served from
+localhost, while preserving the offline `Load trace JSON` mode.
+Live data is sent via **read-only Server-Sent Events (SSE)**; there is no
+remote login, no external scripts, and no command/firmware-control API.
+The HTTP service binds to **127.0.0.1 only**, checks Host and Origin,
+rejects POST, and serves only the viewer and /events.
+
+The Guest/probe thread appends previously validated WFI snapshots to a
+bounded **2048-frame in-memory ring**. Browser clients wait/read on
+separate HTTP threads and cannot backpressure Guest RSP/QTest.
+Reload/reconnect receives the current ring snapshot. Ring overflow,
+subscriber gaps, and disconnects are explicitly labeled; the viewer
+does **not** interpolate lost native evidence or treat missing samples
+as continuous motion. The complete offline JSON can still preserve the
+whole run, and is the preferred replay/provenance artifact.
+
+**Caution:** "Live" refers to incremental publication as the native
+QEMU run proceeds. Time is **ECAP virtual time**, not wall-clock
+real-time performance. PWM is a **WFI-sampled carrier duty**, not
+individual high-frequency switching edges. SIM_ONLY model RPM/BEMF
+remain uncalibrated, not physical motor/board measurements.
+
+The stream terminates with a native-probe result or exception indicator,
+not the separate G13B3M strict gate. The WebGUI must display
+`NOT EXECUTED` for that gate; it cannot declare a twelve-sector /
+90 ms / rotor-continuity PASS from telemetry. Existing G13B3L and
+G13B3M CI commands/gates are unchanged.
+
+## Phase 1: Offline trace analysis
 This is an **offline read-only viewer**, NOT a QEMU controller or a
 production ESC configuration utility. It opens actual native WFI snapshots
 from the optional `--sitl-trace-output` recorder. Its operation does not
@@ -55,13 +108,15 @@ even if the probe later fails. The separate strict extended-run audit is
 
 The recorder consumes existing Python objects at the same stopped WFI
 checkpoint; it adds **zero** RSP commands, QTest commands, or Guest register
-writes. No backend/WebSocket or live QEMU control is included in Phase 1.
+writes. No native Guest control is exposed by either phase. Phase 2 adds only a
+localhost SSE reader; it does not add QEMU control or a WebSocket backend.
 The existing hardware H0–H4 measurements remain OPEN_NOT_MEASURED.
 
 ## Verification
 
 ```bash
 python3 tests/test_sitl_trace.py
+python3 tests/test_sitl_live.py
 python3 tests/test_sitl_viewer.py
 ```
 

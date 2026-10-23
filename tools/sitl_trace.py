@@ -147,6 +147,9 @@ class SitlTraceRecorder:
         self.samples.append(sample)
         self.events.extend(new_events)
         self._sector_count = len(sectors)
+        # Return the already validated, immutable-at-publication payload
+        # to an optional telemetry consumer. No duplicate Guest/MMIO read.
+        return {"sample": sample, "events": new_events}
 
     def finish(self, result):
         if not isinstance(result, dict):
