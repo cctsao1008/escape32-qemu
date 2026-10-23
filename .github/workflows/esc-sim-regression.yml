@@ -12,6 +12,12 @@ on:
       - '.github/workflows/esc-sim-regression.yml'
   workflow_dispatch:
 
+# Only the newest main commit needs a full native run. Historical passing
+# commits stay immutable in Git and their completed Action logs remain linked.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   firmware-backed-qemu:
     runs-on: ubuntu-24.04
@@ -25,14 +31,77 @@ jobs:
           submodules: true
           fetch-depth: 1
 
-      - name: Install QEMU dependencies
+      # The official ubuntu-24.04 runner is ephemeral. In a measured run,
+      # downloading 57.5MB gcc-arm-none-eabi + 49.2MB newlib via Azure APT
+      # mirror retried for 27min. Cache the ORIGINAL official .deb archives,
+      # not a copied installation, and let dpkg/apt resolve dependencies.
+      - name: Cache official ARM GCC and newlib .deb downloads
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/e62-arm-debs
+          key: e62-noble-${{ runner.arch }}-gcc13-newlib4-debs-v1
+
+      - name: Install QEMU and ARM firmware build dependencies (bounded)
+        shell: bash
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
+          set -euo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          # Rate-limited Ubuntu mirrors must not hold the entire job for
+          # half an hour. Bounded network retries fail visibly, not falsely.
+          sudo timeout 180s apt-get \
+            -o Acquire::Retries=1 \
+            -o Acquire::http::Timeout=25 \
+            -o Acquire::https::Timeout=25 update
+          DEB_DIR="$RUNNER_TEMP/e62-arm-debs"
+          mkdir -p "$DEB_DIR"
+          shopt -s nullglob
+          arm_debs=()
+          for pkg in gcc-arm-none-eabi libnewlib-arm-none-eabi; do
+            matches=( "$DEB_DIR"/"$pkg"_*.deb )
+            if (( ${#matches[@]} == 0 )); then
+              echo "ARM_DEB_CACHE_MISS $pkg; downloading official Ubuntu archive"
+              (
+                cd "$DEB_DIR"
+                timeout 240s apt-get \
+                  -o Acquire::Retries=1 \
+                  -o Acquire::http::Timeout=25 \
+                  -o Acquire::https::Timeout=25 download "$pkg"
+              )
+              matches=( "$DEB_DIR"/"$pkg"_*.deb )
+            else
+              echo "ARM_DEB_CACHE_HIT $pkg"
+            fi
+            if (( ${#matches[@]} != 1 )); then
+              echo "ERROR: expected exactly one official $pkg .deb"
+              exit 1
+            fi
+            dpkg-deb --info "${matches[0]}" >/dev/null
+            if [[ "$(dpkg-deb -f "${matches[0]}" Package)" != "$pkg" ]]; then
+              echo "ERROR: wrong cached Debian package for $pkg"
+              exit 1
+            fi
+            arm_debs+=( "${matches[0]}" )
+          done
+          sudo timeout 300s apt-get \
+            -o Acquire::Retries=1 \
+            -o Acquire::http::Timeout=25 \
+            -o Acquire::https::Timeout=25 \
+            install -y --no-install-recommends \
             build-essential pkg-config libglib2.0-dev \
             libpixman-1-dev libfdt-dev ninja-build meson python3 git \
-            gcc-arm-none-eabi binutils-arm-none-eabi libnewlib-arm-none-eabi
+            binutils-arm-none-eabi "${arm_debs[@]}"
           arm-none-eabi-gcc --version | head -1
+          test -f /usr/share/doc/libnewlib-arm-none-eabi/copyright
+
+      # Pin the compiled emulator to its exact QEMU revision AND all
+      # in-repo machine code/build flags. A Python audit-only edit can
+      # reuse it, while any machine/build change invalidates the cache.
+      - name: Restore exact-source pinned QEMU compiled build
+        id: qemu-cache
+        uses: actions/cache@v4
+        with:
+          path: .build/qemu-src/build
+          key: e62-qemu-ubuntu2404-${{ runner.arch }}-${{ hashFiles('build.sh', 'machine/**') }}-v1
 
       - name: Pin ESCape32 HAL fix and TI SDK
         run: |
@@ -122,10 +191,25 @@ jobs:
             exit 1
           fi
           echo PASS_G13B2E_IDEAL_BEMF_REFERENCE_SEPARATE_NATIVE_ELF_ONLY
-      - name: Build pinned QEMU AM13E model
+      - name: Build or verify exact-source pinned QEMU AM13E model
+        shell: bash
         run: |
           set -euo pipefail
-          ./build.sh
+          # A cache hit is only accepted for the hashed build.sh+machine
+          # sources and the original pinned submodule. No acceptance
+          # test is skipped; only a byte-for-byte matching rebuild.
+          test "$(git -C qemu rev-parse HEAD)" = \
+            "44f28df24767cf9dca1ddc9b23157737c4cbb645"
+          if [[ "${{ steps.qemu-cache.outputs.cache-hit }}" == "true" ]]; then
+            echo "E62_QEMU_EXACT_SOURCE_CACHE_HIT"
+            test -x .build/qemu-src/build/qemu-system-arm
+            .build/qemu-src/build/qemu-system-arm --version | head -1
+            .build/qemu-src/build/qemu-system-arm -M help \
+              | grep -q 'am13e23019'
+          else
+            echo "E62_QEMU_EXACT_SOURCE_CACHE_MISS; rebuilding"
+            ./build.sh
+          fi
 
       - name: G13B2A SIM_ONLY original ELF preflight (NO DRIVE gate)
         run: |
