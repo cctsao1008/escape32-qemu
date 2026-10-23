@@ -60,6 +60,15 @@ def check_native_extended_run(data, *, min_sectors=12,
         raise ExtendedRunError("No independent qualified cross-phase model-energy gate")
     if loop.get("original_guest_wfi_visits", 0) < min_powered_pwm_samples:
         raise ExtendedRunError("Real original WFI observation count insufficient")
+    trajectory = loop.get("sim_only_rotor_motion")
+    if (not isinstance(trajectory, dict) or
+            trajectory.get("direction_continuity_qualified_sim_only") is not True or
+            trajectory.get("significant_direction_reversals") != 0 or
+            trajectory.get("post_six_sector_wfi_samples", 0) <= 0 or
+            trajectory.get("physical_motor_stability_qualified") is not False):
+        raise ExtendedRunError(
+            "SIM_ONLY motor trajectory reversed or missing; 90ms PWM "
+            "function alone is NOT continuously stable rotor motion")
 
     preceding_capture = None
     preceding_service = None
@@ -105,6 +114,7 @@ def check_native_extended_run(data, *, min_sectors=12,
         "actual_powered_pwm_samples": loop["powered_pwm_samples"],
         "simulated_positive_dc_energy_j": power["simulated_net_dc_energy_j"],
         "original_cpu_and_trip_qualification": "INHERITED_FROM_STRICT_G13B3L",
+        "sim_only_rotor_motion": trajectory,
         "hardware_pwm_current_protection_thermal": "OPEN_NOT_MEASURED",
     }
 

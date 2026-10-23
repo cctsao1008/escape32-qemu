@@ -54,6 +54,7 @@ from tools.native_timg12_observer import observe_native_timg12
 from tools.native_pwm_deadband_diagnostic import native_deadband_source_clamp, read_native_deadband
 from tools.native_power_coupled_plant import NativePowerCoupledBLDC
 from tools.native_closed_loop_audit import NativeClosedLoopAudit
+from tools.native_rotor_motion_audit import NativeRotorMotionAudit
 from tools.native_power_path_qualification import qualify_cross_phase_bridge
 from tools.virtual_bldc_feedback import SIM_BEMF_INPUT
 
@@ -982,6 +983,7 @@ def probe_native_sustained_power_feedback(
     frontend = AnalogFrontend(reference_v=3.3, zero_bemf_bias_v=1.65,
                               input_gain_v_per_bemf_v=.02)
     audit = NativeClosedLoopAudit(required_sectors=required_sectors)
+    rotor_motion = NativeRotorMotionAudit()
     for pc in sorted(armed_breakpoints - {hardfault}):
         del_bp(rsp, pc)
         armed_breakpoints.remove(pc)
@@ -1102,21 +1104,49 @@ def probe_native_sustained_power_feedback(
             for name in needed
         }
         cap1 = qtest.read(ECAP1_TSCTR + 8)
-        audit.ingest(
-            ecap_ticks=frame.native_ecap_ticks,
-            cap1_ticks=cap1,
-            captured=guest["captured_events"],
-            rejected=guest["rejected_events"],
-            scheduled=guest["scheduled"],
-            serviced=guest["serviced"],
-            step=guest["step"],
-            selected_code=guest["selected_code"],
-            pwm_high=real_pwm.six_high_ticks,
-            pwm_period=real_pwm.period_ticks,
-            gate_trip_qualified=real_pwm.acceptable_for_plant,
+        try:
+            audit.ingest(
+                ecap_ticks=frame.native_ecap_ticks,
+                cap1_ticks=cap1,
+                captured=guest["captured_events"],
+                rejected=guest["rejected_events"],
+                scheduled=guest["scheduled"],
+                serviced=guest["serviced"],
+                step=guest["step"],
+                selected_code=guest["selected_code"],
+                pwm_high=real_pwm.six_high_ticks,
+                pwm_period=real_pwm.period_ticks,
+                gate_trip_qualified=real_pwm.acceptable_for_plant,
+                rpm=sample.mechanical_rpm,
+                armed=(guest["armed"] == 1),
+                pending_code=guest["pending_code"])
+        except AssertionError as exc:
+            # Fail closed, but retain the SOURCE-owned old/now Guest state
+            # and independent SIM_ONLY motion trend. Never hide a bad CAP1,
+            # missed TIMG12, reset, reversed rotor, or Trip.
+            rotor_motion.observe(
+                wfi_visit=visit, completed_sectors=len(audit.sectors),
+                integrated_ns=frame.total_integrated_ns,
+                rpm=sample.mechanical_rpm,
+                phase_currents_a=sample.phase_currents_a,
+                dc_power_w=motor.last_dc_input_power_w)
+            print("G13B3M_FAIL_CLOSED_NATIVE_LOOP_DIAGNOSTIC " +
+                  json.dumps({
+                      "reason": str(exc), "native_guest_wfi_visit": visit,
+                      "guest_event_counters": guest,
+                      "previous_native_audit_state": audit.last,
+                      "pending_original_cap1_timg12": audit.pending,
+                      "completed_native_sectors": len(audit.sectors),
+                      "sim_only_motion": rotor_motion.result(),
+                      "host_guest_writes": False,
+                  }, sort_keys=True), flush=True)
+            raise
+        rotor_motion.observe(
+            wfi_visit=visit, completed_sectors=len(audit.sectors),
+            integrated_ns=frame.total_integrated_ns,
             rpm=sample.mechanical_rpm,
-            armed=(guest["armed"] == 1),
-            pending_code=guest["pending_code"])
+            phase_currents_a=sample.phase_currents_a,
+            dc_power_w=motor.last_dc_input_power_w)
         if visit <= 3 or visit % 16 == 0:
             print("G13B3L_NATIVE_GUEST_DUTY_PROGRESS " +
                   json.dumps({
@@ -1185,6 +1215,7 @@ def probe_native_sustained_power_feedback(
                 first_qualified_wfi_visit=first_qualified_wfi,
                 native_powered_endurance_tail_wfi_visits=visit-first_qualified_wfi,
                 last_measured_power_path=last_qualified_path,
+                sim_only_rotor_motion=rotor_motion.result(),
                 plant_max_rpm=motor.max_measured_rpm,
                 plant_integrated_ns=timeline.frames[-1].total_integrated_ns,
                 simulator_analog_frames=total_written,
@@ -1211,6 +1242,7 @@ def probe_native_sustained_power_feedback(
             result["qualified"] = False
             result["reason"] = "STRICT_NATIVE_ECAP_ENDURANCE_OR_POWER_INCOMPLETE"
         result.update(
+            sim_only_rotor_motion=rotor_motion.result(),
             required_native_integrated_ns=required_integrated_ns,
             first_qualified_wfi_visit=first_qualified_wfi,
             original_guest_wfi_visits=max_visits,

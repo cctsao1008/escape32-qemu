@@ -43,6 +43,13 @@ def fixture():
             "first_qualified_wfi_visit": 805,
             "native_powered_endurance_tail_wfi_visits": 130,
             "last_measured_power_path": True,
+            "sim_only_rotor_motion": {
+                "direction_continuity_qualified_sim_only": True,
+                "significant_direction_reversals": 0,
+                "post_six_sector_wfi_samples": 120,
+                "physical_motor_stability_qualified": False,
+                "scope": "SIM_ONLY_UNCALIBRATED_OPEN_STAR_MODEL",
+            },
             "powered_pwm_samples": 1000,
             "simulator_analog_frames": 1000,
             "original_guest_wfi_visits": 1000,
@@ -109,6 +116,19 @@ class ExtendedNativeRunUnitTests(unittest.TestCase):
         other["g13b3l_native_sustained_loop"]["native_effective_power"]["gate_connected"] = False
         with self.assertRaisesRegex(ExtendedRunError, "cross-phase"):
             check_native_extended_run(other)
+
+    def test_90ms_logical_sectors_cannot_hide_rotor_reversal(self):
+        data = fixture()
+        trajectory = data["g13b3l_native_sustained_loop"]["sim_only_rotor_motion"]
+        trajectory["significant_direction_reversals"] = 2
+        trajectory["direction_continuity_qualified_sim_only"] = False
+        with self.assertRaisesRegex(ExtendedRunError, "trajectory reversed"):
+            check_native_extended_run(data)
+        trajectory["significant_direction_reversals"] = 0
+        trajectory["direction_continuity_qualified_sim_only"] = True
+        trajectory["physical_motor_stability_qualified"] = True
+        with self.assertRaisesRegex(ExtendedRunError, "trajectory reversed"):
+            check_native_extended_run(data)
 
     def test_unpowered_intermediate_step_fails(self):
         data = fixture()
