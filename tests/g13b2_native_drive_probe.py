@@ -2364,6 +2364,20 @@ def run(args):
                                       repr(cleanup_error), flush=True)
                                 break
             finally:
+                # Transport-only counters: observational profiling, not
+                # motor state, Guest registers or altered acceptance gates.
+                if "rsp" in locals() and "qtest" in locals():
+                    print("G13B3_NATIVE_TRANSPORT_PROFILE " +
+                          json.dumps({
+                              "rsp_commands": rsp.command_count,
+                              "rsp_socket_recv_calls": rsp.recv_calls,
+                              "rsp_bytes_received": rsp.recv_bytes,
+                              "qtest_commands": qtest.command_count,
+                              "qtest_mmio_reads": qtest.read_count,
+                              "qtest_mmio_writes": qtest.write_count,
+                              "host_guest_register_writes": False,
+                              "scope": "TRANSPORT_DIAGNOSTIC_ONLY"
+                          }, sort_keys=True), flush=True)
                 if qtconn is not None:
                     qtconn.close()
                 if proc.poll() is None:

@@ -20,14 +20,29 @@ class RSP:
     def __init__(self, sock):
         self.sock = sock
         self.sock.settimeout(8)
+        # GDB RSP is a framed byte stream, not one syscall per byte.
+        # Retain surplus bytes from a coalesced ACK/packet/checksum read.
+        # Only a verified 'command' round trip can advance the Guest.
+        self._rx = b""
+        self._rx_at = 0
+        self.recv_calls = 0
+        self.recv_bytes = 0
+        self.command_count = 0
 
     def byte(self):
-        data = self.sock.recv(1)
-        if not data:
-            raise RuntimeError("GDB stub closed the connection")
+        if self._rx_at == len(self._rx):
+            self._rx = self.sock.recv(4096)
+            self._rx_at = 0
+            self.recv_calls += 1
+            self.recv_bytes += len(self._rx)
+            if not self._rx:
+                raise RuntimeError("GDB stub closed the connection")
+        data = self._rx[self._rx_at:self._rx_at + 1]
+        self._rx_at += 1
         return data
 
     def command(self, payload):
+        self.command_count += 1
         raw = payload.encode("ascii")
         checksum = sum(raw) & 255
         self.sock.sendall(b"$" + raw + f"#{checksum:02x}".encode())

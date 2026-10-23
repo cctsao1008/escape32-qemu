@@ -11,9 +11,16 @@ from elf_image import app_vector_from_elf
 class QTest:
     def __init__(self, sock):
         self.sock = sock
-        self.stream = sock.makefile("rb", buffering=0)
+        # A QTest response is newline-framed and can include asynchronous
+        # IRQ notifications. Buffered readline avoids a recv syscall for
+        # every byte without caching MMIO values or skipping commands.
+        self.stream = sock.makefile("rb", buffering=16384)
         sock.settimeout(5)
+        self.command_count = 0
+        self.read_count = 0
+        self.write_count = 0
     def cmd(self, command):
+        self.command_count += 1
         self.sock.sendall((command + "\n").encode("ascii"))
         while True:
             line = self.stream.readline().decode("ascii").strip()
@@ -23,8 +30,10 @@ class QTest:
                 raise RuntimeError(f"QTest failure: {line!r}")
             return line.split()
     def read(self, address):
+        self.read_count += 1
         return int(self.cmd(f"readl 0x{address:08x}")[1], 0)
     def write(self, address, value):
+        self.write_count += 1
         self.cmd(f"writel 0x{address:08x} 0x{value:08x}")
 
 def main():
