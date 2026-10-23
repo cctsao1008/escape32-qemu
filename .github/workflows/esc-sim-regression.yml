@@ -99,7 +99,6 @@ jobs:
           test "$(git ls-tree HEAD qemu | awk '{print $3}')" = \
             "44f28df24767cf9dca1ddc9b23157737c4cbb645"
           test -x .build/qemu-src/build/qemu-system-arm
-          .build/qemu-src/build/qemu-system-arm -M help | grep -q am13e23019
           (cd .build/e62-fw-artifacts && sha256sum -c SHA256SUMS)
           (cd .build/e62-host-binutils && sha256sum -c SHA256SUMS)
           (cd .build/e62-host-runtime && sha256sum -c SHA256SUMS)
@@ -111,6 +110,7 @@ jobs:
             exit 1
           fi
           .build/qemu-src/build/qemu-system-arm --version | head -1
+          .build/qemu-src/build/qemu-system-arm -M help | grep -q am13e23019
           arm-none-eabi-objdump --version | head -1
           mkdir -p artifacts
           python3 tools/native_sim_cfg_flash.py \
