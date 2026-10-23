@@ -91,6 +91,47 @@ class TestNativeClosedLoopAudit(unittest.TestCase):
         self.assertEqual(a.early_rejections, 1)
         self.assertEqual(len(a.sectors), 0)
 
+    def test_source_owned_bemf_rejection_window_reset_after_native_timg12(self):
+        # Pinned original motor_bemf.c resets rejected_events per interval
+        # after a genuine nextstep re-arms capture, not on Host command.
+        a = NativeClosedLoopAudit(required_sectors=12)
+        first = (0,0,0,6250,620,0)
+        second = (620,0,0,6250,0,0)
+        a.ingest(**snap(100, pwm=first))
+        # Early CAP1 rejected by original Rel17, not counted as sector.
+        a.ingest(**snap(200,cap=1,c1=175,rej=1,sch=1,pwm=first))
+        self.assertEqual(a.early_rejections, 1)
+        self.assertEqual(len(a.sectors), 0)
+        # A NEW CAP1 accepted and scheduled, with rejection still 1.
+        a.ingest(**snap(300,cap=2,c1=270,rej=1,sch=2,pwm=first))
+        self.assertIsNotNone(a.pending)
+        # Original TIMG12 moves step and source-owned interval rearm
+        # clears rejected_events=0, while old rejected CAP1 stays uncredited.
+        a.ingest(**snap(400,cap=2,c1=270,rej=0,sch=2,srv=1,
+                        step=2,code=3,pwm=second))
+        self.assertEqual(a.original_rejection_window_resets, 1)
+        self.assertEqual(a.early_rejections, 1)
+        self.assertEqual(len(a.sectors), 1)
+        self.assertFalse(a.qualified)
+
+    def test_bemf_rejection_reset_without_native_step_stays_rejected(self):
+        a=NativeClosedLoopAudit(required_sectors=12)
+        a.ingest(**snap(100))
+        a.ingest(**snap(200,cap=1,c1=175,rej=1))
+        with self.assertRaisesRegex(AssertionError, "WITHOUT"):
+            a.ingest(**snap(300,cap=1,c1=175,rej=0))
+        self.assertEqual(len(a.sectors), 0)
+
+    def test_bemf_rejection_reset_with_fake_step_or_missing_service_fails(self):
+        a=NativeClosedLoopAudit(required_sectors=12)
+        a.ingest(**snap(100))
+        a.ingest(**snap(200,cap=1,c1=175,rej=1))
+        a.ingest(**snap(300,cap=2,c1=275,rej=1,sch=2))
+        with self.assertRaisesRegex(AssertionError, "WITHOUT"):
+            a.ingest(**snap(400,cap=2,c1=275,rej=0,sch=2,srv=0,
+                            step=2,code=3))
+        self.assertEqual(len(a.sectors), 0)
+
     def test_isr_but_sink_only_is_not_powered_sector(self):
         a = NativeClosedLoopAudit()
         a.ingest(**snap(100))
