@@ -10,7 +10,8 @@ The opt-in native WFI trace recorder and dependency-free **localhost SSE**
 live/offline browser viewer are documented in
 [docs/sitl-workbench.md](docs/sitl-workbench.md).
 The viewer shows **sampled** original six-channel PWM high-tick duty,
-SIM_ONLY model BEMF/RPM and source-owned CAP1/TIMG12 event times;
+SIM_ONLY model BEMF/RPM/phase currents, original Guest/Fault state,
+and source-owned CAP1/TIMG12 event times;
 it does not infer pin-edge waveforms, alter Guest state or relax strict
 G13B3L/G13B3M acceptance. Download the CI artifact even on a failing
 rotor-direction gate and open `web/sitl_trace_viewer.html` locally.

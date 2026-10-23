@@ -61,6 +61,13 @@ Event timestamps are source-owned ECAP/TIMG12 captures from native sector eviden
 <canvas id="pwm" width="1200" height="205"></canvas></div>
 <div class="panel"><h2>Model three-phase BEMF (V)</h2><canvas id="bemf" width="1200" height="205"></canvas></div>
 <div class="panel"><h2>Model mechanical rotor RPM</h2><canvas id="rpm" width="1200" height="205"></canvas></div>
+<div class="panel"><h2>Model phase currents (A) — SIM_ONLY, not board measurements</h2>
+<canvas id="current" width="1200" height="205"></canvas></div>
+<div class="panel"><h2>Original Guest step / armed / gate / Trip snapshot</h2>
+<div class="sub">WFI sampled state, not continuous transistor or physical safety timing.</div>
+<canvas id="guest" width="1200" height="205"></canvas></div>
+<div class="panel"><h2>Guest CAP1 / TIMG12 event counters</h2>
+<canvas id="counters" width="1200" height="205"></canvas></div>
 <div class="panel"><h2>Accepted native CAP1 / TIMG12 events</h2>
 <canvas id="events" width="1200" height="92"></canvas></div>
 </div>
@@ -93,8 +100,17 @@ function validate(d){
        !Array.isArray(s.pwm_duties) || s.pwm_duties.length!==6 ||
        !s.pwm_duties.every(x=>finite(x)&&x>=0&&x<=1) ||
        !Array.isArray(s.bemf_phase_v) || s.bemf_phase_v.length!==3 ||
-       !s.bemf_phase_v.every(finite) || !finite(s.motor_rpm) ||
-       !Number.isSafeInteger(s.integrated_ns) || !Number.isInteger(s.guest_step))
+       !s.bemf_phase_v.every(finite) ||
+       !Array.isArray(s.phase_currents_a) || s.phase_currents_a.length!==3 ||
+       !s.phase_currents_a.every(finite) || !finite(s.motor_rpm) ||
+       !Number.isSafeInteger(s.integrated_ns) ||
+       !Number.isInteger(s.guest_step) || s.guest_step<1 || s.guest_step>6 ||
+       ![0,1].includes(s.guest_armed) ||
+       !Number.isInteger(s.guest_captured) ||
+       !Number.isInteger(s.guest_scheduled) ||
+       !Number.isInteger(s.guest_serviced) ||
+       typeof s.ost2!=="boolean" || typeof s.ost3!=="boolean" ||
+       typeof s.gate_qualified!=="boolean")
        throw Error("Malformed native sample at index "+i);
     prev=s.t_ns;prevWfi=s.wfi;
   }
@@ -116,7 +132,7 @@ function geometry(ctx,w,h){
   const l=65,r=12,t=14,b=25;
   return {l,r,t,b,cw:w-l-r,ch:h-t-b};
 }
-function plot(canvasId, channels, fixedRange=null){
+function plot(canvasId, channels, fixedRange=null, sampledOnly=false){
   const c=$(canvasId),ctx=c.getContext("2d"),w=c.width,h=c.height;
   ctx.clearRect(0,0,w,h);
   const g=geometry(ctx,w,h), [t0,t1]=windowRange();
@@ -146,12 +162,13 @@ function plot(canvasId, channels, fixedRange=null){
   }
   for(const [j,ch] of channels.entries()){
     ctx.beginPath();ctx.strokeStyle=ch.color||COLORS[j];ctx.lineWidth=1.8;
+    ctx.fillStyle=ch.color||COLORS[j];
     for(let i=0;i<visible.length;i++){
       const px=x(visible[i].t_ns),py=y(ch.get(visible[i]));
-      if(i===0)ctx.moveTo(px,py);else ctx.lineTo(px,py);
+      if(sampledOnly)ctx.fillRect(px-1.4,py-1.4,2.8,2.8);
+      else if(i===0)ctx.moveTo(px,py);else ctx.lineTo(px,py);
     }
-    ctx.stroke();
-    ctx.fillStyle=ch.color||COLORS[j];
+    if(!sampledOnly)ctx.stroke();
     ctx.fillText(ch.name,g.l+10+j*96,g.t+13);
   }
   if(cursor){
@@ -209,11 +226,26 @@ function redraw(){
   plot("pwm",Array.from({length:6},(_,i)=>({
     name:["UH","UL","VH","VL","WH","WL"][i],
     color:COLORS[i],get:s=>s.pwm_duties[i]*100
-  })),[0,100]);
+  })),[0,100],true); // measured WFI points, NEVER synthetic PWM edges
   plot("bemf",Array.from({length:3},(_,i)=>({
     name:["U","V","W"][i],color:COLORS[i*2],get:s=>s.bemf_phase_v[i]
   })));
   plot("rpm",[{name:"Rotor RPM",color:"#8ec4ff",get:s=>s.motor_rpm}]);
+  plot("current",Array.from({length:3},(_,i)=>({
+    name:["I_U","I_V","I_W"][i],color:COLORS[i*2],
+    get:s=>s.phase_currents_a[i]
+  })));
+  plot("guest",[
+    {name:"Step",get:s=>s.guest_step,color:"#72d8c8"},
+    {name:"Armed",get:s=>s.guest_armed*6,color:"#ffc778"},
+    {name:"Gate",get:s=>s.gate_qualified?7:0,color:"#8ec4ff"},
+    {name:"Trip",get:s=>(s.ost2||s.ost3)?8:0,color:"#ff8b8b"}
+  ],[0,8],true);
+  plot("counters",[
+    {name:"CAP1 count",get:s=>s.guest_captured,color:"#72d8c8"},
+    {name:"Scheduled",get:s=>s.guest_scheduled,color:"#ffc778"},
+    {name:"Serviced",get:s=>s.guest_serviced,color:"#cba4ff"}
+  ],null,true);
   eventPlot();
 }
 function eventsList(){
@@ -326,6 +358,7 @@ function applyLiveSnapshot(message){
 }
 function applyLivePacket(packet){
   if(!liveMeta||!packet||!packet.sample||!Array.isArray(packet.events))return;
+  validate(liveDocument([packet],null)); // reject malformed live samples early
   if(!trace){
     load(liveDocument([packet],null));
     $("live-follow").hidden=false;
@@ -408,7 +441,7 @@ for(const id of ["zoom","pan"])$(id).addEventListener("input",redraw);
 $("reset").addEventListener("click",()=>{
   $("zoom").value="1";$("pan").value="0";redraw();
 });
-for(const id of ["pwm","bemf","rpm","events"]){
+for(const id of ["pwm","bemf","rpm","current","guest","counters","events"]){
   $(id).addEventListener("mousemove",e=>{
     if(!trace)return;
     const c=$(id),r=c.getBoundingClientRect(),left=65/c.width,

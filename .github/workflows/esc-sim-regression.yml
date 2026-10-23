@@ -162,6 +162,7 @@ jobs:
               --initial-electrical-degrees -30 \
               --artifact artifacts/g13b3m-extended-twelve-sector.json \
               --sitl-trace-output artifacts/g13b3m-native-sitl-trace.json \
+              --sitl-live-port 0 \
               2>&1 | tee artifacts/g13b3m-extended-twelve-sector.log
             python3 tools/native_extended_run_gate.py \
               --artifact artifacts/g13b3m-extended-twelve-sector.json \
@@ -582,6 +583,7 @@ jobs:
               --initial-electrical-degrees -30 \
               --artifact artifacts/g13b3m-extended-twelve-sector.json \
               --sitl-trace-output artifacts/g13b3m-native-sitl-trace.json \
+              --sitl-live-port 0 \
               2>&1 | tee artifacts/g13b3m-extended-twelve-sector.log
             python3 tools/native_extended_run_gate.py \
               --artifact artifacts/g13b3m-extended-twelve-sector.json \

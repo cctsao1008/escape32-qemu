@@ -26,6 +26,10 @@ These options work **only** on the existing native sustained loop path.
 
 The WebGUI automatically detects the local SSE endpoint when served from
 localhost, while preserving the offline `Load trace JSON` mode.
+The dashboard plots WFI-sampled **six PWM duty points** (no invented
+carrier edge transitions), SIM_ONLY BEMF/RPM/**three phase currents**,
+original Guest step/ARM/Gate/OST2/OST3 state and Guest event counters.
+Accepted CAP1 and serviced TIMG12 events appear on the same ECAP timebase.
 Live data is sent via **read-only Server-Sent Events (SSE)**; there is no
 remote login, no external scripts, and no command/firmware-control API.
 The HTTP service binds to **127.0.0.1 only**, checks Host and Origin,
@@ -49,8 +53,12 @@ remain uncalibrated, not physical motor/board measurements.
 The stream terminates with a native-probe result or exception indicator,
 not the separate G13B3M strict gate. The WebGUI must display
 `NOT EXECUTED` for that gate; it cannot declare a twelve-sector /
-90 ms / rotor-continuity PASS from telemetry. Existing G13B3L and
-G13B3M CI commands/gates are unchanged.
+90 ms / rotor-continuity PASS from telemetry. The immutable G13B3L six-sector test and all G13B3M strict acceptance
+conditions are unchanged. The firmware-backed CI G13B3M command now
+also opts into `--sitl-live-port 0` as a **publisher smoke test** (with no
+browser client); it does not introduce any extra Guest/MMIO sampling.
+The original twelve-sector/90ms/rotor verdict still comes solely from
+`tools/native_extended_run_gate.py`.
 
 ## Phase 1: Offline trace analysis
 This is an **offline read-only viewer**, NOT a QEMU controller or a

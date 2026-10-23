@@ -49,6 +49,10 @@ class TestOfflineViewer(unittest.TestCase):
         self.assertIn('new EventSource("/events")', html)
         self.assertIn("DROPPED", html)
         self.assertIn("NOT EXECUTED", html)
+        self.assertIn('plot("current"', html)
+        self.assertIn('plot("guest"', html)
+        self.assertIn('plot("counters"', html)
+        self.assertIn("measured WFI points, NEVER synthetic PWM edges", html)
 
     @unittest.skipUnless(shutil.which("node"), "Node syntax checker unavailable")
     def test_inline_browser_javascript_is_syntactically_valid(self):

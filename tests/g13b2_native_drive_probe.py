@@ -2417,11 +2417,24 @@ def run(args):
                               repr(trace_error), flush=True)
                 if live is not None:
                     primary = sys.exc_info()[1]
+                    stream = live.hub.snapshot()
+                    count = len(trace.samples) if trace is not None else 0
+                    if stream["seq"] != count:
+                        if primary is None:
+                            raise AssertionError(
+                                "Live WFI telemetry dropped a publisher frame")
+                        print("E62_SITL_LIVE_PUBLISH_INCOMPLETE_AFTER_NATIVE_ERROR "
+                              f"packets={stream['seq']} native={count}",
+                              flush=True)
                     live.hub.finish(
                         native_result=(trace.native_result if trace is not None
                                        else None),
                         error_type=(type(primary).__name__
                                     if primary is not None else None))
+                    print("E62_SITL_LIVE_CAPTURED "
+                          f"frames={stream['seq']} "
+                          f"buffer_truncated={stream['truncated']} "
+                          "extra_guest_queries=0", flush=True)
                 # Transport-only counters: observational profiling, not
                 # motor state, Guest registers or altered acceptance gates.
                 if "rsp" in locals() and "qtest" in locals():
