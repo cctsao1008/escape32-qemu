@@ -347,7 +347,13 @@ function applyLiveSnapshot(message){
   if(!liveMeta||!message.packets.length){
     $("dashboard").hidden=true;
     $("scope").textContent="WAITING FOR NATIVE GATE";
-    $("status").textContent="SITL running; no qualified original WFI samples yet.";
+    setLiveStatus("SSE CONNECTED · WAITING FOR WFI");
+    $("status").textContent=liveMeta?
+      "Native session started; no qualified original WFI samples yet.":
+      "SSE connected; native Gate origin not yet observed.";
+    // A native probe can fail before the first WFI. Show its terminal
+    // exception rather than leaving a false CONNECTING/WAITING status.
+    if(message.complete)applyLiveComplete(message.complete);
     return;
   }
   const doc=liveDocument(message.packets,message.complete);

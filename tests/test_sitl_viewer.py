@@ -49,6 +49,8 @@ class TestOfflineViewer(unittest.TestCase):
         self.assertIn('new EventSource("/events")', html)
         self.assertIn("DROPPED", html)
         self.assertIn("NOT EXECUTED", html)
+        self.assertIn("SSE CONNECTED · WAITING FOR WFI", html)
+        self.assertIn("if(message.complete)applyLiveComplete(message.complete)", html)
         self.assertIn('plot("current"', html)
         self.assertIn('plot("guest"', html)
         self.assertIn('plot("counters"', html)
