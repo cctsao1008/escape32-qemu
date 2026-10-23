@@ -151,10 +151,53 @@ class NativeClosedLoopAudit:
                  (selected_code == route[step][0] and armed and
                   pending_code == 0))
             )
-            if not source_rearm:
+            # The pinned Rel17 firmware uses TWO source-owned callbacks:
+            #  TIMG12 IRQ: nextstep() -> motor_bemf_stage()
+            #             selected_code=0, pending_code=next COMP phase
+            #  MCPWM ZERO: motor_bemf_carrier_zero() -> interval_select()
+            #             rejected_events=0, selected_code=next phase,
+            #             armed=1, pending_code=0
+            # When a genuine WFI falls BETWEEN these callbacks, the
+            # original rejected counter clears one (or more) observations
+            # AFTER the original TIMG12 service and step increment. Such
+            # a reset is legal ONLY on that exact Guest stage->publish
+            # transition for a previously accepted CAP1. No fabricated
+            # elapsed time, Guest IRQ, counter, or firmware state is used.
+            pending = self.pending
+            deferred_carrier_zero_rearm = (
+                rejected == 0 and
+                pending is not None and
+                pending["service_tick"] is not None and
+                old["step"] == (pending["pre_step"] % 6) + 1 and
+                old["serviced"] > pending["original_serviced_before"] and
+                serviced == old["serviced"] and
+                scheduled == old["scheduled"] and
+                captured == old["captured"] and
+                old["selected_code"] == 0 and
+                not old["armed"] and
+                old["pending_code"] == route[old["step"]][0] and
+                step == old["step"] and
+                selected_code == route[step][0] and
+                bool(armed) and pending_code == 0
+            )
+            if not (source_rearm or deferred_carrier_zero_rearm):
                 raise AssertionError(
                     "Original guest rejected counter reset WITHOUT "
-                    "accepted CAP1->TIMG12 native nextstep BEMF rearm")
+                    "accepted CAP1->TIMG12 native nextstep BEMF rearm: " +
+                    repr({
+                        "previous": {k: old[k] for k in
+                                     ("captured", "rejected", "scheduled",
+                                      "serviced", "step", "selected_code",
+                                      "armed", "pending_code")},
+                        "current": {k: now[k] for k in
+                                    ("captured", "rejected", "scheduled",
+                                     "serviced", "step", "selected_code",
+                                     "armed", "pending_code")},
+                        "accepted_cap1_pending": pending,
+                        "immediate_rearm": bool(source_rearm),
+                        "carrier_zero_deferred_rearm":
+                            bool(deferred_carrier_zero_rearm),
+                    }))
             self.original_rejection_window_resets += 1
         elif rejected - old["rejected"] > 1:
             raise AssertionError("Missed multiple guest events: rejected")
