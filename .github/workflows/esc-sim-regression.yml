@@ -25,10 +25,12 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Checkout pinned QEMU submodule
+      # On a cache hit, the committed gitlink is enough to establish
+      # pinned source identity; clone QEMU only if a rebuild is required.
+      - name: Checkout E62 harness (defer pinned QEMU submodule)
         uses: actions/checkout@v4
         with:
-          submodules: true
+          submodules: false
           fetch-depth: 1
 
       # The official ubuntu-24.04 runner is ephemeral. In a measured run,
@@ -231,7 +233,9 @@ jobs:
           # A cache hit is only accepted for the hashed build.sh+machine
           # sources and the original pinned submodule. No acceptance
           # test is skipped; only a byte-for-byte matching rebuild.
-          test "$(git -C qemu rev-parse HEAD)" = \
+          # git ls-tree checks the *committed* QEMU submodule gitlink,
+          # even when its working directory is deliberately not checked out.
+          test "$(git ls-tree HEAD qemu | awk '{print $3}')" = \
             "44f28df24767cf9dca1ddc9b23157737c4cbb645"
           if [[ "${{ steps.qemu-cache.outputs.cache-hit }}" == "true" ]]; then
             echo "E62_QEMU_EXACT_SOURCE_CACHE_HIT"
@@ -240,7 +244,10 @@ jobs:
             .build/qemu-src/build/qemu-system-arm -M help \
               | grep -q 'am13e23019'
           else
-            echo "E62_QEMU_EXACT_SOURCE_CACHE_MISS; rebuilding"
+            echo "E62_QEMU_EXACT_SOURCE_CACHE_MISS; cloning pinned QEMU and rebuilding"
+            git submodule update --init --depth 1 qemu
+            test "$(git -C qemu rev-parse HEAD)" = \
+              "44f28df24767cf9dca1ddc9b23157737c4cbb645"
             ./build.sh
           fi
 
@@ -291,56 +298,80 @@ jobs:
             exit 1
           fi
           echo PASS_G13B3N_ORIGINAL_ELF_AND_PREBOOT_FLASH_CFG_PROVISIONING
-      - name: G13B3L original ELF physically powered continuous motor-loop diagnostic
+      # Each invocation launches its own QEMU+GDB Unix sockets in a
+      # tempfile.TemporaryDirectory; they do not share writable Guest state.
+      # Execute BOTH unchanged positive gates concurrently, preserving
+      # independent six-sector and twelve-sector/90ms CI artifacts.
+      - name: G13B3L + G13B3M independent native acceptance (parallel; both strict)
+        shell: bash
         run: |
           set -euo pipefail
           mkdir -p artifacts
-          python3 tests/g13b2_native_drive_probe.py \
-            --qemu .build/qemu-src/build/qemu-system-arm \
-            --elf /tmp/e62-fw-fast-ramp/AM13E-rev17.3.elf \
-            --throttle 1500 --startup-steps 32768 \
-            --slice-ms 300 --runtime-slices 20 \
-            --wait-native-bemf-calibration --calibration-wfi-visits 24 \
-            --require-drive --require-native-pwm \
-            --require-native-bemf-arm --require-native-sustained-loop \
-            --sim-only-cfg-flash artifacts/g13b3n-original-cfg-flash.bin \
-            --sustained-wfi-visits 1500 --sustained-sectors 6 \
-            --initial-electrical-degrees -30 \
-            --artifact artifacts/g13b3l-native-six-powered-sector-loop.json \
-            2>&1 | tee artifacts/g13b3l-native-six-powered-sector-loop.log
-          # STRICT: fail this firmware-backed CI unless six accepted
-          # physical CAP1->native TIMG12->powered six-step transitions
-          # AND an independently qualified multi-WFI power path pass.
-          # No one-event or non-driven virtual RPM can satisfy the gate.
-      - name: G13B3M extended twelve native feedback-powered sectors (separate strict gate)
-        run: |
-          set -euo pipefail
-          mkdir -p artifacts
-          # Preserve the previously passing six-sector G13B3L unchanged.
-          # Use the SAME original Rel17 ELF, factory Cfg and strict protection.
-          python3 tests/g13b2_native_drive_probe.py \
-            --qemu .build/qemu-src/build/qemu-system-arm \
-            --elf /tmp/e62-fw-fast-ramp/AM13E-rev17.3.elf \
-            --throttle 1500 --startup-steps 32768 \
-            --slice-ms 300 --runtime-slices 20 \
-            --wait-native-bemf-calibration --calibration-wfi-visits 24 \
-            --require-drive --require-native-pwm \
-            --require-native-bemf-arm --require-native-sustained-loop \
-            --sim-only-cfg-flash artifacts/g13b3n-original-cfg-flash.bin \
-            --sustained-wfi-visits 2800 --sustained-sectors 12 \
-            --sustained-min-integrated-ns 90000000 \
-            --initial-electrical-degrees -30 \
-            --artifact artifacts/g13b3m-extended-twelve-sector.json \
-            2>&1 | tee artifacts/g13b3m-extended-twelve-sector.log
-          python3 tools/native_extended_run_gate.py \
-            --artifact artifacts/g13b3m-extended-twelve-sector.json \
-            --min-sectors 12 --min-integrated-ns 90000000 \
-            --min-powered-pwm-samples 600 \
-            --output artifacts/g13b3m-extended-strict-verdict.json \
-            2>&1 | tee artifacts/g13b3m-extended-strict-verdict.log
-          # Separate positive gate: two unbroken source-derived cycles,
-          # original CAP1/TIMG12, native PWM and ECAP-time evidence.
-          # All evidence stays SIM_ONLY; no actual E62 current/thermal PASS.
+          echo "G13B3_NATIVE_INDEPENDENT_PARALLEL_GATES_START"
+          (
+            set -euo pipefail
+            mkdir -p artifacts
+            python3 tests/g13b2_native_drive_probe.py \
+              --qemu .build/qemu-src/build/qemu-system-arm \
+              --elf /tmp/e62-fw-fast-ramp/AM13E-rev17.3.elf \
+              --throttle 1500 --startup-steps 32768 \
+              --slice-ms 300 --runtime-slices 20 \
+              --wait-native-bemf-calibration --calibration-wfi-visits 24 \
+              --require-drive --require-native-pwm \
+              --require-native-bemf-arm --require-native-sustained-loop \
+              --sim-only-cfg-flash artifacts/g13b3n-original-cfg-flash.bin \
+              --sustained-wfi-visits 1500 --sustained-sectors 6 \
+              --initial-electrical-degrees -30 \
+              --artifact artifacts/g13b3l-native-six-powered-sector-loop.json \
+              2>&1 | tee artifacts/g13b3l-native-six-powered-sector-loop.log
+            # STRICT: fail this firmware-backed CI unless six accepted
+            # physical CAP1->native TIMG12->powered six-step transitions
+            # AND an independently qualified multi-WFI power path pass.
+            # No one-event or non-driven virtual RPM can satisfy the gate.
+          ) &
+          pid_l=$!
+          (
+            set -euo pipefail
+            mkdir -p artifacts
+            # Preserve the previously passing six-sector G13B3L unchanged.
+            # Use the SAME original Rel17 ELF, factory Cfg and strict protection.
+            python3 tests/g13b2_native_drive_probe.py \
+              --qemu .build/qemu-src/build/qemu-system-arm \
+              --elf /tmp/e62-fw-fast-ramp/AM13E-rev17.3.elf \
+              --throttle 1500 --startup-steps 32768 \
+              --slice-ms 300 --runtime-slices 20 \
+              --wait-native-bemf-calibration --calibration-wfi-visits 24 \
+              --require-drive --require-native-pwm \
+              --require-native-bemf-arm --require-native-sustained-loop \
+              --sim-only-cfg-flash artifacts/g13b3n-original-cfg-flash.bin \
+              --sustained-wfi-visits 2800 --sustained-sectors 12 \
+              --sustained-min-integrated-ns 90000000 \
+              --initial-electrical-degrees -30 \
+              --artifact artifacts/g13b3m-extended-twelve-sector.json \
+              2>&1 | tee artifacts/g13b3m-extended-twelve-sector.log
+            python3 tools/native_extended_run_gate.py \
+              --artifact artifacts/g13b3m-extended-twelve-sector.json \
+              --min-sectors 12 --min-integrated-ns 90000000 \
+              --min-powered-pwm-samples 600 \
+              --output artifacts/g13b3m-extended-strict-verdict.json \
+              2>&1 | tee artifacts/g13b3m-extended-strict-verdict.log
+            # Separate positive gate: two unbroken source-derived cycles,
+            # original CAP1/TIMG12, native PWM and ECAP-time evidence.
+            # All evidence stays SIM_ONLY; no actual E62 current/thermal PASS.
+          ) &
+          pid_m=$!
+          l_status=0
+          m_status=0
+          wait "$pid_l" || l_status=$?
+          wait "$pid_m" || m_status=$?
+          echo "G13B3L_INDEPENDENT_GATE_EXIT=$l_status"
+          echo "G13B3M_INDEPENDENT_GATE_EXIT=$m_status"
+          if (( l_status != 0 || m_status != 0 )); then
+            echo "G13B3_NATIVE_PARALLEL_STRICT_GATE_FAIL"
+            exit 1
+          fi
+          echo "PASS_G13B3L_G13B3M_BOTH_INDEPENDENT_NATIVE_GATES"
+
       - name: G13B2A SIM_ONLY original ELF preflight (NO DRIVE gate)
         run: |
           set -euo pipefail
