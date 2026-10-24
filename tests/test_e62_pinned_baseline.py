@@ -65,6 +65,16 @@ class PinnedBinaryContract(unittest.TestCase):
         self.assertEqual([line.split("  ")[1] for line in sums],
                          [b.ELF,b.QEMU,b.FDT])
 
+    def test_pinned_strict_job_cannot_skip_extended_rotor_gate(self):
+        workflow=(ROOT/".github/workflows/e62-pinned-regression.yml").read_text()
+        # A 12-sector Native Loop exit alone is not the independent
+        # rotor-motion/90ms gate. Never report that as green.
+        self.assertIn("python3 tools/native_extended_run_gate.py", workflow)
+        self.assertIn("--min-sectors 12 --min-integrated-ns 90000000", workflow)
+        self.assertIn("--min-powered-pwm-samples 600", workflow)
+        self.assertIn("exit \"$strict_exit\"", workflow)
+        self.assertIn("original Guest strict", workflow.lower() if False else workflow)
+
     def test_qemu_baseline_source_pin_matches_repository_gitlink(self):
         b.gitlink_pin()
 
