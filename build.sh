@@ -123,6 +123,13 @@ if wave_target.is_symlink():
     sys.exit('ERROR: generated PA26 waveform path is a symlink')
 if not wave_target.exists() or wave_target.read_bytes() != wave_source.read_bytes():
     wave_target.write_bytes(wave_source.read_bytes())
+history_source = root / 'machine/am13e_pwm_history.inc'
+history_target = qemu / 'hw/arm/am13e_pwm_history.inc'
+if history_target.is_symlink():
+    sys.exit('ERROR: generated PWM history path is a symlink')
+if (not history_target.exists() or
+        history_target.read_bytes() != history_source.read_bytes()):
+    history_target.write_bytes(history_source.read_bytes())
 if target.is_symlink():
     sys.exit('ERROR: generated machine path is a symlink; refusing overwrite')
 if target.exists() and 'TYPE_AM13E_MACHINE MACHINE_TYPE_NAME("am13e23019")' not in target.read_text():

@@ -217,6 +217,16 @@ OBJECT_DECLARE_SIMPLE_TYPE(AM13EMachineState, AM13E_MACHINE)
 #define AM13E_SIM_PWM_SWITCH_OBSERVER 0x5ffe6000U
 #define AM13E_SIM_PWM_SWITCH_OBS_SIZE 0x240U
 #define AM13E_SIM_PWM_SWITCH_MAX_EDGES 64U
+/* G13B3 chronological QEMU-internal callback journal; not MOSFET traces. */
+#define AM13E_SIM_PWM_HIST_BASE 0x5ffe7000U
+#define AM13E_SIM_PWM_HIST_SIZE 0x1000U
+#define AM13E_H_CAPACITY 128U
+#define AM13E_H_REC_WORDS 8U
+enum {
+    AM13E_H_EDGE=1, AM13E_H_ZERO=2, AM13E_H_SHADOW=3,
+    AM13E_H_CLOCK=4, AM13E_H_GUEST_REG=5, AM13E_H_TRIP=6,
+    AM13E_H_GATE=7, AM13E_H_INVALID=8,
+};
 /* G11 read-only non-silicon CPU/exception probe. Not guest firmware MMIO. */
 #define AM13E_G11_ARCH_OBS_BASE 0x5ffe3000U
 #define AM13E_G11_ARCH_OBS_SIZE 0x40U
@@ -286,11 +296,22 @@ struct AM13ESimADC {
     bool unmodeled_reported;
 };
 
+typedef struct AM13EPWMHistoryRecord {
+    uint64_t time_ns;
+    uint32_t type, oldmask, newmask, counter, zero, aux;
+} AM13EPWMHistoryRecord;
+
 typedef struct AM13ESimPWM {
     MemoryRegion mmio;
     MemoryRegion observer;
     MemoryRegion switch_observer; /* independent non-silicon plan */
+    MemoryRegion historical_observer; /* clocked read-only event ring */
     QEMUTimer *zero_timer;
+    QEMUTimer *edge_timer; /* observer-only, no original PWM IRQ effects */
+    AM13EPWMHistoryRecord hist_records[AM13E_H_CAPACITY];
+    uint64_t hist_total, hist_dropped, hist_last_time_ns;
+    uint32_t hist_mask, hist_invalid_count, hist_gate_word;
+    bool hist_model_valid;
     qemu_irq irq;
     struct AM13EMachineState *machine;
     uint32_t reg[AM13E_SIM_MCPWM_SIZE / 4U];
@@ -421,6 +442,7 @@ struct AM13ESimWWDT {
 
 typedef struct AM13EGpioPort {
     MemoryRegion mmio;
+    struct AM13EMachineState *machine; /* raw PB13 history only */
     uint32_t bank;
     bool powered;
     bool reset_sticky;
@@ -1482,6 +1504,12 @@ static void am13e_pwm4_irq_update(AM13ESimPWM *p)
     }
 }
 
+/* Observer-only helpers are implemented after the original level
+ * evaluator. These callbacks may never modify a Guest PWM register.
+ */
+static void am13e_pwm4_hist_refresh(AM13ESimPWM *p,uint32_t kind,bool force);
+static void am13e_pwm4_hist_gate(AM13ESimPWM *p);
+
 #include "am13e_trip_safety.inc"
 
 /* Compile-time guard: no two ESC-SIM test MMIO windows may alias.
@@ -1514,6 +1542,29 @@ _Static_assert(AM13E_SIM_REGIONS_DISJOINT(
     AM13E_SIM_PWM_SWITCH_OBSERVER, AM13E_SIM_PWM_SWITCH_OBS_SIZE,
     AM13E_SIM_PA26_INJECT_BASE, AM13E_SIM_PA26_INJECT_SIZE),
     "MCPWM4 switch plan must not overlap original PA26 input");
+_Static_assert(AM13E_SIM_REGIONS_DISJOINT(
+    AM13E_SIM_PWM_HIST_BASE, AM13E_SIM_PWM_HIST_SIZE,
+    AM13E_SIM_PWM_SWITCH_OBSERVER, AM13E_SIM_PWM_SWITCH_OBS_SIZE),
+    "Historical PWM edge journal cannot overlap carrier plan");
+_Static_assert(AM13E_SIM_REGIONS_DISJOINT(
+    AM13E_SIM_PWM_HIST_BASE, AM13E_SIM_PWM_HIST_SIZE,
+    AM13E_PA26_WAVE_BASE, AM13E_PA26_WAVE_SIZE),
+    "Historical PWM edge journal cannot overlap PA26 waveform");
+_Static_assert(AM13E_SIM_REGIONS_DISJOINT(
+    AM13E_SIM_PWM_HIST_BASE, AM13E_SIM_PWM_HIST_SIZE,
+    AM13E_G13B2_SOURCE_BASE, 0x1cU),
+    "Historical PWM edge journal cannot overlap Trip fixture");
+_Static_assert(AM13E_SIM_REGIONS_DISJOINT(
+    AM13E_SIM_PWM_HIST_BASE, AM13E_SIM_PWM_HIST_SIZE,
+    AM13E_SIM_PWM_OBSERVER, AM13E_SIM_PWM_OBS_SIZE),
+    "Historical PWM edge journal cannot overlap original PWM observer");
+_Static_assert(AM13E_SIM_REGIONS_DISJOINT(
+    AM13E_SIM_PWM_HIST_BASE, AM13E_SIM_PWM_HIST_SIZE,
+    AM13E_G11_ARCH_OBS_BASE, AM13E_G11_ARCH_OBS_SIZE),
+    "Historical PWM edge journal cannot overlap G11 CPU observer");
+_Static_assert(0x80U + AM13E_H_CAPACITY * AM13E_H_REC_WORDS * 4U
+               <= AM13E_SIM_PWM_HIST_SIZE,
+    "Historical PWM event ring must fit read-only MMIO aperture");
 
 
 static bool am13e_pwm4_clock_allowed(const AM13ESimPWM *p)
@@ -1613,6 +1664,8 @@ static void am13e_pwm4_zero_event(void *opaque)
     }
     p->epoch_ns = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
     p->counter_base = 0U;
+    bool shadow_loaded = (p->reg[0xf0U / 4U] & 1U) &&
+        (!(p->reg[0xf0U / 4U] & 2U) || p->latch);
     am13e_pwm4_shadow_load(p);
     am13e_g10_pwm_sync(&p->machine->feedback);
     ++p->zero_events;
@@ -1629,10 +1682,19 @@ static void am13e_pwm4_zero_event(void *opaque)
     }
     am13e_pwm4_irq_update(p);
     am13e_pwm4_rearm(p);
+    /* ZERO timestamp is a callback actually executed at this virtual
+     * time. Shadow load (if armed) precedes the next carrier's model.
+     */
+    am13e_pwm4_hist_refresh(p,AM13E_H_ZERO,true);
+    if (shadow_loaded) {
+        /* Report both one-shot and continuous ACTIVE shadow loads. */
+        am13e_pwm4_hist_refresh(p,AM13E_H_SHADOW,true);
+    }
 }
 
 static void am13e_pwm4_clock_update(AM13ESimPWM *p)
 {
+    bool before = p->running;
     bool allowed = am13e_pwm4_clock_allowed(p);
     if (!allowed) {
         if (p->running) {
@@ -1647,6 +1709,7 @@ static void am13e_pwm4_clock_update(AM13ESimPWM *p)
         p->epoch_ns = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
         am13e_pwm4_rearm(p);
     }
+    am13e_pwm4_hist_refresh(p,AM13E_H_CLOCK,before!=p->running);
 }
 
 static void am13e_pwm4_reset(AM13ESimPWM *p)
@@ -1654,6 +1717,13 @@ static void am13e_pwm4_reset(AM13ESimPWM *p)
     if (p->zero_timer) {
         timer_del(p->zero_timer);
     }
+    if (p->edge_timer) {
+        timer_del(p->edge_timer);
+    }
+    memset(p->hist_records,0,sizeof(p->hist_records));
+    p->hist_total=p->hist_dropped=p->hist_last_time_ns=0;
+    p->hist_mask=p->hist_invalid_count=p->hist_gate_word=0;
+    p->hist_model_valid=false;
     memset(p->reg, 0, sizeof(p->reg));
     p->reg[0x10U / 4U] = 2U; /* safe STOP_FREEZE */
     p->irqs = p->zero_events = p->counter_base = 0U;
@@ -1855,11 +1925,13 @@ static MemTxResult am13e_pwm4_write(void *opaque, hwaddr off,
     case 0x14U:
         p->reg[off / 4U] = data & 0xffffU;
         am13e_pwm4_rearm(p);
+        am13e_pwm4_hist_refresh(p,AM13E_H_GUEST_REG,false);
         return MEMTX_OK;
     case 0x28U:
         p->counter_base = data & 0xffffU;
         p->epoch_ns = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
         am13e_pwm4_rearm(p);
+        am13e_pwm4_hist_refresh(p,AM13E_H_GUEST_REG,true);
         return MEMTX_OK;
     case 0x90U:
         p->reg[off / 4U] = data & 0x1cU;
@@ -1879,6 +1951,7 @@ static MemTxResult am13e_pwm4_write(void *opaque, hwaddr off,
         }
         p->reg[off / 4U] = data;
         am13e_g13b2_trip_update(p->machine);
+        am13e_pwm4_hist_refresh(p,AM13E_H_TRIP,false);
         return MEMTX_OK;
     case 0xb4U:
         /* Guest W1C never clears a physically active Trip source. */
@@ -1890,16 +1963,23 @@ static MemTxResult am13e_pwm4_write(void *opaque, hwaddr off,
         }
         am13e_g13b2_trip_update(p->machine);
         am13e_pwm4_irq_update(p);
+        am13e_pwm4_hist_refresh(p,AM13E_H_TRIP,false);
         return MEMTX_OK;
     case 0xf4U:
         if (data & 2U) p->latch = false;
         if (data & 1U) p->latch = true;
-        if (data & 4U) am13e_pwm4_shadow_load(p);
+        if (data & 4U) {
+            am13e_pwm4_shadow_load(p);
+            am13e_pwm4_hist_refresh(p,AM13E_H_SHADOW,true);
+        }
         return MEMTX_OK;
     case 0xf8U: case 0x94U: case 0x20U: case 0x88U: case 0xb0U:
         return am13e_pwm4_invalid(p, off, true, size);
     default:
         p->reg[off / 4U] = data;
+        /* Ordinary Guest active image writes can change modeled levels
+         * without waiting for ZERO. Shadow-only writes are harmless. */
+        am13e_pwm4_hist_refresh(p,AM13E_H_GUEST_REG,false);
         return MEMTX_OK;
     }
 }
@@ -2020,6 +2100,8 @@ static uint32_t am13e_pwm4_switch_mask(AM13ESimPWM *p,
     }
     return mask;
 }
+
+#include "am13e_pwm_history.inc"
 
 static AM13EPWMSwitchPlan am13e_pwm4_switch_plan(AM13ESimPWM *p)
 {
@@ -3169,6 +3251,9 @@ static MemTxResult am13e_iomux_write(void *opaque, hwaddr offset,
         return am13e_iomux_invalid(s, offset, true, size);
     }
     s->pincm[offset / 4U] = next;
+    if (offset == 45U * 4U) {
+        am13e_pwm4_hist_gate(&s->pwm4);
+    }
     return MEMTX_OK;
 }
 
@@ -3437,6 +3522,9 @@ static MemTxResult am13e_gpio_write(void *opaque, hwaddr offset,
             return am13e_gpio_unmodeled(g, offset, true, size);
         }
         g->powered = (data & 1U) != 0U;
+        if (g->esc_sim && g->bank == 1U) {
+            am13e_pwm4_hist_gate(&g->machine->pwm4);
+        }
         return MEMTX_OK;
     case AM13E_GPIO_RSTCTL:
         if ((data & 0xff000000U) != AM13E_GPIO_RSTCTL_KEY ||
@@ -3452,6 +3540,9 @@ static MemTxResult am13e_gpio_write(void *opaque, hwaddr offset,
             g->reset_sticky = true;
         } else if (data & 2U) {
             g->reset_sticky = false;
+        }
+        if (g->esc_sim && g->bank == 1U) {
+            am13e_pwm4_hist_gate(&g->machine->pwm4);
         }
         return MEMTX_OK;
     default:
@@ -3478,34 +3569,41 @@ static MemTxResult am13e_gpio_write(void *opaque, hwaddr offset,
                 output |= ((data >> (8U * i)) & 1U) << (first + i);
             }
             g->dout = (g->dout & ~group_mask) | output;
+            if (g->bank == 1U) {
+                am13e_pwm4_hist_gate(&g->machine->pwm4);
+            }
             return MEMTX_OK;
         }
     }
     switch (offset) {
     case AM13E_GPIO_DOUT:
         g->dout = data;
-        return MEMTX_OK;
+        break;
     case AM13E_GPIO_DOUTSET:
         g->dout |= data;
-        return MEMTX_OK;
+        break;
     case AM13E_GPIO_DOUTCLR:
         g->dout &= ~data;
-        return MEMTX_OK;
+        break;
     case AM13E_GPIO_DOUTTGL:
         g->dout ^= data;
-        return MEMTX_OK;
+        break;
     case AM13E_GPIO_DOE:
         g->doe = data;
-        return MEMTX_OK;
+        break;
     case AM13E_GPIO_DOESET:
         g->doe |= data;
-        return MEMTX_OK;
+        break;
     case AM13E_GPIO_DOECLR:
         g->doe &= ~data;
-        return MEMTX_OK;
+        break;
     default:
         return am13e_gpio_unmodeled(g, offset, true, size);
     }
+    if (g->esc_sim && g->bank == 1U) {
+        am13e_pwm4_hist_gate(&g->machine->pwm4);
+    }
+    return MEMTX_OK;
 }
 
 static const MemoryRegionOps am13e_gpio_ops = {
@@ -3682,6 +3780,9 @@ static void am13e_init(MachineState *machine)
     s->pwm4.machine = s;
     s->pwm4.zero_timer = timer_new_ns(QEMU_CLOCK_VIRTUAL,
                                       am13e_pwm4_zero_event, &s->pwm4);
+    s->pwm4.edge_timer = timer_new_ns(QEMU_CLOCK_VIRTUAL,
+                                      am13e_pwm4_hist_edge_event,
+                                      &s->pwm4);
     am13e_pwm4_reset(&s->pwm4);
     memory_region_init_io(&s->pwm4.mmio, NULL, &am13e_pwm4_ops, &s->pwm4,
                           "am13e-mcpwm4-native", AM13E_SIM_MCPWM_SIZE);
@@ -3701,6 +3802,12 @@ static void am13e_init(MachineState *machine)
                           AM13E_SIM_PWM_SWITCH_OBS_SIZE);
     memory_region_add_subregion(sysmem, AM13E_SIM_PWM_SWITCH_OBSERVER,
                                 &s->pwm4.switch_observer);
+    memory_region_init_io(&s->pwm4.historical_observer, NULL,
+                          &am13e_pwm4_hist_ops, &s->pwm4,
+                          "esc-sim-mcpwm4-clocked-history-readonly",
+                          AM13E_SIM_PWM_HIST_SIZE);
+    memory_region_add_subregion(sysmem, AM13E_SIM_PWM_HIST_BASE,
+                                &s->pwm4.historical_observer);
 
     /* G13B2: native independent physical fault routing + analog OC. */
     s->trip.machine = s;
@@ -3877,6 +3984,7 @@ static void am13e_init(MachineState *machine)
         AM13EGpioPort *g = &s->gpio[i];
 
         g->bank = i;
+        g->machine = s;
         g->esc_sim = s->esc_sim;
         g->nfault_asserted = s->esc_sim_nfault_asserted;
         g->nfault_pincm = i == 0U ? &s->pincm[22] : NULL;

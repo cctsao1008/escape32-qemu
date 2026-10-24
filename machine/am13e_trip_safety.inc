@@ -118,9 +118,15 @@ static void am13e_g13b2_trip_update(AM13EMachineState *s)
     }
     if (new_ost) {
         /* Latch until software W1C and underlying source released. */
+        uint32_t prior = p->reg[0xb0U / 4U];
         p->reg[0xb0U / 4U] |= new_ost;
         p->irqs |= AM13E_G13B2_INT_OST;
         am13e_pwm4_irq_update(p);
+        if (p->reg[0xb0U / 4U] != prior) {
+            /* Observational only: record virtual-time Trip boundary.
+             * It does not synthesize/clear the actual fault signal. */
+            am13e_pwm4_hist_refresh(p,AM13E_H_TRIP,true);
+        }
     }
 }
 

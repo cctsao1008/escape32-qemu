@@ -127,6 +127,15 @@ jobs:
             --elf /tmp/e62-fw-fast-ramp/AM13E-rev17.3.elf \
             2>&1 | tee artifacts/g13b3-qemu-switch-plan.log
           echo "PASS_G13B3_QEMU_MODEL_DERIVED_CARRIER_PLAN_PREFLIGHT"
+          # G13B3 timeline is a *clocked* QEMU-internal observer with
+          # explicit ring overflow. This QTest peripheral fixture is NOT
+          # native Guest motor or physical MOSFET waveform qualification.
+          python3 tests/g13b3_pwm_history.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf /tmp/e62-fw-fast-ramp/AM13E-rev17.3.elf \
+            2>&1 | tee artifacts/g13b3-qemu-clocked-history.log
+          echo "PASS_G13B3_QEMU_CLOCKED_INTERNAL_HISTORY_PREFLIGHT"
+
           echo "G13B3_NATIVE_INDEPENDENT_PARALLEL_GATES_START"
           (
             set -euo pipefail
@@ -555,6 +564,15 @@ jobs:
             --elf /tmp/e62-fw-fast-ramp/AM13E-rev17.3.elf \
             2>&1 | tee artifacts/g13b3-qemu-switch-plan.log
           echo "PASS_G13B3_QEMU_MODEL_DERIVED_CARRIER_PLAN_PREFLIGHT"
+          # G13B3 timeline is a *clocked* QEMU-internal observer with
+          # explicit ring overflow. This QTest peripheral fixture is NOT
+          # native Guest motor or physical MOSFET waveform qualification.
+          python3 tests/g13b3_pwm_history.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf /tmp/e62-fw-fast-ramp/AM13E-rev17.3.elf \
+            2>&1 | tee artifacts/g13b3-qemu-clocked-history.log
+          echo "PASS_G13B3_QEMU_CLOCKED_INTERNAL_HISTORY_PREFLIGHT"
+
           echo "G13B3_NATIVE_INDEPENDENT_PARALLEL_GATES_START"
           (
             set -euo pipefail
