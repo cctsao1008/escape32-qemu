@@ -93,12 +93,23 @@ def verify(q):
     stopped=read_native_pwm_history(q.read)
     assert not stopped.qemu_pwm_clock_running
     count=stopped.total_events_since_pmw_reset
+    print("DIAG_HIST_STOP_TOTAL_BEFORE",count,flush=True)
     q.cmd("clock_step 5000")
-    assert read_native_pwm_history(q.read).total_events_since_pmw_reset==count
-    print("PASS_QEMU_HISTORICAL_NO_EDGES_WITH_TBCLKSYNC_OFF")
+    # First check the tiny non-mutating header word independently of
+    # a full bounded 128-record read. This isolates timebase failure
+    # from history bulk-read failure without weakening the assertion.
+    post_total=q.read(BASE+0x14)
+    print("DIAG_HIST_STOP_TOTAL_AFTER",post_total,flush=True)
+    assert post_total==count, "PWM history changed with TBCLKSYNC disabled"
+    print("PASS_QEMU_HISTORICAL_NO_EDGES_WITH_TBCLKSYNC_OFF",flush=True)
+    # Separately verify the full read-only ring after the count guard.
+    post=read_native_pwm_history(q.read)
+    assert post.total_events_since_pmw_reset==count
+    print("PASS_QEMU_HISTORICAL_STOP_FULL_RING_READ",flush=True)
 
     q.write(TBCLKSYNC,1)
     q.cmd("clock_step 60000")
+    print("DIAG_HIST_WRAP_COUNT_HEADER",q.read(BASE+0x14),flush=True)
     wrapped=read_native_pwm_history(q.read)
     assert wrapped.total_events_since_pmw_reset>128
     assert wrapped.dropped_events>0
