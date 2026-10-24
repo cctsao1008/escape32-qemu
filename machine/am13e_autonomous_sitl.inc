@@ -256,8 +256,11 @@ static MemTxResult am13e_auto_read(void *opaque, hwaddr off,
         return MEMTX_ERROR;
     }
     int64_t now = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
+    /* START arms virtual timers 100ns in the future. Before that first
+     * event, negative elapsed must report zero, never wrap to UINT64_MAX. */
     uint64_t ns = a->done ? (uint64_t)(a->end_ns - a->start_ns) :
-                  a->running ? (uint64_t)(now - a->start_ns) : 0U;
+                  a->running && now >= a->start_ns ?
+                  (uint64_t)(now - a->start_ns) : 0U;
     switch (off) {
     case 0x00: *v = AM13E_AUTO_MAGIC; break;
     case 0x08: *v = (a->running ? 1U : 0U) |

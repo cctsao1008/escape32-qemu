@@ -145,7 +145,12 @@ def run_autonomous(args, scenario, evidence, rsp, qtest,
     evidence['autonomous']['valid_crc_feed_per_sent_ratio'] = (
         (after['valid_frame_feeds']-baseline['valid_frame_feeds'])/snap['sent']
         if snap['sent'] else None)
-    evidence['native_wfi_visits'] = 0  # Host did NOT stop on runtime WFI.
+    # Guest executes its original WFI instructions without host breakpoints;
+    # number of Guest WFIs is deliberately NOT measured in this mode.
+    evidence['native_wfi_visits'] = None
+    evidence['autonomous']['host_runtime_wfi_breakpoint_stops'] = 0
+    evidence['autonomous']['guest_wfi_count'] = 'NOT_MEASURED'
+    evidence['native_guest_executed'] = True
     evidence['dshot_frames_sent'] = snap['sent']
     evidence['last_guest_virtual_elapsed_ns'] = snap['elapsed_ns']
     evidence['scripted_bemf_crossings_issued'] = snap['bemf_crossings']
