@@ -40,10 +40,12 @@
   },
   "provenance": {
     "first_verified_source_run": "https://github.com/cctsao1008/escape32-qemu/actions/runs/40107025185",
-    "packaged_binary_qtest_and_native_gate": "MUST_PASS_BEFORE_COMMIT_BY_PUBLISH_WORKFLOW",
+    "packaged_binary_qtest_and_native_gate": "PASS_QEMU_PWM_QTEST_AND_ORIGINAL_G13B3L_NATIVE_GATE",
+    "packaged_binary_qtest_native_gate_run": "https://github.com/cctsao1008/escape32-qemu/actions/runs/40110025277",
     "packaging_run": "https://github.com/cctsao1008/escape32-qemu/actions/runs/40110025277",
     "recorded_g13b3l_six_sector": "PASS",
-    "recorded_g13b3m_90ms_rotor": "FAIL_ORIGINAL_REVERSE_MOTION"
+    "recorded_g13b3m_90ms_rotor": "FAIL_ORIGINAL_REVERSE_MOTION",
+    "recorded_pinned_g13b3m_extended_rotor_run": "https://github.com/cctsao1008/escape32-qemu/actions/runs/40110272401"
   },
   "qemu": {
     "packaging": "BYTE_IDENTICAL_CI_QEMU_EXECUTABLE",

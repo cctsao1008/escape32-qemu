@@ -73,7 +73,7 @@ class PinnedBinaryContract(unittest.TestCase):
         self.assertIn("--min-sectors 12 --min-integrated-ns 90000000", workflow)
         self.assertIn("--min-powered-pwm-samples 600", workflow)
         self.assertIn("exit \"$strict_exit\"", workflow)
-        self.assertIn("original Guest strict", workflow.lower() if False else workflow)
+        self.assertIn("Execute original Guest strict rotor gate", workflow)
 
     def test_qemu_baseline_source_pin_matches_repository_gitlink(self):
         b.gitlink_pin()
