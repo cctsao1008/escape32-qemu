@@ -14,7 +14,7 @@ from typing import Callable
 
 from .native_pwm_qualification import observe_original_pwm
 
-SWITCH_BASE = 0x5FFE4000
+SWITCH_BASE = 0x5FFE6000
 SWITCH_MAGIC = 0x50323645  # little-endian ASCII "E62P"
 SWITCH_ABI = 1
 MAX_EDGES = 64

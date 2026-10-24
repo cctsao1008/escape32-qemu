@@ -41,6 +41,41 @@ def fixture():
 
 
 class ReadOnlyCarrierPlan(unittest.TestCase):
+    def test_switching_plan_mmio_address_is_unique(self):
+        from tools.native_pwm_switching_plan import SWITCH_BASE
+        from pathlib import Path
+        import re
+        root=Path(__file__).resolve().parents[1]
+        macro_sources={
+            "C PWM": root/"machine/am13e23019.c",
+            "PA26":root/"machine/am13e_pa26_waveform.inc",
+            "Fault":root/"machine/am13e_trip_safety.inc",
+            "BEMF":root/"machine/am13e_motor_feedback.inc",
+        }
+        all_source="\n".join(f.read_text() for f in macro_sources.values())
+        def macro(k):
+            values=re.findall(r"^#define\s+"+re.escape(k)+r"\s+(0x[0-9a-fA-F]+)U",all_source,re.M)
+            self.assertEqual(len(values),1,k)
+            return int(values[0],16)
+        # Do not repeat the 0x5ffe4000 collision: already PA26 waveform.
+        self.assertEqual(SWITCH_BASE,0x5ffe6000)
+        self.assertEqual(SWITCH_BASE,macro("AM13E_SIM_PWM_SWITCH_OBSERVER"))
+        own_size=macro("AM13E_SIM_PWM_SWITCH_OBS_SIZE")
+        windows=(
+            ("AM13E_PA26_WAVE_BASE","AM13E_PA26_WAVE_SIZE"),
+            ("AM13E_G13B2_SOURCE_BASE",None),
+            ("AM13E_G10_STIM_BASE",None),
+            ("AM13E_SIM_PWM_OBSERVER","AM13E_SIM_PWM_OBS_SIZE"),
+            ("AM13E_G11_ARCH_OBS_BASE","AM13E_G11_ARCH_OBS_SIZE"),
+            ("AM13E_SIM_PA26_INJECT_BASE","AM13E_SIM_PA26_INJECT_SIZE"),
+        )
+        for start_key,size_key in windows:
+            start=macro(start_key)
+            size=macro(size_key) if size_key else 0x100
+            self.assertTrue(
+                SWITCH_BASE+own_size<=start or
+                start+size<=SWITCH_BASE, start_key)
+
     def test_source_evaluated_edges_match_all_six_high_counts(self):
         regs=fixture()
         x=capture_qemu_carrier_plan(lambda address:regs[address])

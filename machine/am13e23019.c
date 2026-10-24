@@ -214,7 +214,7 @@ OBJECT_DECLARE_SIMPLE_TYPE(AM13EMachineState, AM13E_MACHINE)
  * This reports levels derived from currently active AQ/DB registers,
  * NOT callbacks of chronological physical MOSFET transitions.
  */
-#define AM13E_SIM_PWM_SWITCH_OBSERVER 0x5ffe4000U
+#define AM13E_SIM_PWM_SWITCH_OBSERVER 0x5ffe6000U
 #define AM13E_SIM_PWM_SWITCH_OBS_SIZE 0x240U
 #define AM13E_SIM_PWM_SWITCH_MAX_EDGES 64U
 /* G11 read-only non-silicon CPU/exception probe. Not guest firmware MMIO. */
@@ -1484,6 +1484,38 @@ static void am13e_pwm4_irq_update(AM13ESimPWM *p)
 
 #include "am13e_trip_safety.inc"
 
+/* Compile-time guard: no two ESC-SIM test MMIO windows may alias.
+ * 0x5ffe4000 belongs to the existing PA26 waveform queue, NOT PWM4.
+ * Do not rely on QEMU same-priority region ordering to break ties.
+ */
+#define AM13E_SIM_REGIONS_DISJOINT(a, asz, b, bsz) \
+    (((a) + (asz) <= (b)) || ((b) + (bsz) <= (a)))
+_Static_assert(AM13E_SIM_REGIONS_DISJOINT(
+    AM13E_SIM_PWM_SWITCH_OBSERVER, AM13E_SIM_PWM_SWITCH_OBS_SIZE,
+    AM13E_PA26_WAVE_BASE, AM13E_PA26_WAVE_SIZE),
+    "MCPWM4 switch plan must not overlap PA26 Waveform Fixture");
+_Static_assert(AM13E_SIM_REGIONS_DISJOINT(
+    AM13E_SIM_PWM_SWITCH_OBSERVER, AM13E_SIM_PWM_SWITCH_OBS_SIZE,
+    AM13E_G13B2_SOURCE_BASE, 0x1cU),
+    "MCPWM4 switch plan must not overlap G13B2 fault/current fixture");
+_Static_assert(AM13E_SIM_REGIONS_DISJOINT(
+    AM13E_SIM_PWM_SWITCH_OBSERVER, AM13E_SIM_PWM_SWITCH_OBS_SIZE,
+    AM13E_SIM_PWM_OBSERVER, AM13E_SIM_PWM_OBS_SIZE),
+    "MCPWM4 switch plan must not overlap original high-tick observer");
+_Static_assert(AM13E_SIM_REGIONS_DISJOINT(
+    AM13E_SIM_PWM_SWITCH_OBSERVER, AM13E_SIM_PWM_SWITCH_OBS_SIZE,
+    AM13E_G11_ARCH_OBS_BASE, AM13E_G11_ARCH_OBS_SIZE),
+    "MCPWM4 switch plan must not overlap CPU exception observer");
+_Static_assert(AM13E_SIM_REGIONS_DISJOINT(
+    AM13E_SIM_PWM_SWITCH_OBSERVER, AM13E_SIM_PWM_SWITCH_OBS_SIZE,
+    AM13E_G10_STIM_BASE, 0x10U),
+    "MCPWM4 switch plan must not overlap native BEMF stimulus");
+_Static_assert(AM13E_SIM_REGIONS_DISJOINT(
+    AM13E_SIM_PWM_SWITCH_OBSERVER, AM13E_SIM_PWM_SWITCH_OBS_SIZE,
+    AM13E_SIM_PA26_INJECT_BASE, AM13E_SIM_PA26_INJECT_SIZE),
+    "MCPWM4 switch plan must not overlap original PA26 input");
+
+
 static bool am13e_pwm4_clock_allowed(const AM13ESimPWM *p)
 {
     const AM13EMachineState *s = p->machine;
@@ -1957,7 +1989,7 @@ static const MemoryRegionOps am13e_pwm4_obs_ops = {
  * It does not resolve a mid-carrier firmware write, external driver
  * propagation/deadtime, pin voltage, diode/freewheel or true MOS timing.
  *
- * ABI 0x5ffe4000; 32-bit aligned, read-only, ESC-SIM only:
+ * ABI 0x5ffe6000; 32-bit aligned, read-only, ESC-SIM only:
  * +00 magic "E62P" (0x50323645)
  * +04 bits 0 RUNNING;1 FULLY_VALID;2 EDGE_OVERFLOW;3 MODEL_DERIVED
  * +08 carrier tick count; +0c number of edge transitions

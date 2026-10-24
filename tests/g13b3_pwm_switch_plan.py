@@ -27,6 +27,12 @@ def verify(q):
         set_pwm_pair(q,phase,(count,1),(0x12,0x1))
     q.write(CTL,0)
     q.write(TBCLKSYNC,1)
+    # 0x5ffe4000 remains the PA26 external-waveform scheduler. The
+    # switch-plan ABI moved to 0x5ffe6000 after discovering a collision.
+    assert q.read(0x5ffe4000 + 8) == 0, (
+        "Original PA26 queue device was shadowed by switching observer")
+    assert q.read(SWITCH_BASE) == 0x50323645, (
+        "New switch observer must decode at its distinct address")
     evidence=capture_qemu_carrier_plan(q.read)
     assert evidence.period_ticks == 100
     assert evidence.six_high_ticks == (25,0,40,0,60,0)

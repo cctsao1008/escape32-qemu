@@ -11,7 +11,7 @@ HIGH-tick counts and the level at the CURRENT counter. It did not
 provide the event boundaries that produced those counts.
 
 This stage adds a **separate read-only simulator-only observer** at
-0x5ffe4000. It evaluates the existing active AQ+DB level function at
+0x5ffe6000. It evaluates the existing active AQ+DB level function at
 each counter tick of ONE carrier, compresses equal levels into a
 6-bit state sequence and records each modeled transition tick. A
 possible counter-wrap transition is explicitly represented as the
@@ -50,7 +50,7 @@ are always rejected; it cannot program Guest PWM or create IRQs.
 
 ## Read-only ABI, ESC-SIM, QTest only
 
-Mapped at 0x5ffe4000, 32-bit aligned:
+Mapped at 0x5ffe6000, 32-bit aligned. The address was moved from the original prototype's 0x5ffe4000, which is already reserved for the PA26 Waveform Fixture; compile-time non-overlap checks now protect all existing ESC-SIM fixture windows:
 
     +00 0x50323645  "E62P" signature
     +04 status [0] running, [1] fully valid, [2] overflow,
