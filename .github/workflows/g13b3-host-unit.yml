@@ -43,6 +43,8 @@ on:
       - 'tests/test_native_model_energy_balance.py'
       - 'tests/test_native_frozen_pwm_convergence.py'
       - 'tests/test_current_continuous_bldc.py'
+      - 'tests/test_native_pwm_switching_plan.py'
+      - 'tests/g13b3_pwm_switch_plan.py'
       - 'tests/g13b2_native_drive_probe.py'
       - 'tools/native_motor_model_profiles.py'
       - 'tools/native_energy_reciprocity_audit.py'
@@ -100,6 +102,8 @@ jobs:
           python3 tests/test_native_model_energy_balance.py
           python3 tests/test_native_frozen_pwm_convergence.py
           python3 tests/test_current_continuous_bldc.py
+          python3 tests/test_native_pwm_switching_plan.py
+          python3 -m py_compile tests/g13b3_pwm_switch_plan.py
           python3 tools/current_continuous_switch_benchmark.py \
             --substeps 1 2 4 8 \
             --output /tmp/e62-explicit-switch-current-continuity.json > /tmp/e62-switch-benchmark.log

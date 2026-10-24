@@ -210,6 +210,13 @@ OBJECT_DECLARE_SIMPLE_TYPE(AM13EMachineState, AM13E_MACHINE)
 #define AM13E_SIM_MCPWM_SIZE 0x600U
 #define AM13E_SIM_PWM_OBSERVER 0x5ffe1000U
 #define AM13E_SIM_PWM_OBS_SIZE 0x80U
+/* Non-silicon, read-only QEMU *carrier-plan* reconstruction.
+ * This reports levels derived from currently active AQ/DB registers,
+ * NOT callbacks of chronological physical MOSFET transitions.
+ */
+#define AM13E_SIM_PWM_SWITCH_OBSERVER 0x5ffe4000U
+#define AM13E_SIM_PWM_SWITCH_OBS_SIZE 0x240U
+#define AM13E_SIM_PWM_SWITCH_MAX_EDGES 64U
 /* G11 read-only non-silicon CPU/exception probe. Not guest firmware MMIO. */
 #define AM13E_G11_ARCH_OBS_BASE 0x5ffe3000U
 #define AM13E_G11_ARCH_OBS_SIZE 0x40U
@@ -282,6 +289,7 @@ struct AM13ESimADC {
 typedef struct AM13ESimPWM {
     MemoryRegion mmio;
     MemoryRegion observer;
+    MemoryRegion switch_observer; /* independent non-silicon plan */
     QEMUTimer *zero_timer;
     qemu_irq irq;
     struct AM13EMachineState *machine;
@@ -1942,6 +1950,151 @@ static const MemoryRegionOps am13e_pwm4_obs_ops = {
     .valid = { .min_access_size = 4, .max_access_size = 4 },
 };
 
+
+/* Reconstruct exactly ONE carrier based on the current modeled ACTIVE
+ * AQ+DB image. No QEMU timer/callback fires at these listed edges:
+ * this is a model-derived *plan*, not an actual chronological log.
+ * It does not resolve a mid-carrier firmware write, external driver
+ * propagation/deadtime, pin voltage, diode/freewheel or true MOS timing.
+ *
+ * ABI 0x5ffe4000; 32-bit aligned, read-only, ESC-SIM only:
+ * +00 magic "E62P" (0x50323645)
+ * +04 bits 0 RUNNING;1 FULLY_VALID;2 EDGE_OVERFLOW;3 MODEL_DERIVED
+ * +08 carrier tick count; +0c number of edge transitions
+ * +10 initial 6-bit level mask; +14 final mask before wrap
+ * +18 modeled timer Hz; +1c current counter; +20 ZERO event count
+ * +24..28 QEMU virtual ns snapshot (low,high); +2c source ABI=1
+ * +40 onward 64 pairs (tick-index, mask AFTER tick transition).
+ * Tick indexes 1..period, with optional WRAP edge at period+1
+ * transitioning final levels back to level at tick0.
+ */
+typedef struct AM13EPWMSwitchPlan {
+    uint32_t period, count, start_mask, final_mask, status;
+    uint32_t edge_tick[AM13E_SIM_PWM_SWITCH_MAX_EDGES];
+    uint32_t edge_mask[AM13E_SIM_PWM_SWITCH_MAX_EDGES];
+} AM13EPWMSwitchPlan;
+
+static uint32_t am13e_pwm4_switch_mask(AM13ESimPWM *p,
+                                       uint32_t tick, bool *valid)
+{
+    uint32_t mask = 0U;
+    for (unsigned out = 0; out < 6U; ++out) {
+        bool ok = true;
+        uint32_t bit = am13e_pwm4_level(p, out, tick, &ok);
+        if (!ok || bit > 1U) {
+            *valid = false;
+        }
+        mask |= bit << out;
+    }
+    return mask;
+}
+
+static AM13EPWMSwitchPlan am13e_pwm4_switch_plan(AM13ESimPWM *p)
+{
+    AM13EPWMSwitchPlan result = { 0 };
+    uint32_t period = p->reg[0x14U / 4U] & 0xffffU;
+    bool running = p->running && am13e_pwm4_clock_allowed(p);
+    bool valid = running && period > 0U;
+    result.period = period + 1U;
+    if (running) {
+        result.status |= 1U;
+    }
+    result.status |= 8U; /* Always explicitly MODEL_DERIVED. */
+    if (!valid) {
+        return result; /* No startup, power-off or zero-period evidence. */
+    }
+    uint32_t previous = am13e_pwm4_switch_mask(p, 0U, &valid);
+    result.start_mask = previous;
+    for (uint32_t tick = 1U; tick <= period; ++tick) {
+        uint32_t next = am13e_pwm4_switch_mask(p, tick, &valid);
+        if (next != previous) {
+            if (result.count < AM13E_SIM_PWM_SWITCH_MAX_EDGES) {
+                result.edge_tick[result.count] = tick;
+                result.edge_mask[result.count] = next;
+            } else {
+                result.status |= 4U; /* Fail closed on overflow. */
+            }
+            ++result.count;
+        }
+        previous = next;
+    }
+    result.final_mask = previous;
+    /* The wrap is not a firmware ISR and must not be confused with it.
+     * It is the modeled periodic boundary of this ACTIVE image only.
+     */
+    if (previous != result.start_mask) {
+        if (result.count < AM13E_SIM_PWM_SWITCH_MAX_EDGES) {
+            result.edge_tick[result.count] = period + 1U;
+            result.edge_mask[result.count] = result.start_mask;
+        } else {
+            result.status |= 4U;
+        }
+        ++result.count;
+    }
+    if (valid && !(result.status & 4U)) {
+        result.status |= 2U;
+    }
+    return result;
+}
+
+static MemTxResult am13e_pwm4_switch_obs_read(
+    void *opaque, hwaddr off, uint64_t *value, unsigned size,
+    MemTxAttrs attrs)
+{
+    AM13ESimPWM *p = opaque;
+    if (!p->machine->esc_sim || size != 4U || (off & 3U) ||
+        off >= AM13E_SIM_PWM_SWITCH_OBS_SIZE) {
+        return MEMTX_ERROR;
+    }
+    /* Diagnostic only; sampled plan recomputed from original active
+     * Guest PWM registers, never from six averaged high-tick counts.
+     */
+    AM13EPWMSwitchPlan plan = am13e_pwm4_switch_plan(p);
+    switch (off) {
+    case 0x00U: *value = 0x50323645U; return MEMTX_OK; /* E62P */
+    case 0x04U: *value = plan.status; return MEMTX_OK;
+    case 0x08U: *value = plan.period; return MEMTX_OK;
+    case 0x0cU: *value = plan.count; return MEMTX_OK;
+    case 0x10U: *value = plan.start_mask; return MEMTX_OK;
+    case 0x14U: *value = plan.final_mask; return MEMTX_OK;
+    case 0x18U: *value = am13e_pwm4_hz(p); return MEMTX_OK;
+    case 0x1cU: *value = am13e_pwm4_count(p); return MEMTX_OK;
+    case 0x20U: *value = p->zero_events; return MEMTX_OK;
+    case 0x24U:
+        *value = (uint32_t)qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
+        return MEMTX_OK;
+    case 0x28U:
+        *value = (uint64_t)qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) >> 32U;
+        return MEMTX_OK;
+    case 0x2cU: *value = 1U; return MEMTX_OK;
+    default:
+        if (off < 0x40U) {
+            return MEMTX_ERROR;
+        }
+        unsigned slot = (off - 0x40U) / 8U;
+        if (slot >= plan.count ||
+            slot >= AM13E_SIM_PWM_SWITCH_MAX_EDGES) {
+            return MEMTX_ERROR; /* No fabricated unused edges. */
+        }
+        *value = ((off - 0x40U) & 4U) ?
+                  plan.edge_mask[slot] : plan.edge_tick[slot];
+        return MEMTX_OK;
+    }
+}
+
+static MemTxResult am13e_pwm4_switch_obs_write(
+    void *opaque, hwaddr off, uint64_t value, unsigned size,
+    MemTxAttrs attrs)
+{
+    return MEMTX_ERROR; /* No guest/test write path. */
+}
+static const MemoryRegionOps am13e_pwm4_switch_obs_ops = {
+    .read_with_attrs = am13e_pwm4_switch_obs_read,
+    .write_with_attrs = am13e_pwm4_switch_obs_write,
+    .endianness = DEVICE_LITTLE_ENDIAN,
+    .valid = { .min_access_size = 4, .max_access_size = 4 },
+};
+
 static void am13e_sim_motor_sysctl_reset(AM13EMachineState *s)
 {
     s->sim_perclkcr = 0U; /* ESC-SIM initial TBCLKSYNC disabled */
@@ -3507,6 +3660,15 @@ static void am13e_init(MachineState *machine)
                           AM13E_SIM_PWM_OBS_SIZE);
     memory_region_add_subregion(sysmem, AM13E_SIM_PWM_OBSERVER,
                                 &s->pwm4.observer);
+    /* Separate read-only, explicitly model-derived one-carrier edge plan.
+     * Does not drive/alter MCPWM timer, pin, Guest ISR or motor feedback.
+     */
+    memory_region_init_io(&s->pwm4.switch_observer, NULL,
+                          &am13e_pwm4_switch_obs_ops, &s->pwm4,
+                          "esc-sim-mcpwm4-switch-plan-readonly",
+                          AM13E_SIM_PWM_SWITCH_OBS_SIZE);
+    memory_region_add_subregion(sysmem, AM13E_SIM_PWM_SWITCH_OBSERVER,
+                                &s->pwm4.switch_observer);
 
     /* G13B2: native independent physical fault routing + analog OC. */
     s->trip.machine = s;
