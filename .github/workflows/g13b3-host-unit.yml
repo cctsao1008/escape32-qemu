@@ -41,6 +41,7 @@ on:
       - 'tests/test_g13b3_native_wfi_roles.py'
       - 'tests/test_native_motor_reciprocity.py'
       - 'tests/test_native_model_energy_balance.py'
+      - 'tests/test_native_frozen_pwm_convergence.py'
       - 'tests/g13b2_native_drive_probe.py'
       - 'tools/native_motor_model_profiles.py'
       - 'tools/native_energy_reciprocity_audit.py'
@@ -96,6 +97,7 @@ jobs:
           python3 tests/test_g13b3_native_wfi_roles.py
           python3 tests/test_native_motor_reciprocity.py
           python3 tests/test_native_model_energy_balance.py
+          python3 tests/test_native_frozen_pwm_convergence.py
           python3 tests/test_g13b3_native_power_coupled.py
           echo PASS_G13B3_HOST_ONLY_UNIT_REGRESSIONS
 
