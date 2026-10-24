@@ -371,6 +371,23 @@ typedef struct AM13EPA26Wave {
     bool delay_valid, level_valid, running;
 } AM13EPA26Wave;
 
+typedef struct AM13EAutoStage {
+    uint32_t duration_ms, from_permille, to_permille, update_ms;
+} AM13EAutoStage;
+typedef struct AM13EAutoSITL {
+    MemoryRegion mmio;
+    QEMUTimer *dshot_timer, *bemf_timer;
+    struct AM13EMachineState *machine;
+    AM13EAutoStage stages[16];
+    uint32_t stage_count, stage_index, max_frames;
+    uint32_t total_frames, target_frames, sent;
+    uint32_t last_dshot, crossings, analog_updates, powered_samples;
+    uint32_t last_phase, last_falling, current_stage, error_code;
+    bool epoch_valid, running, done;
+    int64_t start_ns, end_ns, phase_epoch_ns;
+    uint32_t last_sample_word;
+} AM13EAutoSITL;
+
 typedef struct AM13EDMA {
     MemoryRegion mmio;
     qemu_irq irq;
@@ -482,6 +499,7 @@ struct AM13EMachineState {
     AM13ESimFeedback feedback;
     MemoryRegion sim_pa26_inject;
     AM13EPA26Wave pa26_wave;
+    AM13EAutoSITL auto_sitl; /* SIM_ONLY, autonomous functional stimulus */
     uint32_t sim_pa26_level;
     uint32_t sim_pa26_transitions;
     uint32_t sim_pa26_captures;
@@ -2209,6 +2227,18 @@ static const MemoryRegionOps am13e_pwm4_switch_obs_ops = {
     .valid = { .min_access_size = 4, .max_access_size = 4 },
 };
 
+#include "am13e_autonomous_sitl.inc"
+
+/* Disjoint non-silicon MMIO: G13B5 vs G13B3 history and all prior ports. */
+_Static_assert(AM13E_SIM_REGIONS_DISJOINT(
+    AM13E_AUTO_BASE, AM13E_AUTO_SIZE,
+    AM13E_SIM_PWM_HIST_BASE, AM13E_SIM_PWM_HIST_SIZE),
+    "G13B5 autonomous stimulus cannot overlap historical PWM journal");
+_Static_assert(AM13E_SIM_REGIONS_DISJOINT(
+    AM13E_AUTO_BASE, AM13E_AUTO_SIZE,
+    AM13E_PA26_WAVE_BASE, AM13E_PA26_WAVE_SIZE),
+    "G13B5 autonomous stimulus cannot overlap physical PA26 queue");
+
 static void am13e_sim_motor_sysctl_reset(AM13EMachineState *s)
 {
     s->sim_perclkcr = 0U; /* ESC-SIM initial TBCLKSYNC disabled */
@@ -3657,6 +3687,7 @@ static void am13e_handoff_reset(void *opaque)
     s->sim_pa26_dma_beats = 0U;
     s->sim_pa26_bad_reported = false;
     am13e_pa26_wave_reset(&s->pa26_wave);
+    am13e_auto_reset(&s->auto_sitl);
     am13e_dma0_reset(&s->dma0);
     am13e_sim_wwdt_reset(&s->wwdt);
     for (unsigned i = 0; i < AM13E_SIM_TIMER_COUNT; ++i) {
@@ -3903,6 +3934,20 @@ static void am13e_init(MachineState *machine)
     memory_region_add_subregion(sysmem, AM13E_PA26_WAVE_BASE,
                                 &s->pa26_wave.mmio);
 
+    /* G13B5 opt-in host-configured autonomous DShot/BEMF virtual timers.
+     * Absent from AM13E silicon, default inactive even with esc-sim=on. */
+    s->auto_sitl.machine = s;
+    s->auto_sitl.dshot_timer = timer_new_ns(
+        QEMU_CLOCK_VIRTUAL, am13e_auto_dshot_event, &s->auto_sitl);
+    s->auto_sitl.bemf_timer = timer_new_ns(
+        QEMU_CLOCK_VIRTUAL, am13e_auto_analog_event, &s->auto_sitl);
+    am13e_auto_reset(&s->auto_sitl);
+    memory_region_init_io(&s->auto_sitl.mmio, NULL, &am13e_auto_ops,
+                          &s->auto_sitl, "esc-sim-autonomous-functional-sitl",
+                          AM13E_AUTO_SIZE);
+    memory_region_add_subregion(sysmem, AM13E_AUTO_BASE,
+                                &s->auto_sitl.mmio);
+
     /* DMA0 register configuration and real software-requested CH2 beats.
      * Hardware source 34 awaits explicit TIMG4 capture edge injection.
      */
@@ -4092,6 +4137,14 @@ static void am13e_finalize(Object *obj)
     if (s->pa26_wave.timer) {
         timer_free(s->pa26_wave.timer);
         s->pa26_wave.timer = NULL;
+    }
+    if (s->auto_sitl.dshot_timer) {
+        timer_free(s->auto_sitl.dshot_timer);
+        s->auto_sitl.dshot_timer = NULL;
+    }
+    if (s->auto_sitl.bemf_timer) {
+        timer_free(s->auto_sitl.bemf_timer);
+        s->auto_sitl.bemf_timer = NULL;
     }
     if (s->feedback.overflow_timer) {
         timer_free(s->feedback.overflow_timer);

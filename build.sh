@@ -123,6 +123,12 @@ if wave_target.is_symlink():
     sys.exit('ERROR: generated PA26 waveform path is a symlink')
 if not wave_target.exists() or wave_target.read_bytes() != wave_source.read_bytes():
     wave_target.write_bytes(wave_source.read_bytes())
+auto_source = root / 'machine/am13e_autonomous_sitl.inc'
+auto_target = qemu / 'hw/arm/am13e_autonomous_sitl.inc'
+if auto_target.is_symlink():
+    sys.exit('ERROR: generated autonomous SITL path is a symlink')
+if not auto_target.exists() or auto_target.read_bytes() != auto_source.read_bytes():
+    auto_target.write_bytes(auto_source.read_bytes())
 history_source = root / 'machine/am13e_pwm_history.inc'
 history_target = qemu / 'hw/arm/am13e_pwm_history.inc'
 if history_target.is_symlink():

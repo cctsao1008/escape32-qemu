@@ -167,6 +167,13 @@ def _run_guest(args, scenario, evidence):
                         if not neutral.get('qualified'):
                             raise AssertionError('Original neutral DShot arming not qualified')
                         evidence['native_zero_arming'] = neutral
+                        if args.autonomous:
+                            # Keep legacy G13B4 per-WFI path unchanged.
+                            # G13B5 runs the unmodified Guest continuously.
+                            from tools.autonomous_sitl_runner import run_autonomous
+                            return run_autonomous(
+                                args, scenario, evidence, rsp, qtest,
+                                hardfault, armed, addresses, wfi)
                         checkpoint = wfi[0]
                         for pc in wfi:
                             if pc not in armed:
@@ -446,6 +453,12 @@ def main():
     ap.add_argument('--max-wfi-visits', type=int, default=3000000)
     ap.add_argument('--max-frames', type=int, default=0,
                     help='Bounded native smoke, 0 means full duration; smoke NEVER PASS')
+    ap.add_argument('--autonomous', action='store_true',
+                    help='G13B5 opt-in: QEMU virtual-time DShot/BEMF, no per-WFI GDB')
+    ap.add_argument('--autonomous-wall-timeout-s', type=int, default=300,
+                    help='Host guard only; never the scenario virtual clock')
+    ap.add_argument('--autonomous-poll-ms', type=int, default=50,
+                    help='Host diagnostic polling, not stimulus timing')
     ap.add_argument('--max-lateness-us', type=int, default=500)
     ap.add_argument('--bemf-crossing-delay-us', type=int, default=750)
     ap.add_argument('--bemf-amplitude-codes', type=int, default=128)
@@ -464,6 +477,9 @@ def main():
         not 1 <= args.bemf_sample_interval <= 1000 or
         not 1 <= args.teardown_max_wfi <= 5000):
         ap.error('Unsafe fixture bounds')
+    if (not 10 <= args.autonomous_wall_timeout_s <= 7200 or
+            not 10 <= args.autonomous_poll_ms <= 1000):
+        ap.error('Unsafe autonomous observation bound')
     scenario = load_scenario(args.plan,args.case_id)
     args.artifact.parent.mkdir(parents=True,exist_ok=True)
     evidence = dict(scope='EXPERIMENTAL_FUNCTIONAL_SCRIPTED_BEMF_NO_MOTOR_RPM_PROOF',
