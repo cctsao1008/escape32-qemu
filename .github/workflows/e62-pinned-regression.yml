@@ -145,9 +145,21 @@ jobs:
               --require-observed-original-guest-edge \
               --output artifacts/g13b3m-pinned-history-evidence.json
           fi
-          echo "G13B3M_PINNED_UNMODIFIED_STRICT_ROTOR_GATE_EXIT=$strict_exit"
-          # Absolutely do NOT turn known rotor reversal into CI PASS.
-          exit "$strict_exit"
+          echo "G13B3M_PINNED_ORIGINAL_GUEST_NATIVE_LOOP_EXIT=$strict_exit"
+          # Native 12-sector feedback can reach 12 commutations yet
+          # still FAIL the independently required 90ms rotor-motion gate.
+          # Preserve exactly the original G13B3M extended checks.
+          if (( strict_exit == 0 )); then
+            python3 tools/native_extended_run_gate.py \
+              --artifact artifacts/g13b3m-pinned-strict-result.json \
+              --min-sectors 12 --min-integrated-ns 90000000 \
+              --min-powered-pwm-samples 600 \
+              --output artifacts/g13b3m-pinned-extended-verdict.json \
+              2>&1 | tee artifacts/g13b3m-pinned-extended-verdict.log
+          else
+            exit "$strict_exit"
+          fi
+          echo PASS_G13B3M_PINNED_BOTH_NATIVE_AND_EXTENDED_ROTOR_STRICT_GATES
       - name: Persist all original Guest diagnostic/strict evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -160,3 +172,5 @@ jobs:
             artifacts/g13b3m-pinned-wfi-history.json
             artifacts/g13b3m-pinned-strict-result.json
             artifacts/g13b3m-pinned-history-evidence.json
+            artifacts/g13b3m-pinned-extended-verdict.json
+            artifacts/g13b3m-pinned-extended-verdict.log
