@@ -1,0 +1,64 @@
+{
+  "files": {
+    "firmware/AM13E-rev17.3.elf": {
+      "sha256": "05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0",
+      "size_bytes": 1727132
+    },
+    "qemu/linux-x86_64/libfdt.so.1": {
+      "sha256": "66c111808e61c7f6be6715b4b03d0fe75beb5bc5b3a8809608d58d99a6bc9828",
+      "size_bytes": 39064
+    },
+    "qemu/linux-x86_64/qemu-system-arm": {
+      "sha256": "5c56a11ff662ccdb7e6280f78f77c6787707cef530b535958a587713d477719b",
+      "size_bytes": 79883640
+    }
+  },
+  "guest": {
+    "flags": {
+      "G13B2_SIM_ONLY_IDEAL_BEMF_REFERENCE": true,
+      "G13B2_SIM_ONLY_OPT_IN": true
+    },
+    "profile": "tests/fixtures/g13b3l_sim_only_ramp.cmake",
+    "source_repo": "https://github.com/cctsao1008/ESCape32",
+    "source_revision": "b0204670515d2de0b2480b52273038f1ee13d30a",
+    "ti_sdk_repo": "https://github.com/TexasInstruments/am13e2x_sdk",
+    "ti_sdk_revision": "b872469ceef18de5e39a1d3acb0821ec158b44c7",
+    "toolchain": "Ubuntu 24.04 gcc-arm-none-eabi 13 (source CI cache)"
+  },
+  "id": "E62-G13B3-SIM_ONLY-UBUNTU24-X86_64-v1",
+  "limits": {
+    "native_rotor_90ms_qualified": false,
+    "physical_motor_calibrated": false,
+    "real_mosfet_waveform_qualified": false,
+    "sim_only": true
+  },
+  "notices": "See baseline/e62-g13b3/README.md for upstream licenses",
+  "platform": {
+    "guest": "AM13E23019 Cortex-M33 original ESCape32 Rel17.3",
+    "host": "Ubuntu 24.04 x86_64 ABI",
+    "runtime_note": "glibc and other host SONAME dependencies must resolve"
+  },
+  "provenance": {
+    "first_verified_source_run": "https://github.com/cctsao1008/escape32-qemu/actions/runs/40107025185",
+    "packaged_binary_qtest_and_native_gate": "MUST_PASS_BEFORE_COMMIT_BY_PUBLISH_WORKFLOW",
+    "packaging_run": "https://github.com/cctsao1008/escape32-qemu/actions/runs/40110025277",
+    "recorded_g13b3l_six_sector": "PASS",
+    "recorded_g13b3m_90ms_rotor": "FAIL_ORIGINAL_REVERSE_MOTION"
+  },
+  "qemu": {
+    "packaging": "BYTE_IDENTICAL_CI_QEMU_EXECUTABLE",
+    "source_tree_sha256": {
+      "build.sh": "9e0b1f6094d0095381f00293fbba8c21e21eb0f9ab2e86647e0815eedb5da555",
+      "machine/am13e23019.c": "9b0c97f3431f80ecde853f86a734674bae53fc2e93755fa1dbb190919b105be3",
+      "machine/am13e_motor_feedback.inc": "9e02addd631cb6936f8d6b624408339101fc0b337e995bee2cfc7bbd8b1f2a52",
+      "machine/am13e_pa26_waveform.inc": "cc81045b8da8a7baf96501d0697be98d01d0571e055f61e3bb9d399a6e1987a6",
+      "machine/am13e_pwm_history.inc": "25a494a9e96133185c466314fbc984b02742c4ebfcf73d8930e724a594e5273a",
+      "machine/am13e_trip_safety.inc": "333e4bec1e60c57531ae72e48933c1552dfa3ec1b90383f64c61c4676ed45ca2",
+      "tests/fixtures/g13b2_sim_only_board.cmake": "9b30d9fa2e96c74cc5606af59c2091af5fdb066ae2f69e7374635d8b67396d83",
+      "tests/fixtures/g13b3l_sim_only_ramp.cmake": "2a902cae90bafb26841ac1d1929582159eaa931f618ff442cd6cb42b40684e72"
+    },
+    "test_machine": "am13e23019,esc-sim=on",
+    "upstream_revision": "44f28df24767cf9dca1ddc9b23157737c4cbb645"
+  },
+  "schema": "e62-g13b3-paired-binary-baseline.v1"
+}
