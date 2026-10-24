@@ -24,7 +24,7 @@ the physical high/low power-stage switching waveform remains OPEN.
 
 ## Bounded read-only observer
 
-- MMIO base: 0x5FFE7000; size: 0x1000; ESC-SIM only
+- MMIO base: 0x5FFE7000; size: 0x2000; ESC-SIM only
 - Magic: 0x48323645 (E62H); ABI: 1
 - Capacity: 128 events; eight 32-bit words per event
 - Event ring overwrites old events after capacity; total, dropped,

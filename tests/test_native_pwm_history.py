@@ -79,6 +79,15 @@ class NativeHistoricalPWMModel(unittest.TestCase):
         self.assertEqual(h.observed_events[-1].sequence,137)
         self.assertFalse(h.to_dict()["complete_history_qualified"])
 
+    def test_empty_uninitialized_or_invalid_model_never_qualified(self):
+        empty=fixture([])
+        model=read_native_pwm_history(empty.__getitem__)
+        self.assertFalse(model.to_dict()["complete_history_qualified"])
+        invalid=fixture()
+        invalid[BASE+4] &= ~2
+        model=read_native_pwm_history(invalid.__getitem__)
+        self.assertFalse(model.to_dict()["complete_history_qualified"])
+
     def test_invalid_model_count_forces_not_complete(self):
         regs=fixture()
         regs[BASE+0x40]=1

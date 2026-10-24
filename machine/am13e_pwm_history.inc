@@ -196,7 +196,7 @@ static void am13e_pwm4_hist_gate(AM13ESimPWM *p)
 }
 
 /* Bounded read-only non-silicon QEMU observer:
- * base 0x5FFE7000, length 0x1000
+ * base 0x5FFE7000, length 0x2000
  * 00 magic, 04 flags, 08 ABI, 0c capacity, 10 count
  * 14 total lo, 18 total hi, 1c dropped lo, 20 dropped hi
  * 24 active internal mask, 28 zero events, 2c counter,

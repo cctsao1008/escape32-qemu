@@ -87,6 +87,8 @@ class NativePWMHistory:
             "model_timer_hz":self.model_timer_hz,
             "chronological_qemu_callbacks_recorded":True,
             "complete_history_qualified":(
+                self.total_events_since_pmw_reset > 0 and
+                self.latest_internal_model_valid and
                 self.dropped_events == 0 and
                 self.invalid_model_samples == 0),
             "historical_physical_mosfet_edges_qualified":False,
