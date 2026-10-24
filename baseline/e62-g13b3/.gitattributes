@@ -1,0 +1,3 @@
+firmware/*.elf -text -diff
+qemu/linux-x86_64/qemu-system-arm -text -diff
+qemu/linux-x86_64/libfdt.so.1 -text -diff

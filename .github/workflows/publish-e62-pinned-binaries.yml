@@ -1,0 +1,162 @@
+name: Publish E62 pinned ELF + QEMU binaries
+
+# One-time bootstrap on introducing this file; subsequent baseline
+# revisions are EXPLICIT manual workflow_dispatch (not floating "latest").
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-e62-pinned-binaries.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: e62-g13b3-binary-baseline-publisher
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Validate, test, commit pinned original Guest and paired QEMU
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+          persist-credentials: true
+
+      # The exact caches were already produced by the SOURCE-BUILD
+      # firmware integration CI and are content-keyed by fixed revisions,
+      # build.sh + Machine sources and firmware board profile. Cache
+      # absence is a hard error; never silently rebuild with a new GCC.
+      - name: Restore pinned GCC13 Guest ELF bundle
+        id: fw-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .build/e62-fw-artifacts
+          key: e62-fw-ubuntu2404-GCC13-ESCb0204670-SDKb872469c-${{ hashFiles('tests/fixtures/g13b2_sim_only_board.cmake', 'tests/fixtures/g13b3l_sim_only_ramp.cmake') }}-v1
+      - name: Restore exact-source AM13E QEMU 6.2 executable
+        id: qemu-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .build/qemu-src/build
+          key: e62-qemu-ubuntu2404-${{ runner.arch }}-${{ hashFiles('build.sh', 'machine/**') }}-v1
+      - name: Restore original tested libfdt runtime
+        id: fdt-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .build/e62-host-runtime
+          key: e62-qemu-libfdt1-noble-x64-v1
+      - name: Restore official ARM read-only inspection tools
+        id: binutils-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .build/e62-host-binutils
+          key: e62-host-binutils-noble-x64-GNU242-v1
+
+      - name: Fail closed if any source-pinned CI cache is unavailable
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ steps.fw-cache.outputs.cache-hit }}" = "true"
+          test "${{ steps.qemu-cache.outputs.cache-hit }}" = "true"
+          test "${{ steps.fdt-cache.outputs.cache-hit }}" = "true"
+          test "${{ steps.binutils-cache.outputs.cache-hit }}" = "true"
+          test "$(git ls-tree HEAD qemu | awk '{print $3}')" = \
+            "44f28df24767cf9dca1ddc9b23157737c4cbb645"
+          (cd .build/e62-fw-artifacts && sha256sum -c SHA256SUMS)
+          (cd .build/e62-host-runtime && sha256sum -c SHA256SUMS)
+          (cd .build/e62-host-binutils && sha256sum -c SHA256SUMS)
+          test "$(sha256sum .build/e62-fw-artifacts/fast-ramp.elf | cut -d' ' -f1)" = \
+            "05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0"
+          test -x .build/qemu-src/build/qemu-system-arm
+          test -f .build/e62-host-runtime/libfdt.so.1
+          echo PASS_G13B3_PUBLISH_INPUTS_EXACT_CI_CACHE_AND_GUEST_SHA256
+
+      - name: Stage one immutable Git-pinned binary pair and manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/e62_pinned_baseline.py stage \
+            --elf .build/e62-fw-artifacts/fast-ramp.elf \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --libfdt .build/e62-host-runtime/libfdt.so.1 \
+            --source-run "https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          python3 tools/e62_pinned_baseline.py verify --smoke-qemu
+
+      - name: Verify packaged QEMU model-specific virtual PWM history
+        shell: bash
+        run: |
+          set -euo pipefail
+          export LD_LIBRARY_PATH="$PWD/baseline/e62-g13b3/qemu/linux-x86_64:${LD_LIBRARY_PATH:-}"
+          python3 tests/g13b3_pwm_switch_plan.py \
+            --qemu baseline/e62-g13b3/qemu/linux-x86_64/qemu-system-arm \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf
+          python3 tests/g13b3_pwm_history.py \
+            --qemu baseline/e62-g13b3/qemu/linux-x86_64/qemu-system-arm \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf
+          echo PASS_G13B3_PACKAGED_QEMU_CARRIER_AND_CLOCKED_HISTORY
+
+      - name: Re-execute unchanged original Guest G13B3L six-sector gate on packaged pair
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          export PATH="$PWD/.build/e62-host-binutils:$PATH"
+          export LD_LIBRARY_PATH="$PWD/baseline/e62-g13b3/qemu/linux-x86_64:${LD_LIBRARY_PATH:-}"
+          python3 tools/native_sim_cfg_flash.py \
+            --sim-only-opt-in \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --output artifacts/g13b3n-original-cfg-flash.bin
+          python3 tests/g13b2_native_drive_probe.py \
+            --qemu baseline/e62-g13b3/qemu/linux-x86_64/qemu-system-arm \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --throttle 1500 --startup-steps 32768 \
+            --slice-ms 300 --runtime-slices 20 \
+            --wait-native-bemf-calibration --calibration-wfi-visits 24 \
+            --require-drive --require-native-pwm \
+            --require-native-bemf-arm --require-native-sustained-loop \
+            --sim-only-cfg-flash artifacts/g13b3n-original-cfg-flash.bin \
+            --sustained-wfi-visits 1500 --sustained-sectors 6 \
+            --initial-electrical-degrees -30 \
+            --artifact artifacts/g13b3l-pinned-binary-native-six-sector.json \
+            2>&1 | tee artifacts/g13b3l-pinned-binary-native-six-sector.log
+          echo PASS_E62_G13B3_PINNED_BINARY_NATIVE_G13B3L_STRICT_GATE
+
+      # The existing G13B3M 12-sector/90ms acceptance STILL fails
+      # rotor stability in independent source CI. This publisher never
+      # changes its criteria or claims it passed.
+      - name: Commit ONLY the verified pair and notices to public main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- \
+            baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            baseline/e62-g13b3/qemu/linux-x86_64/qemu-system-arm \
+            baseline/e62-g13b3/qemu/linux-x86_64/libfdt.so.1 \
+            baseline/e62-g13b3/manifest.json \
+            baseline/e62-g13b3/SHA256SUMS
+          git diff --cached --check
+          if git diff --cached --quiet; then
+            echo "E62_PINNED_BINARY_PAIR_ALREADY_IDENTICAL_NO_COMMIT"
+          else
+            git commit -m "chore(e62): pin paired CI GCC13 Guest ELF and verified QEMU binary"
+            git push origin HEAD:main
+            echo PASS_E62_G13B3_BINARY_BASELINE_COMMITTED_TO_MAIN
+          fi
+
+      - name: Preserve staged files and native acceptance evidence even on blocked push
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-g13b3-pinned-binary-publisher
+          if-no-files-found: warn
+          retention-days: 30
+          path: |
+            baseline/e62-g13b3/
+            artifacts/g13b3l-pinned-binary-native-six-sector.json
+            artifacts/g13b3l-pinned-binary-native-six-sector.log

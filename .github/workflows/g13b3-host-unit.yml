@@ -46,6 +46,7 @@ on:
       - 'tests/test_native_pwm_switching_plan.py'
       - 'tests/test_native_pwm_history.py'
       - 'tests/test_native_pwm_history_collector.py'
+      - 'tests/test_e62_pinned_baseline.py'
       - 'tests/g13b3_pwm_history.py'
       - 'tests/g13b3_pwm_switch_plan.py'
       - 'tests/g13b2_native_drive_probe.py'
@@ -108,6 +109,8 @@ jobs:
           python3 tests/test_native_pwm_switching_plan.py
           python3 tests/test_native_pwm_history.py
           python3 tests/test_native_pwm_history_collector.py
+          python3 tests/test_e62_pinned_baseline.py
+          python3 -m py_compile tools/run_pinned_guest.py
           python3 -m py_compile tools/native_pwm_history_report.py
           python3 -m py_compile tests/g13b3_pwm_history.py
           python3 -m py_compile tests/g13b3_pwm_switch_plan.py
