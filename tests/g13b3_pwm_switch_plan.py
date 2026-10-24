@@ -6,7 +6,10 @@ BEMF/CAP1 injection. The test explicitly writes MCPWM registers as a
 QTest device UNIT fixture, not a native Guest firmware validation.
 """
 import argparse
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from g9_mcpwm_observer import (
     run, set_pwm_pair, POWER, TBCLKSYNC, PWM, OBS, PERIOD, SHADOW, CTL)
