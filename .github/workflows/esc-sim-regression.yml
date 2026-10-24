@@ -178,8 +178,16 @@ jobs:
               --initial-electrical-degrees -30 \
               --artifact artifacts/g13b3m-extended-twelve-sector.json \
               --sitl-trace-output artifacts/g13b3m-native-sitl-trace.json \
+                --sitl-native-pwm-history \
               --sitl-live-port 0 \
               2>&1 | tee artifacts/g13b3m-extended-twelve-sector.log
+          python3 tools/native_pwm_history_report.py \
+            --trace artifacts/g13b3m-native-sitl-trace.json \
+            --require-observed-original-guest-edge \
+            --output artifacts/g13b3m-native-pwm-history-evidence.json \
+            2>&1 | tee artifacts/g13b3m-native-pwm-history-evidence.log
+          # QEMU-internal original Guest WFI history is independent of
+          # unmodified strict 12-sector/90ms rotor-direction acceptance.
             python3 tools/native_extended_run_gate.py \
               --artifact artifacts/g13b3m-extended-twelve-sector.json \
               --min-sectors 12 --min-integrated-ns 90000000 \
@@ -615,8 +623,16 @@ jobs:
               --initial-electrical-degrees -30 \
               --artifact artifacts/g13b3m-extended-twelve-sector.json \
               --sitl-trace-output artifacts/g13b3m-native-sitl-trace.json \
+                --sitl-native-pwm-history \
               --sitl-live-port 0 \
               2>&1 | tee artifacts/g13b3m-extended-twelve-sector.log
+          python3 tools/native_pwm_history_report.py \
+            --trace artifacts/g13b3m-native-sitl-trace.json \
+            --require-observed-original-guest-edge \
+            --output artifacts/g13b3m-native-pwm-history-evidence.json \
+            2>&1 | tee artifacts/g13b3m-native-pwm-history-evidence.log
+          # QEMU-internal original Guest WFI history is independent of
+          # unmodified strict 12-sector/90ms rotor-direction acceptance.
             python3 tools/native_extended_run_gate.py \
               --artifact artifacts/g13b3m-extended-twelve-sector.json \
               --min-sectors 12 --min-integrated-ns 90000000 \

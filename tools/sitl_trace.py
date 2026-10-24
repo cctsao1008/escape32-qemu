@@ -12,6 +12,8 @@ import os
 import tempfile
 from pathlib import Path
 
+from .native_pwm_history_collector import NativeWfiPWMHistoryCollector
+
 FORMAT = "e62.sitl.native-wfi.v1"
 NS_PER_ECAP_TICK = 5  # Native ECAP1, functional 200 MHz SIM_ONLY
 SCOPE = "SIM_ONLY_UNCALIBRATED_OPEN_STAR_MODEL"
@@ -58,6 +60,16 @@ class SitlTraceRecorder:
         self.events = []
         self._sector_count = 0
         self.native_result = None
+        self.pwm_history_collector = None
+
+    def attach_pwm_history(self, collector):
+        """Optional read-only QEMU internal event evidence; no native gate."""
+        if (not isinstance(collector, NativeWfiPWMHistoryCollector) or
+                self.origin_ecap_ticks is None or self.samples or
+                self.pwm_history_collector is not None):
+            raise ValueError("Native Gate origin and unique PWM collector required")
+        self.pwm_history_collector = collector
+        self.meta["qemu_internal_history_opt_in"] = True
 
     def set_gate_origin(self, frame):
         if self.origin_ecap_ticks is not None or self.samples:
@@ -195,7 +207,7 @@ class SitlTraceRecorder:
         }
 
     def document(self, *, error_type=None):
-        return {
+        document = {
             "format": FORMAT,
             "scope": SCOPE,
             "data_semantics": {
@@ -213,6 +225,14 @@ class SitlTraceRecorder:
             "samples": self.samples,
             "events": self.events,
         }
+        if self.pwm_history_collector is not None:
+            document["pwm_history"] = self.pwm_history_collector.document()
+            document["data_semantics"]["pwm_history"] = (
+                "Executed SIM_ONLY QEMU INTERNAL edge callbacks and Guest "
+                "MMIO boundaries read at original paused WFI checkpoints; "
+                "QEMU virtual ns NOT aligned with native ECAP ns; "
+                "NOT external MOSFET gate/power stage waveform")
+        return document
 
     def write(self, path, *, error_type=None):
         path = Path(path)

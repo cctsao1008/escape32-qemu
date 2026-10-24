@@ -63,6 +63,7 @@ from tools.native_rotor_motion_audit import NativeRotorMotionAudit
 from tools.native_power_path_qualification import qualify_cross_phase_bridge
 from tools.virtual_bldc_feedback import SIM_BEMF_INPUT
 from tools.sitl_trace import SitlTraceRecorder, file_sha256
+from tools.native_pwm_history_collector import NativeWfiPWMHistoryCollector
 from tools.sitl_live import SitlLiveServer
 
 FAULT_FN = "am13e_app_motor_fault_reset"
@@ -1008,7 +1009,7 @@ def probe_native_sustained_power_feedback(
         slice_ms, runtime_slices, max_visits, required_sectors,
         require_sim_only_cfg=False, initial_electrical_degrees=0.0,
         required_integrated_ns=0, motor_profile="legacy",
-        trace=None, live=None):
+        trace=None, live=None, pwm_history=None):
     """Full native WFI-to-WFI physical bridge -> plant -> BEMF feedback loop.
 
     No native program counter, firmware SRAM, PWM, TIMG12, CAP1, or IRQ
@@ -1057,6 +1058,19 @@ def probe_native_sustained_power_feedback(
         checkpoint="native_gate_return_before_sustained_motor")
     if trace is not None:
         trace.set_gate_origin(initial)  # reuse existing ECAP observation
+        if pwm_history is not None:
+            # Attach exactly at the ORIGINAL Guest Gate-return checkpoint.
+            # No preceding firmware PWM events are retroactively invented.
+            attach = pwm_history.attach_safe(
+                qtest.read,
+                checkpoint="native_gate_return_before_sustained_motor")
+            trace.attach_pwm_history(pwm_history)
+            print("G13B3_NATIVE_WFI_PWM_HISTORY_ATTACH " +
+                  json.dumps({"attached": attach is not None,
+                              "baseline": attach,
+                              "errors": pwm_history.errors,
+                              "guest_writes": False},
+                             sort_keys=True), flush=True)
         if live is not None:
             live.hub.begin(trace.meta)
     if motor.sample().mechanical_rpm != 0:
@@ -1103,6 +1117,25 @@ def probe_native_sustained_power_feedback(
             frame = timeline.observe(
                 qtest.read, native_ticks=qtest.read(ECAP1_TSCTR),
                 checkpoint=f"native_sustained_wfi_{visit}")
+            if pwm_history is not None:
+                # QEMU Guest is stopped at the original WFI. Read only
+                # the ring events not yet captured since Gate return.
+                # An overflow, invalid model or transport failure is
+                # preserved as unqualified evidence, never forged PASS.
+                prev_gaps = len(pwm_history.gaps)
+                prev_errors = len(pwm_history.errors)
+                observed = pwm_history.poll(
+                    qtest.read, wfi=visit,
+                    ecap_elapsed_ns=frame.elapsed_ns)
+                if (len(pwm_history.gaps) != prev_gaps or
+                        len(pwm_history.errors) != prev_errors):
+                    print("G13B3_NATIVE_WFI_PWM_HISTORY_INCOMPLETE " +
+                          json.dumps({
+                              "wfi": visit, "last_poll": observed,
+                              "gaps": pwm_history.gaps[-1:],
+                              "errors": pwm_history.errors[-1:],
+                              "strict_motor_gate_changed": False,
+                          },sort_keys=True), flush=True)
             # Same stopped Guest, same single observed physical output
             # image used for BOTH motor integration and strict CAP1/PWM
             # auditing. Do not reread an unchanged checkpoint's MMIO.
@@ -1660,6 +1693,8 @@ def run(args):
         required_integrated_ns=args.sustained_min_integrated_ns,
         motor_model=native_motor_model_metadata(profile))
         if (args.sitl_trace_output or args.sitl_live_port is not None) else None)
+    pwm_history = (NativeWfiPWMHistoryCollector()
+                   if args.sitl_native_pwm_history else None)
     live = args.sitl_live_server
     if args.probe_native_bemf:
         # Diagnose GCC static-symbol suffixes and scope without guessing.
@@ -2255,7 +2290,8 @@ def run(args):
                                          required_integrated_ns=(
                                              args.sustained_min_integrated_ns),
                                          motor_profile=profile,
-                                         trace=trace, live=live)
+                                         trace=trace, live=live,
+                                         pwm_history=pwm_history)
                                     evidence["g13b3l_native_sustained_loop"] = (
                                         loop_result)
                                     if args.require_native_sustained_loop and (
@@ -2697,6 +2733,11 @@ def main():
     p.add_argument("--sitl-trace-output", type=Path,
                    help="Optional offline WebGUI WFI trace JSON. Reuses "
                         "existing native samples; no new Guest/MMIO queries")
+    p.add_argument("--sitl-native-pwm-history",action="store_true",
+                   help="Opt-in read-only SIM_ONLY historical QEMU PWM ring "
+                        "poll at original Guest Gate return and each WFI; "
+                        "retain chronological gaps, never qualify MOSFET "
+                        "switching or change the motor strict gate")
     p.add_argument("--sitl-live-port", type=int, metavar="PORT",
                    help="Opt-in read-only localhost SSE dashboard port; "
                         "0 selects an available loopback port")
@@ -2764,6 +2805,10 @@ def main():
              a.sitl_trace_output.resolve() == a.artifact.resolve())):
         p.error("SITL trace requires native sustained loop and a distinct "
                 "output path from --artifact")
+    if a.sitl_native_pwm_history and (
+            not a.sitl_trace_output or not a.probe_native_sustained_loop):
+        p.error("--sitl-native-pwm-history requires --sitl-trace-output "
+                "and the native sustained Guest WFI probe")
     if a.sitl_live_hold and a.sitl_live_port is None:
         p.error("--sitl-live-hold requires --sitl-live-port")
     if a.sitl_live_port is not None:
