@@ -1,0 +1,186 @@
+{
+  "schema": "e62.sitl.dshot.scenario.v1.proposal",
+  "status": "DECLARATIVE_TEMPLATE_NOT_CURRENT_RUNNER_CLI",
+  "target": {
+    "mcu": "TI AM13E23019",
+    "firmware": "original ESCape32 Rel17.3",
+    "target_elf_sha256": "05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0"
+  },
+  "clock": {
+    "scenario_clock": "guest_virtual_elapsed_time",
+    "host_sleep_driven": false,
+    "duration_unit": "seconds"
+  },
+  "dshot": {
+    "protocol": "DSHOT600",
+    "signal_path": "physical simulated PA26 edges -> original DMA/CRC parser",
+    "nominal_frame_rate_hz": 1000,
+    "frame_rate_is_proposed_and_requires_watchdog_verification": true,
+    "crc_required": true,
+    "percentage_mapping": {
+      "zero_pct_frame_value": 0,
+      "positive_pct_min_frame_value": 48,
+      "positive_pct_max_frame_value": 2047,
+      "mapping": "round(48 + 1999 * throttle_pct / 100) for throttle_pct > 0",
+      "comment": "Input command percent, not measured shaft speed or linear physical PWM duty"
+    }
+  },
+  "preparation": {
+    "neutral_frame_repetition": true,
+    "original_firmware_arm_required": true,
+    "arm_min_native_systick_ms": 250,
+    "do_not_skip_original_arm": true,
+    "scenario_t0": "after_original_arming_is_observed"
+  },
+  "virtual_bemf": {
+    "mode": "functional_commutation_reactive_bemf",
+    "scope": "functional ISR/ECAP/TIMG12 chain only",
+    "generate_analog_signal_through_existing_comparator_frontend": true,
+    "direct_ecap_capture_or_guest_irq_injection": false,
+    "guest_owned_commutation_required": true,
+    "rotor_dynamics_or_rpm_validation_required": false,
+    "timing_profile": "to_be_defined_and_checked_against_original_guest_capture_windows"
+  },
+  "scenarios": [
+    {
+      "id": "T01",
+      "name": "ramp_0_to_90_hold_10s",
+      "description": "Ramp 0% to 90% in 1 simulated second; hold 90% for 10 more simulated seconds",
+      "stage_time_origin": "after_original_firmware_zero_dshot_arming",
+      "stages": [
+        {
+          "kind": "ramp",
+          "from_pct": 0,
+          "to_pct": 90,
+          "duration_s": 1,
+          "update_period_ms": 10,
+          "interpolation": "linear"
+        },
+        {
+          "kind": "hold",
+          "throttle_pct": 90,
+          "duration_s": 10
+        }
+      ],
+      "expected_test_duration_s": 11,
+      "assertions": {
+        "always": [
+          "original_elf_sha256_verified",
+          "no_host_guest_register_or_sram_writes",
+          "dshot_crc_accepted_by_original_firmware",
+          "no_unexpected_hardfault",
+          "no_unexpected_trip_or_fault"
+        ],
+        "positive_throttle_windows": [
+          "guest_throttle_command_observed",
+          "nonzero_six_output_pwm_from_guest",
+          "native_bemf_comparator_and_capture_path_observed",
+          "guest_owned_timg12_commutation_observed"
+        ],
+        "zero_throttle_windows": [
+          "guest_neutral_command_observed"
+        ],
+        "not_required": [
+          "physical_rotor_rpm_tracking",
+          "physical_motor_efficiency",
+          "power_stage_current_continuity",
+          "real_hardware_stability"
+        ]
+      }
+    },
+    {
+      "id": "T02",
+      "name": "step_sweep_0_to_100_each_10s",
+      "description": "Hold each throttle level 0,10,...,100% for 10 simulated seconds; 11 levels, 110 seconds total",
+      "stage_time_origin": "after_original_firmware_zero_dshot_arming",
+      "stages": [
+        {
+          "kind": "hold",
+          "throttle_pct": 0,
+          "duration_s": 10
+        },
+        {
+          "kind": "hold",
+          "throttle_pct": 10,
+          "duration_s": 10
+        },
+        {
+          "kind": "hold",
+          "throttle_pct": 20,
+          "duration_s": 10
+        },
+        {
+          "kind": "hold",
+          "throttle_pct": 30,
+          "duration_s": 10
+        },
+        {
+          "kind": "hold",
+          "throttle_pct": 40,
+          "duration_s": 10
+        },
+        {
+          "kind": "hold",
+          "throttle_pct": 50,
+          "duration_s": 10
+        },
+        {
+          "kind": "hold",
+          "throttle_pct": 60,
+          "duration_s": 10
+        },
+        {
+          "kind": "hold",
+          "throttle_pct": 70,
+          "duration_s": 10
+        },
+        {
+          "kind": "hold",
+          "throttle_pct": 80,
+          "duration_s": 10
+        },
+        {
+          "kind": "hold",
+          "throttle_pct": 90,
+          "duration_s": 10
+        },
+        {
+          "kind": "hold",
+          "throttle_pct": 100,
+          "duration_s": 10
+        }
+      ],
+      "expected_test_duration_s": 110,
+      "assertions": {
+        "always": [
+          "original_elf_sha256_verified",
+          "no_host_guest_register_or_sram_writes",
+          "dshot_crc_accepted_by_original_firmware",
+          "no_unexpected_hardfault",
+          "no_unexpected_trip_or_fault"
+        ],
+        "positive_throttle_windows": [
+          "guest_throttle_command_observed",
+          "nonzero_six_output_pwm_from_guest",
+          "native_bemf_comparator_and_capture_path_observed",
+          "guest_owned_timg12_commutation_observed"
+        ],
+        "zero_throttle_windows": [
+          "guest_neutral_command_observed"
+        ],
+        "not_required": [
+          "physical_rotor_rpm_tracking",
+          "physical_motor_efficiency",
+          "power_stage_current_continuity",
+          "real_hardware_stability"
+        ]
+      }
+    }
+  ],
+  "execution_policy": {
+    "long_scenario_is_expected_to_be_costly": true,
+    "bounded_smoke_before_full_duration": true,
+    "unimplemented_features_fail_closed": true,
+    "teardown": "send repeated valid DShot zero frames; teardown time excluded from declared scenario duration"
+  }
+}
