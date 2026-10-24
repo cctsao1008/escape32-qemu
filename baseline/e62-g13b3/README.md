@@ -58,8 +58,27 @@ as part of a separately audited baseline update. Historical versions
 remain accessible through Git commits; no implicit floating `latest`.
 
 The repo's normal source-build CI still exists for independently checking
-build reproducibility. Ordinary regression runs can use these pinned
-binaries directly without compiling QEMU or ESCape32.
+build reproducibility. The dedicated
+[`e62-pinned-regression.yml`](../../.github/workflows/e62-pinned-regression.yml)
+is the default *no-build* native regression: it verifies SHA/source pairing,
+executes the pinned QEMU device tests and original Guest six-sector Gate, and
+executes the **separate unchanged 12-sector/90ms Strict Gate**. That job
+remains red while the original rotor reversal remains unfixed, and it
+preserves partial historical traces rather than labeling failure a PASS.
+
+Ordinary regression runs can use these pinned binaries directly without
+compiling QEMU or ESCape32. For the existing original native command's
+arguments, the source-checking convenience runner is:
+
+```bash
+python3 tools/run_pinned_guest.py -- --throttle 1500 --startup-steps 32768 \
+  --slice-ms 300 --runtime-slices 20 --wait-native-bemf-calibration \
+  --calibration-wfi-visits 24 --require-drive --require-native-pwm \
+  --require-native-bemf-arm
+```
+
+The runner refuses alternate `--elf` or `--qemu` paths and does not
+override the original native Gate's acceptance options.
 
 ## Redistribution notices
 

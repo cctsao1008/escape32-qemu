@@ -1,0 +1,162 @@
+name: E62 G13B3 pinned ELF + QEMU regression
+
+# Default native regression on byte-identical committed binaries.
+# No ESCape32 compilation, no QEMU compilation, no floating download.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'baseline/e62-g13b3/**'
+      - 'machine/**'
+      - 'build.sh'
+      - 'tests/**'
+      - 'tools/**'
+      - '.github/workflows/e62-pinned-regression.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pinned-internal-history-and-six-sector:
+    name: Pinned binary SHA + QEMU history + unchanged native 6-sector
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - name: Restore original read-only ARM ELF inspection CLI
+        id: binutils
+        uses: actions/cache/restore@v4
+        with:
+          path: .build/e62-host-binutils
+          key: e62-host-binutils-noble-x64-GNU242-v1
+      - name: Verify binary pair and exact-source fingerprint
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ steps.binutils.outputs.cache-hit }}" = "true"
+          (cd .build/e62-host-binutils && sha256sum -c SHA256SUMS)
+          python3 tools/e62_pinned_baseline.py verify --smoke-qemu
+          python3 tests/test_e62_pinned_baseline.py
+      - name: Test pinned QEMU original carrier and clocked history
+        shell: bash
+        run: |
+          set -euo pipefail
+          export LD_LIBRARY_PATH="$PWD/baseline/e62-g13b3/qemu/linux-x86_64:${LD_LIBRARY_PATH:-}"
+          python3 tests/g13b3_pwm_switch_plan.py \
+            --qemu baseline/e62-g13b3/qemu/linux-x86_64/qemu-system-arm \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf
+          python3 tests/g13b3_pwm_history.py \
+            --qemu baseline/e62-g13b3/qemu/linux-x86_64/qemu-system-arm \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf
+          echo PASS_E62_PINNED_QEMU_SIX_OUTPUT_CLOCKED_HISTORY
+      - name: Test unchanged original Guest 6-sector strict acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          export PATH="$PWD/.build/e62-host-binutils:$PATH"
+          export LD_LIBRARY_PATH="$PWD/baseline/e62-g13b3/qemu/linux-x86_64:${LD_LIBRARY_PATH:-}"
+          python3 tools/native_sim_cfg_flash.py \
+            --sim-only-opt-in \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --output artifacts/g13b3n-original-cfg-flash.bin
+          python3 tests/g13b2_native_drive_probe.py \
+            --qemu baseline/e62-g13b3/qemu/linux-x86_64/qemu-system-arm \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --throttle 1500 --startup-steps 32768 \
+            --slice-ms 300 --runtime-slices 20 \
+            --wait-native-bemf-calibration --calibration-wfi-visits 24 \
+            --require-drive --require-native-pwm \
+            --require-native-bemf-arm --require-native-sustained-loop \
+            --sim-only-cfg-flash artifacts/g13b3n-original-cfg-flash.bin \
+            --sustained-wfi-visits 1500 --sustained-sectors 6 \
+            --initial-electrical-degrees -30 \
+            --artifact artifacts/g13b3l-pinned-six-sector.json \
+            2>&1 | tee artifacts/g13b3l-pinned-six-sector.log
+          echo PASS_E62_PINNED_G13B3L_UNCHANGED_NATIVE_SIX_SECTOR_GATE
+      - name: Preserve exact binary native test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-pinned-g13b3l-six-sector
+          retention-days: 30
+          if-no-files-found: warn
+          path: |
+            artifacts/g13b3l-pinned-six-sector.log
+            artifacts/g13b3l-pinned-six-sector.json
+
+  pinned-strict-twelve-sector-90ms:
+    name: Unchanged G13B3M 12-sector / 90ms gate (known FAIL is FAIL)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - name: Restore source-verified ARM host inspection tools
+        id: binutils
+        uses: actions/cache/restore@v4
+        with:
+          path: .build/e62-host-binutils
+          key: e62-host-binutils-noble-x64-GNU242-v1
+      - name: Verify original pinned binary pair, no compiler builds
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ steps.binutils.outputs.cache-hit }}" = "true"
+          (cd .build/e62-host-binutils && sha256sum -c SHA256SUMS)
+          python3 tools/e62_pinned_baseline.py verify --smoke-qemu
+      - name: Execute original Guest strict rotor gate and preserve partial history
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          export PATH="$PWD/.build/e62-host-binutils:$PATH"
+          export LD_LIBRARY_PATH="$PWD/baseline/e62-g13b3/qemu/linux-x86_64:${LD_LIBRARY_PATH:-}"
+          python3 tools/native_sim_cfg_flash.py \
+            --sim-only-opt-in \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --output artifacts/g13b3n-original-cfg-flash.bin
+          set +e
+          python3 tests/g13b2_native_drive_probe.py \
+            --qemu baseline/e62-g13b3/qemu/linux-x86_64/qemu-system-arm \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --throttle 1500 --startup-steps 32768 \
+            --slice-ms 300 --runtime-slices 20 \
+            --wait-native-bemf-calibration --calibration-wfi-visits 24 \
+            --require-drive --require-native-pwm \
+            --require-native-bemf-arm --require-native-sustained-loop \
+            --sim-only-cfg-flash artifacts/g13b3n-original-cfg-flash.bin \
+            --sustained-wfi-visits 2800 --sustained-sectors 12 \
+            --sustained-min-integrated-ns 90000000 \
+            --initial-electrical-degrees -30 \
+            --sitl-native-pwm-history \
+            --sitl-trace-output artifacts/g13b3m-pinned-wfi-history.json \
+            --artifact artifacts/g13b3m-pinned-strict-result.json \
+            2>&1 | tee artifacts/g13b3m-pinned-strict.log
+          strict_exit=${PIPESTATUS[0]}
+          set -e
+          if [[ -f artifacts/g13b3m-pinned-wfi-history.json ]]; then
+            python3 tools/native_pwm_history_report.py \
+              --trace artifacts/g13b3m-pinned-wfi-history.json \
+              --require-observed-original-guest-edge \
+              --output artifacts/g13b3m-pinned-history-evidence.json
+          fi
+          echo "G13B3M_PINNED_UNMODIFIED_STRICT_ROTOR_GATE_EXIT=$strict_exit"
+          # Absolutely do NOT turn known rotor reversal into CI PASS.
+          exit "$strict_exit"
+      - name: Persist all original Guest diagnostic/strict evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-pinned-g13b3m-12-sector-90ms
+          retention-days: 30
+          if-no-files-found: warn
+          path: |
+            artifacts/g13b3m-pinned-strict.log
+            artifacts/g13b3m-pinned-wfi-history.json
+            artifacts/g13b3m-pinned-strict-result.json
+            artifacts/g13b3m-pinned-history-evidence.json
