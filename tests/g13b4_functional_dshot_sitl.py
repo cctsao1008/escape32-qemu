@@ -39,13 +39,12 @@ from g7b_pa26_capture import dshot_frame
 from tools.functional_dshot_scenario import (
     load_scenario, ScenarioError, VirtualTimeDShotSequencer)
 from tools.functional_bemf import FunctionalBemf
+from tools.functional_guest_clock import OriginalGuestTickClock
 from tools.native_bemf_qualification import (
     audit_native_bemf_arm_elf, observe_original_bemf_route)
 from tools.native_pwm_qualification import observe_original_pwm
 from tools.native_runtime_timeline import ECAP1_TSCTR
 from tools.virtual_bldc_feedback import SIM_BEMF_INPUT
-
-ECAP_CLOCK_NS_PER_TICK = 5  # Existing ECAP 200 MHz model.
 
 
 def _checked_symbols(elf: Path) -> dict:
@@ -173,9 +172,13 @@ def _run_guest(args, scenario, evidence):
                             if pc not in armed:
                                 add_bp(rsp, pc)
                                 armed.add(pc)
+                        # ECAP1.TSCTR can be stopped during zero-throttle ARM.
+                        # Drive *scenario time* from the original Guest-owned
+                        # 16 kHz SysTick; ECAP stays diagnostic, not a clock.
+                        first_tick = rsp.mem32(addresses['tick'])
+                        clock = OriginalGuestTickClock(first_tick)
                         first_tsctr = qtest.read(ECAP1_TSCTR)
-                        previous_tsctr = first_tsctr
-                        elapsed_ns = 0
+                        elapsed_ns = clock.elapsed_ns
                         last_values = _guest_values(rsp, addresses)
                         last_feeds = last_values['valid_frame_feeds']
                         last_cap = last_values['captured_events']
@@ -186,7 +189,13 @@ def _run_guest(args, scenario, evidence):
                         evidence['scenario_t0'] = {
                             'origin': 'AFTER_ORIGINAL_ZERO_DSHOT_ARM_AT_RUNNING_WFI',
                             'original_ecap_tsctr': first_tsctr,
+                            'original_guest_tick': first_tick,
+                            'scenario_clock_source': 'ORIGINAL_GUEST_SYSTICK_16KHZ',
+                            'ecap_tsctr_used_for_scenario_clock': False,
                             'host_guest_register_writes': False}
+                        print('E62_FUNCTIONAL_GUEST_CLOCK ' +
+                              json.dumps(evidence['scenario_t0'],
+                                         sort_keys=True), flush=True)
                         def send_frame(throttle):
                             # Do not print 110,000 redundant QTest waveform lines.
                             with redirect_stdout(io.StringIO()):
@@ -301,13 +310,11 @@ def _run_guest(args, scenario, evidence):
                             except Exception:
                                 print(wfi_diagnostics.getvalue(), file=sys.stderr)
                                 raise
-                            new_tsctr = qtest.read(ECAP1_TSCTR)
-                            delta = (new_tsctr - previous_tsctr) & 0xffffffff
-                            if not 0 < delta <= 400_000:
-                                raise ScenarioError(
-                                    'Original ECAP interval invalid/too large: '+str(delta))
-                            elapsed_ns += delta * ECAP_CLOCK_NS_PER_TICK
-                            previous_tsctr = new_tsctr
+                            # Read-only original source tick advances even
+                            # before motor ECAP1 is enabled. A same-tick WFI
+                            # adds zero time; repeated stalls still fail.
+                            elapsed_ns = clock.observe(
+                                rsp.mem32(addresses['tick']))
                             evidence['last_guest_virtual_elapsed_ns'] = elapsed_ns
                             evidence['native_wfi_visits'] = native_wfi_count
                             evidence['dshot_frames_sent'] = sequencer.next_index
@@ -346,12 +353,8 @@ def _run_guest(args, scenario, evidence):
                                 except Exception:
                                     print(diag.getvalue(),file=sys.stderr)
                                     raise
-                                new_tsctr = qtest.read(ECAP1_TSCTR)
-                                delta = (new_tsctr-previous_tsctr) & 0xffffffff
-                                if not 0 < delta <= 400_000:
-                                    raise ScenarioError('Teardown ECAP interval invalid')
-                                elapsed_ns += delta*ECAP_CLOCK_NS_PER_TICK
-                                previous_tsctr = new_tsctr
+                                elapsed_ns = clock.observe(
+                                    rsp.mem32(addresses['tick']))
                                 last_values = _guest_values(rsp,addresses)
                                 if (last_values['valid_frame_feeds'] > teardown_before and
                                       last_values['throt'] == 0):
@@ -373,6 +376,14 @@ def _run_guest(args, scenario, evidence):
                         evidence['last_guest_state'] = last_values
                         evidence['dshot_frames_sent'] = sequencer.next_index
                         evidence['scripted_bemf_crossings_issued'] = feedback.crossings_issued
+                        evidence['guest_clock_observations'] = {
+                            'origin_tick': clock.origin_tick,
+                            'last_tick': clock.previous_tick,
+                            'elapsed_ns': clock.elapsed_ns,
+                            'last_delta_ticks': clock.last_delta_ticks,
+                            'total_zero_delta_wfi': clock.total_zero_delta_observations,
+                            'consecutive_zero_delta_wfi': clock.stalled_observations,
+                            'source': 'ORIGINAL_GUEST_SYSTICK_16KHZ'}
                         if not evidence['completed_full_duration']:
                             evidence['status'] = 'OPEN_BOUNDED_SMOKE_NOT_FULL_DURATION'
                         else:
