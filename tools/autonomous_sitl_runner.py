@@ -85,7 +85,7 @@ def run_autonomous(args, scenario, evidence, rsp, qtest,
                     'guest_elapsed_ms': snap['elapsed_ms'],
                     'bemf_stimulus_transitions': snap['bemf_crossings'],
                 }, sort_keys=True), flush=True)
-            if (snap['elapsed_ms'] >= (
+            if (snap['elapsed_ms'] >=
                     last_sample_ms + args.autonomous_telemetry_interval_ms):
                 last_sample_ms = snap['elapsed_ms']
                 g = guest_snapshot(qtest.read, addresses)
