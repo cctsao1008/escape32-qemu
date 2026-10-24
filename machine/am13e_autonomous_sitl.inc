@@ -16,7 +16,8 @@
 #define AM13E_AUTO_MAGIC UINT32_C(0x41323645) /* E62A */
 #define AM13E_AUTO_MAX_STAGES 16U
 #define AM13E_AUTO_FRAME_NS INT64_C(1000000)
-#define AM13E_AUTO_BEMF_NS INT64_C(100000)
+/* One-shot phase crossing at 750us, no fixed 100us analogue polling. */
+#define AM13E_AUTO_ROUTE_REEVAL_NS INT64_C(100)
 #define AM13E_AUTO_BEMF_CROSS_NS INT64_C(750000)
 #define AM13E_AUTO_STATUS_RUNNING 1U
 #define AM13E_AUTO_STATUS_DONE 2U
@@ -35,6 +36,12 @@
  * +48 analog_vector_updates RO; +4c powered_pwm_samples RO
  * +50 current_stage RO; +54 physical_PA26_capture RO
  * +58 physical_PA26_DMA_beat RO
+ * +5c stage evidence selector RW (even after DONE, SIM_ONLY only)
+ * +60 stage_end_sent RO; +64 stage_end_capture RO; +68 stage_end_dma RO
+ * +6c stage_end_crossings RO; +70 stage_finished_flag RO
+ * +74 stage_end_elapsed_ms RO; +78 stage_end_bemf_timer_callbacks RO
+ * +7c stage_end_analog_updates RO; +80 live_bemf_timer_callbacks RO
+ * +84 live_route_reschedule_count RO; +88 ABI version RO (=2)
  */
 static void am13e_auto_reset(AM13EAutoSITL *a)
 {
@@ -45,6 +52,9 @@ static void am13e_auto_reset(AM13EAutoSITL *a)
         timer_del(a->bemf_timer);
     }
     memset(a->stages, 0, sizeof(a->stages));
+    memset(a->stage_evidence, 0, sizeof(a->stage_evidence));
+    a->stage_query = a->bemf_timer_callbacks = a->route_reschedules = 0U;
+    a->last_route_signature = UINT64_MAX;
     a->stage_count = a->stage_index = a->max_frames = 0U;
     a->total_frames = a->target_frames = a->sent = 0U;
     a->last_dshot = a->crossings = a->analog_updates = 0U;
@@ -158,19 +168,47 @@ static bool am13e_auto_wire_frame(AM13EAutoSITL *a, uint32_t throttle)
     return true;
 }
 
+/* Stage-end hardware checkpoint is latched by QEMU's frame timer.
+ * These are test-fixture PA26/DMA counters, never Guest CRC statements. */
+static void am13e_auto_checkpoint(AM13EAutoSITL *a, unsigned stage,
+                                  int64_t now, bool complete)
+{
+    if (stage >= a->stage_count) {
+        am13e_auto_fail(a, 6U);
+        return;
+    }
+    AM13EAutoStageEvidence *e = &a->stage_evidence[stage];
+    e->valid = true;
+    e->completed = complete;
+    e->sent = a->sent;
+    e->capture = a->machine->sim_pa26_captures;
+    e->dma = a->machine->sim_pa26_dma_beats;
+    e->crossings = a->crossings;
+    e->analog_updates = a->analog_updates;
+    e->bemf_timer_callbacks = a->bemf_timer_callbacks;
+    e->elapsed_ns = now >= a->start_ns ?
+                    (uint64_t)(now - a->start_ns) : 0U;
+}
+
 static void am13e_auto_dshot_event(void *opaque)
 {
     AM13EAutoSITL *a = opaque;
     if (!a->running) return;
     int64_t now = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
     if (a->sent >= a->target_frames) {
+        bool full_stage = a->sent == a->total_frames;
+        am13e_auto_checkpoint(a, a->current_stage, now, full_stage);
         a->end_ns = now;
         a->running = false;
         a->done = true;
         if (a->bemf_timer) timer_del(a->bemf_timer);
         return;
     }
+    unsigned previous_stage = a->current_stage;
     uint32_t target = am13e_auto_target_for_frame(a, a->sent);
+    if (a->sent && a->current_stage != previous_stage) {
+        am13e_auto_checkpoint(a, previous_stage, now, true);
+    }
     if (target == UINT32_MAX || !am13e_auto_wire_frame(a, target)) {
         am13e_auto_fail(a, 2U); /* Wire busy/malformed input. */
         return;
@@ -183,18 +221,12 @@ static void am13e_auto_dshot_event(void *opaque)
               a->start_ns + (int64_t)a->sent * AM13E_AUTO_FRAME_NS);
 }
 
-static void am13e_auto_analog_event(void *opaque)
+/* Ready means original Guest has actually powered/configured the
+ * native PWM/CMPSS/ECAP route; unlike a motor plant no rotor is inferred. */
+static bool am13e_auto_feedback_ready(AM13EMachineState *s,
+                                     AM13ESimFeedback *f, unsigned phase)
 {
-    AM13EAutoSITL *a = opaque;
-    if (!a->running) return;
-    AM13EMachineState *s = a->machine;
-    AM13ESimFeedback *f = &s->feedback;
-    int64_t now = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
-    uint32_t words[3] = {0x10000U | 2048U,
-                         0x10000U | 2048U,
-                         0x10000U | 2048U};
-    unsigned phase = s->sim_mc_mux[0] & 7U;
-    bool ready = s->pwm4.running &&
+    return s->pwm4.running &&
         !!(s->sim_perclkcr & 1U) &&
         !!(s->sim_mc_power & AM13E_SIM_PWM_POWER_BIT) &&
         am13e_g10_cmp_powered(f) && am13e_g10_ecap_powered(f) &&
@@ -203,6 +235,51 @@ static void am13e_auto_analog_event(void *opaque)
         !!(f->eceint & 0x2U) &&
         (f->cmp[0] & 0x800cU) == 0x8008U &&
         !(s->pwm4.reg[0xb0U / 4U] & 0x00060000U);
+}
+
+/* Register change notifications only. Re-schedule 100ns in the future
+ * to let a Guest update comparator mux + polarity in separate writes.
+ * No timer when disabled: future Guest register writes re-activate it.
+ * A fingerprint suppresses unchanged PWM-zero/DAC-sync notifications. */
+static void am13e_auto_route_changed(AM13EMachineState *s)
+{
+    AM13EAutoSITL *a = &s->auto_sitl;
+    if (!a->running || !a->bemf_timer) {
+        return;
+    }
+    AM13ESimFeedback *f = &s->feedback;
+    unsigned phase = s->sim_mc_mux[0] & 7U;
+    uint32_t dac = f->cmp[0x0eU / 2U] & 0xfffU;
+    uint64_t fingerprint =
+        (uint64_t)phase | ((uint64_t)(f->ecctl1 & 1U) << 3U) |
+        ((uint64_t)dac << 4U) |
+        ((uint64_t)am13e_auto_feedback_ready(s, f, phase) << 16U) |
+        ((uint64_t)f->cmp[0] << 17U) |
+        ((uint64_t)(f->cmp[0x30U / 2U] & 0x7fffU) << 33U);
+    if (fingerprint == a->last_route_signature) {
+        return;
+    }
+    a->last_route_signature = fingerprint;
+    ++a->route_reschedules;
+    timer_mod(a->bemf_timer, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) +
+              AM13E_AUTO_ROUTE_REEVAL_NS);
+}
+
+static void am13e_auto_analog_event(void *opaque)
+{
+    AM13EAutoSITL *a = opaque;
+    if (!a->running) return;
+    ++a->bemf_timer_callbacks;
+    AM13EMachineState *s = a->machine;
+    AM13ESimFeedback *f = &s->feedback;
+    int64_t now = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
+    uint32_t words[3] = {0x10000U | 2048U,
+                         0x10000U | 2048U,
+                         0x10000U | 2048U};
+    unsigned phase = s->sim_mc_mux[0] & 7U;
+    bool ready = am13e_auto_feedback_ready(s, f, phase);
+    int64_t next_crossing_ns = 0;
+
     if (ready) {
         uint32_t dac = f->cmp[0x0eU / 2U] & 0xfffU;
         uint32_t falling = !!(f->ecctl1 & 1U);
@@ -215,23 +292,30 @@ static void am13e_auto_analog_event(void *opaque)
                 a->epoch_valid = true;
                 a->phase_epoch_ns = now;
             }
-            uint64_t phase_time = (uint64_t)(now - a->phase_epoch_ns) %
-                                  (2U * AM13E_AUTO_BEMF_CROSS_NS);
-            bool crossed = phase_time >= AM13E_AUTO_BEMF_CROSS_NS;
+            uint64_t phase_time = (uint64_t)(now - a->phase_epoch_ns);
+            bool crossed = !!((phase_time / AM13E_AUTO_BEMF_CROSS_NS) & 1U);
             uint32_t high = dac + 128U, low = dac - 128U;
             words[phase] = 0x10000U |
                 (crossed == !!falling ? low : high);
+            /* Absolute one-shot zero-crossing deadlines prevent drift;
+             * 750us polarity flips continue if the original Guest
+             * chooses not to commutate. A changed mux/polarity restarts
+             * the half-cycle at the next deferred route notification. */
+            next_crossing_ns = a->phase_epoch_ns +
+                (int64_t)(phase_time / AM13E_AUTO_BEMF_CROSS_NS + 1U) *
+                AM13E_AUTO_BEMF_CROSS_NS;
+        } else {
+            a->epoch_valid = false;
         }
     } else {
         a->epoch_valid = false;
     }
+
     uint32_t previous = a->last_sample_word;
     for (unsigned i = 0; i < 3U; ++i) {
         uint32_t word = f->phase_code[i] |
                         (f->phase_valid[i] ? 0x10000U : 0U);
         if (word == words[i]) continue;
-        /* Existing QEMU SIM_ONLY stimulus entrypoint already implements
-         * comparator routing/filtering; no CAP1/ISR is manufactured. */
         if (am13e_g10_stim_write(f, i * 4U, words[i], 4U,
                                 MEMTXATTRS_UNSPECIFIED) != MEMTX_OK) {
             am13e_auto_fail(a, 3U);
@@ -243,8 +327,11 @@ static void am13e_auto_analog_event(void *opaque)
         previous && a->epoch_valid) {
         ++a->crossings; /* stimulus transitions, NOT native CAP1. */
     }
-    a->last_sample_word = ready ? words[phase] : 0U;
-    timer_mod(a->bemf_timer, now + AM13E_AUTO_BEMF_NS);
+    a->last_sample_word = next_crossing_ns ? words[phase] : 0U;
+    if (next_crossing_ns > now) {
+        timer_mod(a->bemf_timer, next_crossing_ns);
+    }
+    /* No polling when not ready; MMIO route changes reactivate timer. */
 }
 
 static MemTxResult am13e_auto_read(void *opaque, hwaddr off,
@@ -286,6 +373,23 @@ static MemTxResult am13e_auto_read(void *opaque, hwaddr off,
     case 0x50: *v = a->current_stage; break;
     case 0x54: *v = a->machine->sim_pa26_captures; break;
     case 0x58: *v = a->machine->sim_pa26_dma_beats; break;
+    case 0x5c: *v = a->stage_query; break;
+    case 0x60: *v = a->stage_evidence[a->stage_query].sent; break;
+    case 0x64: *v = a->stage_evidence[a->stage_query].capture; break;
+    case 0x68: *v = a->stage_evidence[a->stage_query].dma; break;
+    case 0x6c: *v = a->stage_evidence[a->stage_query].crossings; break;
+    case 0x70:
+        *v = (a->stage_evidence[a->stage_query].valid ? 1U : 0U) |
+             (a->stage_evidence[a->stage_query].completed ? 2U : 0U);
+        break;
+    case 0x74:
+        *v = a->stage_evidence[a->stage_query].elapsed_ns / AM13E_AUTO_FRAME_NS;
+        break;
+    case 0x78: *v = a->stage_evidence[a->stage_query].bemf_timer_callbacks; break;
+    case 0x7c: *v = a->stage_evidence[a->stage_query].analog_updates; break;
+    case 0x80: *v = a->bemf_timer_callbacks; break;
+    case 0x84: *v = a->route_reschedules; break;
+    case 0x88: *v = 2U; break; /* G13B6 experimental ABI */
     default: return MEMTX_ERROR;
     }
     return MEMTX_OK;
@@ -318,7 +422,11 @@ static MemTxResult am13e_auto_write(void *opaque, hwaddr off,
         a->start_ns = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + 100U;
         a->running = true;
         timer_mod(a->dshot_timer, a->start_ns);
-        timer_mod(a->bemf_timer, a->start_ns + AM13E_AUTO_BEMF_NS);
+        timer_mod(a->bemf_timer, a->start_ns + AM13E_AUTO_ROUTE_REEVAL_NS);
+        return MEMTX_OK;
+    }
+    if (off == 0x5c && v < AM13E_AUTO_MAX_STAGES) {
+        a->stage_query = v; /* non-silicon, read-only evidence selection */
         return MEMTX_OK;
     }
     if (a->running || a->done || a->error_code) {

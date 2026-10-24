@@ -13,7 +13,8 @@ import time
 from g11_exception_lifecycle import observer, del_bp, continue_bounded
 from g13b_native_dshot import queue_dshot600_wire
 from tools.autonomous_sitl_host import (
-    configure_auto, read_auto, native_end_oracle,
+    configure_auto, read_auto, read_stage_checkpoints,
+    summarize_stage_samples, native_end_oracle,
     AUTO_RUNNING, AUTO_DONE, AUTO_ERROR,
 )
 from tools.native_pwm_qualification import observe_original_pwm
@@ -60,7 +61,7 @@ def run_autonomous(args, scenario, evidence, rsp, qtest,
     thread = threading.Thread(target=continue_guest, daemon=True)
     started = time.monotonic()
     last_log_frames = 0
-    last_sample_ms = -1000
+    last_sample_ms = -args.autonomous_telemetry_interval_ms
     snap = initial
     try:
         thread.start()
@@ -84,12 +85,22 @@ def run_autonomous(args, scenario, evidence, rsp, qtest,
                     'guest_elapsed_ms': snap['elapsed_ms'],
                     'bemf_stimulus_transitions': snap['bemf_crossings'],
                 }, sort_keys=True), flush=True)
-            if snap['elapsed_ms'] >= last_sample_ms + 1000:
+            if (snap['elapsed_ms'] >= (
+                    last_sample_ms + args.autonomous_telemetry_interval_ms):
                 last_sample_ms = snap['elapsed_ms']
                 g = guest_snapshot(qtest.read, addresses)
+                frame_index = min(max(snap['sent'] - 1, 0),
+                                  scenario.total_frames - 1)
+                intended = scenario.frame(frame_index)
                 record = {'sim_elapsed_ms':snap['elapsed_ms'],
+                          'stage_index':intended.stage_index,
+                          'last_sent_frame_index':frame_index,
+                          'intended_command_pct':float(intended.pct),
+                          'intended_command_dshot':intended.dshot_value,
                           'sim_dshot_value':snap['last_dshot'],
                           'guest_throt_sample':g['throt'],
+                          'guest_throttle_minus_command':
+                              g['throt'] - intended.dshot_value,
                           'guest_valid_crc_feed_total':g['valid_frame_feeds'],
                           'guest_step_sample':g['step'],
                           'guest_cap1_total':g['captured_events'],
@@ -102,6 +113,11 @@ def run_autonomous(args, scenario, evidence, rsp, qtest,
                     record['pwm_observer_ready_sample'] = obs.acceptable_for_plant
                     record['pwm_six_high_ticks_sample'] = list(obs.six_high_ticks)
                     record['pwm_period_ticks_sample'] = obs.period_ticks
+                    record['pwm_high_tick_ratios_sample'] = (
+                        [round(t/obs.period_ticks,5)
+                         for t in obs.six_high_ticks]
+                        if obs.period_ticks > 0 and
+                        obs.acceptable_for_plant else None)
                 except (ValueError, AssertionError, RuntimeError) as exc:
                     record['pwm_observer_diagnostic'] = str(exc)
                 evidence['telemetry'].append(record)
@@ -132,14 +148,38 @@ def run_autonomous(args, scenario, evidence, rsp, qtest,
         guest_core=core,
         host_wall_elapsed_s=time.monotonic()-started,
         native_oracle_issues=issues)
-    # Native total counters are observed, but no fake per-stage Guest CRC
-    # claim is made from asynchronously sampled intervals.
-    remaining = snap['sent']
-    for row, source in zip(evidence['stages'], scenario.stages):
-        budget = (source.end_ns-source.start_ns) // 1_000_000
-        row['frames_sent'] = min(budget, remaining)
-        remaining -= row['frames_sent']
+    # Each virtual stage boundary is latched by QEMU's input timer.
+    # These are exact physical fixture counters, distinct from sampled
+    # Guest CRC/throttle and modeled PWM (not coherent Guest snapshots).
+    checkpoints = read_stage_checkpoints(
+        qtest, scenario, max_frames=args.max_frames)
+    async_stage = summarize_stage_samples(scenario, evidence['telemetry'])
+    evidence['autonomous']['stage_physical_checkpoints'] = checkpoints
+    evidence['autonomous']['stage_guest_async_samples'] = async_stage
+    prev_sent = 0
+    for row, stage_cp, stage_diag in zip(
+            evidence['stages'], checkpoints, async_stage):
+        if stage_cp['valid']:
+            row['frames_sent'] = stage_cp['end_sent_cumulative'] - prev_sent
+            prev_sent = stage_cp['end_sent_cumulative']
+        else:
+            row['frames_sent'] = 0
+        row['physical_stage_checkpoint'] = stage_cp
+        row['guest_asynchronous_stage_diagnostics'] = stage_diag
         row['status'] = 'OPEN_AUTONOMOUS_STAGE_GUEST_ACCEPTANCE_NOT_PROVED'
+    if prev_sent != snap['sent']:
+        issues.append('stage_latched_frame_total_mismatch')
+    full_duration = (not args.max_frames or
+                     args.max_frames == scenario.total_frames)
+    if full_duration and any(not row['valid'] or not row['complete']
+                             for row in checkpoints):
+        issues.append('stage_physical_checkpoint_missing')
+    if full_duration and any(
+            cp['end_sent_cumulative'] != stage.end_ns//1_000_000
+            for cp, stage in zip(checkpoints, scenario.stages)):
+        issues.append('stage_sent_boundary_mismatch')
+    # Stage-specific Guest CRC/Throttle proof remains OPEN; this does
+    # not downgrade the established aggregate-only oracle.
     evidence['autonomous']['valid_crc_feed_delta'] = (
         after['valid_frame_feeds']-baseline['valid_frame_feeds'])
     evidence['autonomous']['valid_crc_feed_per_sent_ratio'] = (
@@ -154,8 +194,9 @@ def run_autonomous(args, scenario, evidence, rsp, qtest,
     evidence['dshot_frames_sent'] = snap['sent']
     evidence['last_guest_virtual_elapsed_ns'] = snap['elapsed_ns']
     evidence['scripted_bemf_crossings_issued'] = snap['bemf_crossings']
-    evidence['completed_full_duration'] = bool(
-        not args.max_frames or args.max_frames == scenario.total_frames)
+    evidence['completed_full_duration'] = full_duration
+    if issues and status.startswith('PASS_'):
+        status = 'FAIL_AUTONOMOUS_ORACLE'
     # A bounded 50-frame smoke is NOT a full PASS and cannot qualify
     # per-stage Guest CRC and commutation even if its inputs all played.
     if evidence['completed_full_duration'] and not issues:
@@ -196,5 +237,10 @@ def run_autonomous(args, scenario, evidence, rsp, qtest,
         'original_timg12_serviced_delta':
             after['serviced']-baseline['serviced'],
         'scripted_bemf_transitions':snap['bemf_crossings'],
+        'bemf_timer_callbacks':snap.get('bemf_timer_callbacks'),
+        'route_reschedules':snap.get('route_reschedules'),
+        'stage_checkpoints':[
+            {'index':cp['index'],'sent':cp['end_sent_cumulative'],
+             'complete':cp['complete']} for cp in checkpoints],
         'issues':issues},sort_keys=True),flush=True)
     return status.startswith('PASS_')

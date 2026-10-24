@@ -374,11 +374,20 @@ typedef struct AM13EPA26Wave {
 typedef struct AM13EAutoStage {
     uint32_t duration_ms, from_permille, to_permille, update_ms;
 } AM13EAutoStage;
+typedef struct AM13EAutoStageEvidence {
+    uint32_t sent, capture, dma, crossings, bemf_timer_callbacks;
+    uint32_t analog_updates;
+    uint64_t elapsed_ns;
+    bool valid, completed;
+} AM13EAutoStageEvidence;
 typedef struct AM13EAutoSITL {
     MemoryRegion mmio;
     QEMUTimer *dshot_timer, *bemf_timer;
     struct AM13EMachineState *machine;
     AM13EAutoStage stages[16];
+    AM13EAutoStageEvidence stage_evidence[16];
+    uint32_t stage_query, bemf_timer_callbacks, route_reschedules;
+    uint64_t last_route_signature;
     uint32_t stage_count, stage_index, max_frames;
     uint32_t total_frames, target_frames, sent;
     uint32_t last_dshot, crossings, analog_updates, powered_samples;
@@ -542,6 +551,10 @@ struct AM13EMachineState {
     Clock *cpuclk;
     Clock *refclk;
 };
+
+/* Defined after the autonomous include; Guest MMIO hooks merely request
+ * a QEMU Virtual Clock re-evaluation, no comparator/CAP1/IRQ injection. */
+static void am13e_auto_route_changed(AM13EMachineState *s);
 
 #include "am13e_motor_feedback.inc"
 
@@ -1728,6 +1741,9 @@ static void am13e_pwm4_clock_update(AM13ESimPWM *p)
         am13e_pwm4_rearm(p);
     }
     am13e_pwm4_hist_refresh(p,AM13E_H_CLOCK,before!=p->running);
+    if (before != p->running) {
+        am13e_auto_route_changed(p->machine);
+    }
 }
 
 static void am13e_pwm4_reset(AM13ESimPWM *p)
@@ -1970,6 +1986,7 @@ static MemTxResult am13e_pwm4_write(void *opaque, hwaddr off,
         p->reg[off / 4U] = data;
         am13e_g13b2_trip_update(p->machine);
         am13e_pwm4_hist_refresh(p,AM13E_H_TRIP,false);
+        am13e_auto_route_changed(p->machine);
         return MEMTX_OK;
     case 0xb4U:
         /* Guest W1C never clears a physically active Trip source. */
@@ -1982,6 +1999,7 @@ static MemTxResult am13e_pwm4_write(void *opaque, hwaddr off,
         am13e_g13b2_trip_update(p->machine);
         am13e_pwm4_irq_update(p);
         am13e_pwm4_hist_refresh(p,AM13E_H_TRIP,false);
+        am13e_auto_route_changed(p->machine);
         return MEMTX_OK;
     case 0xf4U:
         if (data & 2U) p->latch = false;
@@ -2297,6 +2315,7 @@ static MemTxResult am13e_sim_motor_sysctl_write(AM13EMachineState *s,
         *cfg = data;
         if (offset == AM13E_SIM_CMPHP_MUX) {
             am13e_g10_cmp_evaluate(&s->feedback);
+            am13e_auto_route_changed(s);
         }
         return MEMTX_OK;
     }
@@ -2326,6 +2345,7 @@ static MemTxResult am13e_sim_motor_sysctl_write(AM13EMachineState *s,
         }
         am13e_g10_cmp_evaluate(&s->feedback);
         am13e_pwm4_clock_update(&s->pwm4);
+        am13e_auto_route_changed(s);
         return MEMTX_OK;
     case AM13E_SIM_RST_ASSERT_MC:
     case AM13E_SIM_RST_CLEAR_MC:
@@ -2345,6 +2365,7 @@ static MemTxResult am13e_sim_motor_sysctl_write(AM13EMachineState *s,
         } else {
             s->sim_mc_reset_sticky &= ~(data & AM13E_SIM_MCPERIPH_MASK);
         }
+        am13e_auto_route_changed(s);
         return MEMTX_OK;
     case AM13E_SIM_STAT_MCPERIPH:
         return am13e_sysctl_unmodeled(s, offset, true, size);

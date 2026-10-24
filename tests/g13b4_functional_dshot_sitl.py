@@ -459,6 +459,8 @@ def main():
                     help='Host guard only; never the scenario virtual clock')
     ap.add_argument('--autonomous-poll-ms', type=int, default=50,
                     help='Host diagnostic polling, not stimulus timing')
+    ap.add_argument('--autonomous-telemetry-interval-ms', type=int, default=200,
+                    help='Guest virtual time between async stage telemetry samples')
     ap.add_argument('--max-lateness-us', type=int, default=500)
     ap.add_argument('--bemf-crossing-delay-us', type=int, default=750)
     ap.add_argument('--bemf-amplitude-codes', type=int, default=128)
@@ -478,7 +480,8 @@ def main():
         not 1 <= args.teardown_max_wfi <= 5000):
         ap.error('Unsafe fixture bounds')
     if (not 10 <= args.autonomous_wall_timeout_s <= 7200 or
-            not 10 <= args.autonomous_poll_ms <= 1000):
+            not 10 <= args.autonomous_poll_ms <= 1000 or
+            not 50 <= args.autonomous_telemetry_interval_ms <= 10000):
         ap.error('Unsafe autonomous observation bound')
     scenario = load_scenario(args.plan,args.case_id)
     args.artifact.parent.mkdir(parents=True,exist_ok=True)

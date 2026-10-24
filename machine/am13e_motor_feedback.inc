@@ -203,8 +203,12 @@ static void am13e_g10_pwm_sync(AM13ESimFeedback *f)
         return;
     }
     if (f->cmp[0x08U / 2U] & 0x80U) {
+        uint16_t before = f->cmp[0x0eU / 2U];
         f->cmp[0x0eU / 2U] = f->cmp[0x0cU / 2U];
         am13e_g10_cmp_evaluate(f);
+        if (before != f->cmp[0x0eU / 2U]) {
+            am13e_auto_route_changed(f->machine);
+        }
     }
 }
 static void am13e_g10_reset(AM13ESimFeedback *f)
@@ -361,9 +365,15 @@ static MemTxResult am13e_g10_ecap_write(void *opaque, hwaddr off,
             if (!am13e_g10_ecap_put16(f, off, v & 0xffffU) ||
                 !am13e_g10_ecap_put16(f, off + 2U, v >> 16)) goto bad;
         } else goto bad; /* CAPx are captured by events, not firmware */
+        if (off == 0x24U || off == 0x28U || off == 0x2cU) {
+            am13e_auto_route_changed(f->machine);
+        }
         return MEMTX_OK;
     }
     if (size == 2U && am13e_g10_ecap_put16(f, off, v)) {
+        if (off == 0x28U || off == 0x2aU || off == 0x2cU) {
+            am13e_auto_route_changed(f->machine);
+        }
         return MEMTX_OK;
     }
 bad:
@@ -429,6 +439,10 @@ static bool am13e_g10_cmp_write16(AM13ESimFeedback *f, hwaddr off,
         f->filter_pending = f->filtered;
     }
     am13e_g10_cmp_evaluate(f);
+    if (off == 0x00U || off == 0x08U || off == 0x0cU ||
+        off == 0x30U || off == 0x32U || off == 0x72U) {
+        am13e_auto_route_changed(f->machine);
+    }
     return true;
 }
 static MemTxResult am13e_g10_cmp_read(void *opaque, hwaddr off,
