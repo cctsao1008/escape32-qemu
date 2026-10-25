@@ -9,6 +9,8 @@ on:
       - 'tools/native_arming.py'
       - 'tests/functional_dshot_sitl.py'
       - 'tests/test_t02_*.py'
+      - 'tools/ci/verify_t02.py'
+      - 'tools/ci/qualification_matrix.py'
       - '.github/workflows/e62-t02-functional.yml'
   workflow_dispatch:
 permissions:
