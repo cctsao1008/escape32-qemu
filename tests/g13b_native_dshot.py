@@ -32,6 +32,7 @@ from g0_memory import QTest
 from tools.virtual_bldc import GATE_EN, GPIO1_BASE, PINCM_BASE
 
 WAVE = 0x5ffe4000
+EXT_OC = 0x5ffe5000  # external analog current input, never a Guest CMPSS write
 PA26 = 0x5ffe0000
 TIMG4 = 0x40180000
 DMA = 0x40020000
@@ -153,6 +154,12 @@ def main():
         try:
             qsock, _ = listener.accept()
             qtest = QTest(qsock)
+            # Same explicit, physically healthy SIM_ONLY current inputs
+            # used by the verified Native Fault and Functional T01 probes.
+            # This never changes the original Guest's comparator, ISR,
+            # SRAM, or protection state.
+            for phase in range(3):
+                qtest.write(EXT_OC + 4*phase, 0x10000 | 1000)
             print("G13B1_TCG_QTEST_EXTERNAL_PORT_CONNECTED "
                   "NO_GUEST_REGISTER_WRITES", flush=True)
             with wait_for_socket(sock, proc) as conn:
