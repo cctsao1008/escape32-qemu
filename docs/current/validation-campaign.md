@@ -135,7 +135,9 @@ does not implement full reset/shutdown propagation.
 
 `e62-pinned-archive-integrity.yml` checks the original **committed**
 ELF/QEMU/libfdt bytes, sizes, `manifest.json`, and `SHA256SUMS`.
-It reports `current_source_drift_files` separately. A successful
+Published-release SHA256 and byte sizes for all three artifacts are also
+independently pinned in code, so synchronized binary + manifest + checksum
+ledger rewrites fail closed. It reports `current_source_drift_files` separately. A successful
 `PASS_HISTORICAL_BYTES_INTEGRITY_ONLY` proves only the historical
 archive has not changed relative to its manifest. It does **not**
 requalify those 2026-October G13B3 QEMU bytes against changed current

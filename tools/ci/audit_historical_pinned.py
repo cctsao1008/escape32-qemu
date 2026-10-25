@@ -19,6 +19,19 @@ FILES=('firmware/AM13E-rev17.3.elf',
        'qemu/linux-x86_64/qemu-system-arm',
        'qemu/linux-x86_64/libfdt.so.1')
 EXPECTED_ELF='05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0'
+# Independent constants captured at the ORIGINAL pinned G13B3 release.
+# A replacement binary + rewritten manifest must still fail.
+PUBLISHED_BINARIES={
+    'firmware/AM13E-rev17.3.elf':
+        ('05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0',1727132),
+    'qemu/linux-x86_64/qemu-system-arm':
+        ('5c56a11ff662ccdb7e6280f78f77c6787707cef530b535958a587713d477719b',79883640),
+    'qemu/linux-x86_64/libfdt.so.1':
+        ('66c111808e61c7f6be6715b4b03d0fe75beb5bc5b3a8809608d58d99a6bc9828',39064)
+}
+ORIGINAL_QEMU_UPSTREAM='44f28df24767cf9dca1ddc9b23157737c4cbb645'
+ORIGINAL_GUEST_SOURCE='b0204670515d2de0b2480b52273038f1ee13d30a'
+ORIGINAL_TI_SDK='b872469ceef18de5e39a1d3acb0821ec158b44c7'
 
 def digest(path):
     h=hashlib.sha256()
@@ -27,7 +40,7 @@ def digest(path):
             h.update(block)
     return h.hexdigest()
 
-def audit(root=ROOT, *, expected_elf=EXPECTED_ELF):
+def audit(root=ROOT, *, expected_archive=PUBLISHED_BINARIES):
     base=Path(root)/BUNDLE
     problems=[]
     try:
@@ -39,6 +52,16 @@ def audit(root=ROOT, *, expected_elf=EXPECTED_ELF):
     if (meta.get('schema')!='e62-g13b3-paired-binary-baseline.v1' or
         meta.get('id')!='E62-G13B3-SIM_ONLY-UBUNTU24-X86_64-v1'):
         problems.append('archive_manifest_identity_mismatch')
+    qemu=meta.get('qemu') or {}
+    guest=meta.get('guest') or {}
+    provenance=meta.get('provenance') or {}
+    if (qemu.get('upstream_revision')!=ORIGINAL_QEMU_UPSTREAM or
+        guest.get('source_revision')!=ORIGINAL_GUEST_SOURCE or
+        guest.get('ti_sdk_revision')!=ORIGINAL_TI_SDK):
+        problems.append('original_archive_release_revision_mismatch')
+    if (provenance.get('recorded_g13b3m_90ms_rotor') !=
+            'FAIL_ORIGINAL_REVERSE_MOTION'):
+        problems.append('archive_rotor_known_failure_provenance_changed')
     specs=meta.get('files')
     if not isinstance(specs,dict) or set(specs)!=set(FILES):
         problems.append('archive_files_manifest_unexpected')
@@ -55,9 +78,10 @@ def audit(root=ROOT, *, expected_elf=EXPECTED_ELF):
         real_sha=digest(path)
         if real_size!=expected_size or real_sha!=spec.get('sha256'):
             problems.append('archive_binary_checksum_mismatch:'+rel)
+        published_sha,published_size=expected_archive[rel]
+        if real_sha!=published_sha or real_size!=published_size:
+            problems.append('archived_release_identity_mismatch:'+rel)
         verified[rel]=real_sha
-    if verified.get(FILES[0])!=expected_elf:
-        problems.append('original_escap32_elf_sha_mismatch')
     try:
         ledger=(base/'SHA256SUMS').read_text(encoding='utf-8')
         expected=''.join(f'{verified.get(p, "MISSING")}  {p}\n' for p in FILES)
@@ -80,6 +104,7 @@ def audit(root=ROOT, *, expected_elf=EXPECTED_ELF):
                   if not problems else 'FAIL_ARCHIVE_INTEGRITY'),
         'issues':problems,
         'checked_binary_files':len(verified),
+        'independent_published_binary_digest_pin':True,
         'current_source_drift':bool(drift),
         'current_source_drift_files':drift,
         'current_source_pair_qualified':len(drift)==0 and not problems,
