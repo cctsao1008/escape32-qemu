@@ -99,11 +99,18 @@ def queue_dshot600_wire(qtest, throttle, *, allow_zero=False,
     return frame
 
 
-def gate_disconnected(rsp):
-    # Never infer gate polarity from unqualified Reference constants:
-    # absent PB13 output enable is an independent physical disconnect.
-    return ((rsp.mem32(GPIO1_BASE + 0x12c0) & GATE_EN) == 0 and
-            (rsp.mem32(PINCM_BASE + 4 * 45) & 0x3f) == 1)
+def gate_neutral_inactive(rsp):
+    # G13B3 SIM_ONLY has a TEST-ONLY configured PB13 gate output.
+    # Unlike the historical disconnected Reference board, this pin is
+    # mapped, but an unarmed, neutral ESC must have active-high PB13 LOW.
+    # Read-only source-owned GPIO/PINCM, never force the output LOW.
+    pincm = rsp.mem32(PINCM_BASE + 4 * 45)
+    doe = rsp.mem32(GPIO1_BASE + 0x12c0)
+    dout = rsp.mem32(GPIO1_BASE + 0x1280)
+    if (pincm & 0xBF) != 0x81 or not (doe & GATE_EN):
+        raise AssertionError(
+            "G13B3 configured PB13 gate route unexpectedly absent")
+    return not bool(dout & GATE_EN)
 
 
 def main():
@@ -192,8 +199,8 @@ def main():
                         raise AssertionError(
                             "Unexpected non-neutral native throttle before "
                             f"external DShot: {pre_command_throt}")
-                    if not gate_disconnected(rsp):
-                        raise AssertionError("Board unexpectedly gate-connected")
+                    if not gate_neutral_inactive(rsp):
+                        raise AssertionError("Native gate was active before physical DShot")
                     if ((rsp.mem32(PINCM_BASE + 26 * 4) &
                          0x000400bf) != 0x00040083):
                         raise AssertionError("Native TIMG4 PA26 pinmux absent")
@@ -237,7 +244,7 @@ def main():
                     dma_beats = rsp.mem32(PA26 + 12)
                     remaining = rsp.mem32(DMA + 0x122c)
                     delivered = rsp.mem32(WAVE + 12)
-                    gate_off = gate_disconnected(rsp)
+                    gate_off = gate_neutral_inactive(rsp)
                     record = dict(frame=frame, guest_frame=guest_frame,
                                   inverted=inverted, delivered=delivered,
                                   capture=capture, dma_beats=dma_beats,
@@ -279,7 +286,7 @@ def main():
                             f"Unexpected native callback return PC 0x{rsp.reg(15):08x}")
                     crc_accepted = rsp.reg(0) & 0xffffffff
                     throttle_after = rsp.mem32(throt_addr)
-                    gate_still_off = gate_disconnected(rsp)
+                    gate_still_off = gate_neutral_inactive(rsp)
                     record.update(callback_return_pc=return_pc,
                                   callback_return=crc_accepted,
                                   throttle_after_callback=throttle_after,
