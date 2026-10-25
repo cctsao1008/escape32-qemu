@@ -175,6 +175,37 @@ def main():
         assert readw(q, EC + 0x2e) == 0
         print("G10C_INPUT45_AND_COMPARATOR_POWER_ROUTE_FAIL_CLOSED=PASS")
 
+        # G19: after a selected rising edge, both unrelated phase
+        # changes and exact repeated sample writes MUST NOT postpone the
+        # already-running majority filter. This was an actual QEMU timing
+        # defect, unlike unsupported claims about motor control policy.
+        writew(q, CMP, 0)        # ensure known low filtered state
+        writew(q, CMP + 0x08, 0)
+        writew(q, CMP + 0x0c, 2048)
+        writew(q, CMP + 0x30, 0x420)  # threshold=3, 5ns ticks => 15ns
+        writew(q, CMP + 0x32, 0)
+        writew(q, CMP + 0x72, 0)
+        q.write(MUX, 0)
+        q.write(EC + 0x24, 45)
+        writew(q, EC + 0x28, 0x100) # rising CAP1
+        q.write(STIM, 0x10000 | 1500)
+        writew(q, CMP, 0x8008)
+        step(q, 100)
+        assert (readw(q, CMP + 0x04) & 1) == 0
+        writew(q, EC + 0x30, 3)
+        old_cap = q.read(EC + 8)
+        q.write(STIM, 0x10000 | 2500)  # selected raw goes HIGH
+        for k in range(4):
+            step(q, 4)
+            q.write(STIM + 4, 0x10000 | (2100 + k))  # unselected
+            q.write(STIM + 8, 0x10000 | (1900 - k))  # unselected
+            q.write(STIM, 0x10000 | 2500) # selected no-op
+        assert (readw(q, CMP + 0x04) & 1), (
+            "G19 filter was restarted by unchanged/unselected BEMF writes")
+        assert (readw(q, EC + 0x2e) & 2) and q.read(EC + 8) > old_cap, (
+            "G19 genuine comparator CAP1 starved by unrelated phase updates")
+        print("PASS_G19_SELECTED_RAW_CHANGE_ONLY_FILTER_UNSELECTED_NOOP")
+
         # PWM sync DAC: active DAC not updated until a real PWM zero event.
         q.write(POWER, 0x26000610)   # plus PWM4
         writew(q, CMP, 0)

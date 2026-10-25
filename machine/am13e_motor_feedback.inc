@@ -525,11 +525,17 @@ static bool am13e_g10_stim_vector(AM13ESimFeedback *f,
     if (!changed) {
         return true; /* Avoid cancelling pending filter on a no-op. */
     }
+    /* A transition on an UNSELECTED input is not a comparator raw edge.
+     * Preserve an already-running majority filter until the actual
+     * selected comparator raw output changes. */
+    bool old_raw = am13e_g10_raw(f);
     for (unsigned phase = 0; phase < 3U; ++phase) {
         f->phase_code[phase] = words[phase] & 0xfffU;
         f->phase_valid[phase] = !!(words[phase] & 0x10000U);
     }
-    am13e_g10_cmp_evaluate(f); /* Exactly once after atomic vector. */
+    if (am13e_g10_raw(f) != old_raw) {
+        am13e_g10_cmp_evaluate(f);
+    }
     return true;
 }
 
@@ -565,9 +571,22 @@ static MemTxResult am13e_g10_stim_write(void *opaque, hwaddr off,
     if (!f->machine->esc_sim || size != 4U || off >= 12U || (off & 3U) ||
         (value & ~UINT64_C(0x10fff))) return MEMTX_ERROR;
     unsigned phase = off / 4U;
+    /* Previous code restarted the entire digital filter for EVERY
+     * QTest write, even an unchanged value or unrelated U/V/W phase.
+     * The actual comparator should only re-evaluate on a selected
+     * raw-level transition; otherwise valid edges can be starved by
+     * the 3 x per-WFI Host BEMF fixture writes. */
+    uint32_t existing = f->phase_code[phase] |
+                        (f->phase_valid[phase] ? 0x10000U : 0U);
+    if (existing == (uint32_t)value) {
+        return MEMTX_OK;
+    }
+    bool old_raw = am13e_g10_raw(f);
     f->phase_code[phase] = value & 0xfffU;
     f->phase_valid[phase] = !!(value & 0x10000U);
-    am13e_g10_cmp_evaluate(f);
+    if (am13e_g10_raw(f) != old_raw) {
+        am13e_g10_cmp_evaluate(f);
+    }
     return MEMTX_OK;
 }
 static const MemoryRegionOps am13e_g10_stim_ops = {
