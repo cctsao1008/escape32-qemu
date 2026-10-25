@@ -12,7 +12,7 @@
  * The host must independently verify original Guest state.
  */
 #define AM13E_AUTO_BASE UINT32_C(0x5ffea000)
-#define AM13E_AUTO_SIZE 0x100U
+#define AM13E_AUTO_SIZE 0x200U
 #define AM13E_AUTO_MAGIC UINT32_C(0x41323645) /* E62A */
 #define AM13E_AUTO_MAX_STAGES 16U
 #define AM13E_AUTO_FRAME_NS INT64_C(1000000)
@@ -55,6 +55,10 @@
  * +e4 overwritten CAP1; +e8 last stimulus virtual time ns LO;
  * +ec last stimulus virtual time ns HI; +f0 last CAP1 ns LO;
  * +f4 last CAP1 ns HI; +f8 last TIMG12 IRQ ns LO; +fc HI
+ * +100 stage observed phase+polarity mask (6 bits); +104 transitions
+ * +108 no-op analog evaluation skips; +10c coherent vector commits
+ * +110 active-current stage phase+polarity mask; +114 stage transitions
+ * +118 version 4 semantic CRC of staged observer contract
  */
 static void am13e_auto_reset(AM13EAutoSITL *a)
 {
@@ -89,6 +93,9 @@ static void am13e_auto_reset(AM13EAutoSITL *a)
     a->epoch_valid = a->running = a->done = false;
     a->start_ns = a->end_ns = a->phase_epoch_ns = 0;
     a->last_sample_word = 0U;
+    a->stage_seen_mask = a->stage_route_transitions = 0U;
+    a->last_observed_state = UINT32_MAX;
+    a->vector_commits = a->vector_unchanged = 0U;
 }
 
 static void am13e_auto_fail(AM13EAutoSITL *a, uint32_t reason)
@@ -212,6 +219,10 @@ static void am13e_auto_checkpoint(AM13EAutoSITL *a, unsigned stage,
     e->crossings = a->crossings;
     e->analog_updates = a->analog_updates;
     e->bemf_timer_callbacks = a->bemf_timer_callbacks;
+    e->phase_polarity_mask = a->stage_seen_mask;
+    e->route_transitions = a->stage_route_transitions;
+    a->stage_seen_mask = a->stage_route_transitions = 0U;
+    a->last_observed_state = UINT32_MAX;
     e->elapsed_ns = now >= a->start_ns ?
                     (uint64_t)(now - a->start_ns) : 0U;
 }
@@ -350,16 +361,24 @@ static void am13e_auto_analog_event(void *opaque)
     }
 
     uint32_t previous = a->last_sample_word;
-    for (unsigned i = 0; i < 3U; ++i) {
-        uint32_t word = f->phase_code[i] |
-                        (f->phase_valid[i] ? 0x10000U : 0U);
-        if (word == words[i]) continue;
-        if (am13e_g10_stim_write(f, i * 4U, words[i], 4U,
-                                MEMTXATTRS_UNSPECIFIED) != MEMTX_OK) {
-            am13e_auto_fail(a, 3U);
-            return;
+    uint32_t writes_before = a->analog_updates;
+    if (!am13e_g10_stim_vector(f, words, &a->analog_updates)) {
+        am13e_auto_fail(a, 3U);
+        return;
+    }
+    if (a->analog_updates == writes_before) {
+        ++a->vector_unchanged;
+    } else {
+        ++a->vector_commits;
+    }
+    if (ready && phase < 3U && a->epoch_valid) {
+        uint32_t code = 2U * phase + !!(f->ecctl1 & 1U);
+        a->stage_seen_mask |= 1U << code;
+        if (a->last_observed_state != UINT32_MAX &&
+            code != a->last_observed_state) {
+            ++a->stage_route_transitions;
         }
-        ++a->analog_updates;
+        a->last_observed_state = code;
     }
     if (ready && words[phase] != previous &&
         previous && a->epoch_valid) {
@@ -499,7 +518,7 @@ static MemTxResult am13e_auto_read(void *opaque, hwaddr off,
     case 0x7c: *v = a->stage_evidence[a->stage_query].analog_updates; break;
     case 0x80: *v = a->bemf_timer_callbacks; break;
     case 0x84: *v = a->route_reschedules; break;
-    case 0x88: *v = 3U; break; /* G13B7 observation ABI */
+    case 0x88: *v = 4U; break; /* G13B7.1 corrected sampler ABI */
     case 0x8c: *v = a->route_reschedules; break;
     case 0x90: *v = a->route_coalesced; break;
     case 0x94: *v = a->timer_mod_count; break;
@@ -537,6 +556,13 @@ static MemTxResult am13e_auto_read(void *opaque, hwaddr off,
                     (uint32_t)(a->trace_last_t12_ns - a->start_ns) : 0; break;
     case 0xfc: *v = a->trace_last_t12_ns >= a->start_ns ?
                     (uint64_t)(a->trace_last_t12_ns - a->start_ns) >> 32U : 0; break;
+    case 0x100: *v = a->stage_evidence[a->stage_query].phase_polarity_mask; break;
+    case 0x104: *v = a->stage_evidence[a->stage_query].route_transitions; break;
+    case 0x108: *v = a->vector_unchanged; break;
+    case 0x10c: *v = a->vector_commits; break;
+    case 0x110: *v = a->stage_seen_mask; break;
+    case 0x114: *v = a->stage_route_transitions; break;
+    case 0x118: *v = UINT32_C(0x53363134); break; /* S614 schema */
     default: return MEMTX_ERROR;
     }
     return MEMTX_OK;

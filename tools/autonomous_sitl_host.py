@@ -9,7 +9,7 @@ from tools.functional_dshot_scenario import ScenarioError, percent_to_dshot
 
 AUTO_BASE = 0x5ffea000
 AUTO_MAGIC = 0x41323645
-AUTO_ABI = 3  # G13B7 timer coalescing and event timing
+AUTO_ABI = 4  # G13B7.1 atomically committed phases and stage observer
 AUTO_RUNNING, AUTO_DONE, AUTO_ERROR = 1, 2, 4
 FRAME_NS = 1_000_000
 REG = {
@@ -45,6 +45,10 @@ REG = {
     'trace_last_cross_lo': 0xe8, 'trace_last_cross_hi': 0xec,
     'trace_last_cap1_lo': 0xf0, 'trace_last_cap1_hi': 0xf4,
     'trace_last_timg12_lo': 0xf8, 'trace_last_timg12_hi': 0xfc,
+    'stage_phase_mask': 0x100, 'stage_phase_transitions': 0x104,
+    'vector_skipped': 0x108, 'vector_commits': 0x10c,
+    'live_phase_mask': 0x110, 'live_phase_transitions': 0x114,
+    'schema_magic': 0x118,
 }
 
 
@@ -91,7 +95,8 @@ def read_auto(read32):
     names = ('status','sent','target_frames','last_dshot','bemf_crossings',
              'elapsed_ms','error','analog_updates','pwm_samples',
              'stage','pa26_capture','pa26_dma',
-             'bemf_timer_callbacks','route_reschedules')
+             'bemf_timer_callbacks','route_reschedules',
+             'vector_skipped','vector_commits')
     values = {k:get(k) for k in names}
     values['elapsed_ns'] = get('elapsed_ns_lo') | (get('elapsed_ns_hi') << 32)
     return values
@@ -106,7 +111,9 @@ def configure_auto(qtest, scenario, *, max_frames=0):
     if qtest.read(AUTO_BASE+REG['magic']) != AUTO_MAGIC:
         raise RuntimeError('Autonomous QEMU fixture absent: rebuild QEMU')
     if qtest.read(AUTO_BASE+REG['abi_version']) != AUTO_ABI:
-        raise RuntimeError('G13B7 temporal-evidence ABI missing: rebuild QEMU')
+        raise RuntimeError('G13B7.1 atomic feedback ABI missing: rebuild QEMU')
+    if qtest.read(AUTO_BASE+REG['schema_magic']) != 0x53363134:
+        raise RuntimeError('G13B7.1 stage observer schema missing')
     put('command',3)  # clear simulator fixture only, never Guest RAM
     put('stage_count',len(stages))
     for i,stage in enumerate(stages):
@@ -141,8 +148,14 @@ def native_end_oracle(snapshot, before, after, scenario, *, max_frames=0):
     if snapshot['pa26_capture'] <= before['pa26_capture'] or (
             snapshot['pa26_dma'] <= before['pa26_dma']):
         reasons.append('no_physical_pa26_dma')
-    if after['valid_frame_feeds'] <= before['valid_frame_feeds']:
+    accepted = after['valid_frame_feeds'] - before['valid_frame_feeds']
+    if accepted <= 0:
         reasons.append('no_original_crc_acceptance')
+    # Regression threshold, not a wire BER/acceptance guarantee. The
+    # existing G13B5/B6/B7 11s baselines are ~0.96.
+    if not (max_frames and target < scenario.total_frames):
+        if accepted < target * 0.90:
+            reasons.append('aggregate_crc_feed_ratio_below_90_percent')
     if scenario.stages[-1].to_pct > 0 and after['throt'] <= 1:
         reasons.append('original_guest_final_throttle_not_positive')
     if max_frames and target < scenario.total_frames:
@@ -188,6 +201,8 @@ def read_stage_checkpoints(qtest, scenario, *, max_frames=0):
             'end_bemf_timer_callbacks_cumulative':
                 r('stage_end_bemf_callbacks'),
             'end_analog_updates_cumulative': r('stage_end_analog_updates'),
+            'phase_polarity_mask':r('stage_phase_mask'),
+            'phase_polarity_transitions':r('stage_phase_transitions'),
             'declared_start_ms': stage.start_ns//FRAME_NS,
             'declared_end_ms': stage.end_ns//FRAME_NS,
         }
@@ -275,6 +290,8 @@ def read_timing_evidence(read32):
         values[f'last_{name}_elapsed_ns'] = (
             read(f'trace_last_{name}_lo') |
             (read(f'trace_last_{name}_hi') << 32))
+    values['vector_skipped'] = read('vector_skipped')
+    values['vector_commits'] = read('vector_commits')
     values['scope'] = (
         'QEMU_VIRTUAL_TIME_ADJACENT_EVENTS_NOT_GUEST_ISR_PROOF')
     values['pairing_window_ns'] = 3_000_000
@@ -312,6 +329,15 @@ def sampled_stage_regression_gate(scenario, checkpoints, samples):
                 local.append('insufficient_hold_coverage')
         if len(group) < minimum:
             local.append('insufficient_guest_samples')
+        # Hardware-visible comparator mux+polarity observations are
+        # latched by QEMU at each stage boundary, independent of sparse
+        # Guest reads. A steady positive hold must visit all six states.
+        phase_mask = cp.get('phase_polarity_mask')
+        transitions = cp.get('phase_polarity_transitions')
+        if (stage.kind != 'ramp' and stage.to_pct > 0 and
+            stage_ms >= 1000 and
+            (phase_mask != 0x3f or transitions is None or transitions < 6)):
+            local.append('six_phase_polarity_states_not_observed')
         errors = []
         for r in group:
             cmd = r['intended_command_dshot']
@@ -327,10 +353,36 @@ def sampled_stage_regression_gate(scenario, checkpoints, samples):
             any(b < a for a,b in zip(crc, crc[1:]))
         ):
             local.append('guest_crc_not_progressing')
+        # Source counter delta is measured over the VIRTUAL sample span;
+        # not inferred to mean every transmitted packet was decoded.
+        sampled_span = (group[-1]['sim_elapsed_ms'] -
+                        group[0]['sim_elapsed_ms']) if len(group)>1 else 0
+        sampled_feed_ratio = ((crc[-1]-crc[0]) / sampled_span
+                              if sampled_span>0 else None)
+        if (sampled_feed_ratio is not None and
+            sampled_feed_ratio < 0.90):
+            local.append('sampled_crc_feed_ratio_below_90_percent')
         if stage.to_pct > 0 and len(group) >= 2:
-            ready_count = sum(bool(r.get('pwm_observer_ready_sample') and
-                               r.get('pwm_high_tick_ratios_sample') is not None)
-                              for r in group)
+            ready_count = 0
+            for r in group:
+                if not r.get('pwm_observer_ready_sample'):
+                    continue
+                ticks = r.get('pwm_six_high_ticks_sample')
+                period = r.get('pwm_period_ticks_sample')
+                if (not isinstance(ticks,(tuple,list)) or len(ticks)!=6
+                        or not isinstance(period,int) or period<=0):
+                    continue
+                if any(not 0<=t<=period for t in ticks):
+                    local.append('pwm_tick_out_of_range')
+                    continue
+                if any(ticks[i]+ticks[i+1]>period
+                       for i in (0,2,4)):
+                    local.append('pwm_phase_overlap')
+                    continue
+                if not any(ticks[i]!=ticks[i+1] for i in (0,2,4)):
+                    local.append('pwm_no_differential_phase_drive')
+                    continue
+                ready_count+=1
             if ready_count < 2:
                 local.append('insufficient_pwm_observation')
             for key in ('guest_cap1_total','guest_timg12_serviced_total'):
@@ -355,6 +407,9 @@ def sampled_stage_regression_gate(scenario, checkpoints, samples):
             'max_sampled_throttle_error':max(errors) if errors else None,
             'crc_delta_between_samples':(
                 crc[-1]-crc[0] if len(crc)>1 else None),
+            'sampled_crc_feed_ratio':sampled_feed_ratio,
+            'observed_phase_polarity_mask':phase_mask,
+            'observed_phase_polarity_transitions':transitions,
             'issues':local,
             'scope':'REL17_3_ASYNC_GUEST_SAMPLES_NOT_EVERY_FRAME',
         })

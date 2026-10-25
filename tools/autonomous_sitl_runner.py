@@ -61,6 +61,15 @@ def run_autonomous(args, scenario, evidence, rsp, qtest,
     rsp.sock.settimeout(args.autonomous_wall_timeout_s + 30)
     thread = threading.Thread(target=continue_guest, daemon=True)
     started = time.monotonic()
+    host_profiler = {
+        'qtest_engine_poll_wall_s':0.0,
+        'guest_sram_sampling_wall_s':0.0,
+        'model_pwm_observer_wall_s':0.0,
+        'host_poll_sleep_wall_s':0.0,
+        'engine_poll_count':0,
+        'guest_sample_count':0,
+        'pwm_sample_count':0,
+    }
     last_log_frames = 0
     last_sample_ms = -args.autonomous_telemetry_interval_ms
     snap = initial
@@ -71,7 +80,10 @@ def run_autonomous(args, scenario, evidence, rsp, qtest,
                 raise TimeoutError('Bounded host wall-clock timeout before QEMU virtual duration completed')
             if not thread.is_alive() and 'exception' in outcome:
                 raise RuntimeError('Original Guest RSP continue failed: '+outcome['exception'])
+            stamp = time.monotonic()
             snap = read_auto(qtest.read)
+            host_profiler['qtest_engine_poll_wall_s'] += time.monotonic()-stamp
+            host_profiler['engine_poll_count'] += 1
             if snap['status'] & AUTO_ERROR:
                 raise AssertionError('Autonomous QEMU stimulus error: '+str(snap))
             if snap['status'] & AUTO_DONE:
@@ -89,7 +101,11 @@ def run_autonomous(args, scenario, evidence, rsp, qtest,
             if (snap['elapsed_ms'] >=
                     last_sample_ms + args.autonomous_telemetry_interval_ms):
                 last_sample_ms = snap['elapsed_ms']
+                stamp = time.monotonic()
                 g = guest_snapshot(qtest.read, addresses)
+                host_profiler['guest_sram_sampling_wall_s'] += (
+                    time.monotonic()-stamp)
+                host_profiler['guest_sample_count'] += 1
                 frame_index = min(max(snap['sent'] - 1, 0),
                                   scenario.total_frames - 1)
                 intended = scenario.frame(frame_index)
@@ -109,6 +125,8 @@ def run_autonomous(args, scenario, evidence, rsp, qtest,
                           'guest_timg12_serviced_total':g['serviced']}
                 # Reading six duty registers while the Guest RUNS is a
                 # sampled observer, not a coherent PWM timeline or gate proof.
+                stamp = time.monotonic()
+                host_profiler['pwm_sample_count'] += 1
                 try:
                     obs = observe_original_pwm(qtest.read,gate_active_level=1)
                     record['pwm_observer_ready_sample'] = obs.acceptable_for_plant
@@ -121,8 +139,13 @@ def run_autonomous(args, scenario, evidence, rsp, qtest,
                         obs.acceptable_for_plant else None)
                 except (ValueError, AssertionError, RuntimeError) as exc:
                     record['pwm_observer_diagnostic'] = str(exc)
+                finally:
+                    host_profiler['model_pwm_observer_wall_s'] += (
+                        time.monotonic()-stamp)
                 evidence['telemetry'].append(record)
+            stamp = time.monotonic()
             time.sleep(args.autonomous_poll_ms / 1000.0)
+            host_profiler['host_poll_sleep_wall_s'] += time.monotonic()-stamp
     finally:
         # GDB 'c' is in another thread waiting for its async stop packet.
         # The sole host-initiated halt is at completion/fault/timeout,
@@ -141,6 +164,19 @@ def run_autonomous(args, scenario, evidence, rsp, qtest,
     if core['pc'] == hardfault or core['cfsr'] or core['hfsr']:
         raise AssertionError('Original Guest fault during continuous auto SITL: '+str(core))
     after = guest_snapshot(rsp.mem32,addresses)
+    continuous_run_elapsed_s = time.monotonic()-started
+    evidence['autonomous']['host_perf_profile'] = {
+        **host_profiler,
+        'continuous_runtime_wall_s':continuous_run_elapsed_s,
+        'qemu_virtual_s':snap['elapsed_ns']/1_000_000_000,
+        'guest_counters_are_not_cpu_time_profiles':True,
+        'unattributed_wall_s':max(0.0,
+            continuous_run_elapsed_s-
+            host_profiler['qtest_engine_poll_wall_s']-
+            host_profiler['guest_sram_sampling_wall_s']-
+            host_profiler['model_pwm_observer_wall_s']-
+            host_profiler['host_poll_sleep_wall_s']),
+    }
     status, issues = native_end_oracle(
         snap, baseline, after, scenario, max_frames=args.max_frames)
     evidence['autonomous'].update(
@@ -158,6 +194,22 @@ def run_autonomous(args, scenario, evidence, rsp, qtest,
     # original Guest is halted. These are not Guest ISR entry timestamps.
     trace = read_timing_evidence(qtest.read)
     evidence['autonomous']['event_timing_evidence'] = trace
+    evidence['autonomous']['simulator_workload_profile'] = {
+        'dshot_frames':snap['sent'],
+        'pa26_edge_events_delta':
+            snap['pa26_capture']-baseline['pa26_capture'],
+        'dma_beat_delta':snap['pa26_dma']-baseline['pa26_dma'],
+        'bemf_timer_callbacks':snap['bemf_timer_callbacks'],
+        'feedback_timer_mods':trace['feedback_timer_mods'],
+        'route_change_notifications':trace['effective_route_changes'],
+        'route_coalesced':trace['coalesced_route_changes'],
+        'route_duplicate_skips':trace['duplicate_route_skips'],
+        'analog_vector_commits':trace['vector_commits'],
+        'analog_vector_noop_skips':trace['vector_skipped'],
+        'cap1_events':trace['trace_cap1_events'],
+        'timg12_irq_events':trace['trace_timg12_irq_events'],
+        'units':'EVENT_COUNT_NOT_CPU_TIME',
+    }
     async_stage = summarize_stage_samples(scenario, evidence['telemetry'])
     evidence['autonomous']['stage_physical_checkpoints'] = checkpoints
     evidence['autonomous']['stage_guest_async_samples'] = async_stage
@@ -171,6 +223,18 @@ def run_autonomous(args, scenario, evidence, rsp, qtest,
             row['frames_sent'] = 0
         row['physical_stage_checkpoint'] = stage_cp
         row['guest_asynchronous_stage_diagnostics'] = stage_diag
+        # Old per-WFI fields are NOT filled in autonomous mode. Leaving
+        # zeros/False here causes contradictory PASS+False JSON evidence.
+        for legacy in ('valid_crc_feeds_observed',
+                       'guest_pwm_powered_observed',
+                       'guest_nonzero_throttle_observed',
+                       'guest_neutral_throttle_observed',
+                       'original_cap1_count_delta',
+                       'original_timg12_service_delta',
+                       'native_steps_observed'):
+            row[legacy] = None
+        row['legacy_guest_stage_fields_scope'] = (
+            'NOT_MEASURED_IN_AUTONOMOUS_MODE_USE_SAMPLED_STAGE_GATE')
         row['status'] = 'OPEN_AUTONOMOUS_STAGE_GUEST_ACCEPTANCE_NOT_PROVED'
     if prev_sent != snap['sent']:
         issues.append('stage_latched_frame_total_mismatch')
@@ -202,6 +266,10 @@ def run_autonomous(args, scenario, evidence, rsp, qtest,
         if (trace['feedback_timer_mods'] == 0 or
             trace['trace_cross_cap_pairs'] == 0):
             issues.append('missing_qemu_feedback_timing_observation')
+        if trace['trace_cross_cap_pairs'] < 0.90*snap['bemf_crossings']:
+            issues.append('temporal_cross_cap_pair_ratio_below_90_percent')
+        if trace['trace_triplets'] < 0.90*trace['trace_cap1_events']:
+            issues.append('temporal_pair_chain_ratio_below_90_percent')
     else:
         evidence['autonomous']['sampled_stage_regression'] = (
             'OPEN_BOUNDED_SMOKE_NOT_QUALIFIED')
@@ -275,5 +343,6 @@ def run_autonomous(args, scenario, evidence, rsp, qtest,
         'stage_checkpoints':[
             {'index':cp['index'],'sent':cp['end_sent_cumulative'],
              'complete':cp['complete']} for cp in checkpoints],
+        'workload':evidence['autonomous']['simulator_workload_profile'],
         'issues':issues},sort_keys=True),flush=True)
     return status.startswith('PASS_')

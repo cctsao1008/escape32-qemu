@@ -29,12 +29,23 @@ class G13B7SourceWiringTests(unittest.TestCase):
         self.assertIn('t->machine = s;',self.machine)
 
     def test_revised_abi_and_timing_are_readonly_observations(self):
-        self.assertIn('case 0x88: *v = 3U',self.autonomous)
+        self.assertIn('case 0x88: *v = 4U',self.autonomous)
         for offset in ('0x9c','0xa0','0xa4','0xa8','0xac','0xfc'):
             self.assertIn('case '+offset,self.autonomous)
         self.assertIn('static void am13e_auto_trace_cap1',self.autonomous)
         self.assertIn('static void am13e_auto_trace_timg12_zero',
                       self.autonomous)
+
+    def test_comparator_filter_retained_on_identical_pwm_dac(self):
+        # Source wiring sanity; actual timer behavior must also pass
+        # native QEMU integration below.
+        self.assertIn('if (f->cmp[0x0eU / 2U] != shadow)',
+                      self.feedback)
+        self.assertIn('am13e_g10_stim_vector',self.feedback)
+        self.assertIn('am13e_g10_stim_vector(f, words,',
+                      self.autonomous)
+        self.assertNotIn('am13e_g10_stim_write(f, i * 4U, words[i]',
+                         self.autonomous)
 
 
 if __name__=='__main__':

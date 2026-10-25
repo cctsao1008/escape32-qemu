@@ -26,7 +26,11 @@ class G13B7OracleTests(unittest.TestCase):
                 guest_valid_crc_feed_total=crc,guest_cap1_total=cap,
                 guest_timg12_serviced_total=t12,
                 pwm_observer_ready_sample=pwm,
-                pwm_high_tick_ratios_sample=[.5]*6 if pwm else None)
+                pwm_high_tick_ratios_sample=(
+                    [0,0,0,1,.9,.1] if pwm else None),
+                pwm_six_high_ticks_sample=(
+                    [0,0,0,4167,3756,411] if pwm else None),
+                pwm_period_ticks_sample=4167 if pwm else 0)
         return [
             row(0,0,0,1,0,0,False),
             row(211,426,379,200,161,144,True),
@@ -42,8 +46,10 @@ class G13B7OracleTests(unittest.TestCase):
     @staticmethod
     def fixture_checkpoints():
         return [
-            dict(valid=True,complete=True,end_sent_cumulative=1000),
-            dict(valid=True,complete=True,end_sent_cumulative=11000),
+            dict(valid=True,complete=True,end_sent_cumulative=1000,
+                 phase_polarity_mask=0x3f,phase_polarity_transitions=904),
+            dict(valid=True,complete=True,end_sent_cumulative=11000,
+                 phase_polarity_mask=0x3f,phase_polarity_transitions=9100),
         ]
 
     def test_historical_g13b6_t01_semantics_pass_sample_gate(self):
@@ -75,6 +81,42 @@ class G13B7OracleTests(unittest.TestCase):
             self.t01,self.fixture_checkpoints(),samples)
         self.assertTrue(any('guest_crc_not_progressing' in x for x in issues))
 
+    def test_low_crc_acceptance_ratio_fails_despite_positive_counter(self):
+        samples=self.fixture_samples()
+        for i,record in enumerate(samples):
+            record['guest_valid_crc_feed_total']=i*2
+        _,issues=sampled_stage_regression_gate(
+            self.t01,self.fixture_checkpoints(),samples)
+        self.assertTrue(any('sampled_crc_feed_ratio_below_90_percent' in x
+                            for x in issues))
+
+    def test_six_step_stuck_mask_fails_positive_hold(self):
+        stages=self.fixture_checkpoints()
+        stages[1]['phase_polarity_mask']=1
+        _,issues=sampled_stage_regression_gate(
+            self.t01,stages,self.fixture_samples())
+        self.assertTrue(any('six_phase_polarity_states_not_observed' in x
+                            for x in issues))
+
+    def test_all_50pct_pwm_is_not_differential_drive(self):
+        samples=self.fixture_samples()
+        for r in samples:
+            if r['pwm_observer_ready_sample']:
+                r['pwm_six_high_ticks_sample']=[2083]*6
+        _,issues=sampled_stage_regression_gate(
+            self.t01,self.fixture_checkpoints(),samples)
+        self.assertTrue(any('pwm_no_differential_phase_drive' in x
+                            for x in issues))
+
+    def test_invalid_overlapping_phase_pwm_fails(self):
+        samples=self.fixture_samples()
+        for r in samples:
+            if r['pwm_observer_ready_sample']:
+                r['pwm_six_high_ticks_sample']=[3000,3000,0,4167,3756,411]
+        _,issues=sampled_stage_regression_gate(
+            self.t01,self.fixture_checkpoints(),samples)
+        self.assertTrue(any('pwm_phase_overlap' in x for x in issues))
+
     def test_incomplete_physical_checkpoint_fails(self):
         checkpoints=self.fixture_checkpoints()
         checkpoints[0]['complete']=False
@@ -103,7 +145,7 @@ class G13B7OracleTests(unittest.TestCase):
 
     def test_g13b6_abi_cannot_masquerade_as_g13b7(self):
         values={AUTO_BASE+REG['magic']:AUTO_MAGIC,
-                AUTO_BASE+REG['abi_version']:2}
+                AUTO_BASE+REG['abi_version']:3}
         with self.assertRaisesRegex(RuntimeError,'ABI mismatch'):
             read_timing_evidence(lambda addr:values.get(addr,0))
 

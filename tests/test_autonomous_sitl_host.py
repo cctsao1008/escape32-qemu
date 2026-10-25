@@ -14,7 +14,8 @@ class MockQTest:
     def __init__(self):
         self.mem = {AUTO_BASE+REG['magic']: AUTO_MAGIC,
                     AUTO_BASE+REG['status']: AUTO_RUNNING,
-                    AUTO_BASE+REG['abi_version']: AUTO_ABI}
+                    AUTO_BASE+REG['abi_version']: AUTO_ABI,
+                    AUTO_BASE+REG['schema_magic']:0x53363134}
         self.evidence_by_stage = {}
     def write(self, addr, val):
         self.mem[addr] = val

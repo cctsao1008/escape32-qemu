@@ -455,8 +455,8 @@ def main():
                     help='Bounded native smoke, 0 means full duration; smoke NEVER PASS')
     ap.add_argument('--autonomous', action='store_true',
                     help='G13B5 opt-in: QEMU virtual-time DShot/BEMF, no per-WFI GDB')
-    ap.add_argument('--autonomous-wall-timeout-s', type=int, default=300,
-                    help='Host guard only; never the scenario virtual clock')
+    ap.add_argument('--autonomous-wall-timeout-s', type=int, default=0,
+                    help='Host guard seconds: 0 auto-scales with scenario (not Guest clock)')
     ap.add_argument('--autonomous-poll-ms', type=int, default=50,
                     help='Host diagnostic polling, not stimulus timing')
     ap.add_argument('--autonomous-telemetry-interval-ms', type=int, default=200,
@@ -479,11 +479,17 @@ def main():
         not 1 <= args.bemf_sample_interval <= 1000 or
         not 1 <= args.teardown_max_wfi <= 5000):
         ap.error('Unsafe fixture bounds')
-    if (not 10 <= args.autonomous_wall_timeout_s <= 7200 or
+    if (not (args.autonomous_wall_timeout_s == 0 or
+             10 <= args.autonomous_wall_timeout_s <= 7200) or
             not 10 <= args.autonomous_poll_ms <= 1000 or
             not 50 <= args.autonomous_telemetry_interval_ms <= 10000):
         ap.error('Unsafe autonomous observation bound')
     scenario = load_scenario(args.plan,args.case_id)
+    if args.autonomous_wall_timeout_s == 0:
+        # 8x simulated time + 60s startup margin, capped by guard.
+        # T02 110s must not inherit T01's 300s default.
+        args.autonomous_wall_timeout_s = min(
+            7200,max(300,60 + 8*(scenario.total_frames//1000 + 1)))
     args.artifact.parent.mkdir(parents=True,exist_ok=True)
     evidence = dict(scope='EXPERIMENTAL_FUNCTIONAL_SCRIPTED_BEMF_NO_MOTOR_RPM_PROOF',
                     status='OPEN_NOT_EXECUTED', scenario=scenario.summary(),

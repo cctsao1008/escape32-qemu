@@ -208,10 +208,13 @@ static void am13e_g10_pwm_sync(AM13ESimFeedback *f)
         return;
     }
     if (f->cmp[0x08U / 2U] & 0x80U) {
-        uint16_t before = f->cmp[0x0eU / 2U];
-        f->cmp[0x0eU / 2U] = f->cmp[0x0cU / 2U];
-        am13e_g10_cmp_evaluate(f);
-        if (before != f->cmp[0x0eU / 2U]) {
+        uint16_t shadow = f->cmp[0x0cU / 2U];
+        /* Unchanged DAC must not cancel an in-flight majority filter:
+         * am13e_g10_cmp_evaluate() begins with timer_del(filter_timer).
+         * Physical PWM sync is frequent; it is not an analog transition. */
+        if (f->cmp[0x0eU / 2U] != shadow) {
+            f->cmp[0x0eU / 2U] = shadow;
+            am13e_g10_cmp_evaluate(f);
             am13e_auto_route_changed(f->machine);
         }
     }
@@ -496,6 +499,39 @@ static const MemoryRegionOps am13e_g10_cmp_ops = {
     .endianness = DEVICE_LITTLE_ENDIAN,
     .valid = { .min_access_size = 2, .max_access_size = 4 },
 };
+
+/* Simulator input VECTOR commit. All phase codes become visible before
+ * the comparator is evaluated; the existing single-word MMIO interface
+ * remains available for historical native tests. No synthetic CAP1/IRQ. */
+static bool am13e_g10_stim_vector(AM13ESimFeedback *f,
+                                 const uint32_t words[3], uint32_t *writes)
+{
+    if (!f->machine->esc_sim) {
+        return false;
+    }
+    bool changed = false;
+    for (unsigned phase = 0; phase < 3U; ++phase) {
+        uint32_t v = words[phase];
+        if (v & ~UINT32_C(0x10fff)) {
+            return false;
+        }
+        uint32_t existing = f->phase_code[phase] |
+                            (f->phase_valid[phase] ? 0x10000U : 0U);
+        if (existing != v) {
+            changed = true;
+            ++*writes;
+        }
+    }
+    if (!changed) {
+        return true; /* Avoid cancelling pending filter on a no-op. */
+    }
+    for (unsigned phase = 0; phase < 3U; ++phase) {
+        f->phase_code[phase] = words[phase] & 0xfffU;
+        f->phase_valid[phase] = !!(words[phase] & 0x10000U);
+    }
+    am13e_g10_cmp_evaluate(f); /* Exactly once after atomic vector. */
+    return true;
+}
 
 /* Test fixture: 3 x 12-bit virtual BEMF phase sample codes. No phase
  * voltage is synthesized from PWM duty and no comparator defaults true.

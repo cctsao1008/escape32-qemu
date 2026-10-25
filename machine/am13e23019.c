@@ -379,6 +379,7 @@ typedef struct AM13EAutoStageEvidence {
     uint32_t analog_updates;
     uint64_t elapsed_ns;
     bool valid, completed;
+    uint32_t phase_polarity_mask, route_transitions;
 } AM13EAutoStageEvidence;
 typedef struct AM13EAutoSITL {
     MemoryRegion mmio;
@@ -387,6 +388,8 @@ typedef struct AM13EAutoSITL {
     AM13EAutoStage stages[16];
     AM13EAutoStageEvidence stage_evidence[16];
     uint32_t stage_query, bemf_timer_callbacks, route_reschedules;
+    uint32_t stage_seen_mask, stage_route_transitions, last_observed_state;
+    uint32_t vector_commits, vector_unchanged;
     uint64_t last_route_signature;
     uint32_t route_coalesced, route_duplicate, timer_mod_count;
     uint32_t trace_cap1, trace_t12, trace_cross_cap_pairs;
