@@ -138,7 +138,8 @@ def main():
         listener.bind(qtpath)
         listener.listen(1)
         listener.settimeout(15)
-        cmd = [str(args.qemu.resolve()), "-M", "am13e23019,esc-sim=on",
+        cmd = [str(args.qemu.resolve()), "-M",
+               "am13e23019,esc-sim=on,esc-sim-nfault-asserted=off",
                "-kernel", str(args.elf.resolve()), "-S",
                "-display", "none", "-serial", "none", "-monitor", "none",
                "-chardev",
