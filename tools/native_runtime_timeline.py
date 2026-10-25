@@ -49,7 +49,8 @@ class NativePwmTimeline:
 
     def __init__(self, motor: VirtualBLDC, *,
                  ecap_hz: int = NATIVE_ECAP_CLOCK_HZ,
-                 max_delta_ticks: int = 200_000):
+                 max_delta_ticks: int = 200_000,
+                 integrate_sampled_hold: bool = True):
         if (not isinstance(ecap_hz, int) or ecap_hz <= 0
                 or 1_000_000_000 % ecap_hz):
             raise ValueError("Native ECAP timebase must resolve whole ns")
@@ -57,6 +58,9 @@ class NativePwmTimeline:
                 or not 0 < max_delta_ticks < 0x80000000):
             raise ValueError("Native timeline bound must be positive")
         self.motor = motor
+        if type(integrate_sampled_hold) is not bool:
+            raise TypeError("Explicit sampled-duty model policy required")
+        self.integrate_sampled_hold = integrate_sampled_hold
         self.ecap_hz = ecap_hz
         self.max_delta_ticks = max_delta_ticks
         self.frames: list[NativePwmTimelineFrame] = []
@@ -98,7 +102,7 @@ class NativePwmTimeline:
             # Never assign a new image retroactively to an unknown interval.
             # Identical sampled endpoints are a sampled-hold assumption,
             # NOT proof of no intermediate PWM transition.
-            if not changed:
+            if not changed and self.integrate_sampled_hold:
                 integrated = delta * (1_000_000_000 // self.ecap_hz)
                 self.motor.advance(
                     self._last_image.six_duties,
@@ -124,8 +128,10 @@ class NativePwmTimeline:
             mechanical_rpm=sample.mechanical_rpm,
             phase_currents_a=sample.phase_currents_a,
             bemf_phase_v=sample.bemf_phase_v,
-            qualifier="PWM_CHANGE_UNRESOLVED_INTERVAL" if changed else
-                      ("NATIVE_START_SNAPSHOT" if self._last_tick is None
+            qualifier=("EXTERNAL_CLOCKED_CURRENT_CONTINUOUS_NO_AVERAGE"
+                       if not self.integrate_sampled_hold else
+                       "PWM_CHANGE_UNRESOLVED_INTERVAL" if changed else
+                       "NATIVE_START_SNAPSHOT" if self._last_tick is None
                        else "SAMPLED_HOLD_INTERVAL"),
         )
         self.frames.append(frame)

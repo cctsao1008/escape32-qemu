@@ -1,0 +1,91 @@
+name: E62 G14 Native Clocked Current-Continuous Guest Coupling
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/native_clocked_current_coupler.py'
+      - 'tools/current_continuous_bldc.py'
+      - 'tools/native_rotor_geometry_diagnostics.py'
+      - 'tools/native_runtime_timeline.py'
+      - 'tools/native_pwm_history_collector.py'
+      - 'tests/g13b2_native_drive_probe.py'
+      - 'tests/test_native_clocked_current_coupler.py'
+      - 'tests/test_native_rotor_geometry_diagnostics.py'
+      - 'machine/**'
+      - '.github/workflows/e62-g14-clocked-current.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  host-source-boundary:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Original route physics, actual event chronology and code syntax
+        run: |
+          set -euo pipefail
+          python3 -m py_compile \
+            tools/native_clocked_current_coupler.py \
+            tools/native_rotor_geometry_diagnostics.py \
+            tools/native_runtime_timeline.py \
+            tests/g13b2_native_drive_probe.py
+          python3 -m unittest discover -s tests -p 'test_native_clocked_current_coupler.py' -v
+          python3 -m unittest discover -s tests -p 'test_native_rotor_geometry_diagnostics.py' -v
+
+  original-guest-current-coupled-rotor:
+    needs: host-source-boundary
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build original QEMU + original Rel17.3 ELF identity
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            libglib2.0-dev libpixman-1-dev libfdt-dev pkg-config \
+            meson ninja-build binutils-arm-none-eabi
+          git submodule update --init --depth 1 qemu
+          ./build.sh
+          echo '05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0  baseline/e62-g13b3/firmware/AM13E-rev17.3.elf' | sha256sum -c -
+          mkdir -p artifacts
+          python3 tools/native_sim_cfg_flash.py --sim-only-opt-in \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --output artifacts/e62-g13b3-g14-cfg-flash.bin
+      - name: 12-sector original-Guest measured-switch current-continuous BEMF feedback — STRICT
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tests/g13b2_native_drive_probe.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --throttle 1500 --startup-steps 32768 \
+            --slice-ms 300 --runtime-slices 20 \
+            --wait-native-bemf-calibration --calibration-wfi-visits 24 \
+            --require-drive --require-native-pwm \
+            --require-native-bemf-arm --require-native-sustained-loop \
+            --sim-only-cfg-flash artifacts/e62-g13b3-g14-cfg-flash.bin \
+            --sustained-wfi-visits 2800 --sustained-sectors 12 \
+            --sustained-min-integrated-ns 90000000 \
+            --initial-electrical-degrees -30 \
+            --sim-only-reciprocal-motor \
+            --sim-only-clocked-current-continuous \
+            --sitl-native-pwm-history \
+            --sitl-trace-output artifacts/e62-g14-clocked-wfi-history.json \
+            --artifact artifacts/e62-g14-clocked-native.json \
+            2>&1 | tee artifacts/e62-g14-clocked-native.log
+          python3 tools/native_extended_run_gate.py \
+            --artifact artifacts/e62-g14-clocked-native.json \
+            --min-sectors 12 --min-integrated-ns 90000000 \
+            --min-powered-pwm-samples 600 \
+            --output artifacts/e62-g14-clocked-rotor-verdict.json \
+            2>&1 | tee artifacts/e62-g14-clocked-rotor-verdict.log
+      - name: Retain all original-Guest failures and physical-model evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-g14-original-guest-clocked-current-native-evidence
+          path: artifacts/e62-g14-*
+          if-no-files-found: warn
+          retention-days: 30

@@ -54,6 +54,7 @@ from tools.native_bemf_timeout_qualification import (
 from tools.native_timg12_observer import observe_native_timg12
 from tools.native_pwm_deadband_diagnostic import native_deadband_source_clamp, read_native_deadband
 from tools.native_power_coupled_plant import NativePowerCoupledBLDC
+from tools.native_clocked_current_coupler import NativeClockedCurrentCoupler
 from tools.native_motor_model_profiles import (
     native_motor_parameters, native_motor_model_metadata
 )
@@ -686,7 +687,8 @@ def probe_native_sustained_power_feedback(
         slice_ms, runtime_slices, max_visits, required_sectors,
         require_sim_only_cfg=False, initial_electrical_degrees=0.0,
         required_integrated_ns=0, motor_profile="legacy",
-        trace=None, live=None, pwm_history=None):
+        trace=None, live=None, pwm_history=None,
+        clocked_current_feedback=False):
     """Full native WFI-to-WFI physical bridge -> plant -> BEMF feedback loop.
 
     No native program counter, firmware SRAM, PWM, TIMG12, CAP1, or IRQ
@@ -694,6 +696,15 @@ def probe_native_sustained_power_feedback(
     Only original guest CAP1 + TIMG12 service + powered six-vector can
     result in a completed sector. SIM_ONLY assumptions stay explicit.
     """
+    if clocked_current_feedback and (
+            pwm_history is None or trace is None or motor_profile != "reciprocal"):
+        raise ValueError(
+            "Clocked current-continuous feedback requires source history, "
+            "source-native trace and the reciprocal Ke/Kt model")
+    clocked_bridge = (
+        NativeClockedCurrentCoupler(
+            initial_electrical_deg=initial_electrical_degrees)
+        if clocked_current_feedback else None)
     needed = ("armed", "pending_code", "selected_code", "step",
               "captured_events", "rejected_events", "scheduled", "serviced")
     missing = [x for x in needed if x not in bemf_state]
@@ -716,7 +727,8 @@ def probe_native_sustained_power_feedback(
               "applied_external_torque": False,
               "host_forced_capture_irq": False
           },sort_keys=True), flush=True)
-    timeline = NativePwmTimeline(motor)
+    timeline = NativePwmTimeline(
+        motor, integrate_sampled_hold=not clocked_current_feedback)
     frontend = AnalogFrontend(reference_v=3.3, zero_bemf_bias_v=1.65,
                               input_gain_v_per_bemf_v=.02)
     audit = NativeClosedLoopAudit(required_sectors=required_sectors)
@@ -748,6 +760,16 @@ def probe_native_sustained_power_feedback(
                               "errors": pwm_history.errors,
                               "guest_writes": False},
                              sort_keys=True), flush=True)
+            if clocked_bridge:
+                if attach is None:
+                    raise ValueError("Guest Gate-return QEMU PWM history incomplete")
+                origin_ns = clocked_bridge.virtual_time_at_guest_wfi(qtest.read)
+                clocked_bridge.attach(
+                    pwm_history, virtual_ns=origin_ns,
+                    gate_qualified=timeline.last_observation.acceptable_for_plant)
+                print("G14_GUEST_CLOCKED_CURRENT_COUPLER_ATTACHED " +
+                      json.dumps(clocked_bridge.evidence(),sort_keys=True),
+                      flush=True)
         if live is not None:
             live.hub.begin(trace.meta)
     if motor.sample().mechanical_rpm != 0:
@@ -829,13 +851,29 @@ def probe_native_sustained_power_feedback(
                 path.qualifies_necessary_two_terminal_drive)
             consecutive_powered_wfi = (consecutive_powered_wfi + 1
                 if last_qualified_path else 0)
-            sample = motor.sample(gate_enabled=last_qualified_path)
+            if clocked_bridge:
+                # Actual timer/Guest-triggered PWM journal, NEVER the
+                # carrier plan or averaged six duty counts. Fail on
+                # missing source events or invalid powered masks.
+                observed_ns = clocked_bridge.virtual_time_at_guest_wfi(qtest.read)
+                sample = clocked_bridge.consume(
+                    pwm_history, guest_wfi=visit,
+                    observed_virtual_ns=observed_ns)
+            else:
+                sample = motor.sample(gate_enabled=last_qualified_path)
+            source_power_proven = (
+                (clocked_bridge.motor.integrated_intervals >= 2 and
+                 clocked_bridge.records_consumed >= 2 and
+                 clocked_bridge.motor.bus_input_j > 0.0 and
+                 clocked_bridge.motor.shaft_conversion_j > 0.0)
+                if clocked_bridge else
+                (motor.energized_intervals >= 2 and
+                 motor.mechanically_productive_intervals >= 2 and
+                 motor.net_dc_input_energy_j > 0.0 and
+                 motor.net_electromagnetic_work_j > 0.0))
             if (effective_power_proof is None and
                     consecutive_powered_wfi >= 3 and
-                    motor.energized_intervals >= 2 and
-                    motor.mechanically_productive_intervals >= 2 and
-                    motor.net_dc_input_energy_j > 0.0 and
-                    motor.net_electromagnetic_work_j > 0.0 and
+                    source_power_proven and
                     abs(sample.mechanical_rpm) > 0):
                 effective_power_proof = {
                     "native_ecap_ticks": frame.native_ecap_ticks,
@@ -843,16 +881,24 @@ def probe_native_sustained_power_feedback(
                     "qualified_consecutive_wfi": consecutive_powered_wfi,
                     "native_six_high_ticks": real_pwm.six_high_ticks,
                     "physical_power_pairs": path.different_phase_pairs,
-                    "motor_energized_intervals": motor.energized_intervals,
+                    "power_proof_source": (
+                        "ACTUAL_QEMU_CLOCKED_AQ_DB_CONTINUOUS_CURRENT"
+                        if clocked_bridge else "LEGACY_SAMPLED_HOLD"),
+                    "motor_energized_intervals": (
+                        clocked_bridge.motor.integrated_intervals
+                        if clocked_bridge else motor.energized_intervals),
                     "motor_rpm_after_measured_power": sample.mechanical_rpm,
-                    "simulated_dc_input_power_w":
-                        motor.last_dc_input_power_w,
-                    "simulated_electromagnetic_shaft_power_w":
-                        motor.last_electromagnetic_power_w,
-                    "simulated_net_dc_energy_j":
-                        motor.net_dc_input_energy_j,
-                    "simulated_net_electromagnetic_work_j":
-                        motor.net_electromagnetic_work_j,
+                    "simulated_dc_input_power_w": (
+                        None if clocked_bridge else motor.last_dc_input_power_w),
+                    "simulated_electromagnetic_shaft_power_w": (
+                        None if clocked_bridge else
+                        motor.last_electromagnetic_power_w),
+                    "simulated_net_dc_energy_j": (
+                        clocked_bridge.motor.bus_input_j if clocked_bridge
+                        else motor.net_dc_input_energy_j),
+                    "simulated_net_electromagnetic_work_j": (
+                        clocked_bridge.motor.shaft_conversion_j
+                        if clocked_bridge else motor.net_electromagnetic_work_j),
                     "gate_connected": real_pwm.gate_and_pads,
                     "original_ost2_clear": not real_pwm.physical_ost2,
                     "original_ost3_clear": not real_pwm.physical_ost3}
@@ -887,12 +933,17 @@ def probe_native_sustained_power_feedback(
                 last_complete_native_audit_guest_counters=audit.last,
                 pending_native_accepted_cap1_timg12=audit.pending,
                 sim_only_motor_model=native_motor_model_metadata(motor_profile),
+                native_clocked_current_coupling=(
+                    clocked_bridge.evidence() if clocked_bridge else None),
                 sim_only_rotor_motion=rotor_motion.result(),
-                sim_only_energy_balance=motor.energy_balance(),
+                sim_only_energy_balance=(
+                    clocked_bridge.motor.diagnostics() if clocked_bridge
+                    else motor.energy_balance()),
                 failure_diagnostics=failure,
                 plant_integrated_ns=(
-                    timeline.frames[-1].total_integrated_ns
-                    if timeline.frames else 0),
+                    clocked_bridge.total_integrated_ns if clocked_bridge
+                    else (timeline.frames[-1].total_integrated_ns
+                          if timeline.frames else 0)),
                 simulator_analog_frames=total_written,
                 original_early_rejections=audit.early_rejections,
                 original_rejection_window_resets=(
@@ -910,11 +961,19 @@ def probe_native_sustained_power_feedback(
         # Real analog lines remain present even when guest ECAP is
         # unarmed. The guest alone selects/arms comparator and timer.
         # Never gate or spoof IRQ by writing an enable/flag bit.
-        for phase, word in enumerate(analog):
-            qtest.write(SIM_BEMF_INPUT + 4 * phase, word)
-        for phase, word in enumerate(analog):
-            if qtest.read(SIM_BEMF_INPUT + 4 * phase) != word:
-                raise AssertionError("Native analog input MMIO corrupted")
+        if clocked_bridge:
+            # The same physical-sample physics result is applied to the
+            # real CMPSS external fixture. Original Guest chooses the
+            # active phase and performs CAP1/TIMG12/commutation itself.
+            injected = clocked_bridge.inject_bemf(qtest.read, qtest.write)
+            if tuple(analog) != tuple(injected):
+                raise AssertionError("Current model BEMF source changed before injection")
+        else:
+            for phase, word in enumerate(analog):
+                qtest.write(SIM_BEMF_INPUT + 4 * phase, word)
+            for phase, word in enumerate(analog):
+                if qtest.read(SIM_BEMF_INPUT + 4 * phase) != word:
+                    raise AssertionError("Native analog input MMIO corrupted")
         total_written += 1
         guest = {
             name: rsp.mem32(bemf_state[name])
@@ -943,10 +1002,15 @@ def probe_native_sustained_power_feedback(
             # missed TIMG12, reset, reversed rotor, or Trip.
             rotor_motion.observe(
                 wfi_visit=visit, completed_sectors=len(audit.sectors),
-                integrated_ns=frame.total_integrated_ns,
+                integrated_ns=(clocked_bridge.total_integrated_ns
+                               if clocked_bridge else frame.total_integrated_ns),
                 rpm=sample.mechanical_rpm,
                 phase_currents_a=sample.phase_currents_a,
-                dc_power_w=motor.last_dc_input_power_w)
+                dc_power_w=(
+                    clocked_bridge.motor.bus_input_j / (
+                        clocked_bridge.total_integrated_ns*1e-9)
+                    if clocked_bridge and clocked_bridge.total_integrated_ns
+                    else motor.last_dc_input_power_w))
             print("G13B3M_FAIL_CLOSED_NATIVE_LOOP_DIAGNOSTIC " +
                   json.dumps({
                       "reason": str(exc), "native_guest_wfi_visit": visit,
@@ -960,17 +1024,24 @@ def probe_native_sustained_power_feedback(
             raise
         rotor_motion.observe(
             wfi_visit=visit, completed_sectors=len(audit.sectors),
-            integrated_ns=frame.total_integrated_ns,
+            integrated_ns=(clocked_bridge.total_integrated_ns
+                           if clocked_bridge else frame.total_integrated_ns),
             rpm=sample.mechanical_rpm,
             phase_currents_a=sample.phase_currents_a,
-            dc_power_w=motor.last_dc_input_power_w)
+            dc_power_w=(
+                clocked_bridge.motor.bus_input_j / (
+                    clocked_bridge.total_integrated_ns*1e-9)
+                if clocked_bridge and clocked_bridge.total_integrated_ns
+                else motor.last_dc_input_power_w))
         if trace is not None:
             # Both offline/live consume ONLY snapshots already obtained here.
             # The live publisher appends in-memory (no browser I/O on Guest).
             packet = trace.observe(visit=visit, frame=frame, pwm=real_pwm,
                                    plant=sample, guest=guest, analog=analog,
                                    cap1_ticks=cap1, sectors=audit.sectors,
-                                   energy_balance=motor.energy_balance())
+                                   energy_balance=(clocked_bridge.motor.diagnostics()
+                                      if clocked_bridge
+                                      else motor.energy_balance()))
             if live is not None:
                 live.hub.publish(packet["sample"], packet["events"])
         if visit <= 3 or visit % 16 == 0:
@@ -1017,7 +1088,9 @@ def probe_native_sustained_power_feedback(
             raise AssertionError(
                 "Original Guest powered bridge lost during native endurance tail")
         if (first_qualified_wfi is not None and required_integrated_ns
-                and timeline.frames[-1].total_integrated_ns < required_integrated_ns
+                and (clocked_bridge.total_integrated_ns if clocked_bridge
+                     else timeline.frames[-1].total_integrated_ns) <
+                    required_integrated_ns
                 and visit % 32 == 0):
             print("G13B3M_NATIVE_ENDURANCE_ECAP_TIME_PENDING " +
                   json.dumps({
@@ -1028,7 +1101,8 @@ def probe_native_sustained_power_feedback(
                       "host_guest_writes": False,
                   }, sort_keys=True), flush=True)
         if (audit.qualified and
-                timeline.frames[-1].total_integrated_ns >= required_integrated_ns
+                (clocked_bridge.total_integrated_ns if clocked_bridge
+                 else timeline.frames[-1].total_integrated_ns) >= required_integrated_ns
                 and audit.pending is None):
             if effective_power_proof is None:
                 raise AssertionError(
@@ -1042,14 +1116,24 @@ def probe_native_sustained_power_feedback(
                 native_powered_endurance_tail_wfi_visits=visit-first_qualified_wfi,
                 last_measured_power_path=last_qualified_path,
                 sim_only_rotor_motion=rotor_motion.result(),
-                sim_only_energy_balance=motor.energy_balance(),
+                sim_only_energy_balance=(
+                    clocked_bridge.motor.diagnostics() if clocked_bridge
+                    else motor.energy_balance()),
                 sim_only_motor_model=native_motor_model_metadata(motor_profile),
-                plant_max_rpm=motor.max_measured_rpm,
-                plant_integrated_ns=timeline.frames[-1].total_integrated_ns,
+                native_clocked_current_coupling=(
+                    clocked_bridge.evidence() if clocked_bridge else None),
+                plant_max_rpm=(
+                    abs(sample.mechanical_rpm) if clocked_bridge
+                    else motor.max_measured_rpm),
+                plant_integrated_ns=(
+                    clocked_bridge.total_integrated_ns if clocked_bridge
+                    else timeline.frames[-1].total_integrated_ns),
                 simulator_analog_frames=total_written,
                 motor_started_only_after_cross_phase=(
-                    motor.ever_powered and
-                    motor.energized_intervals > 0),
+                    (clocked_bridge.motor.bus_input_j > 0.0 and
+                     clocked_bridge.motor.integrated_intervals > 0)
+                    if clocked_bridge else
+                    (motor.ever_powered and motor.energized_intervals > 0)),
                 native_effective_power=evidence_power(effective_power_proof))
             print("PASS_G13B3L_ORIGINAL_NATIVE_SIX_FEEDBACK_POWERED_"
                   "COMMUTATIONS_SIM_ONLY " +
@@ -1067,13 +1151,18 @@ def probe_native_sustained_power_feedback(
     if not result:
         result = audit.result()
         if required_integrated_ns and (
-                timeline.frames[-1].total_integrated_ns < required_integrated_ns
+                (clocked_bridge.total_integrated_ns if clocked_bridge
+                 else timeline.frames[-1].total_integrated_ns) < required_integrated_ns
                 or audit.pending is not None or not last_qualified_path):
             result["qualified"] = False
             result["reason"] = "STRICT_NATIVE_ECAP_ENDURANCE_OR_POWER_INCOMPLETE"
         result.update(
             sim_only_rotor_motion=rotor_motion.result(),
-            sim_only_energy_balance=motor.energy_balance(),
+            sim_only_energy_balance=(
+                clocked_bridge.motor.diagnostics() if clocked_bridge
+                else motor.energy_balance()),
+            native_clocked_current_coupling=(
+                clocked_bridge.evidence() if clocked_bridge else None),
             sim_only_motor_model=native_motor_model_metadata(motor_profile),
             required_native_integrated_ns=required_integrated_ns,
             first_qualified_wfi_visit=first_qualified_wfi,
@@ -1968,7 +2057,9 @@ def run(args):
                                              args.sustained_min_integrated_ns),
                                          motor_profile=profile,
                                          trace=trace, live=live,
-                                         pwm_history=pwm_history)
+                                         pwm_history=pwm_history,
+                                         clocked_current_feedback=(
+                                             args.sim_only_clocked_current_continuous))
                                     evidence["g13b3l_native_sustained_loop"] = (
                                         loop_result)
                                     if args.require_native_sustained_loop and (
@@ -2346,6 +2437,12 @@ def main():
     p.add_argument("--require-native-sustained-loop", action="store_true",
                    help="Strict native original firmware SIX accepted powered "
                         "commutations; fail closed if unfinished")
+    p.add_argument("--sim-only-clocked-current-continuous",
+                   action="store_true",
+                   help="G14 opt-in: original Guest QEMU CLOCKED AQ/DB event "
+                        "history -> reciprocal current-continuous motor "
+                        "-> physical BEMF input at original WFI; fail closed "
+                        "on missing edge history; does not waive rotor")
     p.add_argument("--sim-only-reciprocal-motor", action="store_true",
                    help="G13B3M A/B model only: keep Ke=.02 per electrical "
                         "rad/s and use reciprocal Kt=.14 for 7 pole pairs; "
@@ -2482,6 +2579,12 @@ def main():
              a.sitl_trace_output.resolve() == a.artifact.resolve())):
         p.error("SITL trace requires native sustained loop and a distinct "
                 "output path from --artifact")
+    if a.sim_only_clocked_current_continuous and not (
+            a.sitl_native_pwm_history and a.sitl_trace_output and
+            a.sim_only_reciprocal_motor and
+            a.require_native_sustained_loop):
+        p.error("Current-continuous Guest coupling requires historical "
+                "WFI PWM trace, reciprocal Ke/Kt and strict native rotor gate")
     if a.sitl_native_pwm_history and (
             not a.sitl_trace_output or not a.probe_native_sustained_loop):
         p.error("--sitl-native-pwm-history requires --sitl-trace-output "
