@@ -13,6 +13,8 @@ on:
       - 'tests/g13b2_native_drive_probe.py'
       - 'tests/test_native_clocked_current_coupler.py'
       - 'tests/test_native_rotor_geometry_diagnostics.py'
+      - 'tools/ci/native_pwm_overlap_audit.py'
+      - 'tests/test_native_pwm_overlap_audit.py'
       - 'machine/**'
       - '.github/workflows/e62-g14-clocked-current.yml'
   workflow_dispatch:
@@ -35,6 +37,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_native_clocked_current_coupler.py' -v
           python3 -m unittest discover -s tests -p 'test_native_rotor_geometry_diagnostics.py' -v
           python3 -m unittest discover -s tests -p 'test_sitl_trace.py' -v
+          python3 -m unittest discover -s tests -p 'test_native_pwm_overlap_audit.py' -v
 
   original-guest-current-coupled-rotor:
     needs: host-source-boundary
@@ -84,6 +87,16 @@ jobs:
             --min-powered-pwm-samples 600 \
             --output artifacts/e62-g14-clocked-rotor-verdict.json \
             2>&1 | tee artifacts/e62-g14-clocked-rotor-verdict.log
+      - name: Preserve exact QEMU PWM overlap forensic classification (no waiver)
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f artifacts/e62-g14-clocked-wfi-history.json ]]; then
+            python3 tools/ci/native_pwm_overlap_audit.py \
+              --history artifacts/e62-g14-clocked-wfi-history.json \
+              --output artifacts/e62-g14-pwm-overlap-forensic.json
+          fi
       - name: Retain all original-Guest failures and physical-model evidence
         if: always()
         uses: actions/upload-artifact@v4

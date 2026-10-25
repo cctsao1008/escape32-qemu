@@ -147,3 +147,28 @@ The original `tools/e62_pinned_baseline.py verify --smoke-qemu`
 continues to FAIL when source fingerprints differ, by design.
 No hashes, binaries, source fingerprints or Strict Gate thresholds were
 modified to make this separate integrity audit pass.
+
+## L2 G14 original-clocked PWM overlap forensic evidence
+
+On the original Rel17.3 Guest native model at G14 WFI #2, the
+**QEMU modeled** PWM journal records `0x28 → 0x38 → 0x10`.
+The first `0x38` is latched by `QEMU_ORIGINAL_PWM_ZERO_CALLBACK`,
+the next `0x38` by `QEMU_SHADOW_ACTIVE_LOAD` at the **same**
+virtual timestamp, and `0x10` follows **20 ns later**.
+Mask `0x38` has both high and low of the modeled W bridge asserted.
+This is a **FAIL** in the existing current-continuous coupler, which
+correctly refuses to integrate a phase shoot-through state.
+
+This observation is within QEMU's **internal modeled PWM output**, not
+an external MOSFET gate-driver measurement. At carrier-zero the
+independent RED/FED implementation may have incomplete continuity of
+pre-/post-shadow ACTIVE images; determining if this is a QEMU
+zero/dead-band ordering error versus a true firmware output configuration
+defect requires source-derived hardware timing proof. The Strict Gate
+remains FAIL until that is resolved; the diagnostic does **not** skip
+20 ns or forcibly choose one phase polarity.
+
+`tools/ci/native_pwm_overlap_audit.py` produces a non-waiving JSON
+trace from the exact QEMU event journal, with virtual time and model
+masks. A counterexample unit case locks the observed 20 ns overlap in
+place; it is **not** a real MOSFET short-circuit claim.
