@@ -1183,6 +1183,14 @@ def probe_native_sustained_power_feedback(
                       "host_guest_writes": False,
                   }, sort_keys=True), flush=True)
         if (audit.qualified and
+                # Strict extended gate requires a genuinely observed powered
+                # WFI AFTER the twelfth sector, not the sector's own WFI.
+                # Prior runner returned immediately on sector 12 when the
+                # 90ms minimum was already met, leaving a zero-sample tail.
+                # Never weaken the extended gate to paper over this.
+                (not required_integrated_ns or
+                 (first_qualified_wfi is not None and
+                  visit > first_qualified_wfi)) and
                 (clocked_bridge.total_integrated_ns if clocked_bridge
                  else timeline.frames[-1].total_integrated_ns) >= required_integrated_ns
                 and audit.pending is None):
