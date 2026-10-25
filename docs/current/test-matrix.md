@@ -47,3 +47,8 @@ Guest CPU profile, nor are stimulus counts equivalent to ISR causality.
   Guest callback 1/0, original throttle change/retention, Gate LOW
   and exact WWDT feed delta +1/0. Neither case qualifies input-loss
   expiry BOOTRST or physical power stage.
+
+- `e62-pinned-archive-integrity.yml`: verify immutable saved G13B3
+  binary *bytes* and manifest independently of changed source.
+  This is NOT a substitute for the strict pinned source-pair verification,
+  which remains FAIL on source fingerprint drift.

@@ -1,0 +1,48 @@
+name: E62 Archived G13B3 Binary Byte Integrity (NOT Source Pairing)
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'baseline/e62-g13b3/**'
+      - 'machine/**'
+      - 'build.sh'
+      - 'tools/ci/audit_historical_pinned.py'
+      - 'tests/test_historical_pinned_integrity.py'
+      - '.github/workflows/e62-pinned-archive-integrity.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  historical-bytes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - name: Negative integrity and source-drift distinction tests
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_historical_pinned_integrity.py' -v
+      - name: Exact archived ELF/QEMU/libfdt and manifest integrity, NOT current source
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          python3 tools/ci/audit_historical_pinned.py \
+            --output artifacts/e62-g13b3-historical-archive-integrity.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('artifacts/e62-g13b3-historical-archive-integrity.json'))
+          assert d['status']=='PASS_HISTORICAL_BYTES_INTEGRITY_ONLY'
+          assert d['issues']==[]
+          assert d['original_g13b3m_rotor_stability']=='KNOWN_FAIL_UNWAIVED'
+          print('PASS_ARCHIVED_G13B3_BYTES_ONLY_CURRENT_SOURCE_PAIR_NOT_VERIFIED')
+          PY
+      - name: Preserve auditable digest evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-g13b3-archived-bytes-integrity-only
+          path: artifacts/e62-g13b3-historical-archive-integrity.json
+          if-no-files-found: warn
+          retention-days: 30

@@ -23,6 +23,7 @@ this is not physical motor, rotor trajectory, or hardware qualification.
 - [Full document index](docs/README.md)
 - [Original G0–G13B development log](docs/history/README-development-log.md)
 - [Immutable paired binaries and licenses](baseline/e62-g13b3/README.md)
+- [Historical G13B3 archive-byte integrity (separate from current-source pairing)](docs/current/validation-campaign.md#historical-g13b3-archive-integrity)
 
 ## Build and test (Ubuntu / WSL)
 

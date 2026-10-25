@@ -130,3 +130,18 @@ Guest throttle response, Gate inactivity and true WWDT source feed
 delta. The CPU’s **actual expiration→BOOTRST→motor gate safe-off**
 on input loss is still OPEN because the current QEMU WWDT model
 does not implement full reset/shutdown propagation.
+
+## Historical G13B3 archive integrity
+
+`e62-pinned-archive-integrity.yml` checks the original **committed**
+ELF/QEMU/libfdt bytes, sizes, `manifest.json`, and `SHA256SUMS`.
+It reports `current_source_drift_files` separately. A successful
+`PASS_HISTORICAL_BYTES_INTEGRITY_ONLY` proves only the historical
+archive has not changed relative to its manifest. It does **not**
+requalify those 2026-October G13B3 QEMU bytes against changed current
+Machine source and does not satisfy original G13B3L/G13B3M native gates.
+
+The original `tools/e62_pinned_baseline.py verify --smoke-qemu`
+continues to FAIL when source fingerprints differ, by design.
+No hashes, binaries, source fingerprints or Strict Gate thresholds were
+modified to make this separate integrity audit pass.
