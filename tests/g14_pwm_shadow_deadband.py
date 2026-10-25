@@ -36,10 +36,10 @@ def fixture(q, *, red_enabled):
     assert h.current_internal_sixbit_mask == 0x28, h
     # Next carrier: V-low and W-low deassert at ZERO; W-high
     # asserts. B had been on at the end of the preceding carrier.
-    # AQ=0x21 means CLEAR on ZERO, SET on CA=10.
+    # AQ=0x201 means CLEAR on ZERO, SET on CB=10.
     set_pwm_pair(q, 0, (1, 1), (1, 1), shadow=True)
-    set_pwm_pair(q, 1, (1, 10), (1, 0x21), shadow=True)
-    set_pwm_pair(q, 2, (1, 10), (2, 0x21), shadow=True)
+    set_pwm_pair(q, 1, (1, 10), (1, 0x201), shadow=True)
+    set_pwm_pair(q, 2, (1, 10), (2, 0x201), shadow=True)
     q.write(PWM + 0xf0, 3)  # global one-shot ZERO load
     q.write(PWM + 0xf4, 1)
     assert q.read(PWM + 0xf8) == 1
