@@ -67,7 +67,7 @@ class AutonomousTest(unittest.TestCase):
     def test_aggregate_not_falsely_stage_qualified(self):
         base={'pa26_capture':0,'pa26_dma':0,'valid_frame_feeds':0,
               'captured_events':0,'serviced':0}
-        end={'valid_frame_feeds':42,'captured_events':10,'serviced':9,'throt':1847}
+        end={'valid_frame_feeds':10500,'captured_events':10,'serviced':9,'throt':1847}
         snapshot={'status':AUTO_DONE,'error':0,'sent':11000,
                   'target_frames':11000,'elapsed_ns':11_000_000_000,
                   'pa26_capture':22000,'pa26_dma':22000,
