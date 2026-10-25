@@ -1,0 +1,40 @@
+name: E62 G14 WWDT BOOTRST Safe-off Device Regression
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'machine/am13e23019.c'
+      - 'tests/g5_wwdt.py'
+      - 'tests/g5_wwdt_bootrst.py'
+      - 'tests/test_wwdt_bootrst_contract.py'
+      - '.github/workflows/e62-wwdt-bootrst.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  bootrst:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify opt-in WWDT0 model and build QEMU
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_wwdt_bootrst_contract.py' -v
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libglib2.0-dev libpixman-1-dev libfdt-dev pkg-config meson ninja-build binutils-arm-none-eabi
+          git submodule update --init --depth 1 qemu
+          ./build.sh
+          echo '05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0  baseline/e62-g13b3/firmware/AM13E-rev17.3.elf' | sha256sum -c -
+      - name: Original existing G5 diagnostic remains unchanged
+        run: |
+          set -euo pipefail
+          python3 tests/g5_wwdt.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf
+      - name: New WWDT BOOTRST source cause plus immediate PB13 safe-off
+        run: |
+          set -euo pipefail
+          python3 tests/g5_wwdt_bootrst.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf

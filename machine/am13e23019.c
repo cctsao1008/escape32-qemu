@@ -15,6 +15,7 @@
 #include "exec/address-spaces.h"
 #include "qom/object.h"
 #include "sysemu/reset.h"
+#include "sysemu/runstate.h"
 #include "qemu/timer.h"
 #include "hw/irq.h"
 
@@ -263,6 +264,7 @@ typedef struct AM13ESimTimer AM13ESimTimer;
 static void am13e_sim_timer_reset(AM13ESimTimer *t);
 static void am13e_sim_wwdt_reset(AM13ESimWWDT *w);
 static void am13e_sim_wwdt_stop(AM13ESimWWDT *w);
+static void am13e_pwm4_reset(AM13ESimPWM *p);
 static void am13e_sim_adc_reset(AM13ESimADC *adc);
 
 typedef struct AM13EPeripheralGPRCM {
@@ -447,6 +449,7 @@ struct AM13ESimWWDT {
     MemoryRegion ctrl_mmio;
     QEMUTimer *timer;
     AM13EPeripheralGPRCM *gprcm;
+    AM13EMachineState *machine; /* owner for BOOTRST safe-off */
     bool esc_sim;
     bool running;
     bool expired;
@@ -550,6 +553,8 @@ struct AM13EMachineState {
     bool xtal_present;
     bool esc_sim;
     bool esc_sim_nfault_asserted;
+    bool esc_sim_wwdt_bootrst; /* opt-in full reset semantics */
+    bool wwdt_reset_pending; /* survives until machine reset callback */
     MemoryRegion factory_rom;
     char *factory_pll_file;
     bool factory_pll_loaded;
@@ -702,10 +707,10 @@ static void am13e_set_sim_reset_cause(Object *obj, const char *input,
  *   crystal analog startup physics, clock-frequency verification or IRQs.
  * - With the fixture absent, startup remains unmodeled/off (fail-closed).
  */
-/* WWDT0 is an ESC input-loss watchdog, not a permanently ready fixture.
- * The selected Rel17 watchdog arms only when the receiver is selected,
- * and feeds only on valid DShot commands. Expiration is observable,
- * but BOOTRST and motor shutdown have not yet been modeled.
+/* WWDT0 feeds only from original valid input. Legacy G5 diagnostic keeps
+ * expiration observable with no reset. Explicit opt-in BOOTRST models the
+ * SDK WWDTLP0RSTDIS=0 setting and reset cause BOOTWWDT0=0x0e.
+ * NMI selection is not modeled and never silently causes BOOTRST.
  */
 static void am13e_sim_wwdt_stop(AM13ESimWWDT *w)
 {
@@ -750,6 +755,21 @@ static void am13e_sim_wwdt_expired(void *opaque)
     }
     w->expired = true;
     w->running = false;
+    if (w->machine && w->machine->esc_sim_wwdt_bootrst &&
+        !(w->machine->sysctl_systemcfg & 1U)) {
+        AM13EMachineState *s = w->machine;
+        /* Immediate fail-safe before the QEMU reset dispatcher executes:
+         * force neutral physical gate and freeze PWM. No guest SRAM writes,
+         * no invented DShot frame or IRQ. Subsequent global reset will
+         * reinitialize peripheral state and Cortex-M Guest. */
+        s->gpio[1].dout &= ~(1U << 13);
+        am13e_pwm4_reset(&s->pwm4);
+        s->wwdt_reset_pending = true;
+        error_report("ESC_SIM_WWDT_BOOTRST_REQUESTED: source-owned input "
+                     "watchdog expired; PB13 LOW; PWM frozen; resetcause=0x0e");
+        qemu_system_reset_request(SHUTDOWN_CAUSE_GUEST_RESET);
+        return;
+    }
     error_report("ESC_SIM_WWDT_EXPIRED: command-loss deadline reached; "
                  "BOOTRST/reset cause/motor output shutdown NOT MODELED");
 }
@@ -3714,7 +3734,9 @@ static void am13e_handoff_reset(void *opaque)
     s->sysctl_pllparam0 = AM13E_SYSCTL_SYSPLLPARAM0_INITIAL;
     s->sysctl_pllparam1 = AM13E_SYSCTL_SYSPLLPARAM1_INITIAL;
     s->sysctl_clkstatus = AM13E_SYSCTL_CLKSTATUS_INITIAL;
-    s->sysctl_rstcause = s->esc_sim ? s->sim_rstcause_seed : 0U;
+    s->sysctl_rstcause = s->esc_sim ?
+        (s->wwdt_reset_pending ? 0x0eU : s->sim_rstcause_seed) : 0U;
+    s->wwdt_reset_pending = false;
     timer_del(s->xtal_timer);
     timer_del(s->sim_pll_timer);
     s->sysctl_unmodeled_reported = false;
@@ -3937,6 +3959,7 @@ static void am13e_init(MachineState *machine)
 
     /* WWDT0 virtual counter: GPRCM shared, status/CTL separate. */
     s->wwdt.gprcm = &s->peripheral_gprcm[5];
+    s->wwdt.machine = s;
     s->wwdt.gprcm->wwdt = &s->wwdt;
     s->wwdt.esc_sim = s->esc_sim;
     s->wwdt.timer = timer_new_ns(QEMU_CLOCK_VIRTUAL,
@@ -4120,6 +4143,16 @@ static void am13e_init(MachineState *machine)
     qemu_register_reset(am13e_handoff_reset, s);
 }
 
+static bool am13e_get_wwdt_bootrst(Object *obj, Error **errp)
+{
+    return AM13E_MACHINE(obj)->esc_sim_wwdt_bootrst;
+}
+
+static void am13e_set_wwdt_bootrst(Object *obj, bool enabled, Error **errp)
+{
+    AM13E_MACHINE(obj)->esc_sim_wwdt_bootrst = enabled;
+}
+
 static void am13e_class_init(ObjectClass *oc, void *data)
 {
     MachineClass *mc = MACHINE_CLASS(oc);
@@ -4151,6 +4184,14 @@ static void am13e_class_init(ObjectClass *oc, void *data)
         "Optional explicit TI RSTCAUSE.ID reset history fixture, "
         "read-to-clear at native 0x400B0220. Default NORST=0 "
         "(no POR/WWDT fault synthesized).");
+    object_class_property_add_bool(oc, "esc-sim-wwdt-bootrst",
+                                   am13e_get_wwdt_bootrst,
+                                   am13e_set_wwdt_bootrst);
+    object_class_property_set_description(oc, "esc-sim-wwdt-bootrst",
+        "Opt-in WWDT0 BOOTRST mode: SYSCTL WWDTLP0RSTDIS=0, "
+        "immediate PB13 safe low, MCPWM4 freeze, QEMU system reset and "
+        "original Guest SYSCTL.RSTCAUSE=0x0E. Default off for "
+        "historical standalone WWDT tests.");
     object_class_property_add_bool(oc, "esc-sim-nfault-asserted",
                                    am13e_get_sim_nfault_asserted,
                                    am13e_set_sim_nfault_asserted);

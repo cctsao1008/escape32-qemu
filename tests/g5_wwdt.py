@@ -14,7 +14,7 @@ CTL0, CTL1, FEED, RUN = BASE+0x1100, BASE+0x1104, BASE+0x1108, BASE+0x110c
 SYSTEMCFG = 0x400b0180
 
 
-def run_qtest(qemu, elf, sim, inspect):
+def run_qtest(qemu, elf, sim, inspect, *, machine_options=''):
     with tempfile.TemporaryDirectory(prefix="am13e-g5-") as directory:
         path = os.path.join(directory, "qtest.sock")
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as server:
@@ -24,7 +24,7 @@ def run_qtest(qemu, elf, sim, inspect):
             proc = subprocess.Popen([
                 str(qemu), "-machine",
                 "am13e23019,accel=qtest,esc-sim=" +
-                ("on" if sim else "off"),
+                ("on" if sim else "off") + machine_options,
                 "-kernel", str(elf), "-display", "none", "-serial", "none",
                 "-monitor", "none", "-qtest", f"unix:path={path}",
             ], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
