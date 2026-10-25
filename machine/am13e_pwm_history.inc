@@ -76,9 +76,11 @@ static bool am13e_pwm4_hist_next_tick(AM13ESimPWM *p, uint32_t from,
         uint32_t ca = p->reg[(base + 0x00U) / 4U];
         uint32_t cb = p->reg[(base + 0x08U) / 4U];
         uint32_t ctl = p->reg[0xc0U / 4U];
+        /* Table 26-51: bit0 B-FED, bit1 A-RED. Keep the event
+         * scheduler consistent with am13e_pwm4_level(). */
         uint32_t dly = (out & 1U) ?
-            ((ctl & 2U) ? (p->reg[0xd0U / 4U] & 0x3fffU) : 0U) :
-            ((ctl & 1U) ? (p->reg[0xd4U / 4U] & 0x3fffU) : 0U);
+            ((ctl & 1U) ? (p->reg[0xd0U / 4U] & 0x3fffU) : 0U) :
+            ((ctl & 2U) ? (p->reg[0xd4U / 4U] & 0x3fffU) : 0U);
         uint32_t candidates[5] = {
             ca, cb, dly,
             (ca + dly) % total,

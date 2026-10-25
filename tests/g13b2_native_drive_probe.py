@@ -298,12 +298,13 @@ def native_sixstep_diagnostics(rsp, qtest, bemf_state):
     # Actual TI/AM13E model layout: DBFED=+0xd0, DBRED=+0xd4.
     # The previous G13B3J diagnostic reversed these 16-bit fields,
     # resulting in a false red<fed error for the original virtual board.
+    # TRM Table 26-51: OUT_MODE bit0 enables B-FED, bit1 enables A-RED.
     dbctl, dbred, dbfed = read_native_deadband(qtest.read, PWM4)
     suppression = (
         native_deadband_source_clamp(
             guest_arrays["logical_aq"], guest_arrays["logical_compare"],
             active, red_ticks=dbred, fed_ticks=dbfed,
-            fed_enabled=bool(dbctl & 2)).to_dict()
+            fed_enabled=bool(dbctl & 1)).to_dict()
         if (guest_arrays["logical_aq"] is not None and
             guest_arrays["logical_compare"] is not None) else None)
     return {
@@ -912,6 +913,46 @@ def probe_native_sustained_power_feedback(
             # exact failed-WFI plant/analog state; no fake accepted CAP1,
             # no clipping, no additional analog stimulus on the failure.
             at_failure = native_pwm_duty_progress(rsp, bemf_state, qtest)
+            # G14 device-forensic ONLY: capture the real stopped original
+            # Guest's MCPWM register state. QTest reads do not change Guest
+            # SRAM, IRQ or PWM. This is the WFI checkpoint, NOT an
+            # assertion about exact pre-/post-ZERO register snapshots.
+            g14_pwm_regs = None
+            if clocked_bridge is not None and pwm_history is not None:
+                b = PWM4
+                r32 = qtest.read
+                g14_pwm_regs = {
+                    "scope": "READ_ONLY_ORIGINAL_GUEST_FAILED_WFI_MCPWM4",
+                    "at_wfi": visit,
+                    "not_per_event_atomic_snapshot": True,
+                    "guest_or_pwm_register_writes": False,
+                    "dbctl_hex": f"0x{r32(b + 0xc0):08x}",
+                    "dbred_active_ticks": r32(b + 0xd4) & 0x3fff,
+                    "dbfed_active_ticks": r32(b + 0xd0) & 0x3fff,
+                    "dbred_shadow_ticks": r32(b + 0xdc) & 0x3fff,
+                    "dbfed_shadow_ticks": r32(b + 0xd8) & 0x3fff,
+                    "tbctl_hex": f"0x{r32(b + 0x10):08x}",
+                    "tbprd_active_ticks": r32(b + 0x14) & 0xffff,
+                    "gldctl_hex": f"0x{r32(b + 0xf0):08x}",
+                    "aq_active_hex": [
+                        [f"0x{r32(b + 0x100 + 0x200 * phase + off):08x}"
+                         for off in (0x20, 0x28)]
+                        for phase in range(3)],
+                    "aq_shadow_hex": [
+                        [f"0x{r32(b + 0x100 + 0x200 * phase + off):08x}"
+                         for off in (0x24, 0x2c)]
+                        for phase in range(3)],
+                    "last_clocked_journal_events": [
+                        {"sequence": e["sequence"],
+                         "kind": e["kind"],
+                         "virtual_ns": e["virtual_ns"],
+                         "old_mask": e["old_mask"],
+                         "new_mask": e["new_mask"],
+                         "pwm_counter": e["pwm_counter"]}
+                        for e in pwm_history.events[-8:]],
+                }
+                print("G14_ORIGINAL_GUEST_FAILED_WFI_READ_ONLY_PWM_REGS " +
+                      json.dumps(g14_pwm_regs, sort_keys=True), flush=True)
             failure = model_failure_evidence(
                 exc, frontend=frontend, sample=sample)
             last_complete_wfi = len(trace.samples) if trace is not None else (
@@ -940,6 +981,7 @@ def probe_native_sustained_power_feedback(
                     clocked_bridge.motor.diagnostics() if clocked_bridge
                     else motor.energy_balance()),
                 failure_diagnostics=failure,
+                g14_original_guest_failed_wfi_pwm_registers=g14_pwm_regs,
                 plant_integrated_ns=(
                     clocked_bridge.total_integrated_ns if clocked_bridge
                     else (timeline.frames[-1].total_integrated_ns
