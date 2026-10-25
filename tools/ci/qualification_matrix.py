@@ -8,7 +8,7 @@ def _load(path):
     return json.load(open(path,encoding='utf-8')) if path else None
 
 def summarize(*,t01=None,t02=None,strict_rotor=None,
-              fault_native=None,physics=None):
+              fault_native=None,crc_native=None,physics=None):
     from tools.ci.verify_t02 import validate
     results={}
     def functional(d,name,expected,nstages):
@@ -33,6 +33,15 @@ def summarize(*,t01=None,t02=None,strict_rotor=None,
             if fault_native and fault_native.get('independent_cases_passed')==
                ['nfault','oc-u','oc-v','oc-w']
             else 'OPEN_OR_FAIL_REQUIRES_FOUR_INDEPENDENT_NATIVE_FAULT_CASES')}
+    results['M3_NATIVE_PHYSICAL_DSHOT_CRC']={
+        'status':('PASS_NATIVE_SOURCE_CRC_AND_FEED_ONLY'
+                  if crc_native and
+                  crc_native.get('status') ==
+                    'PASS_ORIGINAL_GUEST_PHYSICAL_BAD_CRC_REJECTED' and
+                  crc_native.get('issues') == [] and
+                  crc_native.get('scope') ==
+                    'PHYSICAL_PA26_DSHOT600_SOURCE_CRC_AND_WWDT_FEED_ONLY'
+                  else 'OPEN_PHYSICAL_DSHOT_BAD_CRC_NATIVE_GATE_NOT_QUALIFIED')}
     results['M4_STRICT_ROTOR_G13B3M']={
         'status':('PASS_STRICT_NATIVE_ROTOR_ONLY'
                   if strict_rotor and strict_rotor.get('strict_gate')==
@@ -58,13 +67,14 @@ def summarize(*,t01=None,t02=None,strict_rotor=None,
 def main():
     import argparse
     p=argparse.ArgumentParser()
-    for name in ('t01','t02','strict-rotor','fault-native','physics'):
+    for name in ('t01','t02','strict-rotor','fault-native','crc-native','physics'):
         p.add_argument('--'+name)
     p.add_argument('--output',default='artifacts/e62-qualification-matrix.json')
     a=p.parse_args()
     result=summarize(t01=_load(a.t01),t02=_load(a.t02),
                      strict_rotor=_load(a.strict_rotor),
                      fault_native=_load(a.fault_native),
+                     crc_native=_load(a.crc_native),
                      physics=_load(a.physics))
     from pathlib import Path
     out=Path(a.output);out.parent.mkdir(parents=True,exist_ok=True)

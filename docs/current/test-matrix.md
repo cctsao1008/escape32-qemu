@@ -41,3 +41,9 @@ Guest CPU profile, nor are stimulus counts equivalent to ISR causality.
   repetitions; only repeatability, not G13B6 vs G13B7 speedup.
 
 [Ten-item qualification status and strict evidence boundaries](validation-campaign.md).
+
+- `e62-dshot-crc-negative.yml`: independent source-owned physical PA26
+  CRC-positive and one-bit CRC-negative cases; requires original
+  Guest callback 1/0, original throttle change/retention, Gate LOW
+  and exact WWDT feed delta +1/0. Neither case qualifies input-loss
+  expiry BOOTRST or physical power stage.

@@ -84,8 +84,8 @@ turn 200ms QTest snapshots into all sector events.
 **Negative protection:** [CI #40194013605](https://github.com/cctsao1008/escape32-qemu/actions/runs/40194013605)
 PASS each nFAULT and OC-U/V/W genuine QEMU Trip and original MCU
 IPSR=44 fault ISR -> source shutdown. **NOT_NATIVE_MOTOR_START**;
-loss-of-signal recovery and bad physical DShot CRC rejection are separate
-unqualified paths.
+loss-of-signal reset/recovery is an independent OPEN path. Physical
+DShot bad-CRC rejection is separately qualified below.
 
 **Rotor strict failure:** [CI #40194013602](https://github.com/cctsao1008/escape32-qemu/actions/runs/40194013602)
 red, despite 12 powered original Guest commutations: 20 significant SIM_ONLY
@@ -110,3 +110,23 @@ and preserves independent status. It never emits "production qualified".
 Current per-case safety report comes from
 `tools/ci/safety_qualification.py`; model behavior tests alone do not
 generate a system-safety release claim.
+
+**Physical DShot CRC / source Watchdog feeding:**
+[CI #40197254560](https://github.com/cctsao1008/escape32-qemu/actions/runs/40197254560)
+PASS positive and negative original-Guest PA26→TIMG4 capture→DMA→
+`am13e_app_io_dshot_packet` callback. Valid DShot value 1000 yields
+callback return=1, original throttle 0→953, original WWDT valid-feed
+counter delta=1. Flipping exactly **one CRC bit on the physical PA26
+wire** yields callback return=0, throttle remains 0, original WWDT
+valid-feed counter delta=0. In both scenarios original PB13 Gate
+output remains LOW / inactive. This **does not** show the gate route
+was physically disconnected; it is a *connected but neutral*
+SIM_ONLY board profile.
+
+Independent paired-artifact validator:
+`tools/ci/dshot_crc_qualification.py` checks source return values,
+wire checksum and data identity, physical 32-edge capture/DMA,
+Guest throttle response, Gate inactivity and true WWDT source feed
+delta. The CPU’s **actual expiration→BOOTRST→motor gate safe-off**
+on input loss is still OPEN because the current QEMU WWDT model
+does not implement full reset/shutdown propagation.

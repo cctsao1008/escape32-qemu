@@ -5,6 +5,8 @@ on:
     paths:
       - 'tests/g13b_native_dshot.py'
       - 'tests/test_dshot_crc_negative.py'
+      - 'tests/test_dshot_crc_qualification.py'
+      - 'tools/ci/dshot_crc_qualification.py'
       - 'machine/**'
       - '.github/workflows/e62-dshot-crc-negative.yml'
   workflow_dispatch:
@@ -22,6 +24,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m unittest discover -s tests -p 'test_dshot_crc_negative.py' -v
+          python3 -m unittest discover -s tests -p 'test_dshot_crc_qualification.py' -v
       - name: Build original-Guest QEMU and verify pinned original ELF
         run: |
           set -euo pipefail
@@ -50,6 +53,10 @@ jobs:
             2>&1 | tee artifacts/e62-dshot-bad-crc-native.log
           grep -F 'PASS_E62_ORIGINAL_ELF_BAD_DSHOT_CRC_REJECTED' \
             artifacts/e62-dshot-bad-crc-native.log
+          python3 tools/ci/dshot_crc_qualification.py \
+            --valid artifacts/e62-dshot-valid-native.json \
+            --invalid artifacts/e62-dshot-bad-crc-native.json \
+            --output artifacts/e62-dshot-crc-native-verdict.json
           echo PASS_E62_NATIVE_BAD_WIRE_CRC_NEGATIVE
       - name: Preserve Guest wire/CRC evidence including failures
         if: always()

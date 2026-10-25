@@ -59,7 +59,8 @@ programming contract was rewritten by the repository refactor.
 ## Independent validation status
 
 - [Full T02 110s, 110,000 DShot frames, 11 Stage PASS](https://github.com/cctsao1008/escape32-qemu/actions/runs/40194013746)
-- [Four source-owned nFAULT/OC-U/V/W shutdown negative gates PASS](https://github.com/cctsao1008/escape32-qemu/actions/runs/40194013605)
+- [Four source-owned nFAULT/OC-U/V/W shutdown negative gates PASS](https://github.com/cctsao1008/escape32-qemu/actions/runs/40195151571)
+- [Source-owned PA26 DShot valid/bad CRC plus WWDT feed/no-feed PASS](https://github.com/cctsao1008/escape32-qemu/actions/runs/40197254560)
 - [Historical G13B3M 12-sector Rotor Trajectory strict FAIL](https://github.com/cctsao1008/escape32-qemu/actions/runs/40194013602)
 - [Three same-runner T01 Functional passes / repeatability](https://github.com/cctsao1008/escape32-qemu/actions/runs/40194013587)
 
