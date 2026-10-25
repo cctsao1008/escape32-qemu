@@ -138,6 +138,7 @@ def main():
     native_wfi_pcs = native_wfi_locations(
         args.elf, "arm-none-eabi-objdump")
     throt_addr = symbol_address(args.elf, "throt")
+    feeds_addr = symbol_address(args.elf, "valid_frame_feeds")
     events = []
     with tempfile.TemporaryDirectory(prefix="e62-g13b1-native-") as tmp:
         sock = str(Path(tmp) / "gdb.sock")
@@ -195,6 +196,7 @@ def main():
                     # throt=1 during its 250ms arming window; this
                     # is not a decoded motor throttle or a safety bypass.
                     pre_command_throt = rsp.mem32(throt_addr)
+                    feeds_before = rsp.mem32(feeds_addr)
                     if pre_command_throt not in (0, 1):
                         raise AssertionError(
                             "Unexpected non-neutral native throttle before "
@@ -249,7 +251,10 @@ def main():
                                   inverted=inverted, delivered=delivered,
                                   capture=capture, dma_beats=dma_beats,
                                   dma_remaining=remaining,
-                                  gate_disconnected=gate_off,
+                                  gate_output_inactive=gate_off,
+                                  gate_disconnected=None,
+                                  legacy_gate_disconnected_scope=
+                                  "NOT_MEASURED_BOARD_ROUTE_IS_CONNECTED",
                                   ipsr=observer(rsp)["ipsr"], pc=pc,
                                   throttle_pre_callback=rsp.mem32(throt_addr))
                     events.append(record)
@@ -287,36 +292,43 @@ def main():
                     crc_accepted = rsp.reg(0) & 0xffffffff
                     throttle_after = rsp.mem32(throt_addr)
                     gate_still_off = gate_neutral_inactive(rsp)
+                    feeds_after = rsp.mem32(feeds_addr)
                     record.update(callback_return_pc=return_pc,
                                   callback_return=crc_accepted,
                                   throttle_after_callback=throttle_after,
-                                  gate_disconnected_after_callback=
-                                  gate_still_off)
+                                  gate_output_inactive_after_callback=gate_still_off,
+                                  gate_disconnected_after_callback=None,
+                                  watchdog_valid_feeds_before=feeds_before,
+                                  watchdog_valid_feeds_after=feeds_after,
+                                  watchdog_valid_feeds_delta=feeds_after-feeds_before)
                     print("G13B1_NATIVE_CRC_THROTTLE_POLICY " +
                           json.dumps({"return_value": crc_accepted,
                                       "throttle_before":
                                       record["throttle_pre_callback"],
                                       "throttle_after": throttle_after,
-                                      "gate_still_isolated": gate_still_off}),
+                                      "gate_output_inactive":gate_still_off,
+                                      "source_valid_crc_feed_delta":feeds_after-feeds_before}),
                           flush=True)
                     if args.corrupt_crc:
                         # Reject the malformed CRC in the original callback,
                         # without inventing a Guest RX frame or writing SRAM.
                         if (crc_accepted != 0 or
+                                feeds_after != feeds_before or
                                 throttle_after != record["throttle_pre_callback"] or
                                 not gate_still_off or observer(rsp)["cfsr"]):
                             raise AssertionError(
                                 "Original Guest did not reject physical bad CRC fail-closed")
                         print("PASS_E62_ORIGINAL_ELF_BAD_DSHOT_CRC_REJECTED "
-                              "GATE_STILL_ISOLATED", flush=True)
+                              "GATE_OUTPUT_INACTIVE_NO_WWDT_FEED", flush=True)
                     else:
-                        if (crc_accepted != 1 or throttle_after <= 1 or
+                        if (crc_accepted != 1 or feeds_after != feeds_before+1 or
+                                throttle_after <= 1 or
                                 throttle_after == record["throttle_pre_callback"] or
                                 not gate_still_off or observer(rsp)["cfsr"]):
                             raise AssertionError(
                                 "Native DShot CRC/throttle ownership not demonstrated")
                         print("PASS_G13B1_ORIGINAL_ELF_DSHOT_RX_CRC_THROTTLE "
-                              "GATE_STILL_ISOLATED_NOT_CLOSED_LOOP", flush=True)
+                              "GATE_OUTPUT_INACTIVE_NOT_CLOSED_LOOP", flush=True)
                 finally:
                     for pc in sorted(armed, reverse=True):
                         del_bp(rsp, pc)
