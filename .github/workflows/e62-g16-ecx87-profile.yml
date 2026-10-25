@@ -46,8 +46,8 @@ jobs:
       - name: G19 comparator filter no-op/unselected writes regression
         run: |
           set -euo pipefail
-          python3 tests/g10_feedback.py \\
-            --qemu .build/qemu-src/build/qemu-system-arm \\
+          python3 tests/g10_feedback.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
             --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf
       - name: ECX87-KV147 measured-switch native BEMF loop STRICT (no rotor waiver)
         shell: bash
@@ -83,9 +83,9 @@ jobs:
         run: |
           set -euo pipefail
           if [[ -f artifacts/e62-g16-ecx87-wfi-history.json ]]; then
-            python3 tools/native_bemf_timing_audit.py \\
-              --trace artifacts/e62-g16-ecx87-wfi-history.json \\
-              --output artifacts/e62-g16-ecx87-bemf-timing-audit.json \\
+            python3 tools/native_bemf_timing_audit.py \
+              --trace artifacts/e62-g16-ecx87-wfi-history.json \
+              --output artifacts/e62-g16-ecx87-bemf-timing-audit.json \
               2>&1 | tee artifacts/e62-g16-ecx87-bemf-timing-audit.log
           else
             echo "G17_G18_NO_NATIVE_TRACE_FAIL_CLOSED" 
