@@ -313,6 +313,10 @@ typedef struct AM13ESimPWM {
     uint64_t hist_total, hist_dropped, hist_last_time_ns;
     uint32_t hist_mask, hist_invalid_count, hist_gate_word;
     bool hist_model_valid;
+    /* Prior ACTIVE carrier image for RED/FED lookback across ZERO.
+     * These are QEMU internal levels, not physical gate voltages. */
+    uint32_t previous_carrier_reg[AM13E_SIM_MCPWM_SIZE / 4U];
+    bool previous_carrier_valid;
     qemu_irq irq;
     struct AM13EMachineState *machine;
     uint32_t reg[AM13E_SIM_MCPWM_SIZE / 4U];
@@ -1737,6 +1741,10 @@ static void am13e_pwm4_zero_event(void *opaque)
     p->counter_base = 0U;
     bool shadow_loaded = (p->reg[0xf0U / 4U] & 1U) &&
         (!(p->reg[0xf0U / 4U] & 2U) || p->latch);
+    /* Preserve the old carrier BEFORE Shadow-to-Active. A delayed
+     * edge crossing ZERO cannot read the newly latched AQ image. */
+    memcpy(p->previous_carrier_reg,p->reg,sizeof(p->reg));
+    p->previous_carrier_valid=true;
     am13e_pwm4_shadow_load(p);
     am13e_g10_pwm_sync(&p->machine->feedback);
     ++p->zero_events;
@@ -1782,6 +1790,7 @@ static void am13e_pwm4_clock_update(AM13ESimPWM *p)
     }
     am13e_pwm4_hist_refresh(p,AM13E_H_CLOCK,before!=p->running);
     if (before != p->running) {
+        p->previous_carrier_valid=false; /* no continuous carrier */
         am13e_auto_route_changed(p->machine);
     }
 }
@@ -1798,6 +1807,8 @@ static void am13e_pwm4_reset(AM13ESimPWM *p)
     p->hist_total=p->hist_dropped=p->hist_last_time_ns=0;
     p->hist_mask=p->hist_invalid_count=p->hist_gate_word=0;
     p->hist_model_valid=false;
+    p->previous_carrier_valid=false;
+    memset(p->previous_carrier_reg,0,sizeof(p->previous_carrier_reg));
     memset(p->reg, 0, sizeof(p->reg));
     p->reg[0x10U / 4U] = 2U; /* safe STOP_FREEZE */
     p->irqs = p->zero_events = p->counter_base = 0U;
@@ -1848,13 +1859,14 @@ static bool am13e_pwm4_rw_reg(hwaddr off)
            minor == 0x30U || minor == 0x34U;
 }
 
-static uint32_t am13e_pwm4_raw_aq(AM13ESimPWM *p, unsigned out,
-                                  uint32_t c, bool *valid)
+static uint32_t am13e_pwm4_raw_aq_image(AM13ESimPWM *p, unsigned out,
+                                        uint32_t c, bool *valid,
+                                        const uint32_t *image)
 {
     uint32_t base = 0x100U + (out / 2U) * 0x200U;
-    uint32_t aq = p->reg[(base + ((out & 1U) ? 0x28U : 0x20U)) / 4U];
-    uint32_t ca = p->reg[(base + 0x00U) / 4U];
-    uint32_t cb = p->reg[(base + 0x08U) / 4U];
+    uint32_t aq = image[(base + ((out & 1U) ? 0x28U : 0x20U)) / 4U];
+    uint32_t ca = image[(base + 0x00U) / 4U];
+    uint32_t cb = image[(base + 0x08U) / 4U];
     uint32_t zro = aq & 3U, result;
     if ((aq & 0xcccU) != 0U || zro == 3U) {
         *valid = false; /* unsupported PRD/down-AQ or TOGGLE */
@@ -1871,19 +1883,19 @@ static uint32_t am13e_pwm4_raw_aq(AM13ESimPWM *p, unsigned out,
         return 0U;
     }
     result = zro == 2U ? 1U : 0U;
-    if (ca && ca <= c && ca <= p->reg[0x14U / 4U]) {
+    if (ca && ca <= c && ca <= image[0x14U / 4U]) {
         uint32_t action = (aq >> 4U) & 3U;
         if (action == 1U) result = 0U;
         if (action == 2U) result = 1U;
         if (action == 3U) *valid = false;
     }
-    if (cb && cb <= c && cb <= p->reg[0x14U / 4U]) {
+    if (cb && cb <= c && cb <= image[0x14U / 4U]) {
         uint32_t action = (aq >> 8U) & 3U;
         if (action == 1U) result = 0U;
         if (action == 2U) result = 1U;
         if (action == 3U) *valid = false;
     }
-    uint32_t force = p->reg[(base + 0x30U) / 4U];
+    uint32_t force = image[(base + 0x30U) / 4U];
     force = (force >> ((out & 1U) ? 4U : 0U)) & 7U;
     if (force == 1U) result = 0U;
     else if (force == 2U) result = 1U;
@@ -1895,6 +1907,12 @@ static uint32_t am13e_pwm4_raw_aq(AM13ESimPWM *p, unsigned out,
         *valid = false;
     }
     return result;
+}
+
+static uint32_t am13e_pwm4_raw_aq(AM13ESimPWM *p, unsigned out,
+                                  uint32_t c, bool *valid)
+{
+    return am13e_pwm4_raw_aq_image(p,out,c,valid,p->reg);
 }
 
 static uint32_t am13e_pwm4_level(AM13ESimPWM *p, unsigned out,
@@ -1926,8 +1944,30 @@ static uint32_t am13e_pwm4_level(AM13ESimPWM *p, unsigned out,
         *valid = false;
         return 0U;
     }
-    uint32_t past = (c + period + 1U - dly) % (period + 1U);
-    before = am13e_pwm4_raw_aq(p, out, past, valid);
+    if (c < dly && p->previous_carrier_valid) {
+        /* The RED/FED lookback crosses TBCTR_ZERO into the PREVIOUS
+         * ACTIVE image, not into the new Shadow-to-Active image.
+         * Reject in-flight DB timing/topology changes we cannot prove.
+         */
+        const uint32_t *prior = p->previous_carrier_reg;
+        uint32_t old_period = prior[0x14U / 4U] & 0xffffU;
+        uint32_t delay_offset = (out & 1U) ? 0xd0U : 0xd4U;
+        if (!old_period || dly > old_period + 1U ||
+            (prior[0xc0U / 4U] & 0x3ffU) != (dbctl & 0x3ffU) ||
+            prior[delay_offset / 4U] != p->reg[delay_offset / 4U]) {
+            *valid = false;
+            return 0U;
+        }
+        before = am13e_pwm4_raw_aq_image(
+            p,out,old_period + 1U - (dly - c),valid,prior);
+    } else if (c < dly) {
+        /* Initial clock start: existing register-only approximation;
+         * it is not qualified external dead-band propagation. */
+        uint32_t past = (c + period + 1U - dly) % (period + 1U);
+        before = am13e_pwm4_raw_aq(p,out,past,valid);
+    } else {
+        before = am13e_pwm4_raw_aq(p,out,c-dly,valid);
+    }
     /* A RED postpones new HIGH; B FED postpones new LOW.
      * Polarity bits and cross-source topology remain deliberately
      * unsupported, rather than silently misreporting six outputs.
