@@ -54,8 +54,14 @@ def queue_edge(qtest, delay_ns, level):
                              f"before={before}, after={after}, level={level}")
 
 
+def encode_dshot_physical_frame(throttle, *, corrupt_crc=False):
+    """Physical wire frame; corruption changes only checksum bit zero."""
+    frame = dshot_frame(throttle)
+    return frame ^ (1 if corrupt_crc else 0)
+
+
 def queue_dshot600_wire(qtest, throttle, *, allow_zero=False,
-                         reset_completed_wave=False):
+                         reset_completed_wave=False, corrupt_crc=False):
     if not (48 <= throttle <= 2047 or (throttle == 0 and allow_zero)):
         raise ValueError("Only genuine DShot throttle or opt-in zero frames")
     if reset_completed_wave:
@@ -69,7 +75,9 @@ def queue_dshot600_wire(qtest, throttle, *, allow_zero=False,
         qtest.write(WAVE + 0x20, 1)
         if qtest.read(WAVE + 0x08) != 0 or qtest.read(WAVE + 0x0c) != 0:
             raise AssertionError("SIM_ONLY PA26 wire queue did not reset")
-    frame = dshot_frame(throttle)
+    # Deliberately corrupt ONLY the transmitted physical wire checksum.
+    # Original Guest must execute its unmodified decoder and reject.
+    frame = encode_dshot_physical_frame(throttle, corrupt_crc=corrupt_crc)
     assert qtest.read(WAVE + 0x08) == 0
     # DShot600 100MHz TIMG4: high bit1=125 ticks, bit0=63 ticks,
     # period=167 ticks. Each queue entry is a real pin level transition.
@@ -102,6 +110,8 @@ def main():
     p.add_argument("--qemu", type=Path, required=True)
     p.add_argument("--elf", type=Path, required=True)
     p.add_argument("--throttle", type=int, default=1000)
+    p.add_argument("--corrupt-crc", action="store_true",
+                   help="Transmit one genuinely malformed DShot wire frame; require original Guest CRC rejection")
     p.add_argument("--startup-steps", type=int, default=32768)
     p.add_argument("--slice-ms", type=int, default=300)
     p.add_argument("--runtime-slices", type=int, default=12)
@@ -189,7 +199,8 @@ def main():
                         armed.remove(native_wfi)
                     print(f"G13B1_PRE_COMMAND_NATIVE_WFI=0x{observed_wfi:08x}",
                           flush=True)
-                    frame = queue_dshot600_wire(qtest, args.throttle)
+                    frame = queue_dshot600_wire(qtest, args.throttle,
+                                                 corrupt_crc=args.corrupt_crc)
                     add_bp(rsp, native_callback)
                     armed.add(native_callback)
                     stop, interrupted = continue_bounded(rsp, args.slice_ms)
@@ -273,13 +284,24 @@ def main():
                                       "throttle_after": throttle_after,
                                       "gate_still_isolated": gate_still_off}),
                           flush=True)
-                    if (crc_accepted != 1 or throttle_after <= 1 or
-                            throttle_after == record["throttle_pre_callback"] or
-                            not gate_still_off or observer(rsp)["cfsr"]):
-                        raise AssertionError(
-                            "Native DShot CRC/throttle ownership not demonstrated")
-                    print("PASS_G13B1_ORIGINAL_ELF_DSHOT_RX_CRC_THROTTLE "
-                          "GATE_STILL_ISOLATED_NOT_CLOSED_LOOP", flush=True)
+                    if args.corrupt_crc:
+                        # Reject the malformed CRC in the original callback,
+                        # without inventing a Guest RX frame or writing SRAM.
+                        if (crc_accepted != 0 or
+                                throttle_after != record["throttle_pre_callback"] or
+                                not gate_still_off or observer(rsp)["cfsr"]):
+                            raise AssertionError(
+                                "Original Guest did not reject physical bad CRC fail-closed")
+                        print("PASS_E62_ORIGINAL_ELF_BAD_DSHOT_CRC_REJECTED "
+                              "GATE_STILL_ISOLATED", flush=True)
+                    else:
+                        if (crc_accepted != 1 or throttle_after <= 1 or
+                                throttle_after == record["throttle_pre_callback"] or
+                                not gate_still_off or observer(rsp)["cfsr"]):
+                            raise AssertionError(
+                                "Native DShot CRC/throttle ownership not demonstrated")
+                        print("PASS_G13B1_ORIGINAL_ELF_DSHOT_RX_CRC_THROTTLE "
+                              "GATE_STILL_ISOLATED_NOT_CLOSED_LOOP", flush=True)
                 finally:
                     for pc in sorted(armed, reverse=True):
                         del_bp(rsp, pc)
