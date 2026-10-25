@@ -44,7 +44,10 @@ class NativeCFunctionBehavior(unittest.TestCase):
             #include <stdbool.h>
             #include <assert.h>
             #include <string.h>
-            typedef struct AM13EMachineState { bool esc_sim; } AM13EMachineState;
+            typedef struct AM13EMachineState {
+                bool esc_sim;
+                uint32_t sim_mc_mux[1];
+            } AM13EMachineState;
             typedef struct AM13ESimFeedback {
                 uint16_t cmp[128];
                 uint32_t phase_code[3];
@@ -56,10 +59,15 @@ class NativeCFunctionBehavior(unittest.TestCase):
             static bool am13e_g10_cmp_powered(AM13ESimFeedback *f) {
                 (void)f; return true;
             }
+            static bool am13e_g10_raw(AM13ESimFeedback *f) {
+                unsigned mux=f->machine->sim_mc_mux[0] & 7U;
+                return mux < 3 && f->phase_valid[mux] &&
+                       f->phase_code[mux] > f->cmp[0x0e/2];
+            }
             static void am13e_g10_cmp_evaluate(AM13ESimFeedback *f) {
                 ++eval_count;
                 filter_inflight=false; /* real evaluator cancels its timer */
-                if (f->phase_code[0]==100 && f->phase_code[1]==200 &&
+                if (f->phase_code[0]==2200 && f->phase_code[1]==200 &&
                     f->phase_code[2]==300 && f->phase_valid[0] &&
                     f->phase_valid[1] && f->phase_valid[2]) {
                     ++coherent_reads;
@@ -85,7 +93,7 @@ class NativeCFunctionBehavior(unittest.TestCase):
                 assert(f.cmp[0x0e/2]==2100U);
 
                 uint32_t writes=0;
-                uint32_t values[3]={0x10000U|100U,0x10000U|200U,0x10000U|300U};
+                uint32_t values[3]={0x10000U|2200U,0x10000U|200U,0x10000U|300U};
                 eval_count=route_changes=coherent_reads=0U;
                 filter_inflight=true;
                 assert(am13e_g10_stim_vector(&f,values,&writes));
@@ -94,9 +102,12 @@ class NativeCFunctionBehavior(unittest.TestCase):
                 filter_inflight=true;
                 assert(am13e_g10_stim_vector(&f,values,&writes));
                 assert(writes==3 && eval_count==1 && filter_inflight);
+                values[2]=0x10000U|301U; /* unselected change */
+                assert(am13e_g10_stim_vector(&f,values,&writes));
+                assert(writes==4 && eval_count==1 && filter_inflight);
                 values[2]=0x20000U;  /* rejects all, not partial mutate */
                 assert(!am13e_g10_stim_vector(&f,values,&writes));
-                assert(writes==3 && eval_count==1 && f.phase_code[2]==300U);
+                assert(writes==4 && eval_count==1 && f.phase_code[2]==301U);
                 return 0;
             }
         """)
