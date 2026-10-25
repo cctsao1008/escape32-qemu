@@ -14,4 +14,5 @@ python3 -m py_compile \
     tests/g13b4_functional_dshot_sitl.py \
     tests/g13b2_native_drive_probe.py
 python3 -m unittest discover -s tests -p 'test_autonomous*.py' -v
+python3 tools/ci/audit_repository.py
 echo PASS_G13B7_1_AUTONOMOUS_REFACTOR_HOST

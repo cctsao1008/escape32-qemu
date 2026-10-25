@@ -13,6 +13,23 @@ import functional_dshot_sitl as current_sitl
 
 
 class RefactorCompatibilityTests(unittest.TestCase):
+    def test_canonical_and_compat_python_entrypoints_parse(self):
+        import ast
+        for name in (
+            'tools/native_arming.py',
+            'tools/sitl_autonomous_transport.py',
+            'tools/sitl_autonomous_evidence.py',
+            'tools/sitl_stage_oracle.py',
+            'tools/autonomous_sitl_host.py',
+            'tools/autonomous_sitl_runner.py',
+            'tests/functional_dshot_sitl.py',
+            'tests/g13b4_functional_dshot_sitl.py',
+        ):
+            file = ROOT/name
+            with self.subTest(path=name):
+                ast.parse(file.read_text(encoding='utf-8'),
+                          filename=str(file))
+
     def test_zero_arm_and_wfi_symbols_preserve_identity(self):
         for name in ('native_original_zero_throttle_arm',
                      'resolve_original_rel17_wfi_roles',
