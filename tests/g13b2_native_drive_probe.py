@@ -298,12 +298,13 @@ def native_sixstep_diagnostics(rsp, qtest, bemf_state):
     # Actual TI/AM13E model layout: DBFED=+0xd0, DBRED=+0xd4.
     # The previous G13B3J diagnostic reversed these 16-bit fields,
     # resulting in a false red<fed error for the original virtual board.
+    # TRM Table 26-51: OUT_MODE bit0 enables B-FED, bit1 enables A-RED.
     dbctl, dbred, dbfed = read_native_deadband(qtest.read, PWM4)
     suppression = (
         native_deadband_source_clamp(
             guest_arrays["logical_aq"], guest_arrays["logical_compare"],
             active, red_ticks=dbred, fed_ticks=dbfed,
-            fed_enabled=bool(dbctl & 2)).to_dict()
+            fed_enabled=bool(dbctl & 1)).to_dict()
         if (guest_arrays["logical_aq"] is not None and
             guest_arrays["logical_compare"] is not None) else None)
     return {
