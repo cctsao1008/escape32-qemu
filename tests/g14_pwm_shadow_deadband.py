@@ -28,6 +28,10 @@ def fixture(q, *, red_enabled):
     set_pwm_pair(q, 2, (1, 1), (1, 2))
     q.write(PWM + 0xd4, 2)  # A rising delay = 2 TBCLK
     q.write(PWM + 0xd0, 2)  # B falling delay = 2 TBCLK
+    # A real GLD ZERO also transfers DB shadow registers. Keep the
+    # intended delays stable instead of accidentally loading zeros.
+    q.write(PWM + 0xd8, 2)  # DBFEDS
+    q.write(PWM + 0xdc, 2)  # DBREDS
     q.write(PWM + 0xc0, 0x23 if red_enabled else 0x22)
     q.write(CTL, 0)
     q.write(TBCLKSYNC, 1)
