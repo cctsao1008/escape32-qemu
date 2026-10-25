@@ -4,8 +4,8 @@
 The historical 0x28 -> 0x38 -> 0x10 was a same-time ZERO/Shadow
 model overlap. This fixture exercises the actual rebuilt QEMU MCPWM
 register/timer path, not a Python substitute and not original Guest.
-With RED removed (OUT_MODE=01, FED only), a genuine overlap MUST still
-expose the overlap (no masking, clipping or rule waiver).
+With RED removed (OUT_MODE=01, FED only), a genuine complementary
+overlap MUST remain observable (no clipping or rule waiver).
 """
 import argparse
 import sys
@@ -17,7 +17,8 @@ from g9_mcpwm_observer import (
 from tools.native_pwm_history import read_native_pwm_history
 
 
-def fixture(q, *, red_enabled):
+def fixture(q, *, mode):
+    assert mode in ("red_fed", "red_only", "fed_only")
     q.write(POWER, 0x26000200)
     q.write(PERIOD, 99)
     q.write(SHADOW, 99)
@@ -32,7 +33,8 @@ def fixture(q, *, red_enabled):
     # intended delays stable instead of accidentally loading zeros.
     q.write(PWM + 0xd8, 2)  # DBFEDS
     q.write(PWM + 0xdc, 2)  # DBREDS
-    q.write(PWM + 0xc0, 0x23 if red_enabled else 0x21)
+    q.write(PWM + 0xc0, {"red_fed":0x23, "red_only":0x22,
+                           "fed_only":0x21}[mode])
     q.write(CTL, 0)
     q.write(TBCLKSYNC, 1)
     h = read_native_pwm_history(q.read)
@@ -58,15 +60,14 @@ def fixture(q, *, red_enabled):
     assert zero[0].virtual_ns == shadow[0].virtual_ns
     assert zero[0].old_mask == 0x28
 
-    if red_enabled:
-        # Prior ACTIVE AQ image must supply the delayed W-high input.
-        assert zero[0].new_mask == 0x28, zero[0]
-        assert shadow[0].new_mask == 0x28, shadow[0]
-        assert at_zero.current_internal_sixbit_mask == 0x28
-    else:
-        # Deliberate unsafe complementary controls still show overlap.
-        assert zero[0].new_mask == 0x38, zero[0]
-        assert at_zero.current_internal_sixbit_mask == 0x38
+    # OUT_MODE=11: both RED and FED, delayed B-low remains asserted
+    # while W-high is delayed. OUT_MODE=10: RED only, low switches off
+    # immediately and high waits 20 ns. OUT_MODE=01: FED only, high
+    # becomes asserted immediately while W-low remains on (unsafe).
+    zero_expected = {"red_fed":0x28,"red_only":0x00,"fed_only":0x38}[mode]
+    assert zero[0].new_mask == zero_expected, (mode,zero[0])
+    assert shadow[0].new_mask == zero_expected, (mode,shadow[0])
+    assert at_zero.current_internal_sixbit_mask == zero_expected
 
     q.cmd("clock_step 20")  # exactly two TBCLK ticks
     after = read_native_pwm_history(q.read)
@@ -77,15 +78,16 @@ def fixture(q, *, red_enabled):
     assert edges[0].virtual_ns == zero[0].virtual_ns + 20, edges
     assert edges[0].new_mask == 0x10, edges
     assert after.current_internal_sixbit_mask == 0x10
-    if red_enabled:
-        assert all(not (x.new_mask & 0x30) == 0x30
-                   for x in after.observed_events
-                   if x.virtual_ns >= zero[0].virtual_ns)
-        print("PASS_G14_ZERO_SHADOW_PREVIOUS_CARRIER_RED_FED_20NS_CONTINUITY")
+    overlapping = [x for x in after.observed_events
+                   if x.virtual_ns >= zero[0].virtual_ns
+                   and (x.new_mask & 0x30) == 0x30]
+    if mode == "fed_only":
+        assert overlapping, after
+        print("PASS_G14_UNSAFE_FED_ONLY_STILL_REPORTS_W_OVERLAP")
     else:
-        assert any((x.new_mask & 0x30) == 0x30
-                   for x in after.observed_events)
-        print("PASS_G14_UNSAFE_NO_RED_STILL_REPORTS_W_COMPLEMENTARY_OVERLAP")
+        assert not overlapping, (mode,overlapping)
+        print("PASS_G14_ZERO_SHADOW_" + mode.upper() +
+              "_20NS_CONTINUITY")
 
 
 def main():
@@ -96,9 +98,9 @@ def main():
     for path in (a.qemu, a.elf):
         if not path.is_file():
             p.error("Missing QEMU or unchanged original ELF: " + str(path))
-    for red in (True, False):
+    for mode in ("red_fed", "red_only", "fed_only"):
         run(a.qemu.resolve(), a.elf.resolve(), True,
-            lambda q, red=red: fixture(q, red_enabled=red))
+            lambda q, mode=mode: fixture(q, mode=mode))
     print("PASS_G14_QEMU_DEVICE_MODEL_COUNTEREXAMPLE_NOT_NATIVE_ROTOR_GATE")
 
 
