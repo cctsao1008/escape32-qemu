@@ -97,6 +97,22 @@ class MotorProfileTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Only documented ECX87"):
                 build_profile_cfg_flash(b"fixture", "legacy")
 
+    def test_actual_unchanged_rel17_3_elf_profile_image(self):
+        # This repository's immutable original ELF, not a fabricated symbol
+        # map, proves that the original Cfg ABI offset really exists.
+        elf = (Path(__file__).resolve().parents[1] /
+               "baseline/e62-g13b3/firmware/AM13E-rev17.3.elf")
+        original = elf.read_bytes()
+        for profile in DATASHEET_PROFILES:
+            with self.subTest(profile=profile):
+                image, meta = build_profile_cfg_flash(original, profile)
+                self.assertEqual(image[TELEM_POLES_CFG_OFFSET], 42)
+                self.assertEqual(meta["telem_poles_after"], 42)
+                self.assertTrue(meta["original_guest_elf_unchanged"])
+                self.assertEqual(meta["scope"],
+                                 "SIM_ONLY_PREBOOT_FLASH_CFG_NOT_ORIGINAL_GUEST_UART_CLI")
+                require_matching_profile_cfg(original, image, profile)
+
     def test_reject_unknown_profile(self):
         with self.assertRaisesRegex(ValueError, "Unknown explicit"):
             native_motor_parameters("motor-from-nowhere")
