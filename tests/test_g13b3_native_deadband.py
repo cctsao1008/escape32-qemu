@@ -32,11 +32,12 @@ class TestDeadband(unittest.TestCase):
         dbctl,red,fed=read_native_deadband(read,base)
         self.assertEqual(observed,[base+0xc0,base+0xd0,base+0xd4])
         self.assertEqual((red,fed),(32,1))
+        self.assertEqual(dbctl & 3,2)  # RED only; FED is disabled
         x=native_deadband_source_clamp(
             [18,0,0,2,0,0],[9]*6,[1,1,1,512,1,1],
-            red_ticks=red,fed_ticks=fed,fed_enabled=bool(dbctl&2))
+            red_ticks=red,fed_ticks=fed,fed_enabled=bool(dbctl&1))
         self.assertTrue(x.all_source_pwm_clamped)
-        self.assertEqual(x.min_compare_ticks,31)
+        self.assertEqual(x.min_compare_ticks,32)
 
     def test_fail_closed(self):
         with self.assertRaises(ValueError):
