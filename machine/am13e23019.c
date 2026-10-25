@@ -264,7 +264,6 @@ typedef struct AM13ESimTimer AM13ESimTimer;
 static void am13e_sim_timer_reset(AM13ESimTimer *t);
 static void am13e_sim_wwdt_reset(AM13ESimWWDT *w);
 static void am13e_sim_wwdt_stop(AM13ESimWWDT *w);
-static void am13e_pwm4_reset(AM13ESimPWM *p);
 static void am13e_sim_adc_reset(AM13ESimADC *adc);
 
 typedef struct AM13EPeripheralGPRCM {
@@ -326,6 +325,8 @@ typedef struct AM13ESimPWM {
     bool reported_unmodeled;
     bool reported_power_off;
 } AM13ESimPWM;
+
+static void am13e_pwm4_reset(AM13ESimPWM *p);
 
 /* ECAP1 counter/capture and CMPSS0 high comparator, ESC-SIM only. */
 typedef struct AM13ESimFeedback {
