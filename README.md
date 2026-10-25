@@ -11,8 +11,8 @@ flightworthiness or real electrical/thermal qualification.
 
 **Independent strict-gate status:** Historical G13B3L six-sector Native
 gate previously PASS; G13B3M twelve-sector rotor stability is **known
-FAIL** and remains a separately blocking test. T02 110s is not yet
-independently qualified.
+FAIL** and remains a separately blocking test. T02 110s has now passed the independent **11-stage Functional SITL** gate;
+this is not physical motor, rotor trajectory, or hardware qualification.
 
 ## Documentation
 
@@ -55,6 +55,17 @@ compatibility wrapper with the **same** implementation.
 Historical G13B3 probe `tests/g13b2_native_drive_probe.py` keeps its
 original CLI and imported names. No original ELF or board-register
 programming contract was rewritten by the repository refactor.
+
+## Independent validation status
+
+- [Full T02 110s, 110,000 DShot frames, 11 Stage PASS](https://github.com/cctsao1008/escape32-qemu/actions/runs/40194013746)
+- [Four source-owned nFAULT/OC-U/V/W shutdown negative gates PASS](https://github.com/cctsao1008/escape32-qemu/actions/runs/40194013605)
+- [Historical G13B3M 12-sector Rotor Trajectory strict FAIL](https://github.com/cctsao1008/escape32-qemu/actions/runs/40194013602)
+- [Three same-runner T01 Functional passes / repeatability](https://github.com/cctsao1008/escape32-qemu/actions/runs/40194013587)
+
+These are separate scopes; strict rotor failure must not be hidden by
+Functional T02. The host-only physics model does not replace a Guest-coupled
+motor or motor/propeller calibration.
 
 ## Source organization
 

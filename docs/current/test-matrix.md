@@ -6,7 +6,7 @@
 | Custom pinned QEMU source | `./build.sh` | PASS_G0_BUILD |
 | Bounded T01 smoke | `python3 tests/functional_dshot_sitl.py --autonomous --id T01 --max-frames 50 …` | Expected OPEN, never full PASS |
 | Full T01 | `python3 tests/functional_dshot_sitl.py --autonomous --id T01 …` | 11,000 physical input frames; 11s; aggregate + both sampled Stages + neutral teardown |
-| T02 | Same script with `--id T02` | 110s; OPEN until independently validated |
+| T02 | Same script with `--id T02` | **110s Functional PASS / 11 Stage PASS** (CI #40194013746), not motor physics |
 | Native peripheral bring-up | `./test.sh <original-ELF>` | Historical gate-wise acceptance |
 | G13B3L strict six powered sectors | Pinned Native Regression workflow | Previously PASS |
 | G13B3M strict 12 sectors / 90ms rotor | Same workflow, separate independent job | **Known FAIL**, retain it |

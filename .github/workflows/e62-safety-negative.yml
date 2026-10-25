@@ -24,6 +24,10 @@ jobs:
           git submodule update --init --depth 1 qemu
           ./build.sh
           echo '05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0  baseline/e62-g13b3/firmware/AM13E-rev17.3.elf' | sha256sum -c -
+      - name: Verify strict safety evidence policy
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_safety_qualification.py' -v
       - name: Independent QEMU OC/nFAULT hardware route and Trip latch
         run: |
           set -euo pipefail
@@ -32,6 +36,19 @@ jobs:
             --qemu .build/qemu-src/build/qemu-system-arm \
             --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
             2>&1 | tee artifacts/e62-safety-qemu-routing.log
+      - name: Independent modeled input capture and watchdog fail-closed peripheral tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tests/g5_wwdt.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            2>&1 | tee artifacts/e62-safety-wwdt-device-model.log
+          python3 tests/g7b_pa26_capture.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            2>&1 | tee artifacts/e62-safety-pa26-dma-device-model.log
+          echo OPEN_GUEST_NATIVE_LOSS_TIMEOUT_AND_BAD_DSHOT_CRC_NOT_YET_QUALIFIED
       - name: Original Guest native fault ISR — independent cases
         shell: bash
         run: |
@@ -45,6 +62,9 @@ jobs:
               --artifact "artifacts/e62-safety-${fault}.json" \
               2>&1 | tee "artifacts/e62-safety-${fault}.log"
           done
+          python3 tools/ci/safety_qualification.py \
+            --artifacts-dir artifacts \
+            --output artifacts/e62-safety-qualification.json
       - name: Preserve native safety evidence on failure
         if: always()
         uses: actions/upload-artifact@v4

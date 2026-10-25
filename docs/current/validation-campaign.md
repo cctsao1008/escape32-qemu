@@ -66,3 +66,47 @@ bash tools/ci/check_autonomous_host.sh
 python3 -m unittest discover -s tests -p 'test_t02_*.py' -v
 python3 tools/ci/qualification_matrix.py --output artifacts/e62-qualification-matrix.json
 ```
+
+## Verified integrated results (October 25, 2026)
+
+**Full Strict Functional T02:** [CI #40194013746](https://github.com/cctsao1008/escape32-qemu/actions/runs/40194013746).
+PASS 110,000 physical simulated DShot600 frames, 110s virtual, 11/11
+Stage Gates (including 0% neutral and post-transition settled throttle),
+CRC delta 105,578, CAP1 delta 91,809, TIMG12 service delta 91,794,
+original source neutral teardown and zero oracle issues.
+
+**Functional T01:** [CI #40194013528](https://github.com/cctsao1008/escape32-qemu/actions/runs/40194013528) PASS.
+The final code includes extra read-only original Guest sampled Step +
+selected comparator code evidence. The new `sampled_source_sequence_audit`
+remains intentionally OPEN for complete chronological order; it cannot
+turn 200ms QTest snapshots into all sector events.
+
+**Negative protection:** [CI #40194013605](https://github.com/cctsao1008/escape32-qemu/actions/runs/40194013605)
+PASS each nFAULT and OC-U/V/W genuine QEMU Trip and original MCU
+IPSR=44 fault ISR -> source shutdown. **NOT_NATIVE_MOTOR_START**;
+loss-of-signal recovery and bad physical DShot CRC rejection are separate
+unqualified paths.
+
+**Rotor strict failure:** [CI #40194013602](https://github.com/cctsao1008/escape32-qemu/actions/runs/40194013602)
+red, despite 12 powered original Guest commutations: 20 significant SIM_ONLY
+rotor direction reversals. Legacy host physics has nonreciprocal Ke/Kt
+power ratio 7, and resets current at every commutation. A separate
+Reciprocal Ke/Kt A/B [CI #40194544653](https://github.com/cctsao1008/escape32-qemu/actions/runs/40194544653)
+also does **not** resolve qualification: the analog frontend exceeds
+the test fixture voltage range as synthetic rotor speeds exceed ~7189 RPM.
+Do not clamp this event to manufacture a PASS. Actual current-continuous
+switching model tests are HOST_ONLY and are not yet linked to original
+Guest PWM edges / comparator feedback.
+
+**Performance:** [CI #40194013587](https://github.com/cctsao1008/escape32-qemu/actions/runs/40194013587):
+three full T01 repeat trials all Functional PASS, wall times
+60.929, 61.527, 60.425 s on one Ubuntu-24.04 Runner,
+mean 60.960 s, sample standard deviation 0.552 s.
+No same-host G13B6 comparator available, so speedup is still OPEN.
+
+**Automated qualification report:** `tools/ci/qualification_matrix.py`
+accepts T01/T02, rotor, source-native safety and coupled physics evidence,
+and preserves independent status. It never emits "production qualified".
+Current per-case safety report comes from
+`tools/ci/safety_qualification.py`; model behavior tests alone do not
+generate a system-safety release claim.
