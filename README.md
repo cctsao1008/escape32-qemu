@@ -20,6 +20,7 @@ this is not physical motor, rotor trajectory, or hardware qualification.
 - [Test/CI matrix and honest gate meanings](docs/current/test-matrix.md)
 - [Functional SITL G13B7.1](docs/current/functional-sitl.md)
 - [T01/T02, rotor, safety, physics and performance campaign](docs/current/validation-campaign.md)
+- [Every Firmware Release L1 gate and evidence manifest](docs/current/firmware-release-l1.md)
 - [Full document index](docs/README.md)
 - [Original G0–G13B development log](docs/history/README-development-log.md)
 - [Immutable paired binaries and licenses](baseline/e62-g13b3/README.md)

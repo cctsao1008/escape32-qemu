@@ -1,0 +1,158 @@
+name: E62 L1 Firmware Release Functional Gate (Original Guest)
+on:
+  push:
+    branches: [main]
+    tags: ['e62-fw-*']
+    paths:
+      - '.github/workflows/e62-firmware-release-l1.yml'
+      - 'tools/ci/firmware_release_l1.py'
+      - 'tests/test_firmware_release_l1.py'
+  workflow_dispatch:
+    inputs:
+      release_id:
+        description: 'Release label, unique and immutable after qualification'
+        required: true
+        type: string
+        default: 'e62-rel17.3'
+      firmware_path:
+        description: 'Already git-tracked ELF path (qualified symbols/ABI required)'
+        required: true
+        type: string
+        default: 'baseline/e62-g13b3/firmware/AM13E-rev17.3.elf'
+      firmware_sha256:
+        description: 'Exact expected SHA256 of the release ELF'
+        required: true
+        type: string
+        default: '05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0'
+permissions:
+  contents: read
+concurrency:
+  group: e62-l1-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  original-guest-L1:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      REL_ID: ${{ inputs.release_id || github.ref_name }}
+      FW_PATH: ${{ inputs.firmware_path || 'baseline/e62-g13b3/firmware/AM13E-rev17.3.elf' }}
+      FW_SHA256: ${{ inputs.firmware_sha256 || '05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fail-closed Host unit / Release evidence contract
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_firmware_release_l1.py' -v
+          bash tools/ci/check_autonomous_host.sh
+
+      - name: Verify same exact tracked release ELF and build exact QEMU
+        run: |
+          set -euo pipefail
+          test -f "$FW_PATH"
+          git ls-files --error-unmatch "$FW_PATH"
+          echo "$FW_SHA256  $FW_PATH" | sha256sum -c -
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libglib2.0-dev libpixman-1-dev libfdt-dev pkg-config meson ninja-build binutils-arm-none-eabi
+          git submodule update --init --depth 1 qemu
+          ./build.sh
+          mkdir -p artifacts
+          rm -f artifacts/e62-l1-*
+          python3 tools/native_sim_cfg_flash.py --sim-only-opt-in \
+            --elf "$FW_PATH" \
+            --output artifacts/e62-g13b3-l1-cfg-flash.bin
+
+      - name: Source-owned T01 11-second Ramp/Hold (independent strict gate)
+        run: |
+          set -euo pipefail
+          python3 tests/functional_dshot_sitl.py \
+            --autonomous --autonomous-telemetry-interval-ms 200 \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf "$FW_PATH" \
+            --cfg-flash artifacts/e62-g13b3-l1-cfg-flash.bin \
+            --plan scenarios/e62-dshot-v1.json --id T01 \
+            --artifact artifacts/e62-l1-t01.json \
+            2>&1 | tee artifacts/e62-l1-t01.log
+          python3 tools/ci/verify_t01.py artifacts/e62-l1-t01.json
+
+      - name: Source-owned T02 110-second 11-stage sweep (independent strict gate)
+        run: |
+          set -euo pipefail
+          python3 tests/functional_dshot_sitl.py \
+            --autonomous --autonomous-telemetry-interval-ms 200 \
+            --autonomous-wall-timeout-s 1800 \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf "$FW_PATH" \
+            --cfg-flash artifacts/e62-g13b3-l1-cfg-flash.bin \
+            --plan scenarios/e62-dshot-v1.json --id T02 \
+            --artifact artifacts/e62-l1-t02.json \
+            2>&1 | tee artifacts/e62-l1-t02.log
+          python3 tools/ci/verify_t02.py artifacts/e62-l1-t02.json
+
+      - name: Physical DShot good-CRC and bit-flipped bad-CRC, original Guest
+        run: |
+          set -euo pipefail
+          python3 tests/g13b_native_dshot.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf "$FW_PATH" --throttle 1000 \
+            --artifact artifacts/e62-l1-dshot-valid.json \
+            2>&1 | tee artifacts/e62-l1-dshot-valid.log
+          python3 tests/g13b_native_dshot.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf "$FW_PATH" --throttle 1000 --corrupt-crc \
+            --artifact artifacts/e62-l1-dshot-badcrc.json \
+            2>&1 | tee artifacts/e62-l1-dshot-badcrc.log
+          python3 tools/ci/dshot_crc_qualification.py \
+            --valid artifacts/e62-l1-dshot-valid.json \
+            --invalid artifacts/e62-l1-dshot-badcrc.json \
+            --output artifacts/e62-l1-dshot-verdict.json
+
+      - name: External OC/nFAULT plus original Guest fault shutdown
+        run: |
+          set -euo pipefail
+          python3 tests/g13b2_trip_safety.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf "$FW_PATH" \
+            2>&1 | tee artifacts/e62-l1-trip.log
+          for f in nfault oc-u oc-v oc-w; do
+            python3 tests/g13b2_native_fault.py \
+              --qemu .build/qemu-src/build/qemu-system-arm \
+              --elf "$FW_PATH" --fault "$f" \
+              --artifact "artifacts/e62-l1-fault-$f.json" \
+              2>&1 | tee "artifacts/e62-l1-fault-$f.log"
+          done
+          # Independent existing native-fault validator used by release gate.
+
+      - name: WWDT legacy peripheral and opt-in BOOTRST/PB13 safe-off
+        run: |
+          set -euo pipefail
+          python3 tests/g5_wwdt.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf "$FW_PATH" \
+            2>&1 | tee artifacts/e62-l1-wwdt_legacy.log
+          python3 tests/g5_wwdt_bootrst.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf "$FW_PATH" \
+            2>&1 | tee artifacts/e62-l1-wwdt_bootrst.log
+
+      - name: One ELF, one QEMU build, complete L1 release evidence verdict
+        run: |
+          set -euo pipefail
+          python3 tools/ci/firmware_release_l1.py \
+            --release-id "$REL_ID" \
+            --firmware "$FW_PATH" \
+            --expected-elf-sha256 "$FW_SHA256" \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --evidence-dir artifacts \
+            --output artifacts/e62-l1-release-verdict.json
+
+      - name: Retain all original-Guest evidence including FAIL
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-l1-firmware-release-evidence
+          path: |
+            artifacts/e62-l1-*
+            artifacts/e62-g13b3-l1-cfg-flash.bin
+          if-no-files-found: warn
+          retention-days: 60

@@ -52,3 +52,8 @@ Guest CPU profile, nor are stimulus counts equivalent to ISR causality.
   binary *bytes* and manifest independently of changed source.
   This is NOT a substitute for the strict pinned source-pair verification,
   which remains FAIL on source fingerprint drift.
+
+- `e62-firmware-release-l1.yml`: **release-time** 1-ELF / 1-source-build L1
+  native T01/T02/CRC/fault/WWDT pipeline, one evidence manifest,
+  strict fail-closed; independent known L2 Rotor FAIL unchanged.
+  [Execution instructions](firmware-release-l1.md).
