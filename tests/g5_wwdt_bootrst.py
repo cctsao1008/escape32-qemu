@@ -12,7 +12,7 @@ SYSCTL_RSTCAUSE=0x400B0220
 GPIO1_DOUT=0x400F3280
 GPIO1_PWREN=0x400F2800
 GPIO1_DOE=0x400F32C0
-MCPWM4=0x400E0000
+MCPWM4=0x40014000
 
 def bootrst_device_contract(q):
     # Independent QTest startup, not Guest-owned receiver initialization.
