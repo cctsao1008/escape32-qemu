@@ -61,6 +61,7 @@ from tools.native_motor_model_profiles import (
 from tools.native_sitl_failure_diagnostics import model_failure_evidence
 from tools.native_closed_loop_audit import NativeClosedLoopAudit
 from tools.native_rotor_motion_audit import NativeRotorMotionAudit
+from tools.native_rotor_phase_audit import NativeRotorPhaseAudit
 from tools.native_power_path_qualification import qualify_cross_phase_bridge
 from tools.virtual_bldc_feedback import SIM_BEMF_INPUT
 from tools.sitl_trace import SitlTraceRecorder, file_sha256
@@ -734,6 +735,8 @@ def probe_native_sustained_power_feedback(
                               input_gain_v_per_bemf_v=.02)
     audit = NativeClosedLoopAudit(required_sectors=required_sectors)
     rotor_motion = NativeRotorMotionAudit()
+    rotor_phase = NativeRotorPhaseAudit(pole_pairs=(
+        clocked_bridge.motor.p.pole_pairs if clocked_bridge else motor.p.pole_pairs))
     for pc in sorted(armed_breakpoints - {hardfault}):
         del_bp(rsp, pc)
         armed_breakpoints.remove(pc)
@@ -977,6 +980,7 @@ def probe_native_sustained_power_feedback(
                 native_clocked_current_coupling=(
                     clocked_bridge.evidence() if clocked_bridge else None),
                 sim_only_rotor_motion=rotor_motion.result(),
+                sim_only_rotor_phase=rotor_phase.result(),
                 sim_only_energy_balance=(
                     clocked_bridge.motor.diagnostics() if clocked_bridge
                     else motor.energy_balance()),
@@ -1064,6 +1068,21 @@ def probe_native_sustained_power_feedback(
                       "host_guest_writes": False,
                   }, sort_keys=True), flush=True)
             raise
+        # G15: actual WFI original-Guest sector + independently modeled
+        # phase-current/angle. No additional Guest/MMIO reads or retuning.
+        rotor_phase.observe(
+            wfi_visit=visit, completed_sectors=len(audit.sectors),
+            integrated_ns=(clocked_bridge.total_integrated_ns
+                           if clocked_bridge else frame.total_integrated_ns),
+            guest_step=guest["step"],
+            electrical_rad=sample.electrical_rad,
+            mechanical_rpm=sample.mechanical_rpm,
+            phase_currents_a=sample.phase_currents_a,
+            torque_constant_nm_per_a=(
+                clocked_bridge.motor.p.torque_constant_nm_per_a
+                if clocked_bridge else motor.p.torque_constant_nm_per_a),
+            observed_pair=(path.different_phase_pairs[0]
+                           if path.different_phase_pairs else None))
         rotor_motion.observe(
             wfi_visit=visit, completed_sectors=len(audit.sectors),
             integrated_ns=(clocked_bridge.total_integrated_ns
@@ -1161,6 +1180,7 @@ def probe_native_sustained_power_feedback(
                 native_powered_endurance_tail_wfi_visits=visit-first_qualified_wfi,
                 last_measured_power_path=last_qualified_path,
                 sim_only_rotor_motion=rotor_motion.result(),
+                sim_only_rotor_phase=rotor_phase.result(),
                 sim_only_energy_balance=(
                     clocked_bridge.motor.diagnostics() if clocked_bridge
                     else motor.energy_balance()),
@@ -1203,6 +1223,7 @@ def probe_native_sustained_power_feedback(
             result["reason"] = "STRICT_NATIVE_ECAP_ENDURANCE_OR_POWER_INCOMPLETE"
         result.update(
             sim_only_rotor_motion=rotor_motion.result(),
+            sim_only_rotor_phase=rotor_phase.result(),
             sim_only_energy_balance=(
                 clocked_bridge.motor.diagnostics() if clocked_bridge
                 else motor.energy_balance()),

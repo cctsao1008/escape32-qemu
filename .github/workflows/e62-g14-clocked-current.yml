@@ -6,6 +6,8 @@ on:
       - 'tools/native_clocked_current_coupler.py'
       - 'tools/current_continuous_bldc.py'
       - 'tools/native_rotor_geometry_diagnostics.py'
+      - 'tools/native_rotor_phase_audit.py'
+      - 'tests/test_native_rotor_phase_audit.py'
       - 'tools/native_runtime_timeline.py'
       - 'tools/sitl_trace.py'
       - 'tests/test_sitl_trace.py'
@@ -38,10 +40,12 @@ jobs:
           python3 -m py_compile \
             tools/native_clocked_current_coupler.py \
             tools/native_rotor_geometry_diagnostics.py \
+            tools/native_rotor_phase_audit.py \
             tools/native_runtime_timeline.py \
             tests/g13b2_native_drive_probe.py
           python3 -m unittest discover -s tests -p 'test_native_clocked_current_coupler.py' -v
           python3 -m unittest discover -s tests -p 'test_native_rotor_geometry_diagnostics.py' -v
+          python3 -m unittest discover -s tests -p 'test_native_rotor_phase_audit.py' -v
           python3 -m unittest discover -s tests -p 'test_sitl_trace.py' -v
           python3 -m unittest discover -s tests -p 'test_native_pwm_overlap_audit.py' -v
 

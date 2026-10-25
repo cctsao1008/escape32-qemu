@@ -224,6 +224,7 @@ class SitlTraceRecorder:
                 motion.get("direction_continuity_qualified_sim_only") is True,
             "significant_direction_reversals":
                 motion.get("significant_direction_reversals"),
+            "sim_only_rotor_phase": result.get("sim_only_rotor_phase"),
             "sim_only_energy_balance":
                 result.get("sim_only_energy_balance"),
             "sim_only_failure_diagnostics":
