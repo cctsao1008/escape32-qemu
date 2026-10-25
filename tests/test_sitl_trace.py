@@ -122,5 +122,53 @@ class TestSitlTrace(unittest.TestCase):
                          "NOT_EXECUTED_BY_TRACE_RECORDER")
 
 
+    def test_clocked_native_current_ledger_keeps_distinct_provenance(self):
+        frame=self.frame(1,250,4294967050)
+        frame.qualifier="EXTERNAL_CLOCKED_CURRENT_CONTINUOUS_NO_AVERAGE"
+        ledger={
+            "scope":"HOST_ONLY_EXPLICIT_LEG_IDEAL_DIODE_CURRENT_CONTINUITY",
+            "physical_motor_qualified":False,
+            "real_native_guest_PWM_or_CAP1_qualified":False,
+            "bus_input_energy_j":0.1,
+        }
+        source={
+            "original_pwm_source":
+              "EXECUTED_ORIGINAL_GUEST_QEMU_CLOCKED_PWM_HISTORY_NOT_DUTY_PLAN",
+            "guest_sram_irq_pwm_register_writes":False,
+            "calibrated_motor":False,
+            "instantaneous_leg_model_only":True,
+            "physical_model_integrated_ns":150,
+            "actual_clocked_pwm_events":2,
+        }
+        self.observe(frame=frame,energy_balance=ledger,
+                     clocked_source_evidence=source)
+        recorded=self.rec.samples[0]
+        self.assertEqual(recorded["integrated_ns"],150)
+        self.assertEqual(recorded["actual_qemu_clocked_pwm_events"],2)
+        self.assertEqual(recorded["legacy_sampled_hold_ns_not_motor_integrated"],250)
+        self.assertEqual(recorded["sim_only_energy_balance"]["scope"],
+                         ledger["scope"])
+
+    def test_clocked_ledger_with_no_real_source_fails_closed(self):
+        frame=self.frame(1,250,4294967050)
+        frame.qualifier="EXTERNAL_CLOCKED_CURRENT_CONTINUOUS_NO_AVERAGE"
+        ledger={
+            "scope":"HOST_ONLY_EXPLICIT_LEG_IDEAL_DIODE_CURRENT_CONTINUITY",
+            "physical_motor_qualified":False,
+            "real_native_guest_PWM_or_CAP1_qualified":False,
+        }
+        with self.assertRaisesRegex(ValueError,"clocked Guest PWM provenance"):
+            self.observe(frame=frame,energy_balance=ledger)
+        self.assertEqual(self.rec.samples,[])
+
+    def test_legacy_ledger_cannot_masquerade_as_clocked(self):
+        with self.assertRaisesRegex(ValueError,"misclassified"):
+            self.observe(energy_balance={
+                "scope":"SIM_ONLY_SAMPLED_HOLD_NUMERICAL_ENERGY_DIAGNOSTIC",
+                "numerical_energy_balance_qualified":False},
+                clocked_source_evidence={"status":"fake"})
+        self.assertEqual(self.rec.samples,[])
+
+
 if __name__=="__main__":
     unittest.main(verbosity=2)

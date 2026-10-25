@@ -84,7 +84,8 @@ class SitlTraceRecorder:
         return ((tick - self.origin_ecap_ticks) & 0xffffffff) * NS_PER_ECAP_TICK
 
     def observe(self, *, visit, frame, pwm, plant, guest, analog,
-                cap1_ticks, sectors, energy_balance=None):
+                cap1_ticks, sectors, energy_balance=None,
+                clocked_source_evidence=None):
         if self.origin_ecap_ticks is None:
             raise ValueError("Missing actual native Gate ECAP origin")
         if not isinstance(visit, int) or visit != len(self.samples) + 1:
@@ -137,15 +138,48 @@ class SitlTraceRecorder:
             "ost3": pwm.physical_ost3,
             "sampling_qualifier": frame.qualifier,
         }
-        # Reuse the host plant's existing per-integration accumulator.
-        # This does not issue another Guest/QTest read or create an event.
+        # Two distinct mutually exclusive physics ledgers. Never present a
+        # HOST_ONLY continuous-current ledger as a legacy sampled-duty
+        # energy balance, nor a synthetic carrier plan as clocked history.
         if energy_balance is not None:
-            if not isinstance(energy_balance, dict) or energy_balance.get(
-                    "scope") != "SIM_ONLY_SAMPLED_HOLD_NUMERICAL_ENERGY_DIAGNOSTIC":
+            if not isinstance(energy_balance, dict):
                 raise ValueError("Unqualified SIM_ONLY energy ledger provenance")
-            if energy_balance.get("numerical_energy_balance_qualified") is not False:
-                raise ValueError("Energy ledger cannot assert physical qualification")
+            scope = energy_balance.get("scope")
+            if scope == "SIM_ONLY_SAMPLED_HOLD_NUMERICAL_ENERGY_DIAGNOSTIC":
+                if clocked_source_evidence is not None or (
+                        energy_balance.get("numerical_energy_balance_qualified")
+                        is not False):
+                    raise ValueError("Legacy energy ledger misclassified as clocked")
+            elif scope == "HOST_ONLY_EXPLICIT_LEG_IDEAL_DIODE_CURRENT_CONTINUITY":
+                source = clocked_source_evidence
+                if (not isinstance(source, dict) or
+                    source.get("original_pwm_source") !=
+                    "EXECUTED_ORIGINAL_GUEST_QEMU_CLOCKED_PWM_HISTORY_NOT_DUTY_PLAN" or
+                    source.get("guest_sram_irq_pwm_register_writes") is not False or
+                    source.get("calibrated_motor") is not False or
+                    source.get("instantaneous_leg_model_only") is not True or
+                    energy_balance.get("physical_motor_qualified") is not False or
+                    energy_balance.get("real_native_guest_PWM_or_CAP1_qualified")
+                        is not False or
+                    frame.qualifier !=
+                        "EXTERNAL_CLOCKED_CURRENT_CONTINUOUS_NO_AVERAGE"):
+                    raise ValueError(
+                        "Original clocked Guest PWM provenance missing or false")
+                model_ns = source.get("physical_model_integrated_ns")
+                events = source.get("actual_clocked_pwm_events")
+                if (type(model_ns) is not int or model_ns < 0 or
+                    type(events) is not int or events < 0):
+                    raise ValueError("Invalid native clocked PWM model timeline")
+                sample["legacy_sampled_hold_ns_not_motor_integrated"] = (
+                    frame.total_integrated_ns)
+                sample["integrated_ns"] = model_ns
+                sample["actual_qemu_clocked_pwm_events"] = events
+                sample["motor_model_scope"] = scope
+            else:
+                raise ValueError("Unqualified SIM_ONLY energy ledger provenance")
             sample["sim_only_energy_balance"] = dict(energy_balance)
+        elif clocked_source_evidence is not None:
+            raise ValueError("Clocked source evidence requires motor energy ledger")
         # Fail rather than backfill or fabricate time samples and "clean" states.
         if self.samples and sample["integrated_ns"] < self.samples[-1]["integrated_ns"]:
             raise ValueError("Plant-integrated time regressed")

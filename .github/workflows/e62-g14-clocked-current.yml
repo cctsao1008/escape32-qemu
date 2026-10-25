@@ -7,6 +7,8 @@ on:
       - 'tools/current_continuous_bldc.py'
       - 'tools/native_rotor_geometry_diagnostics.py'
       - 'tools/native_runtime_timeline.py'
+      - 'tools/sitl_trace.py'
+      - 'tests/test_sitl_trace.py'
       - 'tools/native_pwm_history_collector.py'
       - 'tests/g13b2_native_drive_probe.py'
       - 'tests/test_native_clocked_current_coupler.py'
@@ -32,6 +34,7 @@ jobs:
             tests/g13b2_native_drive_probe.py
           python3 -m unittest discover -s tests -p 'test_native_clocked_current_coupler.py' -v
           python3 -m unittest discover -s tests -p 'test_native_rotor_geometry_diagnostics.py' -v
+          python3 -m unittest discover -s tests -p 'test_sitl_trace.py' -v
 
   original-guest-current-coupled-rotor:
     needs: host-source-boundary

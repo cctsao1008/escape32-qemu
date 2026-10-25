@@ -1041,7 +1041,10 @@ def probe_native_sustained_power_feedback(
                                    cap1_ticks=cap1, sectors=audit.sectors,
                                    energy_balance=(clocked_bridge.motor.diagnostics()
                                       if clocked_bridge
-                                      else motor.energy_balance()))
+                                      else motor.energy_balance()),
+                                   clocked_source_evidence=(
+                                       clocked_bridge.evidence()
+                                       if clocked_bridge else None))
             if live is not None:
                 live.hub.publish(packet["sample"], packet["events"])
         if visit <= 3 or visit % 16 == 0:
