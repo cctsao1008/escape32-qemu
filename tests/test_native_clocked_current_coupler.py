@@ -56,7 +56,7 @@ class OriginalClockedCurrentCouplerTests(unittest.TestCase):
     def test_lost_source_edge_never_interpolates(self):
         c=NativeClockedCurrentCoupler()
         c.attach(journal(),virtual_ns=0,gate_qualified=True)
-        with self.assertRaisesRegex(ValueError,"chronology"):
+        with self.assertRaisesRegex(ValueError,"sequence gap"):
             c.consume(journal([event(1,1000,0,9)],last_mask=9),
                       guest_wfi=1,observed_virtual_ns=1500)
 
