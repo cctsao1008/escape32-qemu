@@ -10,6 +10,9 @@ on:
       - 'tools/native_arming.py'
       - 'tools/sitl_*.py'
       - 'tools/ci/check_autonomous_host.sh'
+      - 'tools/ci/verify_t01.py'
+      - 'tools/ci/qualification_matrix.py'
+      - 'tests/test_t02_*.py'
       - 'tests/test_autonomous*.py'
       - '.github/workflows/g13b7-correctness.yml'
   workflow_dispatch:
@@ -98,6 +101,8 @@ jobs:
             --plan scenarios/e62-dshot-v1.json --id T01 \
             --artifact artifacts/e62-g13b7-1-full.json \
             2>&1 | tee artifacts/e62-g13b7-1-full.log
+          python3 tools/ci/verify_t01.py artifacts/e62-g13b7-1-full.json \
+            --output artifacts/e62-g13b7-1-independent-qualification.json
           python3 - <<'PY'
           import json
           d=json.load(open('artifacts/e62-g13b7-1-full.json'))

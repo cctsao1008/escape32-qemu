@@ -12,6 +12,7 @@ python3 -m py_compile \
     tools/ci/qualification_matrix.py \
     tools/ci/benchmark_autonomous.py \
     tools/ci/verify_t02.py \
+    tools/ci/verify_t01.py \
     tools/autonomous_sitl_host.py \
     tools/autonomous_sitl_runner.py \
     tests/functional_dshot_sitl.py \

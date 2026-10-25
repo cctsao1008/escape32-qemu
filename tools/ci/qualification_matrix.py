@@ -9,20 +9,18 @@ def _load(path):
 
 def summarize(*,t01=None,t02=None,strict_rotor=None,
               fault_native=None,crc_native=None,physics=None):
-    from tools.ci.verify_t02 import validate
+    from tools.ci.verify_t02 import validate as validate_t02
+    from tools.ci.verify_t01 import validate as validate_t01
     results={}
     def functional(d,name,expected,nstages):
         if d is None:
             return {'status':'OPEN_NOT_RUN'}
-        good=(d.get('status')=='PASS_AUTONOMOUS_AGGREGATE_FUNCTIONAL'
-              and d.get('dshot_frames_sent')==expected
-              and len(d.get('stages',[]))==nstages
-              and not d.get('issues') and
-              all(s.get('sampled_stage_gate',{}).get('status')==
-                  'PASS_SAMPLED_STAGE_DIAGNOSTIC' for s in d.get('stages',[]))
-              and d.get('autonomous',{}).get('neutral_teardown',{}).get('qualified'))
-        if name=='T02' and validate(d):
-            good=False
+        # A self-declared PASS cannot bypass exact physical stage
+        # checkpoints, Guest virtual duration, neutral teardown or
+        # the source-owned temporal/counter evidence gate.
+        good=(d.get('dshot_frames_sent') == expected and
+              len(d.get('stages',[])) == nstages and
+              not (validate_t01(d) if name=='T01' else validate_t02(d)))
         return {'status':'PASS_FUNCTIONAL_ONLY' if good else 'FAIL_FUNCTIONAL_GATE'}
     results['M1_T01']=functional(t01,'T01',11000,2)
     results['M1_T02']=functional(t02,'T02',110000,11)
@@ -30,8 +28,14 @@ def summarize(*,t01=None,t02=None,strict_rotor=None,
         'status':'OPEN_SPARSE_SAMPLES_DO_NOT_PROVE_COMPLETE_SECTOR_ORDER_OR_ISR_CAUSALITY'}
     results['M3_SIM_ONLY_FAULT_NEGATIVE_GATES']={
         'status': ('PASS_MODELED_GUEST_FAULT_GATES'
-            if fault_native and fault_native.get('independent_cases_passed')==
-               ['nfault','oc-u','oc-v','oc-w']
+            if fault_native and
+               fault_native.get('status') ==
+                   'PASS_SIM_ONLY_EXTERNAL_FAULT_IRQ_SHUTDOWN_ONLY' and
+               fault_native.get('scope') ==
+                   'MODEL_ONLY_NATIVE_NEUTRAL_NOT_MOTOR_RUNNING' and
+               fault_native.get('issues') == [] and
+               fault_native.get('independent_cases_passed') ==
+                   ['nfault','oc-u','oc-v','oc-w']
             else 'OPEN_OR_FAIL_REQUIRES_FOUR_INDEPENDENT_NATIVE_FAULT_CASES')}
     results['M3_NATIVE_PHYSICAL_DSHOT_CRC']={
         'status':('PASS_NATIVE_SOURCE_CRC_AND_FEED_ONLY'
