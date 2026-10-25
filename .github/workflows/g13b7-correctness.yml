@@ -62,6 +62,7 @@ jobs:
       - name: Bounded functional smoke — OPEN is required
         shell: bash
         run: |
+          set +e
           set -uo pipefail
           rc=0
           python3 tests/g13b4_functional_dshot_sitl.py \
@@ -73,6 +74,7 @@ jobs:
             --max-frames 50 --artifact artifacts/e62-g13b7-1-smoke.json \
             2>&1 | tee artifacts/e62-g13b7-1-smoke.log
           rc=${PIPESTATUS[0]}
+          set -e
           python3 - "$rc" <<'PY'
           import json,sys
           d=json.load(open('artifacts/e62-g13b7-1-smoke.json'))
