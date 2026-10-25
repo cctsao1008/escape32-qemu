@@ -55,6 +55,51 @@ jobs:
             --min-powered-pwm-samples 600 \
             --output artifacts/e62-g13b3m-current-extended-verdict.json \
             2>&1 | tee artifacts/e62-g13b3m-current-extended.log
+      - name: Forensic report for legacy model (does not waive the red gate)
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f artifacts/e62-g13b3m-current-strict-result.json ]]; then
+            python3 tools/ci/rotor_model_diagnostics.py \
+              --native-result artifacts/e62-g13b3m-current-strict-result.json \
+              --output artifacts/e62-g13b3m-model-forensics.json
+          fi
+      - name: Diagnostic reciprocal Ke/Kt A-B only (independent strict remains red)
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f artifacts/e62-g13b3m-current-cfg-flash.bin ]]; then
+            set +e
+            python3 tests/g13b2_native_drive_probe.py \
+              --qemu .build/qemu-src/build/qemu-system-arm \
+              --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+              --throttle 1500 --startup-steps 32768 \
+              --slice-ms 300 --runtime-slices 20 \
+              --wait-native-bemf-calibration --calibration-wfi-visits 24 \
+              --require-drive --require-native-pwm \
+              --require-native-bemf-arm --require-native-sustained-loop \
+              --sim-only-cfg-flash artifacts/e62-g13b3m-current-cfg-flash.bin \
+              --sustained-wfi-visits 2800 --sustained-sectors 12 \
+              --sustained-min-integrated-ns 90000000 \
+              --initial-electrical-degrees -30 \
+              --sim-only-reciprocal-motor \
+              --sitl-trace-output artifacts/e62-g13b3m-reciprocal-wfi-history.json \
+              --artifact artifacts/e62-g13b3m-reciprocal-native.json \
+              2>&1 | tee artifacts/e62-g13b3m-reciprocal-native.log
+            rc=${PIPESTATUS[0]}
+            echo "E62_RECIPROCAL_AB_MODEL_PROBE_EXIT=$rc"
+            if (( rc == 0 )); then
+              python3 tools/native_extended_run_gate.py \
+                --artifact artifacts/e62-g13b3m-reciprocal-native.json \
+                --min-sectors 12 --min-integrated-ns 90000000 \
+                --min-powered-pwm-samples 600 \
+                --output artifacts/e62-g13b3m-reciprocal-extended.json \
+                2>&1 | tee artifacts/e62-g13b3m-reciprocal-extended.log
+              echo "E62_RECIPROCAL_AB_MODEL_EXTENDED_EXIT=${PIPESTATUS[0]}"
+            fi
+            exit 0
+          fi
       - name: Preserve unsuccessful or successful rotor evidence
         if: always()
         uses: actions/upload-artifact@v4
