@@ -45,14 +45,38 @@ def sampled_stage_regression_gate(scenario, checkpoints, samples):
             (phase_mask != 0x3f or transitions is None or transitions < 6)):
             local.append('six_phase_polarity_states_not_observed')
         errors = []
+        steady_errors = []
+        transition_grace_ms = 500 if (stage.kind == 'hold' and
+            stage.index > 0 and scenario.stages[stage.index-1].to_pct != stage.to_pct) else 0
+        settled = []
         for r in group:
             cmd = r['intended_command_dshot']
             expected = cmd - 47 if cmd else 0
-            errors.append(abs(r['guest_throt_sample'] - expected))
+            error = abs(r['guest_throt_sample'] - expected)
+            errors.append(error)
+            if r['sim_elapsed_ms']-start_ms >= transition_grace_ms:
+                steady_errors.append(error)
+                settled.append(r)
             if r['sim_dshot_value'] != cmd:
                 local.append('wire_command_not_as_intended')
-        if errors and max(errors) > tolerance:
+        # Async sampling at Stage boundary may see the prior 1kHz wire
+        # frame: require settling within 500ms and strict thereafter.
+        # The new source-owned stage still must make real CRC progress.
+        if not settled and group:
+            local.append('no_post_transition_guest_sample')
+        if steady_errors and max(steady_errors) > tolerance:
             local.append('guest_throttle_out_of_tolerance')
+        if stage.kind == 'hold' and stage.to_pct == 0:
+            for r in settled:
+                if r['guest_throt_sample'] != 0:
+                    local.append('neutral_stage_guest_throttle_not_zero')
+                # Ready+nonzero differential PWM in sustained neutral
+                # is a safety-significant unexpected powered output.
+                if r.get('pwm_observer_ready_sample'):
+                    ticks = r.get('pwm_six_high_ticks_sample')
+                    if isinstance(ticks,(tuple,list)) and len(ticks)==6:
+                        if any(ticks[2*i]!=ticks[2*i+1] for i in range(3)):
+                            local.append('neutral_stage_powered_pwm')
         crc = [r['guest_valid_crc_feed_total'] for r in group]
         if len(crc) >= 2 and (
             crc[-1] <= crc[0] or
@@ -111,6 +135,11 @@ def sampled_stage_regression_gate(scenario, checkpoints, samples):
             'index':stage.index, 'kind':stage.kind, 'status':status,
             'sample_count':len(group), 'tolerance_counts':tolerance,
             'max_sampled_throttle_error':max(errors) if errors else None,
+            'max_settled_throttle_error':(
+                max(steady_errors) if steady_errors else None),
+            'post_transition_samples':len(settled),
+            'transition_grace_ms':transition_grace_ms,
+            'neutral_powered_pwm_scope':'READ_ONLY_ASYNC_DIFFERENTIAL_OUTPUT',
             'crc_delta_between_samples':(
                 crc[-1]-crc[0] if len(crc)>1 else None),
             'sampled_crc_feed_ratio':sampled_feed_ratio,
