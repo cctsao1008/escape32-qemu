@@ -45,6 +45,7 @@ class NativeClockedCurrentCoupler:
     """Consume chronological executed QEMU PWM events, not averaged plan."""
 
     def __init__(self, *, initial_electrical_deg=-30.0,
+                 motor_profile="reciprocal",
                  max_substep_ns=1000, max_wfi_gap_ns=2_000_000):
         if not (type(max_substep_ns) is int and
                 1 <= max_substep_ns <= 20000 and
@@ -53,8 +54,9 @@ class NativeClockedCurrentCoupler:
             raise ValueError("Explicit bounded current-continuous substeps")
         import math
         self.motor = CurrentContinuousBLDC(
-            native_motor_parameters("reciprocal"),
+            native_motor_parameters(motor_profile),
             initial_electrical_rad=math.radians(initial_electrical_deg))
+        self.motor_profile = motor_profile
         self.frontend = AnalogFrontend(
             reference_v=3.3, zero_bemf_bias_v=1.65,
             input_gain_v_per_bemf_v=0.02)
@@ -170,6 +172,7 @@ class NativeClockedCurrentCoupler:
         return {
             "status":"OPEN_INDEPENDENT_STRICT_NATIVE_ROTOR_STILL_REQUIRED",
             "original_pwm_source":self.source,
+            "motor_profile":self.motor_profile,
             "guest_sram_irq_pwm_register_writes":False,
             "qemu_analog_fixture_writes_only":True,
             "actual_clocked_pwm_events":self.records_consumed,

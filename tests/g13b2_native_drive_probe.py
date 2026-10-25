@@ -56,9 +56,11 @@ from tools.native_pwm_deadband_diagnostic import native_deadband_source_clamp, r
 from tools.native_power_coupled_plant import NativePowerCoupledBLDC
 from tools.native_clocked_current_coupler import NativeClockedCurrentCoupler
 from tools.native_motor_model_profiles import (
-    native_motor_parameters, native_motor_model_metadata
+    native_motor_parameters, native_motor_model_metadata, PROFILES,
+    DATASHEET_PROFILES
 )
 from tools.native_sitl_failure_diagnostics import model_failure_evidence
+from tools.sim_motor_cfg import require_matching_profile_cfg, TELEM_POLES_CFG_OFFSET
 from tools.native_closed_loop_audit import NativeClosedLoopAudit
 from tools.native_rotor_motion_audit import NativeRotorMotionAudit
 from tools.native_rotor_phase_audit import NativeRotorPhaseAudit
@@ -699,13 +701,14 @@ def probe_native_sustained_power_feedback(
     result in a completed sector. SIM_ONLY assumptions stay explicit.
     """
     if clocked_current_feedback and (
-            pwm_history is None or trace is None or motor_profile != "reciprocal"):
+            pwm_history is None or trace is None or motor_profile == "legacy"):
         raise ValueError(
             "Clocked current-continuous feedback requires source history, "
             "source-native trace and the reciprocal Ke/Kt model")
     clocked_bridge = (
         NativeClockedCurrentCoupler(
-            initial_electrical_deg=initial_electrical_degrees)
+            initial_electrical_deg=initial_electrical_degrees,
+            motor_profile=motor_profile)
         if clocked_current_feedback else None)
     needed = ("armed", "pending_code", "selected_code", "step",
               "captured_events", "rejected_events", "scheduled", "serviced")
@@ -788,6 +791,21 @@ def probe_native_sustained_power_feedback(
     duty_first = native_pwm_duty_progress(rsp, bemf_state, qtest)
     print("G13B3L_GUEST_DUTY_AT_GATE " +
           json.dumps(duty_first, sort_keys=True), flush=True)
+    if motor_profile in DATASHEET_PROFILES:
+        # Original Guest copied profile-provisioned Flash Cfg, read-only here.
+        cfg_addr = bemf_state.get("cfg")
+        if cfg_addr is None:
+            raise AssertionError("Original Guest Cfg address unavailable")
+        cfg_word = rsp.mem32(cfg_addr + (TELEM_POLES_CFG_OFFSET & ~3))
+        actual = (cfg_word >> (8 * (TELEM_POLES_CFG_OFFSET & 3))) & 0xff
+        expected_poles = native_motor_parameters(motor_profile).pole_pairs * 2
+        if actual != expected_poles:
+            raise AssertionError("G16 original Guest telem_poles incorrect: "
+                                 f"actual={actual} expected={expected_poles}")
+        print("PASS_G16_ORIGINAL_GUEST_CFG_TELEM_POLES " +
+              json.dumps({"profile": motor_profile, "actual_poles": actual,
+                          "source": "READ_ONLY_ORIGINAL_GUEST_CFG_SRAM"},
+                         sort_keys=True), flush=True)
     if require_sim_only_cfg:
         # Exact pinned ESCape32 Cfg ABI and isolated SIM_ONLY Rel17 profile.
         # Application-only QEMU must not silently use zeroed .cfg NOLOAD RAM.
@@ -1513,7 +1531,8 @@ def run(args):
         except RuntimeError:
             continue
     evidence = {"status": "OPEN_NOT_NATIVE_DRIVE", "native_elf": str(args.elf)}
-    profile = "reciprocal" if args.sim_only_reciprocal_motor else "legacy"
+    profile = (args.motor_profile or
+               ("reciprocal" if args.sim_only_reciprocal_motor else "legacy"))
     if args.probe_native_sustained_loop:
         evidence["g13b3m_sim_only_model_profile"] = (
             native_motor_model_metadata(profile))
@@ -2509,6 +2528,9 @@ def main():
                         "history -> reciprocal current-continuous motor "
                         "-> physical BEMF input at original WFI; fail closed "
                         "on missing edge history; does not waive rotor")
+    p.add_argument("--motor-profile", choices=PROFILES,
+                   help="G16 motor profile for actual PWM -> current -> BEMF; "
+                        "ECX87 requires matching pre-boot Cfg")
     p.add_argument("--sim-only-reciprocal-motor", action="store_true",
                    help="G13B3M A/B model only: keep Ke=.02 per electrical "
                         "rad/s and use reciprocal Kt=.14 for 7 pole pairs; "
@@ -2589,6 +2611,24 @@ def main():
         p.error("Missing QEMU or genuine SIM_ONLY ELF")
     if a.require_native_sustained_loop and not a.sim_only_cfg_flash:
         p.error("Strict G13B3L requires provisioned original Flash Cfg")
+    if a.motor_profile and a.sim_only_reciprocal_motor:
+        p.error("Choose --motor-profile OR legacy reciprocal flag, not both")
+    if a.motor_profile in DATASHEET_PROFILES:
+        if (not a.require_native_sustained_loop or
+                not a.sim_only_clocked_current_continuous or
+                not a.sim_only_cfg_flash):
+            p.error("ECX87 requires strict clocked Guest feedback loop "
+                    "and pre-boot motor-profile Cfg")
+        try:
+            proof = require_matching_profile_cfg(
+                a.elf.read_bytes(), a.sim_only_cfg_flash.read_bytes(),
+                a.motor_profile)
+        except (OSError, ValueError) as exc:
+            p.error("Invalid SIM_ONLY profile/Cfg pairing: " + str(exc))
+        print("PASS_G16_PREBOOT_MOTOR_PROFILE_CFG_MATCH " +
+              json.dumps({"profile": a.motor_profile,
+                          "telem_poles": proof["telem_poles_after"]},
+                         sort_keys=True), flush=True)
     if a.sim_only_reciprocal_motor and (
             not a.require_native_sustained_loop or
             not a.sim_only_cfg_flash or a.sustained_sectors < 12):
@@ -2647,7 +2687,9 @@ def main():
                 "output path from --artifact")
     if a.sim_only_clocked_current_continuous and not (
             a.sitl_native_pwm_history and a.sitl_trace_output and
-            a.sim_only_reciprocal_motor and
+            (a.sim_only_reciprocal_motor or
+             a.motor_profile in DATASHEET_PROFILES or
+             a.motor_profile == "reciprocal") and
             a.require_native_sustained_loop):
         p.error("Current-continuous Guest coupling requires historical "
                 "WFI PWM trace, reciprocal Ke/Kt and strict native rotor gate")

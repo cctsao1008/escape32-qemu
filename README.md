@@ -17,6 +17,7 @@ this is not physical motor, rotor trajectory, or hardware qualification.
 ## Documentation
 
 - [System architecture and stable APIs](docs/current/architecture.md)
+- [G16 motor profiles: ECX87 PWM/BEMF and Guest telemetry pole Cfg](docs/current/motor-profiles.md)
 - [Test/CI matrix and honest gate meanings](docs/current/test-matrix.md)
 - [Functional SITL G13B7.1](docs/current/functional-sitl.md)
 - [T01/T02, rotor, safety, physics and performance campaign](docs/current/validation-campaign.md)
