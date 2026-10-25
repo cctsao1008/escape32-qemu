@@ -4,6 +4,7 @@
 - [Architecture](current/architecture.md) — QEMU and Host module boundaries
 - [Functional SITL](current/functional-sitl.md) — latest G13B7.1 acceptance scope
 - [Test matrix](current/test-matrix.md) — CLI, CI, expected result and known FAIL
+- [Validation campaign](current/validation-campaign.md) — independent functional, safety, physics, rotor and performance tracks
 
 ## Historical material
 - [Original G0–G13B development README](history/README-development-log.md)

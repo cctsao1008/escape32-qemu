@@ -1,0 +1,30 @@
+name: E62 Physics Model Preflight (Host Only)
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/current_continuous_bldc.py'
+      - 'tools/native_model_energy_balance.py'
+      - 'tools/native_power_coupled_plant.py'
+      - 'tools/native_motor_model_profiles.py'
+      - 'tests/test_current_continuous_bldc.py'
+      - 'tests/test_native_model_energy_balance.py'
+      - 'tests/test_native_motor_reciprocity.py'
+      - '.github/workflows/e62-physics-host.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  numerical-physics-preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Explicit switching, diode conduction, reciprocity and model energy tests
+        run: |
+          set -euo pipefail
+          python3 tests/test_current_continuous_bldc.py
+          python3 tests/test_native_model_energy_balance.py
+          python3 tests/test_native_motor_reciprocity.py
+          echo PASS_HOST_ONLY_E62_NUMERICAL_MOTOR_MODEL
+          echo OPEN_ORIGINAL_GUEST_ROTOR_COUPLING_NOT_PROVED

@@ -23,7 +23,7 @@ from tools.native_pwm_qualification import observe_original_pwm
 def guest_snapshot(read32, addresses):
     return {name: read32(addresses[name])
             for name in ('throt','valid_frame_feeds','step',
-                         'captured_events','scheduled','serviced')}
+                         'selected_code','captured_events','scheduled','serviced')}
 
 
 def run_autonomous(args, scenario, evidence, rsp, qtest,
@@ -120,6 +120,7 @@ def run_autonomous(args, scenario, evidence, rsp, qtest,
                               g['throt'] - intended.dshot_value,
                           'guest_valid_crc_feed_total':g['valid_frame_feeds'],
                           'guest_step_sample':g['step'],
+                          'guest_selected_code_sample':g['selected_code'],
                           'guest_cap1_total':g['captured_events'],
                           'guest_timg12_scheduled_total':g['scheduled'],
                           'guest_timg12_serviced_total':g['serviced']}
@@ -211,6 +212,9 @@ def run_autonomous(args, scenario, evidence, rsp, qtest,
         'units':'EVENT_COUNT_NOT_CPU_TIME',
     }
     async_stage = summarize_stage_samples(scenario, evidence['telemetry'])
+    from tools.sitl_sequence_audit import sampled_original_sequence_audit
+    evidence['autonomous']['sampled_source_sequence_audit'] = (
+        sampled_original_sequence_audit(scenario, evidence['telemetry']))
     evidence['autonomous']['stage_physical_checkpoints'] = checkpoints
     evidence['autonomous']['stage_guest_async_samples'] = async_stage
     prev_sent = 0

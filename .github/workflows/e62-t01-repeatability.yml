@@ -1,0 +1,42 @@
+name: E62 T01 Same-Host Repeatability (Not Cross-Version Speedup)
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/e62-t01-repeatability.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  repeatability:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build exact source and verify original Rel17.3 ELF
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libglib2.0-dev libpixman-1-dev libfdt-dev pkg-config meson ninja-build binutils-arm-none-eabi
+          git submodule update --init --depth 1 qemu
+          ./build.sh
+          echo '05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0  baseline/e62-g13b3/firmware/AM13E-rev17.3.elf' | sha256sum -c -
+          mkdir -p artifacts
+          python3 tools/native_sim_cfg_flash.py --sim-only-opt-in --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf --output artifacts/e62-g13b3-t01-benchmark-cfg-flash.bin
+      - name: Three successive full 11s T01 on same runner
+        run: |
+          set -euo pipefail
+          python3 tools/ci/benchmark_autonomous.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --cfg-flash artifacts/e62-g13b3-t01-benchmark-cfg-flash.bin \
+            --plan scenarios/e62-dshot-v1.json \
+            --repeats 3 --output-dir artifacts/perf
+      - name: Retain all three functional verdicts and runtime statistics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-t01-same-host-repeatability
+          path: artifacts/perf/
+          if-no-files-found: warn
+          retention-days: 21

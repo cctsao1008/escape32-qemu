@@ -19,6 +19,7 @@ independently qualified.
 - [System architecture and stable APIs](docs/current/architecture.md)
 - [Test/CI matrix and honest gate meanings](docs/current/test-matrix.md)
 - [Functional SITL G13B7.1](docs/current/functional-sitl.md)
+- [T01/T02, rotor, safety, physics and performance campaign](docs/current/validation-campaign.md)
 - [Full document index](docs/README.md)
 - [Original G0–G13B development log](docs/history/README-development-log.md)
 - [Immutable paired binaries and licenses](baseline/e62-g13b3/README.md)
