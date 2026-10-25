@@ -1933,11 +1933,15 @@ static uint32_t am13e_pwm4_level(AM13ESimPWM *p, unsigned out,
         return 0U;
     }
     now = am13e_pwm4_raw_aq(p, out, c, valid);
+    /* TRM SPRUJF2B Table 26-51, DBCTL.OUT_MODE[1:0]:
+     * 01 = B-path FED only, 10 = A-path RED only, 11 = both.
+     * Earlier QEMU model had the two bits incorrectly reversed.
+     */
     if (out & 1U) {
-        if (!(dbctl & 2U)) return now;
+        if (!(dbctl & 1U)) return now; /* bit0: B FED */
         dly = p->reg[0xd0U / 4U] & 0x3fffU;
     } else {
-        if (!(dbctl & 1U)) return now;
+        if (!(dbctl & 2U)) return now; /* bit1: A RED */
         dly = p->reg[0xd4U / 4U] & 0x3fffU;
     }
     if (dly > period) {
