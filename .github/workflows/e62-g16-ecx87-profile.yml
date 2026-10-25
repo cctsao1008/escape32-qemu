@@ -1,0 +1,76 @@
+name: E62 G16 ECX87 Motor Profile Native Guest
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/native_motor_model_profiles.py'
+      - 'tools/sim_motor_cfg.py'
+      - 'tools/native_clocked_current_coupler.py'
+      - 'tests/g13b2_native_drive_probe.py'
+      - 'tests/test_sim_motor_profiles.py'
+      - '.github/workflows/e62-g16-ecx87-profile.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ecx87-kv147-native:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Original ELF Cfg ABI, exact motor profile and source unit checks
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_sim_motor_profiles.py' -v
+          echo '05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0  baseline/e62-g13b3/firmware/AM13E-rev17.3.elf' | sha256sum -c -
+          mkdir -p artifacts
+          python3 tools/sim_motor_cfg.py --sim-only-opt-in \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --motor-profile ecx87-kv147 \
+            --output artifacts/e62-g13b3-ecx87-kv147-cfg-flash.bin \
+            2>&1 | tee artifacts/e62-g16-cfg-profile.log
+      - name: Build QEMU with unchanged original Guest ELF
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            libglib2.0-dev libpixman-1-dev libfdt-dev pkg-config \
+            meson ninja-build binutils-arm-none-eabi
+          git submodule update --init --depth 1 qemu
+          ./build.sh
+      - name: ECX87-KV147 measured-switch native BEMF loop STRICT (no rotor waiver)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tests/g13b2_native_drive_probe.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --throttle 1500 --startup-steps 32768 \
+            --slice-ms 300 --runtime-slices 20 \
+            --wait-native-bemf-calibration --calibration-wfi-visits 24 \
+            --require-drive --require-native-pwm --require-native-bemf-arm \
+            --require-native-sustained-loop \
+            --sim-only-cfg-flash artifacts/e62-g13b3-ecx87-kv147-cfg-flash.bin \
+            --motor-profile ecx87-kv147 \
+            --sustained-wfi-visits 2800 --sustained-sectors 12 \
+            --sustained-min-integrated-ns 90000000 \
+            --initial-electrical-degrees -30 \
+            --sim-only-clocked-current-continuous \
+            --sitl-native-pwm-history \
+            --sitl-trace-output artifacts/e62-g16-ecx87-wfi-history.json \
+            --artifact artifacts/e62-g16-ecx87-native.json \
+            2>&1 | tee artifacts/e62-g16-ecx87-native.log
+          python3 tools/native_extended_run_gate.py \
+            --artifact artifacts/e62-g16-ecx87-native.json \
+            --min-sectors 12 --min-integrated-ns 90000000 \
+            --min-powered-pwm-samples 600 \
+            --output artifacts/e62-g16-ecx87-rotor-verdict.json \
+            2>&1 | tee artifacts/e62-g16-ecx87-rotor-verdict.log
+      - name: Keep native Guest, BEMF and PWM trace on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-g16-ecx87-kv147-native-guest-evidence
+          path: artifacts/e62-g16-*
+          if-no-files-found: warn
+          retention-days: 30
