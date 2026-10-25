@@ -16,7 +16,12 @@ ROOT = Path(__file__).resolve().parents[1]
 class AutonomousPythonSyntaxTests(unittest.TestCase):
     def test_runtime_entrypoints_parse_before_native_guest_launch(self):
         for relative in (
+            'tools/native_arming.py',
+            'tools/sitl_autonomous_transport.py',
+            'tools/sitl_autonomous_evidence.py',
+            'tools/sitl_stage_oracle.py',
             'tools/autonomous_sitl_runner.py',
+            'tests/functional_dshot_sitl.py',
             'tools/autonomous_sitl_host.py',
             'tests/g13b4_functional_dshot_sitl.py',
         ):

@@ -58,6 +58,10 @@ on:
       - 'tests/g13b2_native_drive_probe.py'
       - 'tests/test_virtual_bldc.py'
       - '.github/workflows/g13b3-host-unit.yml'
+      - 'tests/test_autonomous*.py'
+      - 'tools/native_arming.py'
+      - 'tools/sitl_*.py'
+      - 'tools/ci/check_autonomous_host.sh'
   workflow_dispatch:
 
 jobs:
@@ -120,6 +124,7 @@ jobs:
           python3 -c 'import json; d=json.load(open("/tmp/e62-explicit-switch-current-continuity.json")); assert d["actual_native_pwm_edges_supplied"] is False and d["native_strict_gate_executed"] is False and len(d["results"])==4; assert all(r["model_energy"]["forced_current_projection_impulse_energy_j"]==0 for r in d["results"])'
 
           python3 tests/test_g13b3_native_power_coupled.py
+          bash tools/ci/check_autonomous_host.sh
           echo PASS_G13B3_HOST_ONLY_UNIT_REGRESSIONS
 
       # No QEMU or original ELF here. Positive motor-closed-loop
