@@ -9,7 +9,7 @@ from tools.functional_dshot_scenario import ScenarioError, percent_to_dshot
 
 AUTO_BASE = 0x5ffea000
 AUTO_MAGIC = 0x41323645
-AUTO_ABI = 2  # G13B6 stage latch + event-driven feedback
+AUTO_ABI = 3  # G13B7 timer coalescing and event timing
 AUTO_RUNNING, AUTO_DONE, AUTO_ERROR = 1, 2, 4
 FRAME_NS = 1_000_000
 REG = {
@@ -30,6 +30,21 @@ REG = {
     'stage_end_analog_updates': 0x7c,
     'bemf_timer_callbacks': 0x80, 'route_reschedules': 0x84,
     'abi_version': 0x88,
+    'effective_route_changes': 0x8c, 'coalesced_route_changes': 0x90,
+    'feedback_timer_mods': 0x94, 'duplicate_route_skips': 0x98,
+    'trace_cap1_events': 0x9c, 'trace_timg12_irq_events': 0xa0,
+    'trace_cross_cap_pairs': 0xa4, 'trace_cap_timg12_pairs': 0xa8,
+    'trace_triplets': 0xac, 'trace_cross_cap_last_ns': 0xb0,
+    'trace_cap_timg12_last_ns': 0xb4,
+    'trace_cross_cap_max_ns': 0xb8, 'trace_cap_timg12_max_ns': 0xbc,
+    'trace_cross_cap_min_ns': 0xc0, 'trace_cap_timg12_min_ns': 0xc4,
+    'trace_cross_cap_sum_lo': 0xc8, 'trace_cross_cap_sum_hi': 0xcc,
+    'trace_cap_timg12_sum_lo': 0xd0, 'trace_cap_timg12_sum_hi': 0xd4,
+    'trace_unpaired_cap1': 0xd8, 'trace_unpaired_timg12': 0xdc,
+    'trace_overwritten_crossings': 0xe0, 'trace_overwritten_cap1': 0xe4,
+    'trace_last_cross_lo': 0xe8, 'trace_last_cross_hi': 0xec,
+    'trace_last_cap1_lo': 0xf0, 'trace_last_cap1_hi': 0xf4,
+    'trace_last_timg12_lo': 0xf8, 'trace_last_timg12_hi': 0xfc,
 }
 
 
@@ -72,7 +87,7 @@ def read_auto(read32):
         raise RuntimeError('Custom QEMU lacks autonomous SITL port; rebuild ./build.sh')
     abi = get('abi_version')
     if abi != AUTO_ABI:
-        raise RuntimeError(f'G13B6 needs autonomous ABI {AUTO_ABI}; QEMU returned {abi}. Rebuild ./build.sh')
+        raise RuntimeError(f'G13B7 needs autonomous ABI {AUTO_ABI}; QEMU returned {abi}. Rebuild ./build.sh')
     names = ('status','sent','target_frames','last_dshot','bemf_crossings',
              'elapsed_ms','error','analog_updates','pwm_samples',
              'stage','pa26_capture','pa26_dma',
@@ -91,7 +106,7 @@ def configure_auto(qtest, scenario, *, max_frames=0):
     if qtest.read(AUTO_BASE+REG['magic']) != AUTO_MAGIC:
         raise RuntimeError('Autonomous QEMU fixture absent: rebuild QEMU')
     if qtest.read(AUTO_BASE+REG['abi_version']) != AUTO_ABI:
-        raise RuntimeError('G13B6 stage-evidence ABI missing: rebuild QEMU')
+        raise RuntimeError('G13B7 temporal-evidence ABI missing: rebuild QEMU')
     put('command',3)  # clear simulator fixture only, never Guest RAM
     put('stage_count',len(stages))
     for i,stage in enumerate(stages):
@@ -229,3 +244,121 @@ def summarize_stage_samples(scenario, samples):
             'provenance':'ASYNC_GUEST_SRAM_AND_MODELED_PWM_DIAGNOSTIC_NOT_STAGE_ORACLE',
         })
     return rows
+
+
+def read_timing_evidence(read32):
+    """QEMU time-adjacent events, NOT proven Guest ISR or rotor causality."""
+    def read(k):
+        return read32(AUTO_BASE + REG[k])
+    if read('magic') != AUTO_MAGIC or read('abi_version') != AUTO_ABI:
+        raise RuntimeError('G13B7 timing ABI mismatch')
+    names = (
+        'effective_route_changes', 'coalesced_route_changes',
+        'feedback_timer_mods', 'duplicate_route_skips',
+        'trace_cap1_events', 'trace_timg12_irq_events',
+        'trace_cross_cap_pairs', 'trace_cap_timg12_pairs', 'trace_triplets',
+        'trace_cross_cap_last_ns', 'trace_cap_timg12_last_ns',
+        'trace_cross_cap_max_ns', 'trace_cap_timg12_max_ns',
+        'trace_cross_cap_min_ns', 'trace_cap_timg12_min_ns',
+        'trace_unpaired_cap1', 'trace_unpaired_timg12',
+        'trace_overwritten_crossings', 'trace_overwritten_cap1',
+    )
+    values = {k: read(k) for k in names}
+    for name in ('cross_cap', 'cap_timg12'):
+        values[f'trace_{name}_sum_ns'] = (
+            read(f'trace_{name}_sum_lo') |
+            (read(f'trace_{name}_sum_hi') << 32))
+        pairs = values[f'trace_{name}_pairs']
+        values[f'trace_{name}_mean_ns'] = (
+            values[f'trace_{name}_sum_ns'] / pairs if pairs else None)
+    for name in ('cross', 'cap1', 'timg12'):
+        values[f'last_{name}_elapsed_ns'] = (
+            read(f'trace_last_{name}_lo') |
+            (read(f'trace_last_{name}_hi') << 32))
+    values['scope'] = (
+        'QEMU_VIRTUAL_TIME_ADJACENT_EVENTS_NOT_GUEST_ISR_PROOF')
+    values['pairing_window_ns'] = 3_000_000
+    return values
+
+
+def sampled_stage_regression_gate(scenario, checkpoints, samples):
+    """Rel17.3 sampled stage response oracle (not all-frame acceptance).
+
+    A positive DShot value N corresponds to internal throttle N-47.
+    The tolerance is explicitly for asynchronous 200ms observations,
+    not an electrical or closed-loop control specification.
+    """
+    issues, results = [], []
+    for stage, cp in zip(scenario.stages, checkpoints):
+        start_ms = stage.start_ns // FRAME_NS
+        end_ms = stage.end_ns // FRAME_NS
+        stage_ms = end_ms - start_ms
+        group = sorted((r for r in samples if
+                        start_ms <= r['sim_elapsed_ms'] < end_ms),
+                       key=lambda r:r['sim_elapsed_ms'])
+        local = []
+        if not cp['complete'] or not cp['valid']:
+            local.append('checkpoint_missing')
+        if cp['end_sent_cumulative'] != end_ms:
+            local.append('stage_frame_boundary_mismatch')
+        if stage.kind == 'ramp':
+            tolerance, minimum = 100, 3
+        else:
+            tolerance, minimum = 2, 3
+            if group and (
+                group[-1]['sim_elapsed_ms'] -
+                group[0]['sim_elapsed_ms'] < stage_ms // 2
+            ):
+                local.append('insufficient_hold_coverage')
+        if len(group) < minimum:
+            local.append('insufficient_guest_samples')
+        errors = []
+        for r in group:
+            cmd = r['intended_command_dshot']
+            expected = cmd - 47 if cmd else 0
+            errors.append(abs(r['guest_throt_sample'] - expected))
+            if r['sim_dshot_value'] != cmd:
+                local.append('wire_command_not_as_intended')
+        if errors and max(errors) > tolerance:
+            local.append('guest_throttle_out_of_tolerance')
+        crc = [r['guest_valid_crc_feed_total'] for r in group]
+        if len(crc) >= 2 and (
+            crc[-1] <= crc[0] or
+            any(b < a for a,b in zip(crc, crc[1:]))
+        ):
+            local.append('guest_crc_not_progressing')
+        if stage.to_pct > 0 and len(group) >= 2:
+            ready_count = sum(bool(r.get('pwm_observer_ready_sample') and
+                               r.get('pwm_high_tick_ratios_sample') is not None)
+                              for r in group)
+            if ready_count < 2:
+                local.append('insufficient_pwm_observation')
+            for key in ('guest_cap1_total','guest_timg12_serviced_total'):
+                series = [r[key] for r in group]
+                if series[-1] <= series[0] or any(
+                    b < a for a,b in zip(series,series[1:])
+                ):
+                    local.append('guest_'+key+'_not_progressing')
+        if stage.kind == 'ramp' and stage.to_pct > stage.from_pct and (
+            len(group) >= 2 and
+            group[-1]['guest_throt_sample'] <= group[0]['guest_throt_sample']
+        ):
+            local.append('ramp_guest_throttle_did_not_increase')
+        if not group:
+            local.append('no_stage_sample')
+        local = list(dict.fromkeys(local))
+        status = ('PASS_SAMPLED_STAGE_DIAGNOSTIC' if not local else
+                  'FAIL_SAMPLED_STAGE_DIAGNOSTIC')
+        results.append({
+            'index':stage.index, 'kind':stage.kind, 'status':status,
+            'sample_count':len(group), 'tolerance_counts':tolerance,
+            'max_sampled_throttle_error':max(errors) if errors else None,
+            'crc_delta_between_samples':(
+                crc[-1]-crc[0] if len(crc)>1 else None),
+            'issues':local,
+            'scope':'REL17_3_ASYNC_GUEST_SAMPLES_NOT_EVERY_FRAME',
+        })
+        issues.extend(f'stage_{stage.index}:{reason}' for reason in local)
+    if len(checkpoints) != len(scenario.stages):
+        issues.append('checkpoint_count_mismatch')
+    return results, issues

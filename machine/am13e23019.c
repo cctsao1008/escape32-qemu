@@ -388,6 +388,17 @@ typedef struct AM13EAutoSITL {
     AM13EAutoStageEvidence stage_evidence[16];
     uint32_t stage_query, bemf_timer_callbacks, route_reschedules;
     uint64_t last_route_signature;
+    uint32_t route_coalesced, route_duplicate, timer_mod_count;
+    uint32_t trace_cap1, trace_t12, trace_cross_cap_pairs;
+    uint32_t trace_cap_t12_pairs, trace_chain_pairs;
+    uint32_t trace_cap1_unpaired, trace_t12_unpaired;
+    uint32_t trace_cross_overwrites, trace_cap_overwrites;
+    uint32_t trace_cross_cap_last, trace_cap_t12_last;
+    uint32_t trace_cross_cap_min, trace_cap_t12_min;
+    uint32_t trace_cross_cap_max, trace_cap_t12_max;
+    uint64_t trace_cross_cap_sum, trace_cap_t12_sum;
+    int64_t trace_last_cross_ns, trace_last_cap_ns, trace_last_t12_ns;
+    bool trace_cross_pending, trace_cap_pending, trace_cap_linked_cross;
     uint32_t stage_count, stage_index, max_frames;
     uint32_t total_frames, target_frames, sent;
     uint32_t last_dshot, crossings, analog_updates, powered_samples;
@@ -416,6 +427,7 @@ struct AM13ESimTimer {
     QEMUTimer *zero_timer;
     qemu_irq irq;
     AM13EPeripheralGPRCM *gprcm;
+    struct AM13EMachineState *machine; /* observational owner */
     const char *name;
     uint32_t base;
     bool esc_sim;
@@ -555,6 +567,8 @@ struct AM13EMachineState {
 /* Defined after the autonomous include; Guest MMIO hooks merely request
  * a QEMU Virtual Clock re-evaluation, no comparator/CAP1/IRQ injection. */
 static void am13e_auto_route_changed(AM13EMachineState *s);
+static void am13e_auto_trace_cap1(AM13EMachineState *s);
+static void am13e_auto_trace_timg12_zero(AM13ESimTimer *t);
 
 #include "am13e_motor_feedback.inc"
 
@@ -918,6 +932,8 @@ static void am13e_timer_zero_event(void *opaque)
         t->irq_raw[group] |= AM13E_SIM_TIMER_ZERO;
     }
     am13e_timer_irq_update(t);
+    /* Only an actual TIMER ZERO IRQ, not the Guest ISR. */
+    am13e_auto_trace_timg12_zero(t);
     if (!(ctrctl & 0x0eU)) {
         t->running = false;
         t->reg[0x804U / 4U] &= ~1U;
@@ -3993,6 +4009,7 @@ static void am13e_init(MachineState *machine)
         t->esc_sim = s->esc_sim;
         t->gprcm = &s->peripheral_gprcm[3U + i];
         t->gprcm->gtimer = t;
+        t->machine = s;
         t->zero_timer = timer_new_ns(QEMU_CLOCK_VIRTUAL,
                                       am13e_timer_zero_event, t);
         am13e_sim_timer_reset(t);

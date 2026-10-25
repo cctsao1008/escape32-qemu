@@ -112,6 +112,11 @@ static void am13e_g10_ecap_edge(AM13ESimFeedback *f, bool rising)
         f->cap[event] = am13e_g10_count(f);
     }
     am13e_g10_flags(f, (uint16_t)(2U << event));
+    if (event == 0U && (f->eceint & 2U) &&
+        (f->ecctl1 & 0x100U)) {
+        /* Observe a real enabled CAP1, never synthesize a capture. */
+        am13e_auto_trace_cap1(f->machine);
+    }
     unsigned wrap = ((f->ecctl2 >> 1U) & 3U) + 1U;
     if (++f->capture_index >= wrap) {
         f->capture_index = 0U;

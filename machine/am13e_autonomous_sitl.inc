@@ -41,7 +41,20 @@
  * +6c stage_end_crossings RO; +70 stage_finished_flag RO
  * +74 stage_end_elapsed_ms RO; +78 stage_end_bemf_timer_callbacks RO
  * +7c stage_end_analog_updates RO; +80 live_bemf_timer_callbacks RO
- * +84 live_route_reschedule_count RO; +88 ABI version RO (=2)
+ * +84 live_route_reschedule_count RO; +88 ABI version RO (=3)
+ * +8c effective route notifications; +90 suppressed early-timer overwrites
+ * +94 feedback timer_mod attempts (actual); +98 fingerprint-duplicate skips
+ * +9c CAP1 event count; +a0 TIMG12 timer ZERO-IRQ event count
+ * +a4 stimulus/CAP1 temporal pairs; +a8 CAP1/TIMG12 temporal pairs
+ * +ac complete temporal triplets (not verified ISR causality)
+ * +b0 last stimulus->CAP1 delta ns; +b4 last CAP1->T12 delta ns
+ * +b8 maximum stimulus->CAP1 delta ns; +bc maximum CAP1->T12 ns
+ * +c0 minimum stimulus->CAP1 ns; +c4 minimum CAP1->T12 ns
+ * +c8/c c stimulus->CAP1 sum ns 64-bit; +d0/d4 CAP1->T12 sum ns
+ * +d8 unpaired CAP1; +dc unpaired T12; +e0 overwritten stimulus;
+ * +e4 overwritten CAP1; +e8 last stimulus virtual time ns LO;
+ * +ec last stimulus virtual time ns HI; +f0 last CAP1 ns LO;
+ * +f4 last CAP1 ns HI; +f8 last TIMG12 IRQ ns LO; +fc HI
  */
 static void am13e_auto_reset(AM13EAutoSITL *a)
 {
@@ -55,6 +68,19 @@ static void am13e_auto_reset(AM13EAutoSITL *a)
     memset(a->stage_evidence, 0, sizeof(a->stage_evidence));
     a->stage_query = a->bemf_timer_callbacks = a->route_reschedules = 0U;
     a->last_route_signature = UINT64_MAX;
+    a->route_coalesced = a->route_duplicate = a->timer_mod_count = 0U;
+    a->trace_cap1 = a->trace_t12 = a->trace_cross_cap_pairs = 0U;
+    a->trace_cap_t12_pairs = a->trace_chain_pairs = 0U;
+    a->trace_cap1_unpaired = a->trace_t12_unpaired = 0U;
+    a->trace_cross_overwrites = a->trace_cap_overwrites = 0U;
+    a->trace_cross_cap_last = a->trace_cap_t12_last = 0U;
+    a->trace_cross_cap_max = a->trace_cap_t12_max = 0U;
+    a->trace_cross_cap_min = a->trace_cap_t12_min = UINT32_MAX;
+    a->trace_cross_cap_sum = a->trace_cap_t12_sum = 0U;
+    a->trace_last_cross_ns = a->trace_last_cap_ns =
+        a->trace_last_t12_ns = 0;
+    a->trace_cross_pending = a->trace_cap_pending = false;
+    a->trace_cap_linked_cross = false;
     a->stage_count = a->stage_index = a->max_frames = 0U;
     a->total_frames = a->target_frames = a->sent = 0U;
     a->last_dshot = a->crossings = a->analog_updates = 0U;
@@ -257,12 +283,24 @@ static void am13e_auto_route_changed(AM13EMachineState *s)
         ((uint64_t)f->cmp[0] << 17U) |
         ((uint64_t)(f->cmp[0x30U / 2U] & 0x7fffU) << 33U);
     if (fingerprint == a->last_route_signature) {
+        ++a->route_duplicate;
         return;
     }
     a->last_route_signature = fingerprint;
-    ++a->route_reschedules;
-    timer_mod(a->bemf_timer, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) +
-              AM13E_AUTO_ROUTE_REEVAL_NS);
+    ++a->route_reschedules; /* meaningful route state notifications */
+    int64_t due = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) +
+                  AM13E_AUTO_ROUTE_REEVAL_NS;
+    /* EARLIEST-WINS: avoid pushing a pending event later by 100ns.
+     * If a native Zero Crossing is scheduled later, the route edit
+     * still preempts it at due. This never defers a pending evaluation
+     * relative to G13B6; it can only evaluate up to 100ns sooner. */
+    if (timer_pending(a->bemf_timer) &&
+        timer_expire_time_ns(a->bemf_timer) <= due) {
+        ++a->route_coalesced;
+        return;
+    }
+    timer_mod(a->bemf_timer, due);
+    ++a->timer_mod_count;
 }
 
 static void am13e_auto_analog_event(void *opaque)
@@ -326,12 +364,84 @@ static void am13e_auto_analog_event(void *opaque)
     if (ready && words[phase] != previous &&
         previous && a->epoch_valid) {
         ++a->crossings; /* stimulus transitions, NOT native CAP1. */
+        if (a->trace_cross_pending) {
+            ++a->trace_cross_overwrites;
+        }
+        a->trace_last_cross_ns = now;
+        a->trace_cross_pending = true;
     }
     a->last_sample_word = next_crossing_ns ? words[phase] : 0U;
     if (next_crossing_ns > now) {
-        timer_mod(a->bemf_timer, next_crossing_ns);
+        if (!timer_pending(a->bemf_timer) ||
+            timer_expire_time_ns(a->bemf_timer) != next_crossing_ns) {
+            timer_mod(a->bemf_timer, next_crossing_ns);
+            ++a->timer_mod_count;
+        }
     }
     /* No polling when not ready; MMIO route changes reactivate timer. */
+}
+
+
+/* Temporal association only, bounded and non-invasive. These callback
+ * hooks observe events AFTER native comparator/capture and TIMER logic.
+ * An adjacent timestamp is evidence of ordering, NOT proof of a causal
+ * Guest ISR or a motor physics/rotor trajectory. */
+#define AM13E_AUTO_TRACE_PAIR_MAX_NS INT64_C(3000000)
+static void am13e_auto_trace_cap1(AM13EMachineState *s)
+{
+    AM13EAutoSITL *a = &s->auto_sitl;
+    if (!a->running) return;
+    const int64_t now = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
+    ++a->trace_cap1;
+    bool linked = false;
+    if (a->trace_cross_pending && now >= a->trace_last_cross_ns &&
+        now - a->trace_last_cross_ns <= AM13E_AUTO_TRACE_PAIR_MAX_NS) {
+        uint32_t ns = (uint32_t)(now - a->trace_last_cross_ns);
+        a->trace_cross_cap_last = ns;
+        a->trace_cross_cap_min = MIN(a->trace_cross_cap_min, ns);
+        a->trace_cross_cap_max = MAX(a->trace_cross_cap_max, ns);
+        a->trace_cross_cap_sum += ns;
+        ++a->trace_cross_cap_pairs;
+        linked = true;
+    } else {
+        ++a->trace_cap1_unpaired;
+    }
+    a->trace_cross_pending = false;
+    if (a->trace_cap_pending) {
+        ++a->trace_cap_overwrites;
+    }
+    a->trace_last_cap_ns = now;
+    a->trace_cap_pending = true;
+    a->trace_cap_linked_cross = linked;
+}
+
+static void am13e_auto_trace_timg12_zero(AM13ESimTimer *t)
+{
+    if (t->base != 0x40188000U || !t->esc_sim ||
+        !(t->irq_mask[0] & AM13E_SIM_TIMER_ZERO) || !t->machine) {
+        return;
+    }
+    /* gtimer belongs to the same AM13E Machine as its GPRCM owner.
+     * Obtain it through its init-time linked machine pointer. */
+    AM13EMachineState *s = t->machine;
+    AM13EAutoSITL *a = &s->auto_sitl;
+    if (!a->running) return;
+    const int64_t now = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
+    ++a->trace_t12;
+    a->trace_last_t12_ns = now;
+    if (a->trace_cap_pending && now >= a->trace_last_cap_ns &&
+        now - a->trace_last_cap_ns <= AM13E_AUTO_TRACE_PAIR_MAX_NS) {
+        uint32_t ns = (uint32_t)(now - a->trace_last_cap_ns);
+        a->trace_cap_t12_last = ns;
+        a->trace_cap_t12_min = MIN(a->trace_cap_t12_min, ns);
+        a->trace_cap_t12_max = MAX(a->trace_cap_t12_max, ns);
+        a->trace_cap_t12_sum += ns;
+        ++a->trace_cap_t12_pairs;
+        if (a->trace_cap_linked_cross) ++a->trace_chain_pairs;
+    } else {
+        ++a->trace_t12_unpaired;
+    }
+    a->trace_cap_pending = false;
 }
 
 static MemTxResult am13e_auto_read(void *opaque, hwaddr off,
@@ -389,7 +499,44 @@ static MemTxResult am13e_auto_read(void *opaque, hwaddr off,
     case 0x7c: *v = a->stage_evidence[a->stage_query].analog_updates; break;
     case 0x80: *v = a->bemf_timer_callbacks; break;
     case 0x84: *v = a->route_reschedules; break;
-    case 0x88: *v = 2U; break; /* G13B6 experimental ABI */
+    case 0x88: *v = 3U; break; /* G13B7 observation ABI */
+    case 0x8c: *v = a->route_reschedules; break;
+    case 0x90: *v = a->route_coalesced; break;
+    case 0x94: *v = a->timer_mod_count; break;
+    case 0x98: *v = a->route_duplicate; break;
+    case 0x9c: *v = a->trace_cap1; break;
+    case 0xa0: *v = a->trace_t12; break;
+    case 0xa4: *v = a->trace_cross_cap_pairs; break;
+    case 0xa8: *v = a->trace_cap_t12_pairs; break;
+    case 0xac: *v = a->trace_chain_pairs; break;
+    case 0xb0: *v = a->trace_cross_cap_last; break;
+    case 0xb4: *v = a->trace_cap_t12_last; break;
+    case 0xb8: *v = a->trace_cross_cap_max; break;
+    case 0xbc: *v = a->trace_cap_t12_max; break;
+    case 0xc0: *v = a->trace_cross_cap_pairs ?
+                    a->trace_cross_cap_min : 0; break;
+    case 0xc4: *v = a->trace_cap_t12_pairs ?
+                    a->trace_cap_t12_min : 0; break;
+    case 0xc8: *v = (uint32_t)a->trace_cross_cap_sum; break;
+    case 0xcc: *v = a->trace_cross_cap_sum >> 32U; break;
+    case 0xd0: *v = (uint32_t)a->trace_cap_t12_sum; break;
+    case 0xd4: *v = a->trace_cap_t12_sum >> 32U; break;
+    case 0xd8: *v = a->trace_cap1_unpaired; break;
+    case 0xdc: *v = a->trace_t12_unpaired; break;
+    case 0xe0: *v = a->trace_cross_overwrites; break;
+    case 0xe4: *v = a->trace_cap_overwrites; break;
+    case 0xe8: *v = a->trace_last_cross_ns >= a->start_ns ?
+                    (uint32_t)(a->trace_last_cross_ns - a->start_ns) : 0; break;
+    case 0xec: *v = a->trace_last_cross_ns >= a->start_ns ?
+                    (uint64_t)(a->trace_last_cross_ns - a->start_ns) >> 32U : 0; break;
+    case 0xf0: *v = a->trace_last_cap_ns >= a->start_ns ?
+                    (uint32_t)(a->trace_last_cap_ns - a->start_ns) : 0; break;
+    case 0xf4: *v = a->trace_last_cap_ns >= a->start_ns ?
+                    (uint64_t)(a->trace_last_cap_ns - a->start_ns) >> 32U : 0; break;
+    case 0xf8: *v = a->trace_last_t12_ns >= a->start_ns ?
+                    (uint32_t)(a->trace_last_t12_ns - a->start_ns) : 0; break;
+    case 0xfc: *v = a->trace_last_t12_ns >= a->start_ns ?
+                    (uint64_t)(a->trace_last_t12_ns - a->start_ns) >> 32U : 0; break;
     default: return MEMTX_ERROR;
     }
     return MEMTX_OK;

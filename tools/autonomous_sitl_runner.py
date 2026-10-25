@@ -15,6 +15,7 @@ from g13b_native_dshot import queue_dshot600_wire
 from tools.autonomous_sitl_host import (
     configure_auto, read_auto, read_stage_checkpoints,
     summarize_stage_samples, native_end_oracle,
+    sampled_stage_regression_gate, read_timing_evidence,
     AUTO_RUNNING, AUTO_DONE, AUTO_ERROR,
 )
 from tools.native_pwm_qualification import observe_original_pwm
@@ -153,6 +154,10 @@ def run_autonomous(args, scenario, evidence, rsp, qtest,
     # Guest CRC/throttle and modeled PWM (not coherent Guest snapshots).
     checkpoints = read_stage_checkpoints(
         qtest, scenario, max_frames=args.max_frames)
+    # Collect QEMU input/CAP1/TIMG12 *hardware-event* timing while the
+    # original Guest is halted. These are not Guest ISR entry timestamps.
+    trace = read_timing_evidence(qtest.read)
+    evidence['autonomous']['event_timing_evidence'] = trace
     async_stage = summarize_stage_samples(scenario, evidence['telemetry'])
     evidence['autonomous']['stage_physical_checkpoints'] = checkpoints
     evidence['autonomous']['stage_guest_async_samples'] = async_stage
@@ -178,8 +183,28 @@ def run_autonomous(args, scenario, evidence, rsp, qtest,
             cp['end_sent_cumulative'] != stage.end_ns//1_000_000
             for cp, stage in zip(checkpoints, scenario.stages)):
         issues.append('stage_sent_boundary_mismatch')
-    # Stage-specific Guest CRC/Throttle proof remains OPEN; this does
-    # not downgrade the established aggregate-only oracle.
+    # Additional sampled stage-gate: no guest ISR causality or all-frame
+    # acceptance inferred from sparse non-coherent QTest SRAM samples.
+    evidence['autonomous']['stage_gate_scope'] = (
+        'REL17_3_SAMPLED_GUEST_THROTTLE_CRC_PWM_CAP1_TIMG12')
+    if full_duration:
+        stage_gate, stage_issues = sampled_stage_regression_gate(
+            scenario, checkpoints, evidence['telemetry'])
+        evidence['autonomous']['sampled_stage_regression'] = stage_gate
+        for row, sample_gate in zip(evidence['stages'], stage_gate):
+            row['sampled_stage_gate'] = sample_gate
+            row['status'] = sample_gate['status']
+        issues.extend(stage_issues)
+        if (trace['trace_cap1_events'] == 0 or
+            trace['trace_timg12_irq_events'] == 0 or
+            trace['trace_triplets'] == 0):
+            issues.append('no_qemu_temporal_cross_cap_timg12_chain')
+        if (trace['feedback_timer_mods'] == 0 or
+            trace['trace_cross_cap_pairs'] == 0):
+            issues.append('missing_qemu_feedback_timing_observation')
+    else:
+        evidence['autonomous']['sampled_stage_regression'] = (
+            'OPEN_BOUNDED_SMOKE_NOT_QUALIFIED')
     evidence['autonomous']['valid_crc_feed_delta'] = (
         after['valid_frame_feeds']-baseline['valid_frame_feeds'])
     evidence['autonomous']['valid_crc_feed_per_sent_ratio'] = (
@@ -199,7 +224,9 @@ def run_autonomous(args, scenario, evidence, rsp, qtest,
         status = 'FAIL_AUTONOMOUS_ORACLE'
     # A bounded 50-frame smoke is NOT a full PASS and cannot qualify
     # per-stage Guest CRC and commutation even if its inputs all played.
-    if evidence['completed_full_duration'] and not issues:
+    if evidence['completed_full_duration']:
+        # Source-owned Neutral teardown must run even when the stage
+        # regression fails, so safety/neutral evidence is not skipped.
         feeds = after['valid_frame_feeds']
         neutral_proved = False
         packets = 0
@@ -239,6 +266,12 @@ def run_autonomous(args, scenario, evidence, rsp, qtest,
         'scripted_bemf_transitions':snap['bemf_crossings'],
         'bemf_timer_callbacks':snap.get('bemf_timer_callbacks'),
         'route_reschedules':snap.get('route_reschedules'),
+        'timer_mods':trace['feedback_timer_mods'],
+        'coalesced':trace['coalesced_route_changes'],
+        'temporal_triplets':trace['trace_triplets'],
+        'sampled_stage_gate':(
+            [row['status'] for row in stage_gate]
+            if full_duration else ['OPEN_BOUNDED_SMOKE']),
         'stage_checkpoints':[
             {'index':cp['index'],'sent':cp['end_sent_cumulative'],
              'complete':cp['complete']} for cp in checkpoints],
