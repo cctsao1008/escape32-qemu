@@ -1,0 +1,60 @@
+name: E62 T02 Autonomous 110s Functional Qualification
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'machine/**'
+      - 'tools/sitl_*.py'
+      - 'tools/autonomous_sitl_*.py'
+      - 'tools/native_arming.py'
+      - 'tests/functional_dshot_sitl.py'
+      - 'tests/test_t02_*.py'
+      - '.github/workflows/e62-t02-functional.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  original-guest-t02:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify Stage Oracle unit and QEMU build dependencies
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_t02_*.py' -v
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libglib2.0-dev libpixman-1-dev libfdt-dev pkg-config meson ninja-build binutils-arm-none-eabi
+      - name: Build custom QEMU from exact source and check Rel17.3 ELF
+        run: |
+          set -euo pipefail
+          git submodule update --init --depth 1 qemu
+          ./build.sh
+          echo '05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0  baseline/e62-g13b3/firmware/AM13E-rev17.3.elf' | sha256sum -c -
+          mkdir -p artifacts
+          python3 tools/native_sim_cfg_flash.py --sim-only-opt-in --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf --output artifacts/e62-g13b3-t02-cfg-flash.bin
+      - name: Full T02 110s — fail-closed; no acceptance waiver
+        shell: bash
+        run: |
+          set -euo pipefail
+          /usr/bin/time -p python3 tests/functional_dshot_sitl.py \
+            --autonomous --autonomous-telemetry-interval-ms 200 \
+            --autonomous-wall-timeout-s 1800 \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --cfg-flash artifacts/e62-g13b3-t02-cfg-flash.bin \
+            --plan scenarios/e62-dshot-v1.json --id T02 \
+            --artifact artifacts/e62-t02-full.json \
+            2>&1 | tee artifacts/e62-t02-full.log
+          python3 tools/ci/verify_t02.py artifacts/e62-t02-full.json
+      - name: Preserve forensic logs even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-t02-original-guest-evidence
+          path: |
+            artifacts/e62-t02-full.json
+            artifacts/e62-t02-full.log
+            artifacts/e62-t02-full.qemu-stderr.log
+          if-no-files-found: warn
+          retention-days: 21
