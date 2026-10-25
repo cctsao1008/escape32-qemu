@@ -4,7 +4,7 @@
 The historical 0x28 -> 0x38 -> 0x10 was a same-time ZERO/Shadow
 model overlap. This fixture exercises the actual rebuilt QEMU MCPWM
 register/timer path, not a Python substitute and not original Guest.
-With RED removed, a genuinely conflicting configuration MUST still
+With RED removed (OUT_MODE=01, FED only), a genuine overlap MUST still
 expose the overlap (no masking, clipping or rule waiver).
 """
 import argparse
@@ -32,7 +32,7 @@ def fixture(q, *, red_enabled):
     # intended delays stable instead of accidentally loading zeros.
     q.write(PWM + 0xd8, 2)  # DBFEDS
     q.write(PWM + 0xdc, 2)  # DBREDS
-    q.write(PWM + 0xc0, 0x23 if red_enabled else 0x22)
+    q.write(PWM + 0xc0, 0x23 if red_enabled else 0x21)
     q.write(CTL, 0)
     q.write(TBCLKSYNC, 1)
     h = read_native_pwm_history(q.read)
