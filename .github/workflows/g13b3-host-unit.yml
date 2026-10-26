@@ -46,6 +46,7 @@ on:
       - 'tests/test_native_pwm_switching_plan.py'
       - 'tests/test_native_pwm_history.py'
       - 'tests/test_native_pwm_history_collector.py'
+      - 'tests/test_functional_pwm_phase_match.py'
       - 'tests/test_functional_six_phase_audit.py'
       - 'tests/test_functional_three_phase_bemf.py'
       - 'tests/functional_dshot_sitl.py'
@@ -117,6 +118,7 @@ jobs:
           python3 tests/test_native_pwm_switching_plan.py
           python3 tests/test_native_pwm_history.py
           python3 tests/test_native_pwm_history_collector.py
+          python3 tests/test_functional_pwm_phase_match.py
           python3 tests/test_functional_six_phase_audit.py
           python3 tests/test_functional_three_phase_bemf.py
           python3 -m py_compile tests/functional_dshot_sitl.py
