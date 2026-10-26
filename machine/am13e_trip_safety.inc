@@ -327,6 +327,9 @@ static MemTxResult am13e_g13b2_stim_write(void *opaque, hwaddr off,
     if (!t->machine->esc_sim || size != 4U || (off & 3U) ||
         (value >> 32)) return MEMTX_ERROR;
     if (off < 12U) {
+        /* The native motor owns these three current-sense lines. Do not
+         * let a host overwrite them with fake healthy OC readings. */
+        if (t->machine->native_motor.enabled) return MEMTX_ERROR;
         unsigned n = off / 4U;
         /* Bit16 establishes validity, bits11:0 are physical ADC code.
          * Writing zero without VALID clears rather than forging 'safe'. */

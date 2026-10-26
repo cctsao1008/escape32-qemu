@@ -2364,6 +2364,9 @@ static void am13e_sim_motor_sysctl_reset(AM13EMachineState *s)
     am13e_pwm4_reset(&s->pwm4);
     am13e_g10_reset(&s->feedback);
     am13e_native_motor_reset(&s->native_motor);
+    if (s->native_motor.enabled && s->native_motor.machine) {
+        am13e_native_motor_publish_oc(&s->native_motor);
+    }
     s->sim_mc_reset_sticky = 0U;
     memset(s->sim_mc_mux, 0, sizeof(s->sim_mc_mux));
     s->sim_cmpssctl = 0U;
@@ -3967,6 +3970,13 @@ static void am13e_init(MachineState *machine)
     /* G13B2: native independent physical fault routing + analog OC. */
     s->trip.machine = s;
     am13e_g13b2_reset(s);
+    /* Native plant's actual zero-current initial condition is a valid
+     * physical current observation, before the original Guest enables
+     * CMPSS/TZ routes. Do not mark unavailable OC as healthy in legacy. */
+    if (s->native_motor.enabled) {
+        s->native_motor.machine = s;
+        am13e_native_motor_publish_oc(&s->native_motor);
+    }
     memory_region_init_io(&s->trip.input_xbar, NULL,
                           &am13e_g13b2_input_ops, &s->trip,
                           "am13e-inputxbar-native", AM13E_G13B2_INPUTXBAR_SIZE);

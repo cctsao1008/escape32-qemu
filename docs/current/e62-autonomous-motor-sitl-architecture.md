@@ -109,3 +109,30 @@ artifact retained. No acceptance condition or Motor Physics is
 altered. This audit is asynchronous, cannot claim coherent
 cycle-accurate cross-register snapshots, and does not block Guest CPU
 or rely on any WFI instruction.
+
+### Native current-sense / overcurrent safety integration
+
+The first no-WFI smoke failed a compound motor activity gate. Source review
+identified a real integration omission: earlier G13B2E/G13B4 fixtures wrote
+three valid external current-sense ADC codes before enabling original Guest
+OC/TZ. The new autonomous runner correctly does not fabricate them, but the
+native motor originally produced only BEMF, leaving OC `oc_valid=false`.
+The QEMU safety model intentionally interprets missing OC inputs as unsafe
+when the original Guest selects Trip3; this can latch OST3 and prevent
+actual PWM drive. **The smoke output did not contain enough individual
+counters to prove this was the only failure.**
+
+Native motor mode now drives actual model-derived three-phase OC codes,
+including a model-zero-current reading before original Guest initializes
+Trip routing, and updates those codes after PWM switch and rotor integration.
+OC channels map W/V/U as defined in the existing simulated COMP mux, with
+`code=1000+4*abs(phase_current_A)` explicitly **SIM_ONLY, not measured analog
+amplifier calibration**. Values that exceed the 12-bit model range fail
+closed. The existing Guest-defined DAC, comparator, XBAR, Trip2/Trip3, PWM
+OST latch, and fault-clearing policies remain unchanged. External host OC
+writes are rejected while Native Motor mode owns current sensing.
+
+The no-WFI probe also reports per-stage read-only original Guest symbol
+counters and QEMU PWM history validity, preserving distinct failure reasons
+for insufficient DShot/Gate/PWM/physics/BEMF activity. It still does not
+establish a strict G20 rotor-stability PASS.

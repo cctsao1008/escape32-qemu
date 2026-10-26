@@ -223,6 +223,34 @@ static void am13e_native_motor_publish(AM13ENativeMotor *m)
     }
     m->analog_updates += changed;
 }
+/* Real motor state drives the simulated physical overcurrent inputs.
+ * QEMU trip comparator channels n=0/1/2 select W/V/U respectively.
+ * Earlier host tests supplied code 1000 as an external zero-current
+ * fixture. Native mode instead uses 1000 + 4*abs(I_phase[A]): a
+ * deliberately UNCALIBRATED SIM_ONLY sensing assumption. The original
+ * CMPSS route, DAC limit, Trip and OST logic remain fully active.
+ * Never saturate an unrepresentable reading into a healthy code.
+ */
+static void am13e_native_motor_publish_oc(AM13ENativeMotor *m)
+{
+    AM13EMachineState *s = m->machine;
+    const unsigned phase_for_oc[3] = {2U, 1U, 0U};
+    uint16_t code[3];
+    for (unsigned n = 0; n < 3U; ++n) {
+        double raw = 1000.0 + 4.0*fabs(m->currents[phase_for_oc[n]]);
+        if (!isfinite(raw) || raw > 4095.0) {
+            am13e_native_motor_fault(m, 6U);
+            return;
+        }
+        code[n] = (uint16_t)lround(raw);
+    }
+    for (unsigned n = 0; n < 3U; ++n) {
+        s->trip.oc_input[n] = code[n];
+        s->trip.oc_valid[n] = true;
+    }
+    am13e_g13b2_trip_update(s);
+}
+
 static bool am13e_native_motor_gate_ok(AM13ESimPWM *p)
 {
     uint32_t gate = am13e_pwm4_hist_gate_word(p);
@@ -265,6 +293,9 @@ static void am13e_native_motor_pwm_event(AM13ESimPWM *p,
         m->gate = gate && valid;
         ++m->switch_events;
         am13e_native_motor_publish(m);
+        if (!m->faulted) {
+            am13e_native_motor_publish_oc(m);
+        }
     }
 }
 /* Native virtual-clock callback; no PC/WFI/GDB requirement.
@@ -283,6 +314,9 @@ static void am13e_native_motor_tick(void *opaque)
     }
     ++m->ticks;
     am13e_native_motor_publish(m);
+    if (!m->faulted) {
+        am13e_native_motor_publish_oc(m);
+    }
     if (!m->faulted) {
         timer_mod(m->tick_timer, now+AM13E_NATIVE_MOTOR_STEP_NS);
     }
