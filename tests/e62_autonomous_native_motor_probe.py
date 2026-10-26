@@ -1,0 +1,201 @@
+#!/usr/bin/env python3
+"""E62 experimental no-GDB/no-WFI original-Guest native motor smoke.
+
+Runs the Original ELF normally in QEMU. The only host writes target
+the non-silicon autonomous PA26 DShot stage input port, before execution
+of the scenario. Native QEMU virtual timers own PWM→current→rotor→BEMF.
+No Guest SRAM, IRQ, CAP1, MCPWM or comparator stimulus writes.
+This is SIM_ONLY evidence; original motor strict rotor gate stays OPEN.
+"""
+import argparse
+import json
+from pathlib import Path
+import socket
+import subprocess
+import tempfile
+import time
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from g0_memory import QTest
+from tools.sitl_autonomous_transport import AUTO_BASE, REG, read_auto
+
+MOTOR_BASE = 0x5ffeb000
+MOTOR_MAGIC = 0x4d323645
+ORIGINAL_SHA = "05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0"
+
+
+def _configure_autonomous_dshot(qtest, *, arm_ms, drive_ms, coast_ms,
+                                drive_permille):
+    """PA26 input only; never program Guest registers."""
+    get = lambda key: qtest.read(AUTO_BASE+REG[key])
+    put = lambda key, val: qtest.write(AUTO_BASE+REG[key], val)
+    if get("magic") != 0x41323645 or get("abi_version") != 4:
+        raise RuntimeError("G13B7 original autonomous DShot engine absent")
+    stages = [
+        (arm_ms, 0, 0, 1),
+        (drive_ms, drive_permille, drive_permille, 1),
+        (coast_ms, 0, 0, 1),
+    ]
+    put("command", 3)
+    put("stage_count", len(stages))
+    for i, (duration, start, end, update) in enumerate(stages):
+        put("stage_index", i)
+        for key, val in (("duration_ms", duration),
+                         ("start_permille", start),
+                         ("end_permille", end), ("update_ms", update)):
+            put(key, val)
+            if get(key) != val:
+                raise RuntimeError("DShot input staging readback changed")
+    put("max_frames", 0)
+    put("command", 1)
+    return sum(stage[0] for stage in stages)
+
+
+def _motor_snapshot(qtest):
+    if qtest.read(MOTOR_BASE) != MOTOR_MAGIC:
+        raise RuntimeError("Native QEMU motor not compiled or not opt-in enabled")
+    get = lambda offset: qtest.read(MOTOR_BASE+offset)
+    signed = lambda v: (v if v < 0x80000000 else v-0x100000000)
+    return {
+        "status_flags": get(0x04),
+        "native_1us_physics_ticks": get(0x08),
+        "actual_pwm_event_notifications": get(0x0c),
+        "analog_phase_code_updates": get(0x10),
+        "model_fault": get(0x14),
+        "actual_pwm_six_bit_mask": get(0x18),
+        "analog_codes": [get(0x1c),get(0x20),get(0x24)],
+        "last_integrated_virtual_ns": get(0x28)|(get(0x2c)<<32),
+        "model_rpm_integer": signed(get(0x30)),
+        "electrical_milli_degrees_signed": signed(get(0x34)),
+    }
+
+
+def run(args):
+    import hashlib
+    observed = hashlib.sha256(args.elf.read_bytes()).hexdigest()
+    if observed != ORIGINAL_SHA:
+        raise RuntimeError("Pinned original ESCape32 Rel17.3 ELF SHA mismatch")
+    if not args.cfg_flash.is_file():
+        raise FileNotFoundError(args.cfg_flash)
+    with tempfile.TemporaryDirectory(prefix="e62-native-no-wfi-") as td:
+        tmp = Path(td)
+        sockpath = tmp/"qtest.sock"
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener:
+            listener.bind(str(sockpath))
+            listener.listen(1)
+            listener.settimeout(20)
+            cmd = [
+                str(args.qemu.resolve()), "-M",
+                "am13e23019,esc-sim=on,esc-sim-native-motor=on,"
+                "esc-sim-nfault-asserted=off",
+                "-kernel", str(args.elf.resolve()),
+                "-display", "none", "-serial", "none", "-monitor", "none",
+                "-qtest", f"unix:path={sockpath}",
+                "-icount", "shift=2,sleep=off,align=off",
+                "-device", "loader,file="+str(args.cfg_flash.resolve())+
+                           ",addr=0x4000,force-raw=on",
+            ]
+            # Deliberately NO -S, -gdb, RSP, CPU halt or WFI breakpoints.
+            proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL,
+                                    stderr=subprocess.PIPE)
+            evidence = {
+                "status": "OPEN_NATIVE_AUTONOMOUS_CLOSED_LOOP_NOT_STRICT_PASS",
+                "original_elf_sha256": observed,
+                "host_guest_register_writes": False,
+                "used_guest_wfi_or_gdb": False,
+                "motor_mode": "QEMU_VIRTUAL_CLOCK_NATIVE_ECX87_KV147_SIM_ONLY",
+                "synthetic_timed_bemf_enabled": False,
+                "physical_motor_qualified": False,
+            }
+            try:
+                conn, _ = listener.accept()
+                with conn:
+                    qtest = QTest(conn)
+                    evidence["motor_before"] = _motor_snapshot(qtest)
+                    evidence["configured_dshot_frames"] = _configure_autonomous_dshot(
+                        qtest, arm_ms=args.arm_ms, drive_ms=args.drive_ms,
+                        coast_ms=args.coast_ms,
+                        drive_permille=args.drive_permille)
+                    deadline = time.monotonic() + args.wall_timeout_s
+                    last = None
+                    while time.monotonic() < deadline:
+                        if proc.poll() is not None:
+                            raise RuntimeError("QEMU exited during autonomous motor test")
+                        auto = read_auto(qtest.read)
+                        motor = _motor_snapshot(qtest)
+                        last = dict(autonomous_dshot=auto, native_motor=motor)
+                        if auto["status"] & 4:
+                            raise RuntimeError("Autonomous PA26 DShot timer failed: "+
+                                               str(auto["error"]))
+                        if motor["model_fault"] or motor["status_flags"] & 4:
+                            raise RuntimeError("Native motor fail-closed: "+
+                                               str(motor["model_fault"]))
+                        if auto["status"] & 2:
+                            break
+                        time.sleep(.02)
+                    else:
+                        raise TimeoutError("QEMU autonomous virtual clock did not finish")
+                    evidence.update(last)
+                    evidence["real_original_guest_cap1_observed_sim_only"] = (
+                        qtest.read(AUTO_BASE+REG["trace_cap1_events"]))
+                    evidence["real_timg12_zero_irq_observed_sim_only"] = (
+                        qtest.read(AUTO_BASE+REG["trace_timg12_irq_events"]))
+                    # Synthetic timed BEMF timer must never fire in this mode.
+                    evidence["legacy_synthetic_bemf_callbacks"] = (
+                        auto["bemf_timer_callbacks"])
+                    if auto["bemf_timer_callbacks"] != 0:
+                        raise AssertionError("Artificial BEMF generator leaked into native mode")
+                    if auto["sent"] != evidence["configured_dshot_frames"]:
+                        raise AssertionError("Not all autonomous DShot inputs delivered")
+                    if motor["native_1us_physics_ticks"] == 0 or (
+                            motor["actual_pwm_event_notifications"] == 0 or
+                            motor["analog_phase_code_updates"] == 0):
+                        raise AssertionError("No source-clocked PWM motor BEMF coupling")
+                    evidence["status"] = (
+                        "PASS_NATIVE_AUTONOMOUS_WIRING_SMOKE_SIM_ONLY_"
+                        "STRICT_STABILITY_STILL_OPEN")
+            except Exception as exc:
+                evidence["status"] = "FAIL_NATIVE_AUTONOMOUS_WIRING_SMOKE"
+                evidence["exception"] = type(exc).__name__+": "+str(exc)
+                raise
+            finally:
+                args.artifact.parent.mkdir(parents=True,exist_ok=True)
+                args.artifact.write_text(json.dumps(evidence,indent=2,sort_keys=True)+"\n")
+                if proc.poll() is None:
+                    proc.terminate()
+                try:
+                    _, stderr = proc.communicate(timeout=5)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    _, stderr = proc.communicate()
+                args.artifact.with_suffix(".qemu.log").write_bytes(stderr)
+            return evidence
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--qemu", type=Path, required=True)
+    parser.add_argument("--elf", type=Path, required=True)
+    parser.add_argument("--cfg-flash", type=Path, required=True)
+    parser.add_argument("--artifact", type=Path, default=Path(
+        "artifacts/e62-autonomous-native-motor-smoke.json"))
+    parser.add_argument("--arm-ms",type=int,default=400)
+    parser.add_argument("--drive-ms",type=int,default=250)
+    parser.add_argument("--coast-ms",type=int,default=100)
+    parser.add_argument("--drive-permille",type=int,default=200)
+    parser.add_argument("--wall-timeout-s",type=int,default=120)
+    args = parser.parse_args()
+    if (not 300<=args.arm_ms<=5000 or
+        not 10<=args.drive_ms<=3000 or
+        not 10<=args.coast_ms<=3000 or
+        not 1<=args.drive_permille<=1000 or
+        not 10<=args.wall_timeout_s<=600):
+        parser.error("Explicit, bounded virtual timing required")
+    evidence=run(args)
+    print("E62_NATIVE_AUTONOMOUS_NO_WFI_PROBE "+
+          json.dumps(evidence,sort_keys=True))
+
+
+if __name__=="__main__":
+    main()

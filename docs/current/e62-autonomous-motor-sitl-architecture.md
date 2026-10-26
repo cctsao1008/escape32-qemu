@@ -49,3 +49,34 @@ Previous WFI G20 diagnostics measured 35 WFI-bracketed model speed sign changes,
 Commit directly to `main`, never use PR. Keep old host/WFI fixtures as clearly labeled historical comparators while implementing the new mode. Change of `machine/*.c` or `machine/*.inc` requires `./build.sh`, not just Python tests. No Host PASS may be represented as an original-Guest rotor stability PASS.
 
 **Implementation status:** Incremental. Landing this document or source scaffolding is not itself evidence of a stable autonomous ESC–motor loop.
+
+
+## Native no-WFI probe (opt-in, strict stability still OPEN)
+
+Build the new machine from source and generate a SIM_ONLY ECX87-KV147
+preboot configuration (the old archived QEMU binary predates this mode).
+
+```bash
+./build.sh
+python3 tools/sim_motor_cfg.py --sim-only-opt-in \
+  --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+  --motor-profile ecx87-kv147 \
+  --output artifacts/e62-native-autonomous-cfg.bin
+python3 tests/e62_autonomous_native_motor_probe.py \
+  --qemu .build/qemu-src/build/qemu-system-arm \
+  --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+  --cfg-flash artifacts/e62-native-autonomous-cfg.bin \
+  --artifact artifacts/e62-native-autonomous-smoke.json
+```
+
+The runner deliberately starts the original ELF *without* `-S`, GDB,
+RSP, WFI stops, host PWM writes, or host BEMF injections. It stages
+zero-throttle arm / fixed drive / zero-throttle recovery as real 1kHz
+PA26 DShot600 wire events. The only live host operations are read-only
+QTest status/diagnostics. The artificial timed-BEMF callback count
+must stay zero; motor physics/analog feedback must advance independently.
+
+**Scope warning:** a successful smoke only establishes QEMU source
+wiring and autonomous feedback activity. It does not yet qualify
+CAP1 geometric crossings, rotor stability, numerical convergence,
+unmodeled physical driver behavior, or the original G20 strict gate.
