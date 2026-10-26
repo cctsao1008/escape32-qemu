@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from tools.native_closed_loop_audit import ORIGINAL_REL17_ROUTE
 from tools.native_power_path_qualification import qualify_cross_phase_bridge
+from tools.functional_pwm_phase_match import match_original_rel17_pwm_sector
 
 
 class FunctionalSixPhaseAudit:
@@ -149,6 +150,7 @@ class FunctionalSixPhaseAudit:
                         pwm_settled_wfi_ns=None,
                         measured_six_high_ticks=None,
                         measured_period_ticks=None,
+                        measured_pwm_topology=None,
                         observed_transient_pairs=[],
                         pwm_observation_count=0,
                         first_pwm_observation=None,
@@ -182,13 +184,23 @@ class FunctionalSixPhaseAudit:
                         gate_trip_qualified=True)
                     actual = bridge.different_phase_pairs
                     expected = tuple(p["expected_source_to_return"])
+                    # A source phase's complementary low PWM must not
+                    # be misclassified as a second independent sink.
+                    # Source and sink are still expected from the pinned
+                    # firmware table, NEVER inferred from Guest MUX.
+                    pattern = match_original_rel17_pwm_sector(
+                        pwm.six_high_ticks,
+                        period_ticks=pwm.period_ticks,
+                        expected_pair=expected)
+                    actual_snapshot["sector_pattern"] = pattern.to_dict()
                     if (bridge.upper_phase_indices == (expected[0],) and
-                            bridge.lower_phase_indices == (expected[1],) and
                             actual == (expected,) and
+                            pattern.qualified and
                             pwm.acceptable_for_plant):
                         p["pwm_settled_wfi_ns"] = guest_time_ns
                         p["measured_six_high_ticks"] = list(pwm.six_high_ticks)
                         p["measured_period_ticks"] = pwm.period_ticks
+                        p["measured_pwm_topology"] = pattern.mode
                         self.sectors.append(p)
                         self.phase_pairs_seen.add(expected)
                         self.pending = None
@@ -198,6 +210,7 @@ class FunctionalSixPhaseAudit:
                                 "wfi_ns": guest_time_ns,
                                 "upper_phases": list(bridge.upper_phase_indices),
                                 "lower_phases": list(bridge.lower_phase_indices),
+                                "topology_rejection": pattern.reason,
                                 "reason": "TRANSITION_OR_MISMATCH_NOT_YET_SETTLED"})
         self.previous = now
         self.last_time_ns = guest_time_ns
