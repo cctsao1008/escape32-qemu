@@ -161,6 +161,89 @@ waveform can expose a real mismatch — the result is **OPEN/FAIL, never
 fabricated PASS**. Existing DShot300 legacy-scripted full T01 PASS stays
 separate and unchanged.
 
+## Latest native independent U/V/W six-pad WFI proof (2026-10-26)
+
+The user-supplied `e62-t01-dshot300-independent-bemf-sixphase-smoke.json`
+after the strict complementary-output oracle correction showed:
+
+- 100 externally delivered DShot300 frames; the outer bounded
+  scenario status correctly remained `OPEN_BOUNDED_SMOKE_NOT_FULL_DURATION`.
+- `PASS_WFI_BRACKETED_SIX_PHASE_FUNCTIONAL_ONLY`;
+  `settled_commutation_count=7`, `failed_commutation_total=0`,
+  `issues=[]`.
+- All **six** pinned original source/sink pairs:
+  U->V, U->W, V->W, V->U, W->U, W->V.
+- Every settled six-pad image was
+  `COMPLEMENTARY_SOURCE_H_L_AND_SINK_L`, QEMU MCPWM4 period 4167.
+- Several original-step/WFI brackets contain an old six-pad vector and
+  a new vector within the SAME Guest 16kHz SysTick. It is therefore
+  incorrect to assign exact physical or even QEMU PWM edge times to
+  `pwm_settled_wfi_ns`.
+
+This closes WFI-bracketed **functional** six-step topology validation only,
+not exact callback chronology or full T01 duration.
+
+## Opt-in next step: actual QEMU PWM virtual-clock event history
+
+The existing 128-record QEMU event ring at `0x5ffe7000` emits
+`QEMU_CLOCKED_AQ_DB_EDGE`, original carrier-ZERO callbacks and
+Guest MMIO/shadow/trip markers. New
+`tools/functional_pwm_clocked_trace.py` reads this **on every genuine
+running-loop Guest WFI** after original zero-throttle ARM. It:
+
+- preserves exact **global QEMU virtual ns** from actual callbacks, no
+  extrapolated/synthetic edges;
+- preserves separate **Guest SysTick-relative ns** from original ELF;
+- refuses to align those two clocks without independent correlation;
+- fails closed on ring overwrite between consecutive WFI stops, mixed
+  masks, model invalidation, storage overflow or internal same-phase
+  H/L both-high masks;
+- never claims physical MOSFET/deadtime measurement or rotor physics;
+- does not recover any pre-attach history.
+
+`--clocked-pwm-history` requires `--six-phase-audit`, and is not
+available with `--autonomous`. The default opt-in bounded host memory
+limit is 100000 events, which is intended for a **100-frame smoke**, not
+the 11-second or 110-second full sequence. Larger histories are
+explicitly bounded with `--clocked-pwm-max-events`; no silent
+truncation is permitted. Existing T01/T02 without the flag remain
+unchanged.
+
+```bash
+cd ~/github/escape32-qemu
+git pull --ff-only
+python3 -m unittest discover -s tests -p 'test_functional_pwm_clocked_trace.py' -v
+
+python3 tests/functional_dshot_sitl.py \
+  --qemu .build/qemu-src/build/qemu-system-arm \
+  --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+  --cfg-flash artifacts/e62-g13b3-functional-cfg-flash.bin \
+  --plan scenarios/e62-dshot-v1.json --id T01 \
+  --input-config configs/e62-functional-input.json \
+  --bemf-config configs/e62-functional-bemf.json \
+  --six-phase-audit --clocked-pwm-history \
+  --max-frames 100 \
+  --artifact artifacts/e62-t01-dshot300-clocked-pwm-smoke.json
+
+jq '{
+    status,
+    six_phase_status: .six_phase_audit.status,
+    clocked_pwm_history: (.clocked_pwm_history | {
+      status, collected_wfi, collected_events,
+      qemu_clocked_edge_callbacks, original_pwm_zero_callbacks,
+      unsafe_internal_both_gates_high_masks,
+      qemu_pwm_invalid_model_events_since_attach,
+      missed_ring_events, collection_error,
+      first_events, last_events
+    })
+  }' artifacts/e62-t01-dshot300-clocked-pwm-smoke.json
+```
+
+The modified Guest-backed clocked-history runner is **OPEN until actually
+executed**. Host unit tests with mock QEMU historical ABI data cannot
+substitute for that run. Even a successful trace qualifies QEMU
+internal callback chronology, **not** real hardware gate timing.
+
 ## Next strict boundary
 
 - No real exact-resolution Guest TIMG12->MCPWM AQ/DB chronology pass yet.
