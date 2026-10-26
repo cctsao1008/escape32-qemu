@@ -1,0 +1,9 @@
+{
+  "schema": "e62.functional-bemf.v1",
+  "mode": "INDEPENDENT_THREE_PHASE_FIXED_HZ",
+  "electrical_hz": 100,
+  "initial_electrical_degrees": -30,
+  "center_code": 2048,
+  "amplitude_codes": 128,
+  "sample_wfi_interval": 2
+}
