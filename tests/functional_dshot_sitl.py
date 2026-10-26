@@ -40,6 +40,7 @@ from tools.functional_dshot_scenario import (
     load_scenario, ScenarioError, VirtualTimeDShotSequencer)
 from tools.functional_bemf import FunctionalBemf
 from tools.functional_six_phase_audit import FunctionalSixPhaseAudit
+from tools.functional_pwm_clocked_trace import FunctionalClockedPWMTrace
 from tools.functional_three_phase_bemf import (
     load_three_phase_config, IndependentThreePhaseBemf)
 from tools.esc_input_protocol import load_input_config
@@ -204,6 +205,14 @@ def _run_guest(args, scenario, evidence):
                         pwm_phase_audit = (FunctionalSixPhaseAudit(
                             max_sectors=args.six_phase_max_sectors)
                             if args.six_phase_audit else None)
+                        clocked_pwm_trace = (FunctionalClockedPWMTrace(
+                            max_events=args.clocked_pwm_max_events)
+                            if args.clocked_pwm_history else None)
+                        if clocked_pwm_trace is not None:
+                            # Attach only after native Guest zero-throttle
+                            # arming and at the actual running-loop WFI.
+                            # PWM events before this point are not recovered.
+                            clocked_pwm_trace.attach(qtest.read)
                         evidence['scenario_t0'] = {
                             'origin': 'AFTER_ORIGINAL_ZERO_DSHOT_ARM_AT_RUNNING_WFI',
                             'original_ecap_tsctr': first_tsctr,
@@ -269,6 +278,15 @@ def _run_guest(args, scenario, evidence):
                                     guest_throttle=step['throt'])
                                 if native_wfi_count % 1000 == 0:
                                     evidence['six_phase_audit'] = pwm_phase_audit.report()
+                            if clocked_pwm_trace is not None:
+                                # QEMU callback virtual_ns and Guest SysTick
+                                # relative elapsed_ns are separate clocks.
+                                clocked_pwm_trace.poll(
+                                    qtest.read,
+                                    wfi=native_wfi_count,
+                                    guest_elapsed_ns=elapsed_ns,
+                                    guest_step=step['step'],
+                                    guest_serviced=step['serviced'])
                             stage_id = _stage_index(scenario, elapsed_ns)
                             stage = stage_records[stage_id]
                             stage['valid_crc_feeds_observed'] += (
@@ -513,6 +531,22 @@ def _run_guest(args, scenario, evidence):
                                       'scenario_full_duration':
                                           bool(evidence.get('completed_full_duration')),
                                   }, sort_keys=True),flush=True)
+                        if clocked_pwm_trace is not None:
+                            trace_report=clocked_pwm_trace.report()
+                            evidence['clocked_pwm_history'] = trace_report
+                            print('E62_FUNCTIONAL_CLOCKED_PWM_HISTORY ' +
+                                  json.dumps({
+                                      key: trace_report[key] for key in (
+                                          'status','collected_events',
+                                          'qemu_clocked_edge_callbacks',
+                                          'original_pwm_zero_callbacks',
+                                          'unsafe_internal_both_gates_high_masks',
+                                          'qemu_pwm_invalid_model_events_since_attach',
+                                          'missed_ring_events',
+                                          'max_events_between_guest_wfi',
+                                          'collection_error',
+                                          'first_events','last_events')
+                                  },sort_keys=True),flush=True)
                         evidence['guest_clock_observations'] = {
                             'origin_tick': clock.origin_tick,
                             'last_tick': clock.previous_tick,
@@ -544,6 +578,10 @@ def _run_guest(args, scenario, evidence):
                                 evidence['six_phase_audit']['status'] !=
                                     'PASS_WFI_BRACKETED_SIX_PHASE_FUNCTIONAL_ONLY'):
                                 issues.append('six_phase_commutation_audit')
+                            if (clocked_pwm_trace is not None and
+                                evidence['clocked_pwm_history']['status'] !=
+                                    'PASS_QEMU_CLOCKED_INTERNAL_PWM_HISTORY_ONLY'):
+                                issues.append('clocked_pwm_callback_history')
                             evidence['status'] = ((
                                 'PASS_FUNCTIONAL_INDEPENDENT_THREE_PHASE_BEMF_ONLY'
                                 if args.independent_bemf_config is not None
@@ -609,6 +647,10 @@ def main():
     ap.add_argument('--six-phase-audit', action='store_true',
                     help='Opt-in original Guest TIMG12/step vs six PWM pad phase-pair oracle')
     ap.add_argument('--six-phase-max-sectors', type=int, default=20000)
+    ap.add_argument('--clocked-pwm-history', action='store_true',
+                    help='Opt-in original running-WFI read-only QEMU clocked PWM callback event journal')
+    ap.add_argument('--clocked-pwm-max-events', type=int, default=100000,
+                    help='Hard event storage bound; never silently truncate a PWM clocked trace')
     ap.add_argument('--bemf-sample-interval', type=int, default=2)
     ap.add_argument('--teardown-max-wfi', type=int, default=1000)
     args = ap.parse_args()
@@ -621,6 +663,7 @@ def main():
         not 0 <= args.max_lateness_us < 1000 or
         not 1 <= args.pwm_sample_interval <= 1000 or
         not 6 <= args.six_phase_max_sectors <= 100000 or
+        not 128 <= args.clocked_pwm_max_events <= 1000000 or
         not 1 <= args.bemf_sample_interval <= 1000 or
         not 1 <= args.teardown_max_wfi <= 5000):
         ap.error('Unsafe fixture bounds')
@@ -649,6 +692,10 @@ def main():
             ap.error('DShot input config frame rate differs from scenario schedule')
     if args.independent_bemf_config is not None and args.autonomous:
         ap.error('Independent three-phase BEMF requires per-WFI Guest mode')
+    if args.clocked_pwm_history and not args.six_phase_audit:
+        ap.error('Clocked PWM history requires six-phase audit to correlate with Guest commutation')
+    if args.clocked_pwm_history and args.autonomous:
+        ap.error('Clocked PWM history requires actual original Guest WFI observations')
     if args.six_phase_audit and args.autonomous:
         ap.error('Six-phase WFI bracketed audit requires per-WFI Guest mode')
     if args.autonomous and args.input_protocol != 'DSHOT600':
@@ -664,6 +711,7 @@ def main():
                     external_input_protocol=args.input_protocol,
                     external_input_config=(str(args.input_config) if args.input_config else None),
                     six_phase_audit_requested=bool(args.six_phase_audit),
+                    clocked_pwm_history_requested=bool(args.clocked_pwm_history),
                     bemf_input_mode=('INDEPENDENT_THREE_PHASE_FIXED_HZ'
                         if args.independent_bemf_config is not None else
                         'LEGACY_GUEST_ROUTED_SCRIPTED_COMPARATOR'),
