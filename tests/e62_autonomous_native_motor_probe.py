@@ -168,6 +168,62 @@ def _classify_receive_path(autonomous, original_guest, receiver):
     return reasons
 
 
+def _receiver_ready_reasons(receiver, guest):
+    """Strict Original Guest PA26/TIMG4/DMA/ARM readiness, no host writes.
+
+    Never equate physical PA26 input capture with valid original DShot
+    CRC. The source-owned DMA0 CH2 must be armed for its first 32
+    samples, and Guest must have enabled IRQ and entered neutral ARM.
+    """
+    reasons=[]
+    if receiver["cpu_primask"] != 0:
+        reasons.append("ORIGINAL_CPU_INTERRUPT_MASKED")
+    if receiver["cpu_exception_ipsr"] in (3,4,5,6):
+        reasons.append("ORIGINAL_CPU_FAULT_EXCEPTION")
+    if receiver["dma_ch2_trigger"] & 0x7f != 34:
+        reasons.append("ORIGINAL_DMA_CH2_TRIGGER_NOT_TIMG4")
+    if receiver["dma_ch2_control"] & 2 == 0:
+        reasons.append("ORIGINAL_DMA_CH2_DISABLED")
+    if receiver["dma_ch2_remaining"] != 32:
+        reasons.append("ORIGINAL_DMA_CH2_NOT_FRESH_32_BEATS")
+    if receiver["dma_irq_raw"] & (1<<24):
+        reasons.append("ORIGINAL_DMA_ADDRESS_FAULT")
+    if guest.get("throt") != 1:
+        reasons.append("ORIGINAL_NEUTRAL_ARM_WINDOW_NOT_ENTERED")
+    if any((code & 0x10000) == 0 for code in receiver["native_oc_adc_codes"]):
+        reasons.append("NATIVE_CURRENT_SENSE_NOT_VALID_AFTER_RESET")
+    return reasons
+
+
+def _wait_for_original_receiver_ready(qtest, proc, symbol_addrs,
+                                      *, wall_timeout_s):
+    """Passive bounded QTest observer, no GDB, WFI or CPU pause."""
+    deadline=time.monotonic()+wall_timeout_s
+    initial=time.monotonic()
+    samples=0
+    last=None
+    while time.monotonic() < deadline:
+        if proc.poll() is not None:
+            raise RuntimeError("Original Guest QEMU exited before DShot receiver ready")
+        receiver=_receiver_snapshot(qtest.read)
+        guest=_read_original_guest_telemetry(qtest,symbol_addrs)
+        reasons=_receiver_ready_reasons(receiver,guest)
+        samples+=1
+        last={"ready":not reasons,"readiness_reasons":reasons,
+              "read_only_receiver":receiver,
+              "read_only_original_guest":guest,
+              "host_observation_count":samples,
+              "host_elapsed_s":round(time.monotonic()-initial,3),
+              "guest_register_writes":False,"guest_cpu_paused":False}
+        if not reasons:
+            return last
+        if "ORIGINAL_CPU_FAULT_EXCEPTION" in reasons:
+            break
+        time.sleep(0.005)
+    raise RuntimeError("Original Guest DShot receiver not ready without "
+                       "external stimulus: "+json.dumps(last,sort_keys=True))
+
+
 def _wiring_failure_reasons(autonomous, motor, pwm):
     """Pinpoint missing stages; original fail-closed assertion is unchanged."""
     reasons = []
@@ -294,6 +350,17 @@ def run(args):
                     evidence["original_guest_before"] = _read_original_guest_telemetry(qtest,symbol_addrs)
                     evidence["receiver_before"] = _receiver_snapshot(qtest.read)
                     evidence["runtime_diagnostics_by_stage"] = []
+                    # The previous run queued 750 wire frames while PRIMASK=1
+                    # and DMA CH2 trigger/control were still 0. This caused
+                    # the physical TX fixture to race Guest boot and ARM.
+                    # Wait PASSIVELY for Original DMA/IRQ/ARM initialization.
+                    # Never send even a neutral frame before this condition.
+                    evidence["receiver_ready"] = _wait_for_original_receiver_ready(
+                        qtest,proc,symbol_addrs,
+                        wall_timeout_s=args.receiver_ready_wall_timeout_s)
+                    print("E62_NATIVE_ORIGINAL_RECEIVER_READY "+
+                          json.dumps(evidence["receiver_ready"],sort_keys=True),
+                          flush=True)
                     evidence["configured_dshot_frames"] = _configure_autonomous_dshot(
                         qtest, arm_ms=args.arm_ms, drive_ms=args.drive_ms,
                         coast_ms=args.coast_ms,
@@ -374,6 +441,17 @@ def run(args):
             except Exception as exc:
                 evidence["status"] = "FAIL_NATIVE_AUTONOMOUS_WIRING_SMOKE"
                 evidence["exception"] = type(exc).__name__+": "+str(exc)
+                # Failure may occur while waiting for natural Guest ARM,
+                # before any autonomous DShot frame runs. Never leave
+                # receiver_after:null as an unexplained artifact.
+                if "qtest" in locals():
+                    try:
+                        evidence["receiver_at_failure"] = _receiver_snapshot(qtest.read)
+                        evidence["original_guest_at_failure"] = (
+                            _read_original_guest_telemetry(qtest,symbol_addrs))
+                    except Exception as diagnostic_exc:
+                        evidence["failure_snapshot_error"] = (
+                            type(diagnostic_exc).__name__+": "+str(diagnostic_exc))
                 print("E62_NATIVE_AUTONOMOUS_NO_WFI_FAIL "+
                       json.dumps(evidence,sort_keys=True),flush=True)
                 raise
@@ -403,12 +481,16 @@ def main():
     parser.add_argument("--coast-ms",type=int,default=100)
     parser.add_argument("--drive-permille",type=int,default=200)
     parser.add_argument("--wall-timeout-s",type=int,default=120)
+    parser.add_argument("--receiver-ready-wall-timeout-s",
+                        type=int,default=20,
+                        help="Bounded passive Guest DMA/IRQ/neutral ARM readiness wait")
     args = parser.parse_args()
     if (not 300<=args.arm_ms<=5000 or
         not 10<=args.drive_ms<=3000 or
         not 10<=args.coast_ms<=3000 or
         not 1<=args.drive_permille<=1000 or
-        not 10<=args.wall_timeout_s<=600):
+        not 10<=args.wall_timeout_s<=600 or
+        not 2<=args.receiver_ready_wall_timeout_s<=120):
         parser.error("Explicit, bounded virtual timing required")
     evidence=run(args)
     print("E62_NATIVE_AUTONOMOUS_NO_WFI_PROBE "+

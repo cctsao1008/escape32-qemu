@@ -183,3 +183,29 @@ first CH2 buffer from a pending DMA interrupt and a CPU Fault, instead
 of claiming downstream PWM/BEMF missing is the primary defect.
 Do not attempt physical rotor or strict G20 qualification until the
 original Guest itself demonstrates valid physical DShot CRC input.
+
+### Race: Autonomous DShot started before Original Guest neutral-arm readiness
+
+Native no-WFI trace first showed `receiver_before` with `PRIMASK=1`,
+DMA CH2 trigger/control/remaining=0 and Guest `throt=0`. The old
+host runner immediately queued DShot regardless of the original
+receiver's initialization. A later trace showed 750 physical DShot
+frames and 23,616 PA26 captures but only 32 DMA beats, zero original
+CRC-fed frames, and no PWM / motor. **That trace does not prove the
+interrupt controller or motor failed**; the stimulus itself raced
+the Guest boot/ARM initialization.
+
+Updated no-WFI runner now waits PASSIVELY (without halting the CPU,
+GDB/WFI breakpoints, Guest state writes or clock fast-forward) for:
+- Guest PRIMASK=0 and no CPU Fault exception;
+- original CH2 TIMG4 event source #34, DMA enable, fresh 32-beat RX;
+- Guest original `throt=1` neutral arming window;
+- native three-phase OC readings valid after reset.
+
+If the Guest never becomes ready, the runner fails closed **without
+sending any DShot**, with exact source counters in the failure report.
+The QEMU device also republishes its modeled *zero-current* OC data
+after the G13B2 trip plane reset, fixing the formerly zero OC-sample
+valid bits that were visible in `receiver_before`. Physical OC
+gain/offset remain uncalibrated, and original comparator/Trip behavior
+is retained. Successful readiness alone is **not** rotor qualification.

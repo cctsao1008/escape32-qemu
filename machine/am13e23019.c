@@ -3790,6 +3790,12 @@ static void am13e_handoff_reset(void *opaque)
     s->sysctl_systemcfg = 0U;
     am13e_sim_motor_sysctl_reset(s);
     am13e_g13b2_reset(s);
+    /* Device reset cleared physical OC sample-valid flags. Re-publish
+     * native rotor's genuine zero-current initial sample AFTER the
+     * safety plane reset; never bypass original CMPSS/XBAR/TZ policy. */
+    if (s->native_motor.enabled) {
+        am13e_native_motor_publish_oc(&s->native_motor);
+    }
     s->sysctl_xtalcr = AM13E_SYSCTL_XTALCR_INITIAL;
     s->sysctl_hsclken = AM13E_SYSCTL_HSCLKEN_INITIAL;
     s->sysctl_hsclkcfg = 0;
