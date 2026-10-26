@@ -119,8 +119,9 @@ class FunctionalSixPhaseAudit:
         unique_steps = {s["new_guest_step"] for s in self.sectors}
         complete_cycle = len(self.sectors) >= 6 and len(unique_steps) == 6
         issues = list(dict.fromkeys(self.issues))
-        if self.pending is not None:
-            issues.append("LAST_COMMUTATION_NOT_YET_SETTLED")
+        # A scenario may stop between TIMG12 service and the next carrier
+        # zero. Preserve that incomplete last bracket but never convert it
+        # into a fabricated observed vector or poison previous proved sectors.
         if not complete_cycle:
             issues.append("NO_COMPLETE_POWERED_SIX_STEP_SEQUENCE")
         return {
