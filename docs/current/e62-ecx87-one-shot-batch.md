@@ -35,3 +35,66 @@ To review the aggregate:
 ```bash
 jq '{overall_status, all_functional_points_pass, all_average_rate_screens_match, points: [.points[] | {electrical_hz, original_guest_functional_status, six_phase_sector_count, hold_timg12_services, observed_average_commutation_to_ideal_ratio, rate_screen_only_10percent}]}' artifacts/e62-ecx87-kv210-full-batch/batch-summary.json
 ```
+
+## 2026-10-26 Guest-backed full results: systematic seven-cycle slip
+
+Actual user-supplied batch summary and all three independent evidence files:
+
+| Fixed independent external BEMF | Original Guest Hold TIMG12 / 10s | Observed steps/s | Expected steps/s | Observed ratio | Six-pad settled Guest PWM sectors |
+|---:|---:|---:|---:|---:|---:|
+| 900 Hz | 7,714 | 771.4 | 5,400 | 0.14285185 | 8,454 |
+| 1,040 Hz | 8,915 | 891.5 | 6,240 | 0.14286859 | 9,770 |
+| 1,285 Hz | 11,015 | 1,101.5 | 7,710 | 0.14286641 | 12,069 |
+
+All three Guest functional runs PASS, no failed PWM sector settles; the
+additional *average commutation-rate screen* FAILS at all three points.
+The external three-phase sample center-sign-change counts are respectively
+59,345 / 68,577 / 84,731 over the entire 11s (approximately the
+expected 6*f*11 electrical input crossings). Original Guest source
+CAP1 totals are 8,476 / 9,793 / 12,119, also near 1/7 of those crossings.
+A physical three-phase input sign change is **not automatically an armed
+CMPSS/ECAP1 capture**; do not call this raw ratio "hardware lost 6/7
+captures". Do not attribute it to changing `telem_poles` from 14 to 42:
+that is telemetry conversion, not a native sector timing parameter.
+The exact same ~1/7 rate appeared in the earlier pre-provision 100 Hz
+11-second experiment.
+
+More direct temporal evidence from the original 1,040 Hz Guest WFI
+`six_phase_audit.sectors`: TIMG12 service 5501 WFI bracket end at
+6,210,750,000 ns; service 5507 at 6,217,500,000 ns. **6 Guest
+sectors = 6.75 ms**, while **7 external 1040 Hz electrical
+periods = 6.730769 ms**. The ~19 us discrepancy is within one
+62.5 us Guest SysTick WFI bracket. Thus this is a deterministic
+**roughly 7 electrical cycles per 6 Guest sectors** cadence, not a
+mere mistaken aggregate unit conversion.
+
+Original source-selected phase/polarity order remains:
+U rising -> W falling -> V rising -> U falling -> W rising -> V falling.
+With fixture U=sin(theta), V=sin(theta-120°), W=sin(theta+120°),
+the nominal desired crossings are separated by 60 electrical degrees.
+The observed ~420° sector cadence is consistent with the firmware
+not being rearmed/ready in time to accept the **next** selected crossing
+and catching that same edge on the following electrical revolution.
+It does **not yet distinguish** native CAP1 blanking, timed 30° advance
+commutation, late CMPSS filter rearm, or an input/route gate.
+The previous source "functional PASS" explicitly did not qualify
+edge-phase coherence; the run itself should remain PASS_FUNCTIONAL_ONLY
+while the rate-screen FAIL remains visible.
+
+No re-run is necessary for the first phase-slip investigation:
+```bash
+cd ~/github/escape32-qemu
+git pull --ff-only
+python3 tests/test_analyze_e62_independent_bemf_cycles.py
+python3 tools/analyze_e62_independent_bemf_cycles.py \
+  artifacts/e62-ecx87-kv210-full-batch/e62-dshot300-900-hz-evidence.json \
+  artifacts/e62-ecx87-kv210-full-batch/e62-dshot300-1040-hz-evidence.json \
+  artifacts/e62-ecx87-kv210-full-batch/e62-dshot300-1285-hz-evidence.json \
+  --output artifacts/e62-ecx87-kv210-full-batch/offline-electrical-cycle-audit.json
+```
+
+That tool reads saved Guest WFI-bracketed original TIMG12 sector
+timestamps and reports the distribution of apparent skipped **whole**
+external electrical cycles between consecutive steps. It adds no
+QEMU instrumentation, Guest writes, or synthetic IRQ. It does not
+claim exact comparator edge timestamps or measured physical rotor phase.
