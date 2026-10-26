@@ -41,6 +41,7 @@ on:
       - 'tests/test_g13b3_native_wfi_roles.py'
       - 'tests/test_native_motor_reciprocity.py'
       - 'tests/test_native_model_energy_balance.py'
+      - 'tests/test_native_precapture_dynamics_audit.py'
       - 'tests/test_native_frozen_pwm_convergence.py'
       - 'tests/test_current_continuous_bldc.py'
       - 'tests/test_native_pwm_switching_plan.py'
@@ -118,6 +119,7 @@ jobs:
           python3 tests/test_g13b3_native_wfi_roles.py
           python3 tests/test_native_motor_reciprocity.py
           python3 tests/test_native_model_energy_balance.py
+          python3 tests/test_native_precapture_dynamics_audit.py
           python3 tests/test_native_frozen_pwm_convergence.py
           python3 tests/test_current_continuous_bldc.py
           python3 tests/test_native_pwm_switching_plan.py
