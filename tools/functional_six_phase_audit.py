@@ -29,30 +29,55 @@ class FunctionalSixPhaseAudit:
         self.phase_pairs_seen = set()
         self.last_time_ns = None
         self.observed_wfi = 0
+        self.idle_wfi = 0
+        self.startup_seeds = []
 
     def needs_pwm(self, step: int) -> bool:
         """Read the six output registers only near an actual commutation."""
         return (self.pending is not None or
                 (self.previous is not None and
+                 1 <= step <= 6 and
+                 1 <= self.previous["step"] <= 6 and
                  step != self.previous["step"]))
 
     def observe(self, *, guest_time_ns: int, guest_step: int,
                 guest_serviced: int, guest_captured: int,
-                pwm=None):
+                pwm=None, guest_throttle=None):
         if (type(guest_time_ns) is not int or guest_time_ns < 0 or
-                type(guest_step) is not int or not 1 <= guest_step <= 6 or
+                type(guest_step) is not int or not 0 <= guest_step <= 6 or
                 type(guest_serviced) is not int or guest_serviced < 0 or
-                type(guest_captured) is not int or guest_captured < 0):
+                type(guest_captured) is not int or guest_captured < 0 or
+                (guest_throttle is not None and
+                 (type(guest_throttle) is not int or guest_throttle < 0))):
             raise ValueError("Invalid original Guest WFI snapshot")
         now = dict(time_ns=guest_time_ns, step=guest_step,
                    serviced=guest_serviced, captured=guest_captured)
         old = self.previous
+        if guest_step == 0:
+            self.idle_wfi += 1
         if old is not None:
             if (guest_time_ns < old["time_ns"] or
                     guest_serviced < old["serviced"] or
                     guest_captured < old["captured"]):
                 self.issues.append("ORIGINAL_GUEST_TIME_OR_COUNTER_REGRESSION")
-            if guest_step != old["step"]:
+            if old["step"] == 0 and guest_step != 0:
+                # Original Rel17 starts with step=0 at idle. Its initial
+                # 0->active choice is startup, not feedback TIMG12.
+                # Observe it, but NEVER credit it as a commutation sector.
+                if len(self.startup_seeds) < 64:
+                    self.startup_seeds.append({
+                        "wfi_ns": guest_time_ns,
+                        "initial_guest_step": guest_step,
+                        "guest_serviced": guest_serviced})
+            elif old["step"] != 0 and guest_step == 0:
+                # A neutral command can legitimately stop the motor. A
+                # powered-command shutdown must never pass unnoticed.
+                if guest_throttle is not None and guest_throttle > 1:
+                    self.issues.append("UNEXPECTED_GUEST_IDLE_WITH_NONZERO_THROTTLE")
+                if self.pending is not None:
+                    self.issues.append("COMMUTATION_INTERRUPTED_BY_IDLE")
+                    self.pending = None
+            elif guest_step != old["step"]:
                 if self.pending is not None:
                     self.issues.append("PREVIOUS_COMMUTATION_NEVER_SETTLED")
                     self.pending = None
@@ -134,6 +159,8 @@ class FunctionalSixPhaseAudit:
             "phase_independent_bemf_source_qualified": False,
             "electrical_gate_driver_or_motor_qualified": False,
             "observed_wfi": self.observed_wfi,
+            "observed_idle_wfi": self.idle_wfi,
+            "startup_seeds": self.startup_seeds,
             "settled_commutation_count": len(self.sectors),
             "all_six_guest_steps_observed_with_expected_pwm": complete_cycle,
             "distinct_source_to_return_pairs": [
