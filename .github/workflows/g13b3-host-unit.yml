@@ -51,6 +51,7 @@ on:
       - 'tools/ci/e62_native_dshot_receiver_triage.py'
       - 'tests/test_e62_native_dshot_receiver_triage.py'
       - 'tests/test_e62_native_first_ost3_latch.py'
+      - 'tests/test_e62_native_qtest_pipe_and_trip_log.py'
       - 'tests/test_native_frozen_pwm_convergence.py'
       - 'tests/test_current_continuous_bldc.py'
       - 'tests/test_native_pwm_switching_plan.py'
@@ -136,6 +137,7 @@ jobs:
           python3 tests/test_e62_native_no_wfi_liveness.py
           python3 tests/test_e62_native_dshot_receiver_triage.py
           python3 tests/test_e62_native_first_ost3_latch.py
+          python3 tests/test_e62_native_qtest_pipe_and_trip_log.py
           python3 -m py_compile tests/e62_autonomous_native_motor_probe.py
           python3 tests/test_native_frozen_pwm_convergence.py
           python3 tests/test_current_continuous_bldc.py

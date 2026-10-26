@@ -397,8 +397,19 @@ def run(args):
                            ",addr=0x4000,force-raw=on",
             ]
             # Deliberately NO -S, -gdb, RSP, CPU halt or WFI breakpoints.
-            proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL,
-                                    stderr=subprocess.PIPE)
+            # A child whose stderr is never drained can block on a full
+            # pipe, freezing its QTest responses independently of QEMU
+            # virtual timer correctness. A regular file is non-blocking
+            # with respect to a bounded pipe buffer and survives failure.
+            qemu_log_path = args.artifact.with_suffix(".qemu.log")
+            qemu_log_path.parent.mkdir(parents=True,exist_ok=True)
+            qemu_log_handle = qemu_log_path.open("wb")
+            try:
+                proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL,
+                                        stderr=qemu_log_handle)
+            except BaseException:
+                qemu_log_handle.close()
+                raise
             evidence = {
                 "status": "OPEN_NATIVE_AUTONOMOUS_CLOSED_LOOP_NOT_STRICT_PASS",
                 "original_elf_sha256": observed,
@@ -571,16 +582,31 @@ def run(args):
                       json.dumps(evidence,sort_keys=True),flush=True)
                 raise
             finally:
-                args.artifact.parent.mkdir(parents=True,exist_ok=True)
-                args.artifact.write_text(json.dumps(evidence,indent=2,sort_keys=True)+"\n")
                 if proc.poll() is None:
                     proc.terminate()
                 try:
-                    _, stderr = proc.communicate(timeout=5)
+                    proc.communicate(timeout=5)
                 except subprocess.TimeoutExpired:
                     proc.kill()
-                    _, stderr = proc.communicate()
-                args.artifact.with_suffix(".qemu.log").write_bytes(stderr)
+                    proc.communicate()
+                qemu_log_handle.flush()
+                qemu_log_handle.close()
+                # QTest may already have timed out, so retrieve asynchronous
+                # source-owned trip evidence from the child process file.
+                # Keep the entire original QEMU log as a separate artifact.
+                log_tail = qemu_log_path.read_bytes()[-65536:].decode(
+                    "utf-8",errors="replace")
+                trip_events = [
+                    line for line in log_tail.splitlines()
+                    if "E62_NATIVE_FIRST_OST3 " in line
+                ]
+                evidence["qemu_stderr_log_path"] = str(qemu_log_path)
+                evidence["source_latched_first_ost3_log"] = trip_events[-1:] 
+                evidence["qemu_stderr_log_tail"] = log_tail[-4096:]
+                evidence["qemu_exit_code_after_probe"] = proc.returncode
+                args.artifact.parent.mkdir(parents=True,exist_ok=True)
+                args.artifact.write_text(json.dumps(
+                    evidence,indent=2,sort_keys=True)+"\n")
             return evidence
 
 

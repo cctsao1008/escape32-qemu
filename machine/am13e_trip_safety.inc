@@ -153,6 +153,30 @@ static void am13e_g13b2_trip_update(AM13EMachineState *s)
                     m->first_ost3_dac[i] =
                         s->trip.cmps[i].reg[0x0eU / 2U] & 0xfffU;
                 }
+                /* One event, captured at the exact *hardware latch*
+                 * boundary. QTest may be unresponsive later, especially
+                 * if the original firmware enters nonreturning reset.
+                 * stderr is directed to a draining regular file by the
+                 * native no-WFI probe, never an undrained PIPE.
+                 */
+                error_report("E62_NATIVE_FIRST_OST3 "
+                             "vns=%" PRId64 " pc=0x%08x "
+                             "ipsr=%u primask=%u "
+                             "valid=%x ready=%x trip=%x "
+                             "codes=%u,%u,%u dac=%u,%u,%u "
+                             "xbar=0x%x tzsel=0x%x prior=0x%x "
+                             "mux=0x%x invert=0x%x oc_updates=%u",
+                             m->first_ost3_ns, m->first_ost3_cpu_pc,
+                             m->first_ost3_ipsr, m->first_ost3_primask,
+                             m->first_ost3_oc_valid, m->first_ost3_ready,
+                             m->first_ost3_trip,
+                             m->first_ost3_oc[0], m->first_ost3_oc[1],
+                             m->first_ost3_oc[2],
+                             m->first_ost3_dac[0], m->first_ost3_dac[1],
+                             m->first_ost3_dac[2],
+                             m->first_ost3_xbar, m->first_ost3_tzsel,
+                             m->first_ost3_prior, m->first_ost3_mux,
+                             m->first_ost3_invert, m->oc_publications);
             }
         }
         p->reg[0xb0U / 4U] |= new_ost;

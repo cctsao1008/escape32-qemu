@@ -349,3 +349,30 @@ root cause. Later OST3 cannot rewrite the first captured snapshot.
 Read-only snapshots remain non-atomic only at sampling time; the
 first-trip details are captured atomically inside the original
 virtual-hardware latch transition.
+
+### QTest Timeout before OST3 snapshot (2026-10-27)
+
+A further no-WFI run stopped while reading the simulator's `sent`
+register through QTest, raising `TimeoutError: timed out`. The failure
+occurred before the Guest/Motor snapshots were completed. It therefore
+cannot determine whether physical OST3 occurred, or whether the first
+fault was independent of the OC comparator. Raising the QTest timeout
+again would only delay investigation and must not be treated as a fix.
+
+Source inspection found the probe launched QEMU with
+`stderr=subprocess.PIPE`, without consuming that pipe during execution.
+A sufficiently verbose child can block on a full pipe, making otherwise
+unrelated QTest reads time out. **This is a possible observer deadlock,
+not a verified cause of this particular timeout.** The probe now directs
+QEMU stderr continuously to a regular `.qemu.log` file instead. It never
+reads or modifies Guest CPU state to unblock the simulator.
+
+Native-mode OST3 first-activation now emits exactly one source-owned
+`E62_NATIVE_FIRST_OST3` line with its first-latch virtual timestamp,
+original CPU PC/IPSR/PRIMASK, OC valid/ready/trip masks, three current
+codes, DAC thresholds and Trip route. The regular file survives QTest
+failure. After QEMU terminates, the probe records that event (if any),
+the QEMU stderr tail, and the last successful QTest command in its
+existing JSON. **No event** is distinct from "event occurred but a
+blocked QTest prevented readback". The source-backed OC/TZ protection,
+DMA and original Guest ELF remain unchanged.
