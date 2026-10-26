@@ -123,6 +123,7 @@ jobs:
           python3 tests/test_functional_pwm_clocked_trace.py
           python3 tests/test_functional_six_phase_audit.py
           python3 tests/test_functional_three_phase_bemf.py
+          python3 tests/test_analyze_e62_independent_bemf_cycles.py
           python3 -m py_compile tests/functional_dshot_sitl.py
           python3 tests/test_e62_pinned_baseline.py
           python3 -m py_compile tools/run_pinned_guest.py
