@@ -285,6 +285,42 @@ def _run_guest(args, scenario, evidence):
                             last_cap = step['captured_events']
                             last_service = step['serviced']
                             last_values = step
+                            # Optional, read-only Guest CMPSS route/DAC evidence:
+                            # useful when the independent three-phase source
+                            # produces many mathematical center crossings but
+                            # only a few original CAP1/TIMG12 events. Never
+                            # drive stimulus from any observed Guest route.
+                            if (args.independent_bemf_config is not None and
+                                    native_wfi_count % 100 == 0 and
+                                    len(evidence.setdefault(
+                                        'independent_bemf_guest_route_samples',
+                                        [])) < 24):
+                                native_route = observe_original_bemf_route(
+                                    qtest.read,
+                                    selected_code=step['selected_code'],
+                                    native_armed=bool(step['armed']))
+                                evidence['independent_bemf_guest_route_samples'].append({
+                                    'wfi': native_wfi_count,
+                                    'guest_elapsed_ns': elapsed_ns,
+                                    'guest_step': step['step'],
+                                    'guest_throttle': step['throt'],
+                                    'guest_cap1_total': step['captured_events'],
+                                    'guest_timg12_serviced_total': step['serviced'],
+                                    'selected_phase': native_route.selected_phase,
+                                    'selected_code': native_route.selected_code,
+                                    'expected_edge_falling':
+                                        native_route.expected_edge_falling,
+                                    'active_dac_code': native_route.active_dac_code,
+                                    'stimulus_center_code':
+                                        args.independent_bemf_config.center_code,
+                                    'stimulus_phase_codes':
+                                        ([v & 0xfff for v in feedback.previous_words]
+                                         if feedback.previous_words else None),
+                                    'guest_comparator_route_ready':
+                                        native_route.channel_ready_for_voltage_samples,
+                                    'guest_comparator_route_reason':
+                                        native_route.reason,
+                                })
                             if native_wfi_count % args.pwm_sample_interval == 0:
                                 p = observe_original_pwm(qtest.read, gate_active_level=1)
                                 if p.acceptable_for_plant:
