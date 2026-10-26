@@ -365,6 +365,93 @@ high-volume history collector. Neither pass qualifies physical gate
 driver timing, shoot-through, motor current, external VN or ADC SOC
 phase-voltage mapping.
 
+## Pre-boot ESCape32 motor configuration: 21 pole pairs != `telem_poles`
+
+Before escalating independent three-phase electrical BEMF frequency, confirm
+the **unchanged original Guest** is paired with the selected motor's
+correct firmware configuration.
+
+The pinned original ESCape32 Rel17.3 `src/prog.c` command map has
+`get telem_poles`, `set telem_poles 42`, `save`, and `show`.
+Here `telem_poles` means *number of poles*, **not pole pairs**:
+maxon EC 87 flat UAV 21 pole pairs = **42 poles**. This field is used
+for *mechanical RPM telemetry conversion* in `src/telem.c`; the
+source-pinned native six-step commutation algorithm does not use it.
+
+The reference AM13E board used by the immutable ELF has **no qualified
+physical UNICOMM UART CLI transport**. The firmware has a source
+`am13e_app_io_cli_line()` entry, but that alone does not create a
+Guest-accessible QEMU serial port or prove that `execcmd` ran.
+Do not fake a CLI prompt or patch Guest SRAM.
+
+The repository already implements `tools/sim_motor_cfg.py`: an
+explicit **SIM_ONLY Host-side configuration CLI**. It provisions the
+unchanged ELF's Cfg into the pre-boot Flash image at `0x4000`,
+changing exactly `telem_poles` at verified Cfg offset 57. It does
+not alter motor-control timing, ESCape32 input-mode, Duty Ramp, FOC,
+voltage/current calibration, or native PWM. The opt-in runner
+`--require-motor-profile` enforces byte-for-byte pairing of
+the file with the pinned ELF and profile before QEMU is launched.
+
+```bash
+cd ~/github/escape32-qemu
+git pull --ff-only
+
+python3 -m unittest discover -s tests -p 'test_sim_motor_profiles.py' -v
+
+python3 tools/sim_motor_cfg.py \
+  --sim-only-opt-in \
+  --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+  --motor-profile ecx87-kv210 \
+  --output artifacts/e62-g13b3-ecx87-kv210-cfg-flash.bin
+
+# Independently verify only Cfg offset 57 = 42 pole count.
+python3 - <<'PY'
+from pathlib import Path
+from tools.native_sim_cfg_flash import extract_cfgdata
+elf=Path('baseline/e62-g13b3/firmware/AM13E-rev17.3.elf')
+cfg=extract_cfgdata(elf.read_bytes())
+flash=Path('artifacts/e62-g13b3-ecx87-kv210-cfg-flash.bin').read_bytes()
+different=[i for i in range(len(cfg)) if cfg[i] != flash[i]]
+assert different in ([], [57]), different
+assert flash[57] == 42, flash[57]
+print('PASS_SIM_ONLY_TELEM_POLES_42 unchanged_ELF=True diff_offsets=', different)
+PY
+
+python3 tests/functional_dshot_sitl.py \
+  --qemu .build/qemu-src/build/qemu-system-arm \
+  --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+  --cfg-flash artifacts/e62-g13b3-ecx87-kv210-cfg-flash.bin \
+  --require-motor-profile ecx87-kv210 \
+  --plan scenarios/e62-dshot-v1.json --id T01 \
+  --input-config configs/e62-functional-input.json \
+  --bemf-config configs/e62-functional-bemf.json \
+  --six-phase-audit --max-frames 100 \
+  --artifact artifacts/e62-t01-dshot300-ecx87-profile-smoke.json
+```
+
+The CLI output metadata or SITL evidence `sim_only_motor_cfg` proves
+the **Flash image selection** and original-ELF profile matching.
+It is **not evidence of original firmware UART RX/CLI commands**.
+Full re-run is needed to show this image boots and the Guest runs.
+
+**Next 12S / KV210 benchmarks:** 900, 1040, and 1285 Hz
+electrical represent approximately 2571, 2971, 3671 mechanical RPM
+for 21 pole pairs. These are external input fixture frequencies,
+not parameters to program into Rel17.3. The current fixed-frequency
+input generator range 1–2000 Hz can represent those points. The
+separate motor physics profile still declares `vbus_v=24.0`, so
+**do not claim 12S bus physics** until explicitly reviewed and
+configured; the independent analog-only BEMF experiment contains no
+physical DC-bus/motor voltage coupling. Likewise `prot_cells=12`
+would specify cell-count policy only; it does not set bus voltage.
+
+The original CLI parameter map also contains timing, PWM freq,
+DUTY_RATE, DAMP and overtemperature/current/LVC settings, but these
+are *control/protection settings*, not automatically derived from
+pole pairs or KV. Leave the source-pinned functional baseline intact
+until a target-specific tuning/board contract is established.
+
 ## Next strict boundary
 
 - No real exact-resolution Guest TIMG12->MCPWM AQ/DB chronology pass yet.
