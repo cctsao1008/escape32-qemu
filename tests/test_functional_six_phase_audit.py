@@ -58,6 +58,46 @@ class SixPhaseFunctionalOracle(unittest.TestCase):
                          [0,125_000])
         self.assertEqual(a.sectors[0]["pwm_settled_wfi_ns"],187_500)
 
+    def test_failed_settle_preserves_real_six_pad_first_and_last(self):
+        a = FunctionalSixPhaseAudit(settle_limit_ns=125_000)
+        a.observe(guest_time_ns=0, guest_step=1,
+                  guest_serviced=0, guest_captured=0, guest_throttle=150)
+        a.observe(guest_time_ns=62_500, guest_step=2,
+                  guest_serviced=1, guest_captured=1,
+                  guest_throttle=150, pwm=image(1))
+        a.observe(guest_time_ns=125_000, guest_step=2,
+                  guest_serviced=1, guest_captured=1,
+                  guest_throttle=150, pwm=image(1, good=False))
+        a.observe(guest_time_ns=250_000, guest_step=2,
+                  guest_serviced=1, guest_captured=1, guest_throttle=150)
+        r = a.report()
+        self.assertEqual(r["settled_commutation_count"], 0)
+        self.assertEqual(r["failed_commutation_total"], 1)
+        self.assertEqual(r["observed_guest_step_changes"], 1)
+        f = r["first_failed_commutations"][0]
+        self.assertEqual(f["expected_source_to_return"],
+                         list(ORIGINAL_REL17_ROUTE[2][1]))
+        self.assertEqual(f["pwm_observation_count"], 2)
+        self.assertEqual(f["first_pwm_observation"]["six_high_ticks"],
+                         list(image(1).six_high_ticks))
+        self.assertEqual(f["last_pwm_observation"]["six_high_ticks"],
+                         [0] * 6)
+        self.assertIn("PWM_DID_NOT_SETTLE_WITHIN_WFI_WINDOW", r["issues"])
+        self.assertEqual(r["status"], "OPEN_OR_FAIL_SIX_PHASE_AUDIT")
+
+    def test_unobserved_pwm_is_diagnosed_not_a_sector(self):
+        a = FunctionalSixPhaseAudit(settle_limit_ns=62_500)
+        a.observe(guest_time_ns=0, guest_step=1,
+                  guest_serviced=0, guest_captured=0)
+        a.observe(guest_time_ns=62_500, guest_step=2,
+                  guest_serviced=1, guest_captured=1)
+        a.observe(guest_time_ns=187_500, guest_step=2,
+                  guest_serviced=1, guest_captured=1)
+        failed = a.report()["first_failed_commutations"][0]
+        self.assertEqual(failed["pwm_observation_count"], 0)
+        self.assertIsNone(failed["last_pwm_observation"])
+        self.assertEqual(a.report()["settled_commutation_count"], 0)
+
     def test_missing_timg12_rejects_step_change(self):
         a = FunctionalSixPhaseAudit()
         a.observe(guest_time_ns=0,guest_step=1,
