@@ -503,6 +503,12 @@ def _run_guest(args, scenario, evidence):
                                             'all_six_guest_steps_observed_with_expected_pwm'],
                                       'first_settled_sectors':
                                           phase_report['sectors'][:6],
+                                      'failed_commutation_total':
+                                          phase_report['failed_commutation_total'],
+                                      'first_failed_commutations':
+                                          phase_report['first_failed_commutations'][:3],
+                                      'observed_guest_step_changes':
+                                          phase_report['observed_guest_step_changes'],
                                       'issues': phase_report['issues'],
                                       'scenario_full_duration':
                                           bool(evidence.get('completed_full_duration')),
