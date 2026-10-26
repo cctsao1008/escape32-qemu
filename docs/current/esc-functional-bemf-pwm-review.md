@@ -310,6 +310,61 @@ The full 11-second independent-frequency BEMF acceptance remains
 six-phase oracles; the preceding 11-second *Guest-directed scripted*
 BEMF PASS is a separate experiment.
 
+## Full independent three-phase DShot300 T01 PASS (2026-10-26)
+
+The user executed **unmodified original Rel17.3 ELF** in the non-autonomous
+per-WFI QEMU functional runner, with external DShot300, 100 Hz independently
+generated U/V/W analog inputs and strict source-pinned six-pad PWM oracle.
+Real user-provided final evidence:
+
+- `status = PASS_FUNCTIONAL_INDEPENDENT_THREE_PHASE_BEMF_ONLY`
+- `completed_full_duration = true`
+- 11 seconds of virtual Guest scenario time: 1s 0->90% ramp, 10s 90% hold
+- `dshot_frames_sent = 11000`; increment of original Guest CRC-feed
+  counter observed within stages: ramp 883 + hold 8697 = **9580**,
+  **not** a per-frame 100% verified delivery claim.
+- Ramp: original Guest CAP1 delta **85**, TIMG12 service delta **84**;
+  all six steps seen; stage PASS.
+- Hold: original Guest CAP1 delta **858**, TIMG12 service delta **857**;
+  all six steps seen; stage PASS.
+- `PASS_WFI_BRACKETED_SIX_PHASE_FUNCTIONAL_ONLY` with **941** settled
+  original TIMG12/step-linked six-pad sectors, **0** unsettled sectors,
+  all six source/sink patterns and `issues=[]`.
+- Genuine DShot300 neutral teardown: one physically scheduled neutral frame,
+  CRC valid-feed increased, original `throt=0`, `armed=0`, teardown
+  **62500 ns** excluded from the scenario duration.
+- The final original Guest counters were
+  `valid_frame_feeds=9582`,
+  `captured_events=943`, `scheduled=943`, `serviced=941`.
+  They are different counters with different semantics; do not assert
+  every external frame was decoded or every captured event serviced.
+
+### Acceptance boundary: phase tracking remains unqualified
+
+The independent U/V/W analog source remains the fixed-frequency
+`configs/e62-functional-bemf.json` **100 Hz electrical** test fixture.
+Ideal coherent sensorless six-step switching at 100 electrical Hz
+would produce approximately **600 sector advances per second** after
+lock. Actual HOLD **857 services / 10 seconds = 85.7 sector advances
+per second**; its equivalent nominal six-step cycle rate is
+**~14.28 electrical cycles/s**, *not* the 100 Hz stimulus rate.
+
+The full T01 PASS proves the original Guest runs through valid, powered,
+source-pinned six-pad commutation with independently supplied phase
+signals for the full scripted DShot envelope. It does **NOT** establish
+phase lock, speed tracking, voltage/zero-crossing detection precision,
+real motor stability or correct mechanical RPM. A future strict
+correlation experiment must compare Guest accepted BEMF/CAP1 time,
+Guest selected floating phase and source-pinned expected edge with the
+**independent electrical phase clock**, using an honestly correlated
+timebase; it must not alter BEMF to follow Guest commutation.
+
+The preceding **100-frame** `PASS_QEMU_CLOCKED_INTERNAL_PWM_HISTORY_ONLY`
+is separately qualified; full-duration T01 did not enable that
+high-volume history collector. Neither pass qualifies physical gate
+driver timing, shoot-through, motor current, external VN or ADC SOC
+phase-voltage mapping.
+
 ## Next strict boundary
 
 - No real exact-resolution Guest TIMG12->MCPWM AQ/DB chronology pass yet.
