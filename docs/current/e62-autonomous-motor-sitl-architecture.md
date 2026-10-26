@@ -276,3 +276,44 @@ while the observer is responsive. No Guest WFI, CPU stop, GDB control,
 injecting CAP1, bypassing DShot RX, or moving motor dynamics to the
 host is permitted. The 1kHz continuous DShot scenario remains
 unchanged and original strict gate still OPEN.
+
+### First complete 3,000-frame no-WFI flight-controller run
+
+The user's no-WFI runner has now **completed all 3,000 input frames**
+(`sent=3000, stage=3, status=DONE`), with QEMU alive, no QTest
+command failure and maximum read delay 4 ms. The previous socket
+timeout was a host observation limitation, not a current reproduction.
+
+The native runner failed its original Guest ingress gate:
+`DMA_CH2_ONLY_ONE_FRAME_OR_LESS_DESPITE_PA26_EDGES`,
+`ORIGINAL_GUEST_NO_VALID_DSHOT_FRAME`,
+`DMA_CH2_FIRST_BUFFER_EXHAUSTED_NOT_REARMED_AT_SAMPLE`,
+`DMA0_IRQ_PENDING_MASKED_STATUS_NONZERO_AT_SAMPLE`.
+Separately, original Trip3 was latched. This is **NOT** rotor or BEMF
+qualification, and the source was not altered to force Guest IRQ/DMA
+or clear Trip.
+
+The original SDK `hw_ints.h` establishes `DMA0_INT_IRQn=40`;
+the same firmware build contains `DMA0_IRQHandler` inside
+`mcu/AM13E/hal/command_reply.c`. Original
+`am13e_pa26_rx_dma_irq()` in `command_capture.c` acknowledges the
+half/full DMA flags and drains the Guest RX buffer, rearming CH2 after
+32 captures. QEMU already maps DMA to Cortex-M IRQ40 and raises it
+from `raw & mask`. The observed pending IRQ therefore **does not
+prove an incorrect vector number** or missing NVIC delivery. CPU
+exception/PRIMASK at end must be inspected first.
+
+Use the offline, read-only artifact triage below **before rerunning
+three seconds of simulation**:
+
+```bash
+python3 tools/ci/e62_native_dshot_receiver_triage.py \
+  --artifact artifacts/e62-native-autonomous-smoke.json \
+  --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf
+```
+
+This categorizes active CPU exception (IPSR), global PRIMASK,
+raw/masked DMA status, address fault and first 32-beat exhaustion,
+and symbolizes the read-only CPU PC using the SHA-verified original
+ELF. It never guesses a causal IRQ-mapping fix; Native Motor and
+original firmware remain untouched.
