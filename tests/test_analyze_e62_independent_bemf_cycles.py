@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Host-only negative/positive controls for offline Guest cycle-slip metrics."""
 import unittest
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from tools.analyze_e62_independent_bemf_cycles import analyze
 
 
