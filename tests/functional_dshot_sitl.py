@@ -48,6 +48,8 @@ from tools.functional_guest_clock import OriginalGuestTickClock
 from tools.native_bemf_qualification import (
     audit_native_bemf_arm_elf, observe_original_bemf_route)
 from tools.native_pwm_qualification import observe_original_pwm
+from tools.native_motor_model_profiles import DATASHEET_PROFILES
+from tools.sim_motor_cfg import require_matching_profile_cfg
 from tools.native_runtime_timeline import ECAP1_TSCTR
 from tools.virtual_bldc_feedback import SIM_BEMF_INPUT
 
@@ -617,6 +619,8 @@ def main():
     ap.add_argument('--qemu', type=Path, required=True)
     ap.add_argument('--elf', type=Path, required=True)
     ap.add_argument('--cfg-flash', type=Path, required=True)
+    ap.add_argument('--require-motor-profile', choices=DATASHEET_PROFILES,
+                    help='Fail closed unless SIM_ONLY preboot Cfg image equals pinned ELF plus the selected motor telemetry-poles profile; not a Guest UART CLI')
     ap.add_argument('--plan', type=Path, required=True)
     ap.add_argument('--input-config', type=Path,
                     help='External DShot bitrate selection (default legacy DSHOT600 if omitted)')
@@ -673,6 +677,29 @@ def main():
             not 50 <= args.autonomous_telemetry_interval_ms <= 10000):
         ap.error('Unsafe autonomous observation bound')
     scenario = load_scenario(args.plan,args.case_id)
+    args.sim_only_motor_cfg = None
+    if args.require_motor_profile:
+        try:
+            provision = require_matching_profile_cfg(
+                args.elf.read_bytes(), args.cfg_flash.read_bytes(),
+                args.require_motor_profile)
+        except ValueError as exc:
+            ap.error('SIM_ONLY original Guest motor profile Cfg does not match: ' +
+                     str(exc))
+        args.sim_only_motor_cfg = {
+            'scope': provision['scope'],
+            'motor_profile': provision['motor_profile'],
+            'telem_poles': provision['telem_poles_after'],
+            'changed_cfg_fields': provision['changed_cfg_fields'],
+            'cfg_flash_base': provision['cfg_flash_base'],
+            'cfg_image_sha256': hashlib.sha256(
+                args.cfg_flash.read_bytes()).hexdigest(),
+            'original_guest_elf_unchanged': True,
+            'original_guest_uart_cli_executed': False,
+            'only_telemetry_conversion_changed': True,
+            'not_used_to_drive_independent_three_phase_bemf': True,
+            'motor_plant_activated': False,
+        }
     args.independent_bemf_config = None
     if args.bemf_config is not None:
         try:
@@ -712,6 +739,7 @@ def main():
                     external_input_config=(str(args.input_config) if args.input_config else None),
                     six_phase_audit_requested=bool(args.six_phase_audit),
                     clocked_pwm_history_requested=bool(args.clocked_pwm_history),
+                    sim_only_motor_cfg=args.sim_only_motor_cfg,
                     bemf_input_mode=('INDEPENDENT_THREE_PHASE_FIXED_HZ'
                         if args.independent_bemf_config is not None else
                         'LEGACY_GUEST_ROUTED_SCRIPTED_COMPARATOR'),
