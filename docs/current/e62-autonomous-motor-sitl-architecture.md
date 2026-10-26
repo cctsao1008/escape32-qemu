@@ -83,3 +83,29 @@ must stay zero; motor physics/analog feedback must advance independently.
 wiring and autonomous feedback activity. It does not yet qualify
 CAP1 geometric crossings, rotor stability, numerical convergence,
 unmodeled physical driver behavior, or the original G20 strict gate.
+
+
+### Failure diagnosis: first unqualified no-WFI smoke
+
+The first user run with the correct G13B3 config succeeded in producing
+the 336-byte original-ELF-derived Flash image, changing only
+`telem_poles=14→42`. The no-WFI native probe then failed at the
+combined source-clocked PWM / motor / analog activity predicate, which
+did not identify which signal was absent. This is **NOT** a motor
+stability outcome.
+
+The probe now emits `E62_NATIVE_AUTONOMOUS_SOURCE_COUNTS` with:
+
+- Autonomous PA26 capture/DMA counters, sent frames and stage.
+- QEMU actual MCPWM4 zero/edge journal and AQ/DB validity.
+- Native motor physics tick, actual-switch notification, analog
+  publication, and fault counts.
+- Read-only original Guest SRAM telemetry resolved from the **original
+  ELF's** symbols, never by writing guest state.
+- Bounded phase-transition snapshots and explicit failure reason codes.
+
+On error, `E62_NATIVE_AUTONOMOUS_NO_WFI_FAIL` is printed and an
+artifact retained. No acceptance condition or Motor Physics is
+altered. This audit is asynchronous, cannot claim coherent
+cycle-accurate cross-register snapshots, and does not block Guest CPU
+or rely on any WFI instruction.

@@ -22,6 +22,8 @@ from tools.sitl_autonomous_transport import AUTO_BASE, REG, read_auto
 
 MOTOR_BASE = 0x5ffeb000
 MOTOR_MAGIC = 0x4d323645
+PWM_HISTORY_BASE = 0x5ffe7000
+PWM_HISTORY_MAGIC = 0x48323645
 ORIGINAL_SHA = "05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0"
 
 
@@ -71,6 +73,84 @@ def _motor_snapshot(qtest):
     }
 
 
+def _pwm_source_snapshot(qtest):
+    """Non-silicon read-only QEMU edge/clock journal, NOT duty estimates."""
+    base = PWM_HISTORY_BASE
+    get = lambda off: qtest.read(base+off)
+    if get(0x00) != PWM_HISTORY_MAGIC:
+        raise RuntimeError("Original QEMU clocked MCPWM history unavailable")
+    flags = get(0x04)
+    records = get(0x10)
+    result = {
+        "running": bool(flags & 1),
+        "evaluator_valid": bool(flags & 2),
+        "ring_dropped": bool(flags & 4),
+        "actual_clocked_journal": bool(flags & 8),
+        "records_retained": records,
+        "total_events": get(0x14) | get(0x18) << 32,
+        "dropped_events": get(0x1c) | get(0x20) << 32,
+        "instantaneous_six_pad_mask": get(0x24),
+        "native_pwm_zero_callbacks": get(0x28),
+        "native_pwm_invalid_level_events": get(0x40),
+    }
+    if records:
+        aux = get(0x80+(records-1)*32+0x1c)
+        result["last_journal_gate_word"] = aux & 0x0f
+        result["last_journal_trip_bits"] = (aux >> 9) & 3
+        result["last_journal_level_valid"] = bool(aux & 0x10000)
+    return result
+
+
+def _wiring_failure_reasons(autonomous, motor, pwm):
+    """Pinpoint missing stages; original fail-closed assertion is unchanged."""
+    reasons = []
+    if not autonomous["pa26_capture"] or not autonomous["pa26_dma"]:
+        reasons.append("ORIGINAL_PA26_TIMG4_DMA_INPUT_NOT_SEEN")
+    if not pwm["running"] or not pwm["native_pwm_zero_callbacks"]:
+        reasons.append("NATIVE_MCPWM_CARRIER_NOT_RUNNING")
+    if not pwm["total_events"]:
+        reasons.append("NO_NATIVE_PWM_HISTORY_EVENTS")
+    if not pwm["evaluator_valid"] or pwm["native_pwm_invalid_level_events"]:
+        reasons.append("NATIVE_PWM_AQ_DB_PROVENANCE_INVALID")
+    if not motor["actual_pwm_event_notifications"]:
+        reasons.append("NATIVE_MOTOR_NOT_NOTIFIED_OF_PWM")
+    if not motor["native_1us_physics_ticks"]:
+        reasons.append("NATIVE_MOTOR_VIRTUAL_TIME_NOT_STARTED")
+    if not motor["analog_phase_code_updates"]:
+        reasons.append("NATIVE_BEMF_NEVER_PUBLISHED")
+    if motor["model_fault"] or motor["status_flags"] & 4:
+        reasons.append("NATIVE_MOTOR_FAIL_CLOSED")
+    return reasons
+
+
+def _read_original_guest_telemetry(qtest, symbol_addrs):
+    """Read-only original SRAM through QTest; no CPU stop and no writes."""
+    return {k:qtest.read(v) for k,v in symbol_addrs.items()}
+
+
+def _guest_symbol_addresses(elf):
+    """Optional source-pinned original ELF data addresses; no hand-coded offsets."""
+    import re
+    output = subprocess.run(["arm-none-eabi-nm","-n",str(elf)],
+                            capture_output=True,text=True,check=True,
+                            timeout=15).stdout
+    wanted = ("throt","valid_frame_feeds","step","armed",
+              "captured_events","rejected_events","scheduled","serviced",
+              "calibration_done","runtime_aq_updates",
+              "runtime_pwm_updates","runtime_commit_count")
+    found = {}
+    for row in output.splitlines():
+        m = re.fullmatch(r"([0-9a-fA-F]{8})\\s+([bBdD])\\s+([A-Za-z_][A-Za-z0-9_]*)",
+                         row.strip())
+        if m and m.group(3) in wanted:
+            addr = int(m.group(1),16)
+            if 0x20000000 <= addr < 0x20020000:
+                if m.group(3) in found:
+                    raise RuntimeError("Duplicate original Guest ELF data symbol "+m.group(3))
+                found[m.group(3)] = addr
+    return found
+
+
 def run(args):
     import hashlib
     observed = hashlib.sha256(args.elf.read_bytes()).hexdigest()
@@ -78,6 +158,7 @@ def run(args):
         raise RuntimeError("Pinned original ESCape32 Rel17.3 ELF SHA mismatch")
     if not args.cfg_flash.is_file():
         raise FileNotFoundError(args.cfg_flash)
+    symbol_addrs = _guest_symbol_addresses(args.elf)
     with tempfile.TemporaryDirectory(prefix="e62-native-no-wfi-") as td:
         tmp = Path(td)
         sockpath = tmp/"qtest.sock"
@@ -113,6 +194,9 @@ def run(args):
                 with conn:
                     qtest = QTest(conn)
                     evidence["motor_before"] = _motor_snapshot(qtest)
+                    evidence["pwm_source_before"] = _pwm_source_snapshot(qtest)
+                    evidence["original_guest_before"] = _read_original_guest_telemetry(qtest,symbol_addrs)
+                    evidence["runtime_diagnostics_by_stage"] = []
                     evidence["configured_dshot_frames"] = _configure_autonomous_dshot(
                         qtest, arm_ms=args.arm_ms, drive_ms=args.drive_ms,
                         coast_ms=args.coast_ms,
@@ -125,6 +209,16 @@ def run(args):
                         auto = read_auto(qtest.read)
                         motor = _motor_snapshot(qtest)
                         last = dict(autonomous_dshot=auto, native_motor=motor)
+                        if (not evidence["runtime_diagnostics_by_stage"] or
+                                auto["stage"] != evidence["runtime_diagnostics_by_stage"][-1]["stage"]):
+                            evidence["runtime_diagnostics_by_stage"].append({
+                                "stage": auto["stage"],
+                                "sent_frames":auto["sent"],
+                                "virtual_elapsed_ns": auto["elapsed_ns"],
+                                "original_guest":_read_original_guest_telemetry(qtest,symbol_addrs),
+                                "pwm_source":_pwm_source_snapshot(qtest),
+                                "native_motor":motor,
+                            })
                         if auto["status"] & 4:
                             raise RuntimeError("Autonomous PA26 DShot timer failed: "+
                                                str(auto["error"]))
@@ -137,6 +231,18 @@ def run(args):
                     else:
                         raise TimeoutError("QEMU autonomous virtual clock did not finish")
                     evidence.update(last)
+                    evidence["pwm_source_after"] = _pwm_source_snapshot(qtest)
+                    evidence["original_guest_after"] = _read_original_guest_telemetry(qtest,symbol_addrs)
+                    evidence["wiring_failure_reasons"] = _wiring_failure_reasons(
+                        auto,motor,evidence["pwm_source_after"])
+                    print("E62_NATIVE_AUTONOMOUS_SOURCE_COUNTS "+
+                          json.dumps({
+                              "auto":auto,
+                              "motor":motor,
+                              "pwm":evidence["pwm_source_after"],
+                              "original_guest":evidence["original_guest_after"],
+                              "wiring_failure_reasons":evidence["wiring_failure_reasons"],
+                          },sort_keys=True),flush=True)
                     evidence["real_original_guest_cap1_observed_sim_only"] = (
                         qtest.read(AUTO_BASE+REG["trace_cap1_events"]))
                     evidence["real_timg12_zero_irq_observed_sim_only"] = (
@@ -151,13 +257,17 @@ def run(args):
                     if motor["native_1us_physics_ticks"] == 0 or (
                             motor["actual_pwm_event_notifications"] == 0 or
                             motor["analog_phase_code_updates"] == 0):
-                        raise AssertionError("No source-clocked PWM motor BEMF coupling")
+                        raise AssertionError(
+                            "No source-clocked PWM motor BEMF coupling: "+
+                            ",".join(evidence["wiring_failure_reasons"]))
                     evidence["status"] = (
                         "PASS_NATIVE_AUTONOMOUS_WIRING_SMOKE_SIM_ONLY_"
                         "STRICT_STABILITY_STILL_OPEN")
             except Exception as exc:
                 evidence["status"] = "FAIL_NATIVE_AUTONOMOUS_WIRING_SMOKE"
                 evidence["exception"] = type(exc).__name__+": "+str(exc)
+                print("E62_NATIVE_AUTONOMOUS_NO_WFI_FAIL "+
+                      json.dumps(evidence,sort_keys=True),flush=True)
                 raise
             finally:
                 args.artifact.parent.mkdir(parents=True,exist_ok=True)
