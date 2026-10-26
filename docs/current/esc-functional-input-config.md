@@ -30,12 +30,41 @@ python3 tests/g13b_native_dshot.py \
 
 Run the same command with `--corrupt-crc` and a separate artifact to perform the physical-wire CRC-negative test.
 
-**Qualification: OPEN** until these commands run successfully against the exact original Guest ELF. A Python unit-test PASS does not prove original Guest decoding.
+**One-packet DShot300 native qualification: CONFIRMED.** User-run original Guest logs prove a CRC-valid `0x7d0a` packet (32 captures and DMA beats, callback return 1, decoded throttle 953 from DShot value 1000), and a CRC-invalid `0x7d0b` packet (return 0, no valid feed, throttle unchanged). These do NOT establish repeated packets or closed-loop PWM.
 
 Legacy `g13b_native_dshot.py` with **no** `--input-config` intentionally keeps **DSHOT600** to preserve G13B1 and CI baseline behavior.
 
-## Deliberately not changed in phase 1
+## Functional SITL DShot300: wired, not yet qualified
 
-- Existing T01/T02 (`tests/functional_dshot_sitl.py` and `scenarios/e62-dshot-v1.json`) and QEMU autonomous SITL still use DShot600. They need a separate compatible protocol-selectable runtime integration before claiming DShot300 scenario support.
-- External BEMF/VN-to-ADC generation, PWM six-pad observation and sustained functional commutation are independent work items.
-- No firmware ELF modification, fake RX/IRQ/capture or strict-gate waiver.
+The `tests/functional_dshot_sitl.py` per-WFI runner now accepts `--input-config`. The configured physical bitrate is used for **the original Guest's 250ms physical zero-throttle ARM**, scripted command frames, and zero-command teardown.
+
+The existing `scenarios/e62-dshot-v1.json` still supplies **T01/T02 throttle intentions, 1kHz cadence, and payload mapping**. Its legacy DShot600 label is superseded **only for the physical signal** when `--input-config` is explicit. Artifacts record `external_input_protocol` to prevent ambiguous qualification.
+
+```bash
+mkdir -p artifacts
+python3 tools/native_sim_cfg_flash.py --sim-only-opt-in \
+  --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+  --output artifacts/e62-g13b3-functional-cfg-flash.bin
+
+# Bounded diagnostic smoke: expected OPEN_BOUNDED_SMOKE_NOT_FULL_DURATION,
+# with process exit 1; intentionally NEVER a functional PASS.
+python3 tests/functional_dshot_sitl.py \
+  --qemu .build/qemu-src/build/qemu-system-arm \
+  --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+  --cfg-flash artifacts/e62-g13b3-functional-cfg-flash.bin \
+  --plan scenarios/e62-dshot-v1.json --id T01 \
+  --input-config configs/e62-functional-input.json \
+  --max-frames 100 \
+  --artifact artifacts/e62-t01-dshot300-smoke.json
+```
+
+For a full T01 qualification, omit `--max-frames 100`. Do not borrow the DShot600 T01/T02 PASS results to claim DShot300.
+
+**Autonomous QEMU Functional SITL remains DShot600-only**. Combining `--autonomous` with DShot300 is rejected at CLI validation until the QEMU timer sender is upgraded. Legacy invocation without `--input-config` remains unchanged.
+
+## Pending integration
+
+- DShot300 Guest ARM and sustained functional T01: **OPEN** until run.
+- Independent three-phase BEMF and **VN** voltage source feeding both Comparator and ADC: **OPEN**.
+- Guest PWM output history and correct phase-sequence verification, independent of Guest-selected Comparator phase: **OPEN**.
+- No ELF modification, guest register/SRAM spoofing, artificial CAP1/TIMG12/IRQ or G20 strict-gate waiver.
