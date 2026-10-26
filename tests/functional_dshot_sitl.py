@@ -255,7 +255,8 @@ def _run_guest(args, scenario, evidence):
                                     guest_step=step['step'],
                                     guest_serviced=step['serviced'],
                                     guest_captured=step['captured_events'],
-                                    pwm=phase_image)
+                                    pwm=phase_image,
+                                    guest_throttle=step['throt'])
                                 if native_wfi_count % 1000 == 0:
                                     evidence['six_phase_audit'] = pwm_phase_audit.report()
                             stage_id = _stage_index(scenario, elapsed_ns)
