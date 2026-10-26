@@ -39,6 +39,7 @@ from g7b_pa26_capture import dshot_frame
 from tools.functional_dshot_scenario import (
     load_scenario, ScenarioError, VirtualTimeDShotSequencer)
 from tools.functional_bemf import FunctionalBemf
+from tools.functional_six_phase_audit import FunctionalSixPhaseAudit
 from tools.esc_input_protocol import load_input_config
 from tools.functional_guest_clock import OriginalGuestTickClock
 from tools.native_bemf_qualification import (
@@ -195,6 +196,9 @@ def _run_guest(args, scenario, evidence):
                         feedback = FunctionalBemf(
                             crossing_delay_ns=args.bemf_crossing_delay_us * 1000,
                             amplitude_codes=args.bemf_amplitude_codes)
+                        pwm_phase_audit = (FunctionalSixPhaseAudit(
+                            max_sectors=args.six_phase_max_sectors)
+                            if args.six_phase_audit else None)
                         evidence['scenario_t0'] = {
                             'origin': 'AFTER_ORIGINAL_ZERO_DSHOT_ARM_AT_RUNNING_WFI',
                             'original_ecap_tsctr': first_tsctr,
@@ -236,6 +240,19 @@ def _run_guest(args, scenario, evidence):
                                 raise AssertionError('Original DShot CRC valid counter regressed')
                             if checkpoint != wfi[0]:
                                 raise AssertionError('Original firmware returned to ARM WFI during scenario')
+                            if pwm_phase_audit is not None:
+                                phase_image = (observe_original_pwm(
+                                    qtest.read, gate_active_level=1)
+                                    if pwm_phase_audit.needs_pwm(step['step'])
+                                    else None)
+                                pwm_phase_audit.observe(
+                                    guest_time_ns=elapsed_ns,
+                                    guest_step=step['step'],
+                                    guest_serviced=step['serviced'],
+                                    guest_captured=step['captured_events'],
+                                    pwm=phase_image)
+                                if native_wfi_count % 1000 == 0:
+                                    evidence['six_phase_audit'] = pwm_phase_audit.report()
                             stage_id = _stage_index(scenario, elapsed_ns)
                             stage = stage_records[stage_id]
                             stage['valid_crc_feeds_observed'] += (
@@ -386,6 +403,8 @@ def _run_guest(args, scenario, evidence):
                         evidence['last_guest_state'] = last_values
                         evidence['dshot_frames_sent'] = sequencer.next_index
                         evidence['scripted_bemf_crossings_issued'] = feedback.crossings_issued
+                        if pwm_phase_audit is not None:
+                            evidence['six_phase_audit'] = pwm_phase_audit.report()
                         evidence['guest_clock_observations'] = {
                             'origin_tick': clock.origin_tick,
                             'last_tick': clock.previous_tick,
@@ -413,6 +432,10 @@ def _run_guest(args, scenario, evidence):
                                     issues.append('stage_'+str(row['index']))
                             if feedback.crossings_issued == 0:
                                 issues.append('no_scripted_comparator_crossing')
+                            if (pwm_phase_audit is not None and
+                                evidence['six_phase_audit']['status'] !=
+                                    'PASS_WFI_BRACKETED_SIX_PHASE_FUNCTIONAL_ONLY'):
+                                issues.append('six_phase_commutation_audit')
                             evidence['status'] = ('PASS_FUNCTIONAL_SCRIPTED_BEMF_ONLY'
                                 if not issues else 'FAIL_FUNCTIONAL_SITL_ORACLE')
                             evidence['issues'] = issues
@@ -470,6 +493,9 @@ def main():
     ap.add_argument('--bemf-crossing-delay-us', type=int, default=750)
     ap.add_argument('--bemf-amplitude-codes', type=int, default=128)
     ap.add_argument('--pwm-sample-interval', type=int, default=10)
+    ap.add_argument('--six-phase-audit', action='store_true',
+                    help='Opt-in original Guest TIMG12/step vs six PWM pad phase-pair oracle')
+    ap.add_argument('--six-phase-max-sectors', type=int, default=20000)
     ap.add_argument('--bemf-sample-interval', type=int, default=2)
     ap.add_argument('--teardown-max-wfi', type=int, default=1000)
     args = ap.parse_args()
@@ -481,6 +507,7 @@ def main():
         not 0 <= args.max_frames <= 110000 or
         not 0 <= args.max_lateness_us < 1000 or
         not 1 <= args.pwm_sample_interval <= 1000 or
+        not 6 <= args.six_phase_max_sectors <= 100000 or
         not 1 <= args.bemf_sample_interval <= 1000 or
         not 1 <= args.teardown_max_wfi <= 5000):
         ap.error('Unsafe fixture bounds')
@@ -501,6 +528,8 @@ def main():
             ap.error('Servo PWM is reserved; native servo input is not implemented')
         if scenario.frame_rate_hz != cfg.frame_rate_hz:
             ap.error('DShot input config frame rate differs from scenario schedule')
+    if args.six_phase_audit and args.autonomous:
+        ap.error('Six-phase WFI bracketed audit requires per-WFI Guest mode')
     if args.autonomous and args.input_protocol != 'DSHOT600':
         ap.error('Autonomous QEMU generator is DSHOT600-only; use non-autonomous mode for configured DShot300')
     if args.autonomous_wall_timeout_s == 0:
@@ -513,6 +542,7 @@ def main():
                     status='OPEN_NOT_EXECUTED', scenario=scenario.summary(),
                     external_input_protocol=args.input_protocol,
                     external_input_config=(str(args.input_config) if args.input_config else None),
+                    six_phase_audit_requested=bool(args.six_phase_audit),
                     stages=_make_stage_records(scenario),
                     guest_register_writes=False,
                     guest_ecap_irq_injection=False,
