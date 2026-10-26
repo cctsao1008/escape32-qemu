@@ -77,11 +77,62 @@ phase the Guest selected for BEMF comparator input.
   and its bounded ring / dropped-event contract. Never convert WFI
   brackets to nanosecond edge timing or physical MOSFET measurements.
 
+## DShot300 actual six-pad complementary PWM evidence (2026-10-26)
+
+The 100-frame independent U/V/W native Guest trace showed 7 real Guest
+TIMG12 services and **0** credited sectors in the first revision of
+`FunctionalSixPhaseAudit`. The historical issue was an over-restrictive
+oracle: it treated **any** nonzero source-leg complementary low-side
+carrier duty as an extra independent sink.
+
+The user's actual QEMU read-only six-output snapshots (channels ordered
+`U_H,U_L,V_H,V_L,W_H,W_L`) show:
+
+| Guest step | Expected source -> sink | Six high ticks | Period |
+|---|---|---|---|
+| 1 | W -> V | [0,0,0,4135,115,3988] | 4167 |
+| 2 | U -> V | [115,3988,0,4135,0,0] | 4167 |
+| 3 | U -> W | [152,3951,0,0,0,4135] | 4167 |
+| 4 | V -> W | [0,0,190,3913,0,4135] | 4167 |
+
+In Step 2, U_H=115 and U_L=3988 are **complementary modulation**,
+while V_L=4135 is the sink and W_H/W_L=0 are floating. This is not two
+independent low-side sinks. The source's PWM high/low deadband budgets
+are consistent with the actual modeled high-tick counts:
+`4167 - (115+3988) = 64` and `4167 - 4135 = 32`. This ratio is also
+present in the other given steps. The QEMU hardware uses independently
+delayed A-RED and B-FED; this is a **per-carrier average-high-tick
+signature**, not measured instantaneous shoot-through deadtime.
+
+`tools/functional_pwm_phase_match.py` now implements a strict,
+separate original-six-pad pattern oracle:
+- exactly one high-side source and a distinct near-full-carrier sink;
+- floating third phase has both PWM outputs off;
+- either legacy non-complementary source high with source low off, or
+  a complementary source low with the appropriate 2x sink blanking
+  budget; disallow unintended pad activity and invalid period sums;
+- expected source/sink indices remain decoded from the pinned Rel17
+  original commutation sequence, not from Guest-selected COMP phase.
+
+`tools/functional_six_phase_audit.py` continues to require a genuine
+Guest TIMG12 service, 1->2->3->4->5->6->1 sequence, native PWM Gate and
+Trip qualification, and the existing **750us WFI settle window**. Its
+failure evidence and incomplete bounded smoke status are not relaxed.
+New matcher host-unit tests include the actual six-output vectors,
+wrong-phase/float-pad/budget negative controls and original legacy
+topology.
+
+**The above real snapshots support the root-cause analysis; the changed
+auditor itself still requires an actual QEMU re-run for Guest-backed
+qualification.** Do not claim that the earlier 0-sector trace was a
+PWM malfunction.
+
 ## DShot300 bounded regression experiment (not yet run on modified QEMU)
 
 ```bash
 cd ~/github/escape32-qemu
 git pull --ff-only
+python3 -m unittest discover -s tests -p 'test_functional_pwm_phase_match.py' -v
 python3 -m unittest discover -s tests -p 'test_functional_six_phase_audit.py' -v
 python3 -m unittest discover -s tests -p 'test_functional_three_phase_bemf.py' -v
 
