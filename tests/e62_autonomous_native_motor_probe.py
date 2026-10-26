@@ -140,7 +140,7 @@ def _guest_symbol_addresses(elf):
               "runtime_pwm_updates","runtime_commit_count")
     found = {}
     for row in output.splitlines():
-        m = re.fullmatch(r"([0-9a-fA-F]{8})\\s+([bBdD])\\s+([A-Za-z_][A-Za-z0-9_]*)",
+        m = re.fullmatch(r"([0-9a-fA-F]{8})\s+([bBdD])\s+([A-Za-z_][A-Za-z0-9_]*)",
                          row.strip())
         if m and m.group(3) in wanted:
             addr = int(m.group(1),16)
