@@ -57,6 +57,13 @@ class NativeBemfForensicTests(unittest.TestCase):
         self.assertEqual(result["accepted_cap1_crossing_origin_counts"]
                          ["ROTOR_ANGLE_ZERO_ONLY"],1)
         self.assertFalse(case["cap1_after_crossing_bracket_end_is_exact_filter_delay"])
+        self.assertAlmostEqual(
+            case["selected_geometric_zero_positive_rotation_deg"], 0.)
+        self.assertIsNotNone(
+            case["cap1_rotor_signed_angle_separation_from_zero_deg_estimated"])
+        self.assertTrue(case["cap1_geometric_separation_is_not_elapsed_rotation"])
+        self.assertEqual(result["observed_wfi_speed_sign_changes_before_first_cap1"], 0)
+        self.assertIsNone(result["first_pre_capture_wfi_speed_sign_change"])
         self.assertEqual(case["cap1_to_service_us"],.03)
         self.assertEqual(result["simulated_rotor_direction_reversals"],2)
         self.assertIn("NOT_WAIVED",result["original_guest_strict_rotor_gate"])
@@ -83,6 +90,31 @@ class NativeBemfForensicTests(unittest.TestCase):
                          "SPEED_SIGN_ZERO_ONLY")
         self.assertEqual(got["accepted_cap1_crossing_origin_counts"]
                          ["SPEED_SIGN_ZERO_ONLY"],1)
+        self.assertEqual(
+            got["observed_wfi_speed_sign_changes_before_first_cap1"], 1)
+        first = got["first_pre_capture_wfi_speed_sign_change"]
+        self.assertEqual((first["wfi_before"], first["wfi_after"]), (1,2))
+        self.assertEqual(first["bracket_ns"], [100,200])
+        self.assertEqual(got["first_original_cap1_ns"], 205)
+        self.assertTrue(got["speed_sign_diagnostics_are_WFI_bracketed_not_strict"])
+
+    def test_sign_change_after_cap1_does_not_become_precapture_evidence(self):
+        x = self.fixture()
+        # Keep the first CAP1 at 205 ns. A model reversal between
+        # WFI 3 and WFI 4 cannot be called a precursor to that capture.
+        x["samples"][3]["motor_rpm"] = -100.
+        s = x["samples"][3]
+        ke = x["metadata"]["motor_model"]["bemf_constant_v_per_electrical_rad_s"]
+        pp = x["metadata"]["motor_model"]["pole_pairs"]
+        s["bemf_phase_v"] = [
+            ke*pp*(s["motor_rpm"]*2*math.pi/60)*math.sin(s["electrical_rad"]+off)
+            for off in (0.,-2*math.pi/3,2*math.pi/3)]
+        s["analog_adc_codes"] = [
+            round(4095*(1.65+.02*v)/3.3) for v in s["bemf_phase_v"]]
+        got = audit(x)
+        self.assertGreaterEqual(got["observed_wfi_speed_sign_changes_entire_trace"], 1)
+        self.assertEqual(got["observed_wfi_speed_sign_changes_before_first_cap1"],0)
+        self.assertIsNone(got["first_pre_capture_wfi_speed_sign_change"])
 
     def test_bemf_wrong_code_and_value_rejected(self):
         x=self.fixture()

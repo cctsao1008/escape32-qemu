@@ -74,6 +74,37 @@ def _threshold_crossings(samples):
     return result
 
 
+def _sample_bracketed_speed_sign_changes(samples):
+    """WFI-to-WFI RPM sign changes; NOT exact physical zero timestamps.
+
+    The strict product criterion excludes endpoint-zero or quantized
+    near-zero cases; counts are diagnostic lower bounds, not rotor gates.
+    """
+    flips = []
+    for a, b in zip(samples, samples[1:]):
+        rpm_before, rpm_after = a["motor_rpm"], b["motor_rpm"]
+        if rpm_before * rpm_after < 0:
+            flips.append({
+                "wfi_before": a["wfi"],
+                "wfi_after": b["wfi"],
+                "bracket_ns": [a["t_ns"], b["t_ns"]],
+                "rpm_before": rpm_before,
+                "rpm_after": rpm_after,
+                "time_precision": "WFI_BRACKET_NOT_EXACT_SPEED_ZERO",
+            })
+    return flips
+
+
+def _guest_selected_geometric_zero_deg(step):
+    """Pinned positive-rotation phase/polarity geometric zero only."""
+    code = ORIGINAL_REL17_ROUTE[step][0]
+    phase = (code & 3) - 1
+    if phase not in (0, 1, 2):
+        raise ValueError("Invalid source-selected comparator phase")
+    return math.degrees(((0 if code & 4 else math.pi)
+                         - OFFSETS[phase]) % TWO_PI)
+
+
 def audit(document):
     if (document.get("format")!="e62.sitl.native-wfi.v1" or
             document.get("scope")!="SIM_ONLY_UNCALIBRATED_OPEN_STAR_MODEL"):
@@ -208,8 +239,19 @@ def audit(document):
                 "geometric_phase_sin_sign_changed":rotor_angle_zero,
             }
         cause_counts[cause]+=1
+        cap_angle = _angle_at(samples, times, cap["t_ns"])
+        selected_zero = _guest_selected_geometric_zero_deg(step)
+        # A modulo angle SEPARATION, never proof the rotor passed a
+        # physical zero in time (speed may be negative or reversing).
+        relative_angle = (
+            (cap_angle - selected_zero + 180.) % 360. - 180.
+            if cap_angle is not None else None)
         cases.append({
             "sector":sector,"original_guest_step_before":step,
+            "selected_geometric_zero_positive_rotation_deg": selected_zero,
+            "cap1_rotor_signed_angle_separation_from_zero_deg_estimated":
+                relative_angle,
+            "cap1_geometric_separation_is_not_elapsed_rotation": True,
             "expected_comparator_phase":phase,
             "expected_comparator_edge":expected_edge,
             "actual_cap1_ns":cap["t_ns"],
@@ -230,7 +272,19 @@ def audit(document):
             "time_source":"ORIGINAL_ECAP1_TICKS_WHILE_WFI_ROTOR_IS_INTERPOLATED",
         })
     native=document.get("native_result") or {}
+    speed_flips = _sample_bracketed_speed_sign_changes(samples)
+    first_cap1_ns = min(c["actual_cap1_ns"] for c in cases)
+    pre_capture_flips = [
+        c for c in speed_flips if c["bracket_ns"][1] <= first_cap1_ns
+    ]
     return {
+        "observed_wfi_speed_sign_changes_entire_trace": len(speed_flips),
+        "observed_wfi_speed_sign_changes_before_first_cap1":
+            len(pre_capture_flips),
+        "first_pre_capture_wfi_speed_sign_change":
+            pre_capture_flips[0] if pre_capture_flips else None,
+        "first_original_cap1_ns": first_cap1_ns,
+        "speed_sign_diagnostics_are_WFI_bracketed_not_strict": True,
         "status":"DIAGNOSTIC_ONLY_NOT_ROTOR_STABILITY_QUALIFICATION",
         "profile":model["profile"],
         "original_elf_sha256":metadata.get("elf_sha256"),
@@ -282,7 +336,9 @@ def main():
                   "observed_crossing_origin_classification",
                   "cap1_after_crossing_bracket_end_ns",
                   "actual_cap1_electrical_angle_deg_estimated",
-                  "actual_timg12_electrical_angle_deg_estimated")},
+                  "actual_timg12_electrical_angle_deg_estimated",
+                  "selected_geometric_zero_positive_rotation_deg",
+                  "cap1_rotor_signed_angle_separation_from_zero_deg_estimated")},
                   sort_keys=True),flush=True)
 
 
