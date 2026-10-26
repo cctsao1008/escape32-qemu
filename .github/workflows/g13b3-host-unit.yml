@@ -46,6 +46,7 @@ on:
       - 'tests/test_e62_native_motor_guest_symbols.py'
       - 'tests/test_e62_native_receiver_diagnostics.py'
       - 'tests/test_e62_native_receiver_readiness.py'
+      - 'tests/test_e62_native_continuous_dshot.py'
       - 'tests/test_native_frozen_pwm_convergence.py'
       - 'tests/test_current_continuous_bldc.py'
       - 'tests/test_native_pwm_switching_plan.py'
@@ -127,6 +128,7 @@ jobs:
           python3 tests/test_e62_native_motor_guest_symbols.py
           python3 tests/test_e62_native_receiver_diagnostics.py
           python3 tests/test_e62_native_receiver_readiness.py
+          python3 tests/test_e62_native_continuous_dshot.py
           python3 -m py_compile tests/e62_autonomous_native_motor_probe.py
           python3 tests/test_native_frozen_pwm_convergence.py
           python3 tests/test_current_continuous_bldc.py

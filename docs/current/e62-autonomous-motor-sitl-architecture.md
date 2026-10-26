@@ -209,3 +209,43 @@ after the G13B2 trip plane reset, fixing the formerly zero OC-sample
 valid bits that were visible in `receiver_before`. Physical OC
 gain/offset remain uncalibrated, and original comparator/Trip behavior
 is retained. Successful readiness alone is **not** rotor qualification.
+
+### Correction: Flight Controller continuously streams DShot from boot
+
+The previous "wait for Guest DMA/IRQ/neutral ARM before sending DShot"
+gate was **architecturally wrong**: it tied an independent external
+Flight Controller to internal Guest status, and did not model realistic
+continuous throttle traffic. That artificial gate has been removed
+from the no-GDB/no-WFI native motor probe; original receiver-readiness
+checks are now **diagnostic only**.
+
+A flight controller transmits every 1 ms for the full bounded
+simulation, independently of whether the original Guest has initialized
+the receiver:
+- initial DShot value 0 (neutral/disarmed), default 1.5 s,
+- monotone slow ramp from neutral to 20.0% command, 1 s,
+  native throttle update every 5 ms, frames still sent every 1 ms,
+- continuous 20% command for 300 ms,
+- continuous DShot=0 neutral/coast for final 200 ms.
+
+The exact integers are configurable via `--arm-ms`, `--drive-ms`,
+`--ramp-update-ms`, `--drive-permille`, `--hold-ms`,
+`--coast-ms`. `arm-ms` names **the external neutral duration**;
+it does not bypass or control Guest ARM. QEMU validates exact integer
+0.1%-permille interpolation and sends all wire packets through
+PA26/TIMG4/DMA0. No CPU breakpoint, MMIO DMA rearm, Guest throttle
+write or Guest-ready handshake is permitted.
+
+Electrical effect: initial PWM absent and rotor motion absent imply
+zero real BEMF. When the original Guest starts PWM, the native motor
+integrates actual six-terminal switching, phase currents and torque;
+its rotor-generated BEMF emerges only as the rotor spins. Zero-crossing
+does not require a special artificial fixed-frequency BEMF generator
+or a host WFI timer.
+
+**Important unresolved provenance:** prior 750 continuous frames yielded
+23,616 PA26 captures but only 32 DMA beats, 0 original CRC feeds.
+Receiver could be un-rearmed after first complete DMA frame. Continuous
+streaming is the correct *input architecture*, not proof that Guest
+DMA/IRQ delivery is correct. The new run must inspect read-only IRQ raw,
+CPU IPSR, original callbacks and rearm without changing device behavior.

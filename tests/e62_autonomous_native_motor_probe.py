@@ -31,18 +31,48 @@ MCPWM_BASE = 0x40014000
 ORIGINAL_SHA = "05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0"
 
 
-def _configure_autonomous_dshot(qtest, *, arm_ms, drive_ms, coast_ms,
-                                drive_permille):
-    """PA26 input only; never program Guest registers."""
+
+def _continuous_dshot_stages(*, neutral_ms, ramp_ms, hold_ms, coast_ms,
+                             drive_permille, ramp_update_ms):
+    """External flight-controller profile, entirely independent of Guest.
+
+    Every millisecond sends one DShot600 frame, including during
+    original firmware boot/ARM. Zero is DShot DISARM/neutral; the QEMU
+    G13B7 fixture maps nonzero permille to DShot active throttle 48..2047.
+    Ramp must be exactly representable by the fixture's integer step ABI.
+    """
+    if not 300 <= neutral_ms <= 120000:
+        raise ValueError("Neutral duration must cover realistic cold boot")
+    if not 100 <= ramp_ms <= 120000:
+        raise ValueError("Ramp duration outside bounded fixture range")
+    if not 10 <= hold_ms <= 120000 or not 10 <= coast_ms <= 120000:
+        raise ValueError("Hold/coast duration outside bounded fixture range")
+    if not 1 <= drive_permille <= 1000:
+        raise ValueError("Active DShot ramp endpoint out of range")
+    if (not 1 <= ramp_update_ms <= ramp_ms or
+            ramp_ms % ramp_update_ms or
+            (drive_permille * ramp_update_ms) % ramp_ms):
+        raise ValueError("Ramp updates not exactly representable at 0.1%")
+    return [
+        (neutral_ms, 0, 0, 1),
+        (ramp_ms, 0, drive_permille, ramp_update_ms),
+        (hold_ms, drive_permille, drive_permille, 1),
+        (coast_ms, 0, 0, 1),
+    ]
+
+
+def _configure_autonomous_dshot(qtest, *, neutral_ms, ramp_ms,
+                                hold_ms, coast_ms, drive_permille,
+                                ramp_update_ms):
+    """Stage uninterrupted PA26 DShot traffic, not Guest synchronization."""
     get = lambda key: qtest.read(AUTO_BASE+REG[key])
     put = lambda key, val: qtest.write(AUTO_BASE+REG[key], val)
     if get("magic") != 0x41323645 or get("abi_version") != 4:
         raise RuntimeError("G13B7 original autonomous DShot engine absent")
-    stages = [
-        (arm_ms, 0, 0, 1),
-        (drive_ms, drive_permille, drive_permille, 1),
-        (coast_ms, 0, 0, 1),
-    ]
+    stages = _continuous_dshot_stages(
+        neutral_ms=neutral_ms, ramp_ms=ramp_ms, hold_ms=hold_ms,
+        coast_ms=coast_ms, drive_permille=drive_permille,
+        ramp_update_ms=ramp_update_ms)
     put("command", 3)
     put("stage_count", len(stages))
     for i, (duration, start, end, update) in enumerate(stages):
@@ -169,11 +199,11 @@ def _classify_receive_path(autonomous, original_guest, receiver):
 
 
 def _receiver_ready_reasons(receiver, guest):
-    """Strict Original Guest PA26/TIMG4/DMA/ARM readiness, no host writes.
+    """Diagnostic-only state report, NEVER gates continuous DShot.
 
-    Never equate physical PA26 input capture with valid original DShot
-    CRC. The source-owned DMA0 CH2 must be armed for its first 32
-    samples, and Guest must have enabled IRQ and entered neutral ARM.
+    External flight controllers transmit neutral regardless of whether
+    receiver boot has reached ARM. State is useful evidence, not a
+    permission to start physical wire traffic.
     """
     reasons=[]
     if receiver["cpu_primask"] != 0:
@@ -194,34 +224,6 @@ def _receiver_ready_reasons(receiver, guest):
         reasons.append("NATIVE_CURRENT_SENSE_NOT_VALID_AFTER_RESET")
     return reasons
 
-
-def _wait_for_original_receiver_ready(qtest, proc, symbol_addrs,
-                                      *, wall_timeout_s):
-    """Passive bounded QTest observer, no GDB, WFI or CPU pause."""
-    deadline=time.monotonic()+wall_timeout_s
-    initial=time.monotonic()
-    samples=0
-    last=None
-    while time.monotonic() < deadline:
-        if proc.poll() is not None:
-            raise RuntimeError("Original Guest QEMU exited before DShot receiver ready")
-        receiver=_receiver_snapshot(qtest.read)
-        guest=_read_original_guest_telemetry(qtest,symbol_addrs)
-        reasons=_receiver_ready_reasons(receiver,guest)
-        samples+=1
-        last={"ready":not reasons,"readiness_reasons":reasons,
-              "read_only_receiver":receiver,
-              "read_only_original_guest":guest,
-              "host_observation_count":samples,
-              "host_elapsed_s":round(time.monotonic()-initial,3),
-              "guest_register_writes":False,"guest_cpu_paused":False}
-        if not reasons:
-            return last
-        if "ORIGINAL_CPU_FAULT_EXCEPTION" in reasons:
-            break
-        time.sleep(0.005)
-    raise RuntimeError("Original Guest DShot receiver not ready without "
-                       "external stimulus: "+json.dumps(last,sort_keys=True))
 
 
 def _wiring_failure_reasons(autonomous, motor, pwm):
@@ -350,21 +352,30 @@ def run(args):
                     evidence["original_guest_before"] = _read_original_guest_telemetry(qtest,symbol_addrs)
                     evidence["receiver_before"] = _receiver_snapshot(qtest.read)
                     evidence["runtime_diagnostics_by_stage"] = []
-                    # The previous run queued 750 wire frames while PRIMASK=1
-                    # and DMA CH2 trigger/control were still 0. This caused
-                    # the physical TX fixture to race Guest boot and ARM.
-                    # Wait PASSIVELY for Original DMA/IRQ/ARM initialization.
-                    # Never send even a neutral frame before this condition.
-                    evidence["receiver_ready"] = _wait_for_original_receiver_ready(
-                        qtest,proc,symbol_addrs,
-                        wall_timeout_s=args.receiver_ready_wall_timeout_s)
-                    print("E62_NATIVE_ORIGINAL_RECEIVER_READY "+
-                          json.dumps(evidence["receiver_ready"],sort_keys=True),
-                          flush=True)
+                    # Flight-controller role: transmit real DShot600 from
+                    # boot onward. Guest DMA/IRQ/ARM states are observations,
+                    # never a readiness gate for the external wire source.
+                    evidence["initial_receiver_diagnostic_only"] = (
+                        _receiver_ready_reasons(
+                            evidence["receiver_before"],
+                            evidence["original_guest_before"]))
+                    evidence["dshot_profile"] = {
+                        "source":"INDEPENDENT_EXTERNAL_FLIGHT_CONTROLLER",
+                        "frame_period_ns":1000000,
+                        "continuous_from_initial_stimulus":True,
+                        "original_receiver_ready_not_a_start_condition":True,
+                        "neutral_ms":args.arm_ms,
+                        "ramp_ms":args.drive_ms,
+                        "hold_ms":args.hold_ms,
+                        "coast_ms":args.coast_ms,
+                        "ramp_update_ms":args.ramp_update_ms,
+                        "target_permille":args.drive_permille,
+                    }
                     evidence["configured_dshot_frames"] = _configure_autonomous_dshot(
-                        qtest, arm_ms=args.arm_ms, drive_ms=args.drive_ms,
-                        coast_ms=args.coast_ms,
-                        drive_permille=args.drive_permille)
+                        qtest, neutral_ms=args.arm_ms, ramp_ms=args.drive_ms,
+                        hold_ms=args.hold_ms, coast_ms=args.coast_ms,
+                        drive_permille=args.drive_permille,
+                        ramp_update_ms=args.ramp_update_ms)
                     deadline = time.monotonic() + args.wall_timeout_s
                     last = None
                     while time.monotonic() < deadline:
@@ -423,7 +434,11 @@ def run(args):
                     if auto["bemf_timer_callbacks"] != 0:
                         raise AssertionError("Artificial BEMF generator leaked into native mode")
                     if auto["sent"] != evidence["configured_dshot_frames"]:
-                        raise AssertionError("Not all autonomous DShot inputs delivered")
+                        raise AssertionError("Not all continuous DShot frames delivered")
+                    if (auto["target_frames"] != evidence["configured_dshot_frames"] or
+                            auto["last_dshot"] != 0):
+                        raise AssertionError(
+                            "No full-length neutral-ramp-hold-neutral DShot")
                     if evidence["receiver_failure_reasons"] and (
                         auto["sent"] > 64 and
                         evidence["original_guest_after"].get("valid_frame_feeds") == 0):
@@ -476,22 +491,29 @@ def main():
     parser.add_argument("--cfg-flash", type=Path, required=True)
     parser.add_argument("--artifact", type=Path, default=Path(
         "artifacts/e62-autonomous-native-motor-smoke.json"))
-    parser.add_argument("--arm-ms",type=int,default=400)
-    parser.add_argument("--drive-ms",type=int,default=250)
-    parser.add_argument("--coast-ms",type=int,default=100)
+    parser.add_argument("--arm-ms",type=int,default=1500,
+                        help="Continuous DShot=0 cold-boot/neutral stage")
+    parser.add_argument("--drive-ms",type=int,default=1000,
+                        help="Continuous linear throttle ramp duration")
+    parser.add_argument("--hold-ms",type=int,default=300,
+                        help="Continuous constant-throttle hold duration")
+    parser.add_argument("--coast-ms",type=int,default=200,
+                        help="Continuous DShot=0 final stage")
+    parser.add_argument("--ramp-update-ms",type=int,default=5,
+                        help="Native integer-permille throttle step interval")
     parser.add_argument("--drive-permille",type=int,default=200)
-    parser.add_argument("--wall-timeout-s",type=int,default=120)
-    parser.add_argument("--receiver-ready-wall-timeout-s",
-                        type=int,default=20,
-                        help="Bounded passive Guest DMA/IRQ/neutral ARM readiness wait")
+    parser.add_argument("--wall-timeout-s",type=int,default=180)
     args = parser.parse_args()
-    if (not 300<=args.arm_ms<=5000 or
-        not 10<=args.drive_ms<=3000 or
-        not 10<=args.coast_ms<=3000 or
-        not 1<=args.drive_permille<=1000 or
-        not 10<=args.wall_timeout_s<=600 or
-        not 2<=args.receiver_ready_wall_timeout_s<=120):
-        parser.error("Explicit, bounded virtual timing required")
+    if not 10 <= args.wall_timeout_s <= 600:
+        parser.error("Explicit bounded wall timeout required")
+    try:
+        _continuous_dshot_stages(
+            neutral_ms=args.arm_ms, ramp_ms=args.drive_ms,
+            hold_ms=args.hold_ms, coast_ms=args.coast_ms,
+            drive_permille=args.drive_permille,
+            ramp_update_ms=args.ramp_update_ms)
+    except ValueError as exc:
+        parser.error(str(exc))
     evidence=run(args)
     print("E62_NATIVE_AUTONOMOUS_NO_WFI_PROBE "+
           json.dumps(evidence,sort_keys=True))
