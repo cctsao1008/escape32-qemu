@@ -52,10 +52,38 @@ class NativeBemfForensicTests(unittest.TestCase):
         self.assertEqual(case["expected_comparator_edge"],"rising")
         self.assertTrue(case["capture_has_matching_wfi_crossing_bracket"])
         self.assertEqual(case["cap1_after_crossing_bracket_end_ns"],5)
+        self.assertEqual(case["observed_crossing_origin_classification"],
+                         "ROTOR_ANGLE_ZERO_ONLY")
+        self.assertEqual(result["accepted_cap1_crossing_origin_counts"]
+                         ["ROTOR_ANGLE_ZERO_ONLY"],1)
         self.assertFalse(case["cap1_after_crossing_bracket_end_is_exact_filter_delay"])
         self.assertEqual(case["cap1_to_service_us"],.03)
         self.assertEqual(result["simulated_rotor_direction_reversals"],2)
         self.assertIn("NOT_WAIVED",result["original_guest_strict_rotor_gate"])
+    def test_rpm_reversal_is_not_geometric_rotor_zero(self):
+        d=self.fixture()
+        for idx, sample in enumerate(d["samples"]):
+            # Electrical phase remains positive, but mechanical omega
+            # reverses; such a BEMF zero must NOT be treated as an
+            # electrical-angle crossing.
+            sample["electrical_rad"]=.4+.01*idx
+            sample["motor_rpm"]=-100. if idx==0 else 100.
+            omega=sample["motor_rpm"]*2*math.pi/60
+            pp=21
+            ke=.0030904761904761904
+            sample["bemf_phase_v"]=[
+                ke*pp*omega*math.sin(sample["electrical_rad"]+offset)
+                for offset in (0,-2*math.pi/3,2*math.pi/3)]
+            sample["analog_adc_codes"]=[
+                round(4095*(1.65+.02*value)/3.3)
+                for value in sample["bemf_phase_v"]]
+        got=audit(d)
+        self.assertEqual(got["sector_timing"][0]
+                         ["observed_crossing_origin_classification"],
+                         "SPEED_SIGN_ZERO_ONLY")
+        self.assertEqual(got["accepted_cap1_crossing_origin_counts"]
+                         ["SPEED_SIGN_ZERO_ONLY"],1)
+
     def test_bemf_wrong_code_and_value_rejected(self):
         x=self.fixture()
         x["samples"][1]["analog_adc_codes"][0]+=1

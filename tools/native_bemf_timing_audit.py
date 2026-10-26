@@ -137,6 +137,13 @@ def audit(document):
     cases=[]
     unbracketed=0
     wrong_order=0
+    cause_counts={
+        "ROTOR_ANGLE_ZERO_ONLY":0,
+        "SPEED_SIGN_ZERO_ONLY":0,
+        "BOTH_SIGN_ZERO_AMBIGUOUS":0,
+        "QUANTIZED_THRESHOLD_UNRESOLVED":0,
+        "NO_BOUNDED_BRACKET":0,
+    }
     for sector,events_pair in sorted(grouped.items()):
         cap=events_pair.get("CAP1_ACCEPTED")
         svc=events_pair.get("TIMG12_SERVICED")
@@ -168,6 +175,39 @@ def audit(document):
                    if matches else None)
         if candidate is None:
             unbracketed+=1
+            cause="NO_BOUNDED_BRACKET"
+            sign_diagnostic=None
+        else:
+            # Physical open-star BEMF = Ke * pole_pairs * omega *
+            # sin(electrical_angle + phase_offset). A raw comparator edge
+            # may be caused by omega changing sign, even when the rotor
+            # NEVER crosses that phase's geometric electrical zero.
+            # Classify only with source OBSERVED WFI endpoints.
+            bef=samples[candidate["wfi_before"]-1]
+            aft=samples[candidate["wfi_after"]-1]
+            mech_before=bef["motor_rpm"]
+            mech_after=aft["motor_rpm"]
+            basis_before=math.sin(bef["electrical_rad"]+OFFSETS[phase])
+            basis_after=math.sin(aft["electrical_rad"]+OFFSETS[phase])
+            speed_zero=(mech_before*mech_after<0)
+            rotor_angle_zero=(basis_before*basis_after<0)
+            if rotor_angle_zero and not speed_zero:
+                cause="ROTOR_ANGLE_ZERO_ONLY"
+            elif speed_zero and not rotor_angle_zero:
+                cause="SPEED_SIGN_ZERO_ONLY"
+            elif rotor_angle_zero and speed_zero:
+                cause="BOTH_SIGN_ZERO_AMBIGUOUS"
+            else:
+                cause="QUANTIZED_THRESHOLD_UNRESOLVED"
+            sign_diagnostic={
+                "rpm_before":mech_before,
+                "rpm_after":mech_after,
+                "electrical_sin_before":basis_before,
+                "electrical_sin_after":basis_after,
+                "rpm_sign_changed":speed_zero,
+                "geometric_phase_sin_sign_changed":rotor_angle_zero,
+            }
+        cause_counts[cause]+=1
         cases.append({
             "sector":sector,"original_guest_step_before":step,
             "expected_comparator_phase":phase,
@@ -185,6 +225,8 @@ def audit(document):
                 if candidate is not None else None),
             "cap1_after_crossing_bracket_end_is_exact_filter_delay":False,
             "capture_has_matching_wfi_crossing_bracket":candidate is not None,
+            "observed_crossing_origin_classification":cause,
+            "observed_crossing_sign_evidence":sign_diagnostic,
             "time_source":"ORIGINAL_ECAP1_TICKS_WHILE_WFI_ROTOR_IS_INTERPOLATED",
         })
     native=document.get("native_result") or {}
@@ -204,6 +246,8 @@ def audit(document):
         "max_observed_wfi_gap_ns":max_wfi_gap_ns,
         "accepted_cap1_with_matching_wfi_threshold_bracket":len(cases)-unbracketed,
         "accepted_cap1_without_matching_wfi_threshold_bracket":unbracketed,
+        "accepted_cap1_crossing_origin_counts":cause_counts,
+        "zero_speed_can_trigger_bemf_edge_without_electrical_phase_zero":True,
         "crossings_are_not_instantaneous_or_exhaustive":True,
         "first_16_crossings":crossings[:16],
         "sector_timing":cases,
@@ -235,6 +279,7 @@ def main():
                   "expected_comparator_phase","expected_comparator_edge",
                   "cap1_to_service_us",
                   "capture_has_matching_wfi_crossing_bracket",
+                  "observed_crossing_origin_classification",
                   "cap1_after_crossing_bracket_end_ns",
                   "actual_cap1_electrical_angle_deg_estimated",
                   "actual_timg12_electrical_angle_deg_estimated")},
