@@ -119,6 +119,42 @@ static void am13e_g13b2_trip_update(AM13EMachineState *s)
     if (new_ost) {
         /* Latch until software W1C and underlying source released. */
         uint32_t prior = p->reg[0xb0U / 4U];
+        if (s->native_motor.enabled &&
+            (new_ost & AM13E_G13B2_TZ_OST3) &&
+            !(prior & AM13E_G13B2_TZ_OST3)) {
+            AM13ENativeMotor *m = &s->native_motor;
+            ++m->first_ost3_count;
+            if (!m->first_ost3_seen) {
+                m->first_ost3_seen = true;
+                m->first_ost3_ns = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
+                m->first_ost3_xbar =
+                    s->trip.pwm_g0[AM13E_G13B2_PW_TRIP3];
+                m->first_ost3_tzsel = sel;
+                m->first_ost3_prior = prior;
+                m->first_ost3_mux = s->sim_mc_mux[0];
+                m->first_ost3_invert = s->trip.pwm_invert;
+                if (s->armv7m.cpu) {
+                    CPUARMState *env = &s->armv7m.cpu->env;
+                    m->first_ost3_cpu_pc = env->regs[15];
+                    m->first_ost3_primask = env->v7m.primask[M_REG_NS];
+                    m->first_ost3_ipsr = env->v7m.exception;
+                }
+                for (unsigned i = 0; i < 3U; ++i) {
+                    if (s->trip.oc_valid[i]) {
+                        m->first_ost3_oc_valid |= 1U << i;
+                    }
+                    if (am13e_g13b2_cmp_ready(s, i)) {
+                        m->first_ost3_ready |= 1U << i;
+                    }
+                    if (am13e_g13b2_cmp_trip(s, i)) {
+                        m->first_ost3_trip |= 1U << i;
+                    }
+                    m->first_ost3_oc[i] = s->trip.oc_input[i];
+                    m->first_ost3_dac[i] =
+                        s->trip.cmps[i].reg[0x0eU / 2U] & 0xfffU;
+                }
+            }
+        }
         p->reg[0xb0U / 4U] |= new_ost;
         p->irqs |= AM13E_G13B2_INT_OST;
         am13e_pwm4_irq_update(p);

@@ -13,7 +13,7 @@
  */
 #include <math.h> /* sin, remainder, isfinite, INFINITY, lround */
 #define AM13E_NATIVE_MOTOR_BASE UINT32_C(0x5ffeb000)
-#define AM13E_NATIVE_MOTOR_SIZE 0x60U
+#define AM13E_NATIVE_MOTOR_SIZE 0xa0U
 #define AM13E_NATIVE_MOTOR_STEP_NS INT64_C(1000)
 #define AM13E_NATIVE_MOTOR_MAGIC UINT32_C(0x4d323645) /* E62M */
 #define AM13E_NATIVE_PP 21.0
@@ -34,6 +34,15 @@ static void am13e_native_motor_reset(AM13ENativeMotor *m)
     m->active = m->faulted = m->gate = false;
     m->fault_code = m->mask = m->ticks = m->switch_events = 0U;
     m->analog_updates = 0U;
+    m->first_ost3_seen = false;
+    m->first_ost3_count = m->oc_publications = 0U;
+    m->first_ost3_ns = 0;
+    m->first_ost3_cpu_pc = m->first_ost3_primask = m->first_ost3_ipsr = 0U;
+    m->first_ost3_oc_valid = m->first_ost3_ready = m->first_ost3_trip = 0U;
+    m->first_ost3_xbar = m->first_ost3_tzsel = m->first_ost3_prior = 0U;
+    m->first_ost3_mux = m->first_ost3_invert = 0U;
+    memset(m->first_ost3_oc, 0, sizeof(m->first_ost3_oc));
+    memset(m->first_ost3_dac, 0, sizeof(m->first_ost3_dac));
     m->last_ns = 0;
     memset(m->currents, 0, sizeof(m->currents));
     memset(m->bemf_codes, 0, sizeof(m->bemf_codes));
@@ -248,6 +257,7 @@ static void am13e_native_motor_publish_oc(AM13ENativeMotor *m)
         s->trip.oc_input[n] = code[n];
         s->trip.oc_valid[n] = true;
     }
+    ++m->oc_publications;
     am13e_g13b2_trip_update(s);
 }
 
@@ -349,6 +359,27 @@ static MemTxResult am13e_native_motor_read(void *opaque, hwaddr off,
                                    (2.0*AM13E_NATIVE_PI)); break;
     case 0x34: *v=(uint32_t)lround(m->theta*180000.0/
                                    AM13E_NATIVE_PI); break;
+    case 0x38: *v=m->oc_publications; break;
+    case 0x3c: *v=m->first_ost3_count; break;
+    case 0x40: *v=m->first_ost3_cpu_pc; break;
+    case 0x44: *v=(uint32_t)m->first_ost3_ns; break;
+    case 0x48: *v=(uint64_t)m->first_ost3_ns>>32U; break;
+    case 0x4c: *v=m->first_ost3_oc_valid; break;
+    case 0x50: *v=m->first_ost3_ready; break;
+    case 0x54: *v=m->first_ost3_trip; break;
+    case 0x58: *v=m->first_ost3_xbar; break;
+    case 0x5c: *v=m->first_ost3_tzsel; break;
+    case 0x60: *v=m->first_ost3_oc[0]; break;
+    case 0x64: *v=m->first_ost3_oc[1]; break;
+    case 0x68: *v=m->first_ost3_oc[2]; break;
+    case 0x6c: *v=m->first_ost3_dac[0]; break;
+    case 0x70: *v=m->first_ost3_dac[1]; break;
+    case 0x74: *v=m->first_ost3_dac[2]; break;
+    case 0x78: *v=m->first_ost3_mux; break;
+    case 0x7c: *v=m->first_ost3_primask; break;
+    case 0x80: *v=m->first_ost3_ipsr; break;
+    case 0x84: *v=m->first_ost3_prior; break;
+    case 0x88: *v=m->first_ost3_invert; break;
     default: return MEMTX_ERROR;
     }
     return MEMTX_OK;

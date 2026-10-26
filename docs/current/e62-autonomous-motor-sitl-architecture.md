@@ -317,3 +317,35 @@ raw/masked DMA status, address fault and first 32-beat exhaustion,
 and symbolizes the read-only CPU PC using the SHA-verified original
 ELF. It never guesses a causal IRQ-mapping fix; Native Motor and
 original firmware remain untouched.
+
+### First actual OST3 hardware boundary forensic latch (2026-10-27)
+
+A completed 3,000-frame no-WFI experiment established that original
+Guest CPU ended at `am13e_app_motor_fault_reset()`, with `PRIMASK=1`,
+`IPSR=0`, DMA CH2 raw early/full completion flags still unacknowledged,
+and original MCPWM OST3 latched. Three current-sense fixture reads at
+end were all invalid (zero without bit16 VALID). The original fault
+reset disables IRQ permanently, so pending DMA at the end **does not
+prove a broken NVIC IRQ number**.
+
+We must NOT automatically assert OC-invalidity was the *first* fault:
+a failure in another Original Guest preflight or an early comparator
+configuration transition can enter the same non-returning reset.
+
+To distinguish those cases, native motor mode now captures the
+**first actual physical OST3 latch transition**, before the original
+QEMU TZ flag is set, with an opt-in read-only observer snapshot:
+QEMU virtual ns, CPU PC/IPSR/PRIMASK, original XBAR selection, TZ
+enable, three OC code/VALID flags, three DAC thresholds, comparator
+configuration-ready mask, and comparator trip-result mask. A new
+counter tracks native physical current publications. The latch never
+inserts, clears, suppresses or reschedules IRQ, DMA, Trip, motor rotor
+or Guest state. Existing G13B2/G14 fail-closed behavior is preserved.
+
+The first event can still be **absent** if the Guest triggers
+`am13e_app_motor_fault_reset` through another preflight check rather
+than OST3. That absence is evidence against over-claiming OST3 as the
+root cause. Later OST3 cannot rewrite the first captured snapshot.
+Read-only snapshots remain non-atomic only at sampling time; the
+first-trip details are captured atomically inside the original
+virtual-hardware latch transition.

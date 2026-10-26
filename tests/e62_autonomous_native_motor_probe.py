@@ -155,6 +155,22 @@ def _motor_snapshot(qtest):
         "last_integrated_virtual_ns": get(0x28)|(get(0x2c)<<32),
         "model_rpm_integer": signed(get(0x30)),
         "electrical_milli_degrees_signed": signed(get(0x34)),
+        "native_oc_publications":get(0x38),
+        "ost3_latch_activations":get(0x3c),
+        "first_ost3_cpu_pc":get(0x40),
+        "first_ost3_virtual_ns":get(0x44)|(get(0x48)<<32),
+        "first_ost3_valid_phase_mask":get(0x4c),
+        "first_ost3_comparator_ready_mask":get(0x50),
+        "first_ost3_comparator_trip_mask":get(0x54),
+        "first_ost3_trip3_xbar_route":get(0x58),
+        "first_ost3_tzsel":get(0x5c),
+        "first_ost3_oc_codes":[get(0x60),get(0x64),get(0x68)],
+        "first_ost3_dac_codes":[get(0x6c),get(0x70),get(0x74)],
+        "first_ost3_hp_mux":get(0x78),
+        "first_ost3_cpu_primask":get(0x7c),
+        "first_ost3_cpu_ipsr":get(0x80),
+        "first_ost3_prior_tz_flags":get(0x84),
+        "first_ost3_trip3_xbar_invert":get(0x88),
     }
 
 

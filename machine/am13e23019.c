@@ -364,6 +364,16 @@ typedef struct AM13ENativeMotor {
     int64_t last_ns;
     double currents[3], theta, omega, last_torque;
     uint32_t bemf_codes[3];
+    /* First actual hardware OST3 activation, read-only forensic latch.
+     * No CPU/IRQ/PWM register changes or synthetic comparator writes. */
+    bool first_ost3_seen;
+    uint32_t first_ost3_count, oc_publications;
+    int64_t first_ost3_ns;
+    uint32_t first_ost3_cpu_pc, first_ost3_primask, first_ost3_ipsr;
+    uint32_t first_ost3_oc_valid, first_ost3_ready, first_ost3_trip;
+    uint32_t first_ost3_xbar, first_ost3_tzsel, first_ost3_prior;
+    uint32_t first_ost3_mux, first_ost3_invert;
+    uint32_t first_ost3_oc[3], first_ost3_dac[3];
 } AM13ENativeMotor;
 
 /* G13B1 waveform scheduling only; PA26 physical capture stays G7B-owned. */
