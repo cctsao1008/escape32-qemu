@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""G13B1 original-ELF PA26 DShot600 receive, no firmware input spoofing.
+"""G13B1 original-ELF PA26 DShot receive, no firmware input spoofing.
 
 Fixture writes ONLY 0x5ffe4000 test-only external *wire edge queue*.
 QEMU virtual time applies each level through its existing PA26 GPIO
@@ -30,6 +30,7 @@ from g11_exception_lifecycle import (
 from g7b_pa26_capture import dshot_frame
 from g0_memory import QTest
 from tools.virtual_bldc import GATE_EN, GPIO1_BASE, PINCM_BASE
+from tools.esc_input_protocol import load_input_config, dshot_physical_edges, DSHOT_TICKS
 
 WAVE = 0x5ffe4000
 EXT_OC = 0x5ffe5000  # external analog current input, never a Guest CMPSS write
@@ -61,14 +62,19 @@ def encode_dshot_physical_frame(throttle, *, corrupt_crc=False):
     return frame ^ (1 if corrupt_crc else 0)
 
 
-def queue_dshot600_wire(qtest, throttle, *, allow_zero=False,
-                         reset_completed_wave=False, corrupt_crc=False):
+def queue_dshot_wire(qtest, throttle, *, protocol="DSHOT600",
+                     allow_zero=False, reset_completed_wave=False,
+                     corrupt_crc=False):
+    """Transmit one configured DShot wire packet, never a Guest callback.
+
+    The 100 MHz TIMG4 input clock quantizes 150/300/600 waveforms to
+    integer ticks. The original Guest must prove any claimed support.
+    """
+    if protocol not in DSHOT_TICKS:
+        raise ValueError("Native DShot packet requires DSHOT150/300/600")
     if not (48 <= throttle <= 2047 or (throttle == 0 and allow_zero)):
         raise ValueError("Only genuine DShot throttle or opt-in zero frames")
     if reset_completed_wave:
-        # Reset ONLY the simulator's external PA26 waveform queue, and
-        # only once its previous physical edges fully reached PA26.
-        # Never touch Guest's timer, DMA, ISR, SRAM, or decoded throttle.
         if (qtest.read(WAVE + 0x10) != 0 or
                 qtest.read(WAVE + 0x08) != 32 or
                 qtest.read(WAVE + 0x0c) != 32):
@@ -76,27 +82,28 @@ def queue_dshot600_wire(qtest, throttle, *, allow_zero=False,
         qtest.write(WAVE + 0x20, 1)
         if qtest.read(WAVE + 0x08) != 0 or qtest.read(WAVE + 0x0c) != 0:
             raise AssertionError("SIM_ONLY PA26 wire queue did not reset")
-    # Deliberately corrupt ONLY the transmitted physical wire checksum.
-    # Original Guest must execute its unmodified decoder and reject.
     frame = encode_dshot_physical_frame(throttle, corrupt_crc=corrupt_crc)
     assert qtest.read(WAVE + 0x08) == 0
-    # DShot600 100MHz TIMG4: high bit1=125 ticks, bit0=63 ticks,
-    # period=167 ticks. Each queue entry is a real pin level transition.
-    queue_edge(qtest, 10000, 1)  # quiet idle before first rising edge
-    for bit in range(15, -1, -1):
-        high_ticks = 125 if (frame >> bit) & 1 else 63
-        if bit != 15:
-            queue_edge(qtest, 10 * (167 - previous_high), 1)
-        queue_edge(qtest, 10 * high_ticks, 0)
-        previous_high = high_ticks
+    for delay_ns, level in dshot_physical_edges(frame, protocol):
+        queue_edge(qtest, delay_ns, level)
     if qtest.read(WAVE + 0x08) != 32:
         raise AssertionError("DShot physical edge count is not 32")
-    qtest.write(WAVE + 0x1c, 1)  # QEMU virtual-time arm, not guest write
+    qtest.write(WAVE + 0x1c, 1)
     if qtest.read(WAVE + 0x10) != 1:
         raise AssertionError("External waveform was not scheduled")
     print(f"G13B1_REAL_INPUT_FRAME=0x{frame:04x} "
-          "PA26_EDGES_SCHEDULED=32 ONLY_EXTERNAL_LINE", flush=True)
+          f"PROTOCOL={protocol} PA26_EDGES_SCHEDULED=32 ONLY_EXTERNAL_LINE",
+          flush=True)
     return frame
+
+
+def queue_dshot600_wire(qtest, throttle, *, allow_zero=False,
+                        reset_completed_wave=False, corrupt_crc=False):
+    """Backward-compatible DShot600 fixture used by existing CI and T01/T02."""
+    return queue_dshot_wire(qtest, throttle, protocol="DSHOT600",
+                           allow_zero=allow_zero,
+                           reset_completed_wave=reset_completed_wave,
+                           corrupt_crc=corrupt_crc)
 
 
 def gate_neutral_inactive(rsp):
@@ -118,6 +125,8 @@ def main():
     p.add_argument("--qemu", type=Path, required=True)
     p.add_argument("--elf", type=Path, required=True)
     p.add_argument("--throttle", type=int, default=1000)
+    p.add_argument("--input-config", type=Path,
+                   help="Select DSHOT150/300/600 using JSON; omitted preserves legacy DSHOT600")
     p.add_argument("--corrupt-crc", action="store_true",
                    help="Transmit one genuinely malformed DShot wire frame; require original Guest CRC rejection")
     p.add_argument("--startup-steps", type=int, default=32768)
@@ -129,6 +138,15 @@ def main():
         p.error("Missing QEMU or original native ELF")
     if not 10 <= args.slice_ms <= 1500 or not 1 <= args.runtime_slices <= 30:
         p.error("Bounded slice or runtime-slices invalid")
+    input_protocol = "DSHOT600"
+    if args.input_config is not None:
+        try:
+            cfg = load_input_config(args.input_config)
+        except (OSError, ValueError) as exc:
+            p.error(f"Invalid external input config: {exc}")
+        input_protocol = cfg.protocol
+        if input_protocol == "PWM":
+            p.error("Servo PWM is reserved; no native servo edge/Guest qualification yet")
     app_vector_from_elf(args.elf)
 
     # Target must be an actual firmware function address from the ELF,
@@ -216,8 +234,9 @@ def main():
                         armed.remove(native_wfi)
                     print(f"G13B1_PRE_COMMAND_NATIVE_WFI=0x{observed_wfi:08x}",
                           flush=True)
-                    frame = queue_dshot600_wire(qtest, args.throttle,
-                                                 corrupt_crc=args.corrupt_crc)
+                    frame = queue_dshot_wire(qtest, args.throttle,
+                                             protocol=input_protocol,
+                                             corrupt_crc=args.corrupt_crc)
                     add_bp(rsp, native_callback)
                     armed.add(native_callback)
                     stop, interrupted = continue_bounded(rsp, args.slice_ms)
@@ -247,7 +266,8 @@ def main():
                     remaining = rsp.mem32(DMA + 0x122c)
                     delivered = rsp.mem32(WAVE + 12)
                     gate_off = gate_neutral_inactive(rsp)
-                    record = dict(frame=frame, guest_frame=guest_frame,
+                    record = dict(input_protocol=input_protocol,
+                                  frame=frame, guest_frame=guest_frame,
                                   inverted=inverted, delivered=delivered,
                                   capture=capture, dma_beats=dma_beats,
                                   dma_remaining=remaining,
