@@ -26,6 +26,21 @@ def _source_field_target_deg(guest_step):
     return math.degrees(math.atan2(a, b)) % 360.0
 
 
+def _selected_geometric_edge_deg(guest_step):
+    """Pinned Rel17 comparator geometric edge in POSITIVE rotor direction.
+
+    Computed from the actual selected phase and rising/falling code, not
+    inferred from an idealized commutation order. A negative rotor speed
+    reverses BEMF edge polarity and cannot use this forward-angle screen.
+    """
+    code = ORIGINAL_REL17_ROUTE[guest_step][0]
+    phase = (code & 3) - 1
+    if phase not in (0, 1, 2):
+        raise ValueError("Invalid original Guest comparator selection")
+    edge = (0.0 if code & 4 else math.pi) - OFFSETS[phase]
+    return math.degrees(edge % (2.0 * math.pi))
+
+
 class NativeRotorPhaseAudit:
     """Capture phase-slip causes, not accept/reject the motor trajectory."""
 
@@ -51,6 +66,8 @@ class NativeRotorPhaseAudit:
         self.source_pair_mismatch_samples = 0
         self.max_abs_slip_deg = 0.0
         self.first_direction_reversal = None
+        self.first_sector_selected_edge_behind = None
+        self.sector_selected_edge_behind_count = 0
         self.sector_checkpoints = []
         self.reversal_checkpoints = []
         self.last_snapshot = None
@@ -121,11 +138,32 @@ class NativeRotorPhaseAudit:
         if completed_sectors > self.last_sectors:
             advance = (None if self.last_sector_rotor_deg is None else
                        self.unwrapped_deg - self.last_sector_rotor_deg)
-            self.sector_checkpoints.append({
+            selected_edge_deg = _selected_geometric_edge_deg(guest_step)
+            signed_past_deg = _shortest_deg(theta - selected_edge_deg)
+            # A positive-rotation WFI already PAST the selected source-
+            # defined comparator edge will not see the same-polarity
+            # geometric crossing again until the next electrical cycle.
+            # This is an observed POST-service WFI, NOT an atomic
+            # statement about the earlier ISR/commutation instant.
+            edge_behind = (mechanical_rpm >= self.significant_rpm and
+                           1e-6 < signed_past_deg < 180.0 - 1e-6)
+            sector = {
                 **snapshot,
                 "rotor_advance_since_previous_observed_sector_deg": advance,
+                "selected_guest_comparator_code": ORIGINAL_REL17_ROUTE[guest_step][0],
+                "selected_geometric_edge_deg_positive_rotation": selected_edge_deg,
+                "rotor_past_selected_edge_signed_deg_at_wfi": signed_past_deg,
+                "forward_deg_to_next_same_polarity_geometric_edge_at_wfi":
+                    (selected_edge_deg - theta) % 360.0,
+                "selected_geometric_edge_already_behind_positive_rpm_at_wfi":
+                    edge_behind,
                 "note": "WFI_AFTER_GUEST_SERVICE_NOT_ATOMIC_CAP1_ANGLE",
-            })
+            }
+            self.sector_checkpoints.append(sector)
+            if edge_behind:
+                self.sector_selected_edge_behind_count += 1
+                if self.first_sector_selected_edge_behind is None:
+                    self.first_sector_selected_edge_behind = sector
             self.last_sector_rotor_deg = self.unwrapped_deg
         if completed_sectors >= 6:
             self.post_six_samples += 1
@@ -139,7 +177,10 @@ class NativeRotorPhaseAudit:
             if sign:
                 if self.last_sign and sign != self.last_sign:
                     reversal = {**snapshot, "old_sign": self.last_sign,
-                                "new_sign": sign}
+                                "new_sign": sign,
+                                "preceding_observed_sector_edge_audit":
+                                    (self.sector_checkpoints[-1]
+                                     if self.sector_checkpoints else None)}
                     if self.first_direction_reversal is None:
                         self.first_direction_reversal = reversal
                     if len(self.reversal_checkpoints) < 8:
@@ -166,6 +207,11 @@ class NativeRotorPhaseAudit:
             "source_pair_mismatch_wfi_samples": self.source_pair_mismatch_samples,
             "max_abs_guest_vs_rotor_advance_slip_deg": self.max_abs_slip_deg,
             "first_direction_reversal": self.first_direction_reversal,
+            "first_sector_selected_geometric_edge_behind_positive_rpm":
+                self.first_sector_selected_edge_behind,
+            "observed_sector_selected_geometric_edge_behind_count":
+                self.sector_selected_edge_behind_count,
+            "sector_entry_edge_screen_not_atomic_guest_service": True,
             "first_eight_reversal_checkpoints": self.reversal_checkpoints,
             "observed_sector_checkpoints": self.sector_checkpoints,
             "last_observation": self.last_snapshot,
