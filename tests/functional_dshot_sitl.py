@@ -31,7 +31,7 @@ from g11_exception_lifecycle import (
 from g12_runtime_progress import native_wfi_locations
 from g13b_native_wfi import wait_for_native_main_wfi
 from g13b_native_no_drive import symbol_address
-from g13b_native_dshot import queue_dshot600_wire, WAVE
+from g13b_native_dshot import queue_dshot_wire, WAVE
 from g13b2_native_drive_probe import (
     resolve_original_rel17_wfi_roles, native_original_zero_throttle_arm,
     native_wait_for_bemf_calibration, step_unchanged_native_wfi, EXT_OC)
@@ -39,6 +39,7 @@ from g7b_pa26_capture import dshot_frame
 from tools.functional_dshot_scenario import (
     load_scenario, ScenarioError, VirtualTimeDShotSequencer)
 from tools.functional_bemf import FunctionalBemf
+from tools.esc_input_protocol import load_input_config
 from tools.functional_guest_clock import OriginalGuestTickClock
 from tools.native_bemf_qualification import (
     audit_native_bemf_arm_elf, observe_original_bemf_route)
@@ -163,7 +164,8 @@ def _run_guest(args, scenario, evidence):
                             armed_breakpoints=armed, throt=addresses['throt'],
                             callback=original_callback, slice_ms=args.slice_ms,
                             runtime_slices=args.runtime_slices,
-                            bemf_state=addresses)
+                            bemf_state=addresses,
+                            protocol=args.input_protocol)
                         if not neutral.get('qualified'):
                             raise AssertionError('Original neutral DShot arming not qualified')
                         evidence['native_zero_arming'] = neutral
@@ -206,8 +208,9 @@ def _run_guest(args, scenario, evidence):
                         def send_frame(throttle):
                             # Do not print 110,000 redundant QTest waveform lines.
                             with redirect_stdout(io.StringIO()):
-                                frame = queue_dshot600_wire(
-                                    qtest, throttle, allow_zero=True,
+                                frame = queue_dshot_wire(
+                                    qtest, throttle, protocol=args.input_protocol,
+                                    allow_zero=True,
                                     reset_completed_wave=True)
                             if frame != dshot_frame(throttle):
                                 raise AssertionError('Transmitted DShot CRC mismatch')
@@ -443,6 +446,8 @@ def main():
     ap.add_argument('--elf', type=Path, required=True)
     ap.add_argument('--cfg-flash', type=Path, required=True)
     ap.add_argument('--plan', type=Path, required=True)
+    ap.add_argument('--input-config', type=Path,
+                    help='External DShot bitrate selection (default legacy DSHOT600 if omitted)')
     ap.add_argument('--id', dest='case_id', choices=('T01','T02'), required=True)
     ap.add_argument('--artifact', type=Path, required=True)
     ap.add_argument('--objdump', default='arm-none-eabi-objdump')
@@ -485,6 +490,19 @@ def main():
             not 50 <= args.autonomous_telemetry_interval_ms <= 10000):
         ap.error('Unsafe autonomous observation bound')
     scenario = load_scenario(args.plan,args.case_id)
+    args.input_protocol = 'DSHOT600'
+    if args.input_config is not None:
+        try:
+            cfg = load_input_config(args.input_config)
+        except (OSError, ValueError) as exc:
+            ap.error(f'Invalid ESC external input config: {exc}')
+        args.input_protocol = cfg.protocol
+        if args.input_protocol == 'PWM':
+            ap.error('Servo PWM is reserved; native servo input is not implemented')
+        if scenario.frame_rate_hz != cfg.frame_rate_hz:
+            ap.error('DShot input config frame rate differs from scenario schedule')
+    if args.autonomous and args.input_protocol != 'DSHOT600':
+        ap.error('Autonomous QEMU generator is DSHOT600-only; use non-autonomous mode for configured DShot300')
     if args.autonomous_wall_timeout_s == 0:
         # 8x simulated time + 60s startup margin, capped by guard.
         # T02 110s must not inherit T01's 300s default.
@@ -493,6 +511,8 @@ def main():
     args.artifact.parent.mkdir(parents=True,exist_ok=True)
     evidence = dict(scope='EXPERIMENTAL_FUNCTIONAL_SCRIPTED_BEMF_NO_MOTOR_RPM_PROOF',
                     status='OPEN_NOT_EXECUTED', scenario=scenario.summary(),
+                    external_input_protocol=args.input_protocol,
+                    external_input_config=(str(args.input_config) if args.input_config else None),
                     stages=_make_stage_records(scenario),
                     guest_register_writes=False,
                     guest_ecap_irq_injection=False,
