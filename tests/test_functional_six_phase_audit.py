@@ -58,6 +58,49 @@ class SixPhaseFunctionalOracle(unittest.TestCase):
                          [0,125_000])
         self.assertEqual(a.sectors[0]["pwm_settled_wfi_ns"],187_500)
 
+    def test_actual_dshot300_complementary_pwm_sectors_settle(self):
+        # Production-style QEMU high-tick data from Guest WFI captures.
+        # The first snapshot after TIMG12 is still the prior source pair;
+        # a later native carrier ZERO publishes the new complementary PWM.
+        # Neither changes Guest source step or fabricates an IRQ.
+        real = {
+            1: (0, 0, 0, 4135, 115, 3988),
+            2: (115, 3988, 0, 4135, 0, 0),
+            3: (152, 3951, 0, 0, 0, 4135),
+            4: (0, 0, 190, 3913, 0, 4135),
+        }
+
+        def observed(words):
+            p = image(1)
+            return SimpleNamespace(
+                **dict(vars(p), period_ticks=4167,
+                       six_high_ticks=words))
+
+        a = FunctionalSixPhaseAudit()
+        a.observe(guest_time_ns=0, guest_step=1,
+                  guest_serviced=0, guest_captured=0, guest_throttle=120)
+        for service, new_step in enumerate((2, 3, 4), start=1):
+            old_step = new_step-1
+            t = service * 250_000
+            a.observe(guest_time_ns=t, guest_step=new_step,
+                      guest_serviced=service, guest_captured=service,
+                      guest_throttle=120, pwm=observed(real[old_step]))
+            self.assertEqual(len(a.sectors), service-1)
+            a.observe(guest_time_ns=t+62_500, guest_step=new_step,
+                      guest_serviced=service, guest_captured=service,
+                      guest_throttle=120, pwm=observed(real[new_step]))
+            self.assertEqual(len(a.sectors), service)
+        result = a.report()
+        self.assertEqual(result["settled_commutation_count"], 3)
+        self.assertEqual(result["failed_commutation_total"], 0)
+        self.assertNotIn("PWM_DID_NOT_SETTLE_WITHIN_WFI_WINDOW", result["issues"])
+        for sector in a.sectors:
+            self.assertEqual(
+                sector["measured_pwm_topology"],
+                "COMPLEMENTARY_SOURCE_H_L_AND_SINK_L")
+        # A partial three-sector bounded smoke is NOT an audit PASS.
+        self.assertEqual(result["status"], "OPEN_OR_FAIL_SIX_PHASE_AUDIT")
+
     def test_failed_settle_preserves_real_six_pad_first_and_last(self):
         a = FunctionalSixPhaseAudit(settle_limit_ns=125_000)
         a.observe(guest_time_ns=0, guest_step=1,
