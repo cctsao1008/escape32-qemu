@@ -129,6 +129,12 @@ if auto_target.is_symlink():
     sys.exit('ERROR: generated autonomous SITL path is a symlink')
 if not auto_target.exists() or auto_target.read_bytes() != auto_source.read_bytes():
     auto_target.write_bytes(auto_source.read_bytes())
+motor_source = root / 'machine/am13e_native_motor_plant.inc'
+motor_target = qemu / 'hw/arm/am13e_native_motor_plant.inc'
+if motor_target.is_symlink():
+    sys.exit('ERROR: generated native motor path is a symlink')
+if not motor_target.exists() or motor_target.read_bytes() != motor_source.read_bytes():
+    motor_target.write_bytes(motor_source.read_bytes())
 history_source = root / 'machine/am13e_pwm_history.inc'
 history_target = qemu / 'hw/arm/am13e_pwm_history.inc'
 if history_target.is_symlink():

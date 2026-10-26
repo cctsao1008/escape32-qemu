@@ -167,6 +167,7 @@ static void am13e_pwm4_hist_refresh(AM13ESimPWM *p, uint32_t kind,
                                 previous,c,false);
         }
         p->hist_model_valid = false;
+        am13e_native_motor_pwm_event(p, 0U, false);
         return;
     }
     if (force || mask != previous || !p->hist_model_valid) {
@@ -174,6 +175,7 @@ static void am13e_pwm4_hist_refresh(AM13ESimPWM *p, uint32_t kind,
     }
     p->hist_mask=mask;
     p->hist_model_valid=true;
+    am13e_native_motor_pwm_event(p, mask, true);
     am13e_pwm4_hist_schedule(p);
 }
 
@@ -194,6 +196,7 @@ static void am13e_pwm4_hist_gate(AM13ESimPWM *p)
         am13e_pwm4_hist_log(p,AM13E_H_GATE,p->hist_mask,p->hist_mask,
                             am13e_pwm4_count(p),p->hist_model_valid);
         p->hist_gate_word=now;
+        am13e_native_motor_pwm_event(p, p->hist_mask, p->hist_model_valid);
     }
 }
 

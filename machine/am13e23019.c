@@ -331,6 +331,8 @@ typedef struct AM13ESimPWM {
 } AM13ESimPWM;
 
 static void am13e_pwm4_reset(AM13ESimPWM *p);
+static void am13e_native_motor_pwm_event(AM13ESimPWM *p,
+                                          uint32_t newmask, bool valid);
 
 /* ECAP1 counter/capture and CMPSS0 high comparator, ESC-SIM only. */
 typedef struct AM13ESimFeedback {
@@ -351,6 +353,18 @@ typedef struct AM13ESimFeedback {
     uint32_t caplden_enable_transitions;
     bool reported_ecap, reported_cmp;
 } AM13ESimFeedback;
+
+/* Independent QEMU-virtual-clock, SIM_ONLY native rotor feedback engine. */
+typedef struct AM13ENativeMotor {
+    MemoryRegion observer;
+    QEMUTimer *tick_timer;
+    struct AM13EMachineState *machine;
+    bool enabled, active, faulted, gate;
+    uint32_t fault_code, mask, ticks, switch_events, analog_updates;
+    int64_t last_ns;
+    double currents[3], theta, omega, last_torque;
+    uint32_t bemf_codes[3];
+} AM13ENativeMotor;
 
 /* G13B1 waveform scheduling only; PA26 physical capture stays G7B-owned. */
 typedef struct AM13ETripCMP {
@@ -532,6 +546,7 @@ struct AM13EMachineState {
     MemoryRegion sim_pa26_inject;
     AM13EPA26Wave pa26_wave;
     AM13EAutoSITL auto_sitl; /* SIM_ONLY, autonomous functional stimulus */
+    AM13ENativeMotor native_motor; /* opt-in, NO WFI/GDB motor coupling */
     uint32_t sim_pa26_level;
     uint32_t sim_pa26_transitions;
     uint32_t sim_pa26_captures;
@@ -2222,6 +2237,7 @@ static uint32_t am13e_pwm4_switch_mask(AM13ESimPWM *p,
 }
 
 #include "am13e_pwm_history.inc"
+#include "am13e_native_motor_plant.inc"
 
 static AM13EPWMSwitchPlan am13e_pwm4_switch_plan(AM13ESimPWM *p)
 {
@@ -2347,6 +2363,7 @@ static void am13e_sim_motor_sysctl_reset(AM13EMachineState *s)
     s->sim_mc_power = 0U; /* No motor peripheral powered */
     am13e_pwm4_reset(&s->pwm4);
     am13e_g10_reset(&s->feedback);
+    am13e_native_motor_reset(&s->native_motor);
     s->sim_mc_reset_sticky = 0U;
     memset(s->sim_mc_mux, 0, sizeof(s->sim_mc_mux));
     s->sim_cmpssctl = 0U;
@@ -4002,6 +4019,17 @@ static void am13e_init(MachineState *machine)
     memory_region_add_subregion(sysmem, AM13E_G10_STIM_BASE,
                                 &s->feedback.stimulus_mmio);
 
+    /* Native rotor clock runs in QEMU virtual time, not Guest WFI. */
+    s->native_motor.machine = s;
+    s->native_motor.tick_timer = timer_new_ns(QEMU_CLOCK_VIRTUAL,
+                              am13e_native_motor_tick, &s->native_motor);
+    am13e_native_motor_reset(&s->native_motor);
+    memory_region_init_io(&s->native_motor.observer, NULL,
+                          &am13e_native_motor_ops, &s->native_motor,
+                          "esc-sim-native-motor-readonly", AM13E_NATIVE_MOTOR_SIZE);
+    memory_region_add_subregion(sysmem, AM13E_NATIVE_MOTOR_BASE,
+                                &s->native_motor.observer);
+
     /* WWDT0 virtual counter: GPRCM shared, status/CTL separate. */
     s->wwdt.gprcm = &s->peripheral_gprcm[5];
     s->wwdt.machine = s;
@@ -4188,6 +4216,15 @@ static void am13e_init(MachineState *machine)
     qemu_register_reset(am13e_handoff_reset, s);
 }
 
+static bool am13e_get_native_motor(Object *obj, Error **errp)
+{
+    return AM13E_MACHINE(obj)->native_motor.enabled;
+}
+static void am13e_set_native_motor(Object *obj, bool on, Error **errp)
+{
+    AM13E_MACHINE(obj)->native_motor.enabled = on;
+}
+
 static bool am13e_get_wwdt_bootrst(Object *obj, Error **errp)
 {
     return AM13E_MACHINE(obj)->esc_sim_wwdt_bootrst;
@@ -4229,6 +4266,12 @@ static void am13e_class_init(ObjectClass *oc, void *data)
         "Optional explicit TI RSTCAUSE.ID reset history fixture, "
         "read-to-clear at native 0x400B0220. Default NORST=0 "
         "(no POR/WWDT fault synthesized).");
+    object_class_property_add_bool(oc, "esc-sim-native-motor",
+                                   am13e_get_native_motor,
+                                   am13e_set_native_motor);
+    object_class_property_set_description(oc, "esc-sim-native-motor",
+        "SIM_ONLY uncalibrated ECX87-KV147 virtual-time PWM-to-rotor-to-BEMF "
+        "engine. Independent of Guest WFI and GDB; not physical qualified.");
     object_class_property_add_bool(oc, "esc-sim-wwdt-bootrst",
                                    am13e_get_wwdt_bootrst,
                                    am13e_set_wwdt_bootrst);
@@ -4264,6 +4307,10 @@ static void am13e_finalize(Object *obj)
     if (s->pa26_wave.timer) {
         timer_free(s->pa26_wave.timer);
         s->pa26_wave.timer = NULL;
+    }
+    if (s->native_motor.tick_timer) {
+        timer_free(s->native_motor.tick_timer);
+        s->native_motor.tick_timer = NULL;
     }
     if (s->auto_sitl.dshot_timer) {
         timer_free(s->auto_sitl.dshot_timer);

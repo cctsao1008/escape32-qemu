@@ -568,7 +568,8 @@ static MemTxResult am13e_g10_stim_write(void *opaque, hwaddr off,
                                         MemTxAttrs attrs)
 {
     AM13ESimFeedback *f = opaque;
-    if (!f->machine->esc_sim || size != 4U || off >= 12U || (off & 3U) ||
+    if (f->machine->native_motor.enabled || !f->machine->esc_sim ||
+        size != 4U || off >= 12U || (off & 3U) ||
         (value & ~UINT64_C(0x10fff))) return MEMTX_ERROR;
     unsigned phase = off / 4U;
     /* Previous code restarted the entire digital filter for EVERY

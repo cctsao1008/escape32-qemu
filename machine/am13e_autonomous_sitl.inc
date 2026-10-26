@@ -281,7 +281,7 @@ static bool am13e_auto_feedback_ready(AM13EMachineState *s,
 static void am13e_auto_route_changed(AM13EMachineState *s)
 {
     AM13EAutoSITL *a = &s->auto_sitl;
-    if (!a->running || !a->bemf_timer) {
+    if (!a->running || !a->bemf_timer || s->native_motor.enabled) {
         return;
     }
     AM13ESimFeedback *f = &s->feedback;
@@ -317,7 +317,7 @@ static void am13e_auto_route_changed(AM13EMachineState *s)
 static void am13e_auto_analog_event(void *opaque)
 {
     AM13EAutoSITL *a = opaque;
-    if (!a->running) return;
+    if (!a->running || a->machine->native_motor.enabled) return;
     ++a->bemf_timer_callbacks;
     AM13EMachineState *s = a->machine;
     AM13ESimFeedback *f = &s->feedback;
@@ -595,7 +595,10 @@ static MemTxResult am13e_auto_write(void *opaque, hwaddr off,
         a->start_ns = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + 100U;
         a->running = true;
         timer_mod(a->dshot_timer, a->start_ns);
-        timer_mod(a->bemf_timer, a->start_ns + AM13E_AUTO_ROUTE_REEVAL_NS);
+        /* Native motor mode owns analog feedback: never start timed fake BEMF. */
+        if (!a->machine->native_motor.enabled) {
+            timer_mod(a->bemf_timer, a->start_ns + AM13E_AUTO_ROUTE_REEVAL_NS);
+        }
         return MEMTX_OK;
     }
     if (off == 0x5c && v < AM13E_AUTO_MAX_STAGES) {
