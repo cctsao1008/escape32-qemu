@@ -24,6 +24,10 @@ MOTOR_BASE = 0x5ffeb000
 MOTOR_MAGIC = 0x4d323645
 PWM_HISTORY_BASE = 0x5ffe7000
 PWM_HISTORY_MAGIC = 0x48323645
+DMA_BASE = 0x40021000  # Native DMA0 register window
+ARCH_BASE = 0x5ffe3000  # Existing read-only QEMU G11 architecture observer
+OC_SOURCE_BASE = 0x5ffe5000
+MCPWM_BASE = 0x40014000
 ORIGINAL_SHA = "05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0"
 
 
@@ -99,6 +103,69 @@ def _pwm_source_snapshot(qtest):
         result["last_journal_trip_bits"] = (aux >> 9) & 3
         result["last_journal_level_valid"] = bool(aux & 0x10000)
     return result
+
+
+def _receiver_snapshot(read32):
+    """Read existing hardware and CPU debug viewports; never pause CPU.
+
+    DMA0 CH2 address offsets below are the original QEMU G7 register bank,
+    not invented application SRAM addresses. G11 is read-only by design.
+    These reads are asynchronous diagnostic observations, not atomic state.
+    """
+    def dma(off):
+        return read32(DMA_BASE+off)
+    def arch(off):
+        return read32(ARCH_BASE+off)
+    def signed(value):
+        return value if value < 0x80000000 else value-0x100000000
+    if arch(0x00) != 0x47313101:
+        raise RuntimeError("Native G11 read-only CPU observer missing")
+    return {
+        "dma_irq_mask": dma(0x028),
+        "dma_irq_raw": dma(0x030),
+        "dma_irq_masked": dma(0x038),
+        "dma_ch2_trigger": dma(0x118),
+        "dma_ch2_control": dma(0x220),
+        "dma_ch2_source": dma(0x224),
+        "dma_ch2_destination": dma(0x228),
+        "dma_ch2_remaining": dma(0x22c),
+        "cpu_exception_ipsr": arch(0x1c),
+        "cpu_pc": arch(0x24),
+        "cpu_lr": arch(0x20),
+        "cpu_xpsr": arch(0x28),
+        "cpu_primask": arch(0x04),
+        "cpu_basepri": arch(0x08),
+        "cpu_faultmask": arch(0x0c),
+        "cpu_control": arch(0x10),
+        "gpio_pa26_external": read32(0x5ffe0000),
+        "gpio_pa26_capture_total": read32(0x5ffe0008),
+        "gpio_pa26_dma_beat_total": read32(0x5ffe000c),
+        "native_ost_latched": read32(OC_SOURCE_BASE+0x14),
+        "native_oc_adc_codes": [read32(OC_SOURCE_BASE+4*i) for i in range(3)],
+        "native_pwm_trip_latch": read32(MCPWM_BASE+0xb0),
+    }
+
+
+def _classify_receive_path(autonomous, original_guest, receiver):
+    """Describe an observed halt of input delivery, not its root cause."""
+    reasons=[]
+    frames=autonomous["sent"]
+    capture=autonomous["pa26_capture"]
+    beats=autonomous["pa26_dma"]
+    feeds=original_guest.get("valid_frame_feeds")
+    if frames > 64 and capture >= 64 and beats <= 32:
+        reasons.append("DMA_CH2_ONLY_ONE_FRAME_OR_LESS_DESPITE_PA26_EDGES")
+    if frames > 64 and feeds == 0:
+        reasons.append("ORIGINAL_GUEST_NO_VALID_DSHOT_FRAME")
+    if beats == 32 and receiver["dma_ch2_remaining"] == 0:
+        reasons.append("DMA_CH2_FIRST_BUFFER_EXHAUSTED_NOT_REARMED_AT_SAMPLE")
+    if receiver["dma_irq_masked"]:
+        reasons.append("DMA0_IRQ_PENDING_MASKED_STATUS_NONZERO_AT_SAMPLE")
+    if receiver["cpu_exception_ipsr"] in (3, 4, 5, 6):
+        reasons.append("GUEST_CPU_IN_FAULT_EXCEPTION_AT_SAMPLE")
+    if receiver["native_ost_latched"]:
+        reasons.append("NATIVE_POWER_TRIP_LATCHED_AT_SAMPLE")
+    return reasons
 
 
 def _wiring_failure_reasons(autonomous, motor, pwm):
@@ -225,6 +292,7 @@ def run(args):
                     evidence["motor_before"] = _motor_snapshot(qtest)
                     evidence["pwm_source_before"] = _pwm_source_snapshot(qtest)
                     evidence["original_guest_before"] = _read_original_guest_telemetry(qtest,symbol_addrs)
+                    evidence["receiver_before"] = _receiver_snapshot(qtest.read)
                     evidence["runtime_diagnostics_by_stage"] = []
                     evidence["configured_dshot_frames"] = _configure_autonomous_dshot(
                         qtest, arm_ms=args.arm_ms, drive_ms=args.drive_ms,
@@ -247,6 +315,7 @@ def run(args):
                                 "original_guest":_read_original_guest_telemetry(qtest,symbol_addrs),
                                 "pwm_source":_pwm_source_snapshot(qtest),
                                 "native_motor":motor,
+                                "receiver_and_cpu": _receiver_snapshot(qtest.read),
                             })
                         if auto["status"] & 4:
                             raise RuntimeError("Autonomous PA26 DShot timer failed: "+
@@ -262,6 +331,9 @@ def run(args):
                     evidence.update(last)
                     evidence["pwm_source_after"] = _pwm_source_snapshot(qtest)
                     evidence["original_guest_after"] = _read_original_guest_telemetry(qtest,symbol_addrs)
+                    evidence["receiver_after"] = _receiver_snapshot(qtest.read)
+                    evidence["receiver_failure_reasons"] = _classify_receive_path(
+                        auto,evidence["original_guest_after"],evidence["receiver_after"])
                     evidence["wiring_failure_reasons"] = _wiring_failure_reasons(
                         auto,motor,evidence["pwm_source_after"])
                     print("E62_NATIVE_AUTONOMOUS_SOURCE_COUNTS "+
@@ -271,6 +343,8 @@ def run(args):
                               "pwm":evidence["pwm_source_after"],
                               "original_guest":evidence["original_guest_after"],
                               "wiring_failure_reasons":evidence["wiring_failure_reasons"],
+                              "receiver_and_cpu":evidence["receiver_after"],
+                              "receiver_failure_reasons":evidence["receiver_failure_reasons"],
                           },sort_keys=True),flush=True)
                     evidence["real_original_guest_cap1_observed_sim_only"] = (
                         qtest.read(AUTO_BASE+REG["trace_cap1_events"]))
@@ -283,6 +357,11 @@ def run(args):
                         raise AssertionError("Artificial BEMF generator leaked into native mode")
                     if auto["sent"] != evidence["configured_dshot_frames"]:
                         raise AssertionError("Not all autonomous DShot inputs delivered")
+                    if evidence["receiver_failure_reasons"] and (
+                        auto["sent"] > 64 and
+                        evidence["original_guest_after"].get("valid_frame_feeds") == 0):
+                        raise AssertionError("Original Guest DShot receiver did not rearm/accept frames: "+
+                                             ",".join(evidence["receiver_failure_reasons"]))
                     if motor["native_1us_physics_ticks"] == 0 or (
                             motor["actual_pwm_event_notifications"] == 0 or
                             motor["analog_phase_code_updates"] == 0):

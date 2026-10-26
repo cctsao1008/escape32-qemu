@@ -154,3 +154,32 @@ by sort order. Missing symbols are reported separately. The authoritative
 MCPWM4 timer/history, PA26, native plant and CMPSS evidence remains
 untouched. Unit negative-controls:
 `python3 tests/test_e62_native_motor_guest_symbols.py`.
+
+### No-WFI PA26/DMA receive-path isolation (2026-10-27)
+
+An original-ELF native simulation transmitted **750** DShot frames and
+observed **23,616** PA26 TIMG4 captures but only **32 DMA CH2 beats**.
+Original Guest `valid_frame_feeds=0`, `throt=0`, `step=0`,
+`calibration_done=0`, native MCPWM zero callbacks=0, rotor physics ticks=0.
+The native motor **never started**, so these are not BEMF or rotor
+stability measurements.
+
+A 32-beat limit suggests one entire DShot receive-buffer transfer
+occurred, after which the **Guest-owned** DMA/IRQ rearm pipeline did not
+deliver subsequent packets. This is *not* proof of a DMA0 IRQ controller
+defect, HardFault, or stale RX buffer, because the old snapshot omitted
+DMA IRQ raw/mask, CH2 remaining/control and CPU exception state.
+
+The updated no-WFI probe now samples existing QEMU read-only G11
+architectural observer (PC/IPSR/PRIMASK/BASEPRI/FAULTMASK) and the real
+DMA0 CH2 MMIO registers (IRQ mask/raw/masked, trigger, control, src/dst,
+remaining). It also captures actual OC ADC sample validity and OST3
+latch. All readings are asynchronous, non-atomic and **read-only**.
+No CPU halt, WFI breakpoints, Guest memory writes, DMA reloads,
+force-fed PWM, or synthetic BEMF are allowed.
+
+A fail-closed receive classifier explicitly distinguishes an exhausted
+first CH2 buffer from a pending DMA interrupt and a CPU Fault, instead
+of claiming downstream PWM/BEMF missing is the primary defect.
+Do not attempt physical rotor or strict G20 qualification until the
+original Guest itself demonstrates valid physical DShot CRC input.
