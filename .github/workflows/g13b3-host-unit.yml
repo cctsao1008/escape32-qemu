@@ -74,6 +74,10 @@ jobs:
   host-only:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    # Tests invoked as python3 tests/foo.py need repository-root tools/ imports.
+    # No test assertions, original Guest, QEMU, or strict gates are altered.
+    env:
+      PYTHONPATH: .
     permissions:
       contents: read
     steps:
