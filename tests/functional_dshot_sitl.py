@@ -431,9 +431,46 @@ def _run_guest(args, scenario, evidence):
                         evidence['last_guest_virtual_elapsed_ns'] = elapsed_ns
                         evidence['last_guest_state'] = last_values
                         evidence['dshot_frames_sent'] = sequencer.next_index
+                        # Backward-compatible numeric field; independent
+                        # generator counts center-reference phase sign changes,
+                        # NOT native CMPSS output, CAP1 or accepted crossings.
                         evidence['scripted_bemf_crossings_issued'] = feedback.crossings_issued
+                        if args.independent_bemf_config is not None:
+                            evidence['independent_bemf_diagnostics'] = {
+                                'phase_center_sign_changes': feedback.crossings_issued,
+                                'waveform_samples_written_or_checked':
+                                    feedback.injected_samples,
+                                'simulated_center_code':
+                                    args.independent_bemf_config.center_code,
+                                'electrical_hz':
+                                    args.independent_bemf_config.electrical_hz,
+                                'native_cmp_edges_measured_here': False,
+                                'source_cap1_count_from_guest':
+                                    last_values['captured_events'],
+                                'native_capture_acceptance_not_implied': True,
+                            }
                         if pwm_phase_audit is not None:
-                            evidence['six_phase_audit'] = pwm_phase_audit.report()
+                            phase_report = pwm_phase_audit.report()
+                            evidence['six_phase_audit'] = phase_report
+                            print('E62_FUNCTIONAL_SIX_PHASE_AUDIT ' +
+                                  json.dumps({
+                                      'status': phase_report['status'],
+                                      'scope': phase_report['scope'],
+                                      'observed_idle_wfi':
+                                          phase_report['observed_idle_wfi'],
+                                      'startup_seed_count':
+                                          len(phase_report['startup_seeds']),
+                                      'settled_commutation_count':
+                                          phase_report['settled_commutation_count'],
+                                      'six_distinct_pairs_observed':
+                                          phase_report[
+                                            'all_six_guest_steps_observed_with_expected_pwm'],
+                                      'first_settled_sectors':
+                                          phase_report['sectors'][:6],
+                                      'issues': phase_report['issues'],
+                                      'scenario_full_duration':
+                                          bool(evidence.get('completed_full_duration')),
+                                  }, sort_keys=True),flush=True)
                         evidence['guest_clock_observations'] = {
                             'origin_tick': clock.origin_tick,
                             'last_tick': clock.previous_tick,
