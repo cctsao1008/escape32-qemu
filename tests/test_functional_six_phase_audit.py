@@ -87,6 +87,53 @@ class SixPhaseFunctionalOracle(unittest.TestCase):
         self.assertIn("UNSUPPORTED_GUEST_STEP_OR_TIMG12_SEQUENCE",
                       a.report()["issues"])
 
+    def test_original_guest_zero_step_is_legal_idle_without_fake_sector(self):
+        a = FunctionalSixPhaseAudit()
+        for n in range(6):
+            a.observe(guest_time_ns=n * 62_500,
+                      guest_step=0, guest_serviced=0,
+                      guest_captured=0, guest_throttle=0)
+        self.assertEqual(a.report()["observed_idle_wfi"], 6)
+        self.assertEqual(a.report()["settled_commutation_count"], 0)
+        self.assertEqual(a.report()["startup_seeds"], [])
+        self.assertEqual(a.report()["status"], "OPEN_OR_FAIL_SIX_PHASE_AUDIT")
+        self.assertNotIn("UNSUPPORTED_GUEST_STEP_OR_TIMG12_SEQUENCE",
+                         a.report()["issues"])
+
+    def test_original_idle_to_step_one_seeds_but_does_not_credit(self):
+        a = FunctionalSixPhaseAudit()
+        a.observe(guest_time_ns=0, guest_step=0, guest_serviced=0,
+                  guest_captured=0, guest_throttle=0)
+        self.assertFalse(a.needs_pwm(1))
+        a.observe(guest_time_ns=62_500, guest_step=1, guest_serviced=0,
+                  guest_captured=0, guest_throttle=30)
+        self.assertEqual(a.report()["settled_commutation_count"], 0)
+        self.assertEqual(a.report()["startup_seeds"][0]["initial_guest_step"], 1)
+        self.assertEqual(a.report()["issues"],
+                         ["NO_COMPLETE_POWERED_SIX_STEP_SEQUENCE"])
+        a.observe(guest_time_ns=125_000, guest_step=2, guest_serviced=1,
+                  guest_captured=1, guest_throttle=30, pwm=image(2))
+        self.assertEqual(a.report()["settled_commutation_count"], 1)
+
+    def test_original_idle_to_arbitrary_valid_source_step_is_seed_only(self):
+        a = FunctionalSixPhaseAudit()
+        a.observe(guest_time_ns=0, guest_step=0, guest_serviced=0,
+                  guest_captured=0)
+        a.observe(guest_time_ns=62_500, guest_step=4, guest_serviced=0,
+                  guest_captured=0)
+        self.assertEqual(a.report()["startup_seeds"][0]["initial_guest_step"], 4)
+        self.assertNotIn("UNSUPPORTED_GUEST_STEP_OR_TIMG12_SEQUENCE",
+                         a.report()["issues"])
+
+    def test_unexpected_idle_under_throttle_cannot_be_silent(self):
+        a = FunctionalSixPhaseAudit()
+        a.observe(guest_time_ns=0, guest_step=1, guest_serviced=0,
+                  guest_captured=0, guest_throttle=100)
+        a.observe(guest_time_ns=62_500, guest_step=0, guest_serviced=0,
+                  guest_captured=0, guest_throttle=100)
+        self.assertIn("UNEXPECTED_GUEST_IDLE_WITH_NONZERO_THROTTLE",
+                      a.report()["issues"])
+
     def test_not_an_exact_edge_or_rotor_qualification(self):
         a = FunctionalSixPhaseAudit()
         r = a.report()
