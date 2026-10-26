@@ -244,6 +244,72 @@ executed**. Host unit tests with mock QEMU historical ABI data cannot
 substitute for that run. Even a successful trace qualifies QEMU
 internal callback chronology, **not** real hardware gate timing.
 
+## Guest-backed QEMU clocked history 100-frame PASS (2026-10-26)
+
+The user actually executed `--clocked-pwm-history --six-phase-audit`
+with independent U/V/W and physical-format DShot300. The saved JSON
+reports:
+
+- outer test: `OPEN_BOUNDED_SMOKE_NOT_FULL_DURATION` (100 frames);
+- `PASS_WFI_BRACKETED_SIX_PHASE_FUNCTIONAL_ONLY`;
+- `PASS_QEMU_CLOCKED_INTERNAL_PWM_HISTORY_ONLY`;
+- 6,869 records collected on genuine native Guest Running-WFI stops,
+  comprising 3,632 `QEMU_CLOCKED_AQ_DB_EDGE` callbacks and 1,215
+  `QEMU_ORIGINAL_PWM_ZERO_CALLBACK` records;
+- zero in-scope missing ring events; zero internal same-leg H/L
+  simultaneously HIGH masks; zero model-invalid events; no collection
+  error;
+- the collected journal begins at record sequence 1258 after arming:
+  **prior QEMU records are outside this qualification scope**.
+
+Observed ZERO #301 at global QEMU virtual timestamp 13,769,005,288 ns
+and ZERO #1515 at 13,870,184,484 ns. Their interval divided by
+1,214 periods is ~83,343.65 ns per carrier, approximately **11.9985
+kHz** in this observed simulator run. This is a measurement of **QEMU
+callback timing**, not a requested ESC switching-frequency specification
+or a physical hardware PWM frequency qualification.
+
+Clocked event timestamps are global QEMU virtual ns; Guest Step and
+`observed_guest_elapsed_ns` are **WFI observation context**, not the
+instant Guest TIMG12 serviced. Do not claim exact ISR-to-edge latency
+without a shared timestamp domain and IRQ event marker. The history
+tracks internal QEMU AQ/DB outputs, not physical gate voltage.
+
+### Next run: 11-second independent U/V/W functional T01
+
+Run full T01 with `--six-phase-audit` **but without**
+`--clocked-pwm-history`. The latter stores every event; the 100k
+default record limit is unsuitable for the full-duration 11-second
+trace and should not be silently truncated.
+
+```bash
+set -o pipefail
+python3 tests/functional_dshot_sitl.py \
+  --qemu .build/qemu-src/build/qemu-system-arm \
+  --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+  --cfg-flash artifacts/e62-g13b3-functional-cfg-flash.bin \
+  --plan scenarios/e62-dshot-v1.json --id T01 \
+  --input-config configs/e62-functional-input.json \
+  --bemf-config configs/e62-functional-bemf.json \
+  --six-phase-audit \
+  --artifact artifacts/e62-t01-dshot300-independent-bemf-full.json \
+  2>&1 | tee artifacts/e62-t01-dshot300-independent-bemf-full.log
+
+jq '{
+  status,completed_full_duration,external_input_protocol,
+  bemf_input_mode,dshot_frames_sent,stages,teardown,
+  six_phase_audit: (.six_phase_audit | {
+    status,settled_commutation_count,failed_commutation_total,
+    all_six_guest_steps_observed_with_expected_pwm,issues
+  }),issues,last_guest_state
+}' artifacts/e62-t01-dshot300-independent-bemf-full.json
+```
+
+The full 11-second independent-frequency BEMF acceptance remains
+**OPEN** until genuine Guest execution completes all stage/neutral and
+six-phase oracles; the preceding 11-second *Guest-directed scripted*
+BEMF PASS is a separate experiment.
+
 ## Next strict boundary
 
 - No real exact-resolution Guest TIMG12->MCPWM AQ/DB chronology pass yet.
