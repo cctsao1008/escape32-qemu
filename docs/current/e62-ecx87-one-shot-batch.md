@@ -98,3 +98,90 @@ timestamps and reports the distribution of apparent skipped **whole**
 external electrical cycles between consecutive steps. It adds no
 QEMU instrumentation, Guest writes, or synthetic IRQ. It does not
 claim exact comparator edge timestamps or measured physical rotor phase.
+
+## 2026-10-26 Offline full-Guest cycle-slip evidence and edge-phase alignment
+
+The user ran the committed offline `analyze_e62_independent_bemf_cycles.py`
+against three **original Guest full 11s** saved JSON files.
+
+| Independent fixture | Consecutive Hold Guest intervals | Intervals matching 60deg + exactly one extra full electrical cycle | Median Guest electrical degrees / step | Normal expected |
+|---|---:|---:|---:|---:|
+| 900 Hz | 7,713 | 7,694 (99.75%) | 425.25deg | 60deg |
+| 1,040 Hz | 8,914 | 8,894 (99.78%) | 421.20deg | 60deg |
+| 1,285 Hz | 11,014 | 10,129 (91.97%) | 433.6875deg | 60deg |
+
+The classification threshold in the offline diagnostic is a **wide
+±0.20 electrical cycles = ±72deg**. The original WFI sample clock is
+16 kHz / 62.5us per tick, equivalent to 20.25deg at 900 Hz, 23.4deg
+at 1,040 Hz and 28.91deg at 1,285 Hz. The 885 unclassified
+1,285 Hz intervals are **not independently proven to be malformed
+captures, phase swaps or dropouts**.
+
+**Stronger specific phasor alignment from original Guest
+`six_phase_audit.sectors`, 1,040Hz hold at t ~6.21s:**
+
+Original ELF BEMF code/route order, decoded from pinned
+`src/commutation.h` and `mcu/AM13E/hal/motor_bemf.c`,
+is Step1 U rising (theta=0deg), Step2 W falling (60deg),
+Step3 V rising (120deg), Step4 U falling (180deg),
+Step5 W rising (240deg), Step6 V falling (300deg).
+Independent fixture defines U=sin(theta), V=sin(theta-120deg),
+W=sin(theta+120deg), with theta(0)=-30deg. The original
+`--bemf-config` is a fixture, **not the Guest's target rotor speed**.
+The following theta values are derived from that independent
+fixture's exact declared t0 and the saved real Guest WFI
+`commutation_wfi_bracket_ns` end:
+
+| Guest service | Step after service | WFI t (s) | Fixed-fixture theta | Next selected zero crossing | Angle forward to next crossing |
+|---:|---:|---:|---:|---:|---:|
+| 5501 | 6 | 6.2107500 | 34.8deg | V falling at 300deg | 265.2deg |
+| 5502 | 1 | 6.2119375 | 119.4deg | U rising at 0deg | 240.6deg |
+| 5503 | 2 | 6.2130000 | 157.2deg | W falling at 60deg | 262.8deg |
+| 5504 | 3 | 6.2140625 | 195.0deg | V rising at 120deg | 285.0deg |
+| 5505 | 4 | 6.2152500 | 279.6deg | U falling at 180deg | 260.4deg |
+| 5506 | 5 | 6.2163125 | 317.4deg | W rising at 240deg | 282.6deg |
+| 5507 | 6 | 6.2175000 | 42.0deg | V falling at 300deg | 258.0deg |
+
+For example, when Guest enters Step6, the expected V falling
+crossing at 300deg of the *current* external BEMF cycle has already
+passed by approximately **94.8deg**; another V falling is about
+**265.2deg** away. The **6 Guest sectors in 6.75ms** cover about
+**7.02** independent electrical cycles. WFI time brackets are
+not exact original CMPSS/ECAP IRQ timestamps, so do not present
+these phase angles as exact hardware switching-edge measurements.
+
+This **directly demonstrates a late-entered externally imposed
+crossing window**, and explains how a fixed periodic input can
+produce the observed 7-cycles-per-6-sectors alias. It does NOT
+prove whether the lateness was introduced by Rel17 `ival` filtering,
+`bemf_zero_cross_delay()`, delayed TIMG12 service, PWM ZERO
+publication and rearm, or physical rotor phase mismatch in this
+independent fixture. The original Rel17
+`bemf_zero_cross_delay()` applies
+`ival=(capture+3*ival)/4` and schedules a **positive**
+post-CAP1 commutation delay
+`(ival-(ival*cfg.timing>>5))/2` before the next sector; that
+is a plausible self-reinforcing late-step mechanism if the
+original Guest estimator has already accepted an entire extra
+electrical revolution. **No unverified exact default timing
+or root-cause attribution is asserted.**
+
+Engineering implication: all three full Guest Functional SITL
+results stay PASS, and the average-rate screens stay FAIL.
+Do not 'fix' the result by dividing counters by 7, multiplying
+Guest RPM by 7, changing `telem_poles`, artificially moving the
+independent input crossings to Guest step times, inverting
+comparator polarities, or skipping original CAP1/IRQ/blanking.
+The input is not coupled to a motor plant: it is prescribed
+external sine, while the original ESC controls outputs without
+being able to change this source's rotor angle.
+
+**Next causal experiment (only if actually needed):** one short
+Guest run instrumenting *read-only* timestamps of source-pinned
+original CAP1 accepted, TIMG12 scheduled/service, MCPWM ZERO
+publication, and native CMPSS arm/rearm; compare each to the
+next fixed-fixture target crossing on one coherent QEMU virtual
+clock. Without these event timestamps, the exact stage responsible
+for missing a crossing cannot be distinguished from phase-rate
+totals alone. An improved *motor-coupled* 12S model is a different
+experiment, requiring physical parameter/voltage/load contracts.
