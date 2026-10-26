@@ -40,6 +40,8 @@ from tools.functional_dshot_scenario import (
     load_scenario, ScenarioError, VirtualTimeDShotSequencer)
 from tools.functional_bemf import FunctionalBemf
 from tools.functional_six_phase_audit import FunctionalSixPhaseAudit
+from tools.functional_three_phase_bemf import (
+    load_three_phase_config, IndependentThreePhaseBemf)
 from tools.esc_input_protocol import load_input_config
 from tools.functional_guest_clock import OriginalGuestTickClock
 from tools.native_bemf_qualification import (
@@ -193,9 +195,12 @@ def _run_guest(args, scenario, evidence):
                         last_feeds = last_values['valid_frame_feeds']
                         last_cap = last_values['captured_events']
                         last_service = last_values['serviced']
-                        feedback = FunctionalBemf(
-                            crossing_delay_ns=args.bemf_crossing_delay_us * 1000,
-                            amplitude_codes=args.bemf_amplitude_codes)
+                        feedback = (IndependentThreePhaseBemf(
+                            args.independent_bemf_config)
+                            if args.independent_bemf_config is not None else
+                            FunctionalBemf(
+                                crossing_delay_ns=args.bemf_crossing_delay_us * 1000,
+                                amplitude_codes=args.bemf_amplitude_codes))
                         pwm_phase_audit = (FunctionalSixPhaseAudit(
                             max_sectors=args.six_phase_max_sectors)
                             if args.six_phase_audit else None)
@@ -293,10 +298,23 @@ def _run_guest(args, scenario, evidence):
                                         event['scheduled_virtual_ns'] == stage['start_ns']):
                                     print('E62_FUNCTIONAL_DSHOT_SENT ' +
                                           json.dumps(event,sort_keys=True),flush=True)
-                            # Only real original comparator/ECAP readiness
-                            # authorizes synthetic analog stimulus.
-                            if (native_wfi_count % args.bemf_sample_interval == 0 and
-                                    step['armed'] == 1 and step['throt'] > 1):
+                            # Independent three-phase waveform never uses
+                            # Guest selected_code, selected phase, comparator
+                            # polarity, or internal DAC as its phase reference.
+                            # The legacy guest-directed scripted comparator
+                            # mode is unchanged unless --bemf-config is set.
+                            if args.independent_bemf_config is not None:
+                                if (native_wfi_count %
+                                        args.independent_bemf_config.sample_wfi_interval == 0
+                                        and step['throt'] > 1):
+                                    vector = feedback.evaluate(guest_ns=elapsed_ns)
+                                    feedback.inject(vector, qtest.write,
+                                                    qtest.read, SIM_BEMF_INPUT)
+                                elif step['throt'] <= 1:
+                                    feedback.neutralize(qtest.write, qtest.read,
+                                                        SIM_BEMF_INPUT)
+                            elif (native_wfi_count % args.bemf_sample_interval == 0
+                                  and step['armed'] == 1 and step['throt'] > 1):
                                 route = observe_original_bemf_route(
                                     qtest.read, selected_code=step['selected_code'],
                                     native_armed=True)
@@ -436,7 +454,10 @@ def _run_guest(args, scenario, evidence):
                                 evidence['six_phase_audit']['status'] !=
                                     'PASS_WFI_BRACKETED_SIX_PHASE_FUNCTIONAL_ONLY'):
                                 issues.append('six_phase_commutation_audit')
-                            evidence['status'] = ('PASS_FUNCTIONAL_SCRIPTED_BEMF_ONLY'
+                            evidence['status'] = ((
+                                'PASS_FUNCTIONAL_INDEPENDENT_THREE_PHASE_BEMF_ONLY'
+                                if args.independent_bemf_config is not None
+                                else 'PASS_FUNCTIONAL_SCRIPTED_BEMF_ONLY')
                                 if not issues else 'FAIL_FUNCTIONAL_SITL_ORACLE')
                             evidence['issues'] = issues
                         print('E62_FUNCTIONAL_SITL_VERDICT ' +
@@ -491,6 +512,8 @@ def main():
                     help='Guest virtual time between async stage telemetry samples')
     ap.add_argument('--max-lateness-us', type=int, default=500)
     ap.add_argument('--bemf-crossing-delay-us', type=int, default=750)
+    ap.add_argument('--bemf-config', type=Path,
+                    help='Opt-in independent U/V/W waveform (no external VN, no ADC mapping claim)')
     ap.add_argument('--bemf-amplitude-codes', type=int, default=128)
     ap.add_argument('--pwm-sample-interval', type=int, default=10)
     ap.add_argument('--six-phase-audit', action='store_true',
@@ -517,6 +540,12 @@ def main():
             not 50 <= args.autonomous_telemetry_interval_ms <= 10000):
         ap.error('Unsafe autonomous observation bound')
     scenario = load_scenario(args.plan,args.case_id)
+    args.independent_bemf_config = None
+    if args.bemf_config is not None:
+        try:
+            args.independent_bemf_config = load_three_phase_config(args.bemf_config)
+        except (OSError, ValueError) as exc:
+            ap.error(f'Invalid independent three-phase BEMF config: {exc}')
     args.input_protocol = 'DSHOT600'
     if args.input_config is not None:
         try:
@@ -528,6 +557,8 @@ def main():
             ap.error('Servo PWM is reserved; native servo input is not implemented')
         if scenario.frame_rate_hz != cfg.frame_rate_hz:
             ap.error('DShot input config frame rate differs from scenario schedule')
+    if args.independent_bemf_config is not None and args.autonomous:
+        ap.error('Independent three-phase BEMF requires per-WFI Guest mode')
     if args.six_phase_audit and args.autonomous:
         ap.error('Six-phase WFI bracketed audit requires per-WFI Guest mode')
     if args.autonomous and args.input_protocol != 'DSHOT600':
@@ -543,6 +574,11 @@ def main():
                     external_input_protocol=args.input_protocol,
                     external_input_config=(str(args.input_config) if args.input_config else None),
                     six_phase_audit_requested=bool(args.six_phase_audit),
+                    bemf_input_mode=('INDEPENDENT_THREE_PHASE_FIXED_HZ'
+                        if args.independent_bemf_config is not None else
+                        'LEGACY_GUEST_ROUTED_SCRIPTED_COMPARATOR'),
+                    external_vn_simulated=False,
+                    adc_bemf_channel_mapping_qualified=False,
                     stages=_make_stage_records(scenario),
                     guest_register_writes=False,
                     guest_ecap_irq_injection=False,
