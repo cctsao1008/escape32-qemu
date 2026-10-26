@@ -21,6 +21,8 @@ for HZ in 900 1040 1285; do
     BEMF="$PREFIX-bemf.json"
     EVIDENCE="$PREFIX-evidence.json"
     LOG="$PREFIX.log"
+    # Never reuse last run\x27s PASS when this Guest fails before JSON write.
+    rm -f "$EVIDENCE" "$PREFIX-exit-code.txt"
     python3 - "$HZ" "$TEMPLATE" "$BEMF" <<'PY'
 import json,sys
 from pathlib import Path
