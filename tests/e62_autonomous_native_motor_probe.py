@@ -128,27 +128,54 @@ def _read_original_guest_telemetry(qtest, symbol_addrs):
     return {k:qtest.read(v) for k,v in symbol_addrs.items()}
 
 
-def _guest_symbol_addresses(elf):
-    """Optional source-pinned original ELF data addresses; no hand-coded offsets."""
+_GUEST_DIAGNOSTIC_SYMBOLS = (
+    "throt", "valid_frame_feeds", "step", "armed",
+    "captured_events", "rejected_events", "scheduled", "serviced",
+    "calibration_done", "runtime_aq_updates",
+    "runtime_pwm_updates", "runtime_commit_count",
+)
+
+
+def _resolve_unambiguous_guest_symbols(nm_output):
+    """Only optional, uniquely addressable original SRAM values are readable.
+
+    Several C file-static variables (e.g. 'armed') share names in the
+    original Rel17.3 ELF. Guessing one of those addresses would mislabel
+    Guest telemetry. Exclude ambiguous entries without affecting native
+    PWM, motor, DShot, or strict evidence gates.
+    """
     import re
-    output = subprocess.run(["arm-none-eabi-nm","-n",str(elf)],
-                            capture_output=True,text=True,check=True,
-                            timeout=15).stdout
-    wanted = ("throt","valid_frame_feeds","step","armed",
-              "captured_events","rejected_events","scheduled","serviced",
-              "calibration_done","runtime_aq_updates",
-              "runtime_pwm_updates","runtime_commit_count")
-    found = {}
-    for row in output.splitlines():
-        m = re.fullmatch(r"([0-9a-fA-F]{8})\s+([bBdD])\s+([A-Za-z_][A-Za-z0-9_]*)",
-                         row.strip())
-        if m and m.group(3) in wanted:
-            addr = int(m.group(1),16)
-            if 0x20000000 <= addr < 0x20020000:
-                if m.group(3) in found:
-                    raise RuntimeError("Duplicate original Guest ELF data symbol "+m.group(3))
-                found[m.group(3)] = addr
-    return found
+    import collections
+    addresses = collections.defaultdict(set)
+    pattern = re.compile(
+        r"([0-9a-fA-F]{8,16})\s+([bBdD])\s+([A-Za-z_][A-Za-z0-9_]*)"
+    )
+    for row in nm_output.splitlines():
+        m = pattern.fullmatch(row.strip())
+        if not m or m[3] not in _GUEST_DIAGNOSTIC_SYMBOLS:
+            continue
+        addr = int(m[1], 16)
+        if 0x20000000 <= addr < 0x20020000:
+            addresses[m[3]].add(addr)
+    unique = {name: next(iter(locations))
+              for name, locations in addresses.items()
+              if len(locations) == 1}
+    unavailable = {
+        name: ("AMBIGUOUS_STATIC_ELF_SYMBOL" if len(addresses[name]) > 1
+               else "ORIGINAL_ELF_SYMBOL_NOT_AVAILABLE")
+        for name in _GUEST_DIAGNOSTIC_SYMBOLS
+        if name not in unique
+    }
+    return unique, unavailable
+
+
+def _guest_symbol_addresses(elf):
+    """Resolve read-only Guest SRAM diagnostics; ambiguous is not fatal."""
+    output = subprocess.run(
+        ["arm-none-eabi-nm", "-n", str(elf)],
+        capture_output=True, text=True, check=True, timeout=15
+    ).stdout
+    return _resolve_unambiguous_guest_symbols(output)
 
 
 def run(args):
@@ -158,7 +185,7 @@ def run(args):
         raise RuntimeError("Pinned original ESCape32 Rel17.3 ELF SHA mismatch")
     if not args.cfg_flash.is_file():
         raise FileNotFoundError(args.cfg_flash)
-    symbol_addrs = _guest_symbol_addresses(args.elf)
+    symbol_addrs, unresolved_guest_symbols = _guest_symbol_addresses(args.elf)
     with tempfile.TemporaryDirectory(prefix="e62-native-no-wfi-") as td:
         tmp = Path(td)
         sockpath = tmp/"qtest.sock"
@@ -188,6 +215,8 @@ def run(args):
                 "motor_mode": "QEMU_VIRTUAL_CLOCK_NATIVE_ECX87_KV147_SIM_ONLY",
                 "synthetic_timed_bemf_enabled": False,
                 "physical_motor_qualified": False,
+                "readable_original_guest_diagnostics": sorted(symbol_addrs),
+                "unavailable_original_guest_diagnostics": unresolved_guest_symbols,
             }
             try:
                 conn, _ = listener.accept()

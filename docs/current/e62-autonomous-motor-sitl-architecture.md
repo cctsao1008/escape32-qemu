@@ -136,3 +136,21 @@ The no-WFI probe also reports per-stage read-only original Guest symbol
 counters and QEMU PWM history validity, preserving distinct failure reasons
 for insufficient DShot/Gate/PWM/physics/BEMF activity. It still does not
 establish a strict G20 rotor-stability PASS.
+
+
+### ELF duplicate static symbols (October 27)
+
+The first extended no-WFI diagnostic runner aborted before launching
+QEMU with `Duplicate original Guest ELF data symbol armed`. The
+original Rel17.3 ELF legitimately contains file-static variables with
+the same unqualified name. This is a **host telemetry resolver error**,
+not a native motor dynamics, QEMU build, or Guest execution failure.
+
+Optional original Guest SRAM diagnostics now admit only uniquely
+addressed, real original-ELF symbols. Duplicated local symbols such as
+`armed` are recorded under `unavailable_original_guest_diagnostics`
+with `AMBIGUOUS_STATIC_ELF_SYMBOL`; the runner never selects an address
+by sort order. Missing symbols are reported separately. The authoritative
+MCPWM4 timer/history, PA26, native plant and CMPSS evidence remains
+untouched. Unit negative-controls:
+`python3 tests/test_e62_native_motor_guest_symbols.py`.
