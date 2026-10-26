@@ -9,7 +9,7 @@ from pathlib import Path
 _TESTS = str(Path(__file__).resolve().parents[1] / 'tests')
 if _TESTS not in sys.path:
     sys.path.insert(0, _TESTS)
-from g13b_native_dshot import queue_dshot600_wire, WAVE, PA26, DMA
+from g13b_native_dshot import queue_dshot_wire, WAVE, PA26, DMA
 from g11_exception_lifecycle import observer, add_bp, del_bp, continue_bounded
 from g13b_native_wfi import wait_for_native_main_wfi
 
@@ -95,8 +95,8 @@ def resolve_original_rel17_wfi_roles(elf, candidates, *, addr2line="arm-none-eab
 def native_original_zero_throttle_arm(rsp, qtest, *, wfi, hardfault,
                                      armed_breakpoints, throt,
                                      callback, slice_ms, runtime_slices,
-                                     bemf_state):
-    """Complete original ARM=1 250ms neutral by physical DShot600=0.
+                                     bemf_state, protocol="DSHOT600"):
+    """Complete original ARM=1 250ms neutral by configured physical DShot=0.
 
     Enter only at source-owned arming __WFI. The receiver must accept
     an actual physical PA26->TIMG4->DMA0->CRC packet and set original
@@ -123,9 +123,9 @@ def native_original_zero_throttle_arm(rsp, qtest, *, wfi, hardfault,
     capture_start = qtest.read(PA26 + 0x08)
     dma_start = qtest.read(PA26 + 0x0c)
     # Stop at original actual callback, not a Host-created decoder.
-    frame = queue_dshot600_wire(qtest, 0, allow_zero=True)
+    frame = queue_dshot_wire(qtest, 0, protocol=protocol, allow_zero=True)
     if frame != 0:
-        raise AssertionError("Not an actual DShot600 neutral packet")
+        raise AssertionError("Not an actual configured DShot neutral packet")
     add_bp(rsp, callback)
     armed_breakpoints.add(callback)
     def sample_physical_neutral_ingress(n, state):
@@ -203,8 +203,9 @@ def native_original_zero_throttle_arm(rsp, qtest, *, wfi, hardfault,
                 raise AssertionError("Neutral PA26 must return low at frame end")
             capture_start = qtest.read(PA26 + 0x08)
             dma_start = qtest.read(PA26 + 0x0c)
-            new_frame = queue_dshot600_wire(
-                qtest, 0, allow_zero=True, reset_completed_wave=True)
+            new_frame = queue_dshot_wire(
+                qtest, 0, protocol=protocol, allow_zero=True,
+                reset_completed_wave=True)
             if new_frame != frame:
                 raise AssertionError("Retransmitted genuine neutral mismatch")
             retry_tick = rsp.mem32(bemf_state["tick"])
