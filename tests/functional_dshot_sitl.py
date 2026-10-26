@@ -239,6 +239,16 @@ def _run_guest(args, scenario, evidence):
                                     cpu['pc'] == hardfault):
                                 raise AssertionError('Original Guest HardFault')
                             step = _guest_values(rsp, addresses)
+                            # Preserve the actual original Guest state when
+                            # any new sideband functional oracle fails.
+                            # Diagnostics are read-only Guest observations.
+                            evidence['last_guest_state'] = step
+                            if native_wfi_count <= 4:
+                                evidence.setdefault(
+                                    'first_running_wfi_guest_snapshots', []).append({
+                                        'wfi': native_wfi_count,
+                                        'guest_elapsed_ns': elapsed_ns,
+                                        'guest': dict(step)})
                             if step['captured_events'] < last_cap or step['serviced'] < last_service:
                                 raise AssertionError('Original CAP1/TIMG12 source counters regressed')
                             if step['valid_frame_feeds'] < last_feeds:
