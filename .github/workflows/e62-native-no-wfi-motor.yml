@@ -1,0 +1,72 @@
+name: E62 Native No-WFI Autonomous Motor (strict, unqualified until PASS)
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'machine/**'
+      - 'build.sh'
+      - 'tests/e62_autonomous_native_motor_probe.py'
+      - 'tests/test_e62_native_qtest_pipe_and_trip_log.py'
+      - 'tools/sim_motor_cfg.py'
+      - 'tools/native_motor_model_profiles.py'
+      - '.github/workflows/e62-native-no-wfi-motor.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  original-guest-native-no-wfi:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - name: Install source-pinned QEMU host build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            libglib2.0-dev libpixman-1-dev libfdt-dev pkg-config \
+            meson ninja-build binutils-arm-none-eabi
+      - name: Verify pinned original ELF and source-build QEMU
+        shell: bash
+        run: |
+          set -euo pipefail
+          git submodule update --init --depth 1 qemu
+          echo '05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0  baseline/e62-g13b3/firmware/AM13E-rev17.3.elf' | sha256sum -c -
+          ./build.sh
+      - name: Provision matching ECX87 SIM_ONLY native Guest CFG
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          python3 tools/sim_motor_cfg.py --sim-only-opt-in \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --motor-profile ecx87-kv147 \
+            --output artifacts/e62-g13b3-native-autonomous-cfg-flash.bin
+      - name: No-GDB no-WFI real continuous DShot → original Guest → motor (STRICT)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tests/e62_autonomous_native_motor_probe.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --cfg-flash artifacts/e62-g13b3-native-autonomous-cfg-flash.bin \
+            --wall-timeout-s 180 \
+            --qtest-response-timeout-s 20 \
+            --artifact artifacts/e62-native-autonomous-smoke.json \
+            2>&1 | tee artifacts/e62-native-autonomous-probe.log
+      - name: Preserve failed/progress/QEMU first-trip source evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-native-no-wfi-strict-evidence
+          path: |
+            artifacts/e62-native-autonomous-smoke.json
+            artifacts/e62-native-autonomous-smoke.qemu.log
+            artifacts/e62-native-autonomous-probe.log
+          if-no-files-found: warn
+          retention-days: 14
