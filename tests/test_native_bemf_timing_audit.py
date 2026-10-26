@@ -36,9 +36,9 @@ class NativeBemfForensicTests(unittest.TestCase):
                     "profile":"ecx87-kv147"}},
             "samples":samples,
             "events":[
-                {"kind":"CAP1_ACCEPTED","sector":1,"t_ns":160,
+                {"kind":"CAP1_ACCEPTED","sector":1,"t_ns":205,
                  "guest_step_before":1,"guest_step_after":2},
-                {"kind":"TIMG12_SERVICED","sector":1,"t_ns":190,
+                {"kind":"TIMG12_SERVICED","sector":1,"t_ns":235,
                  "guest_step_before":1,"guest_step_after":2}],
             "native_result":{"significant_direction_reversals":2}
         }
@@ -51,6 +51,8 @@ class NativeBemfForensicTests(unittest.TestCase):
         self.assertEqual(case["expected_comparator_phase"],0)
         self.assertEqual(case["expected_comparator_edge"],"rising")
         self.assertTrue(case["capture_has_matching_wfi_crossing_bracket"])
+        self.assertEqual(case["cap1_after_crossing_bracket_end_ns"],5)
+        self.assertFalse(case["cap1_after_crossing_bracket_end_is_exact_filter_delay"])
         self.assertEqual(case["cap1_to_service_us"],.03)
         self.assertEqual(result["simulated_rotor_direction_reversals"],2)
         self.assertIn("NOT_WAIVED",result["original_guest_strict_rotor_gate"])
@@ -64,7 +66,7 @@ class NativeBemfForensicTests(unittest.TestCase):
             audit(x)
     def test_cap1_after_service_is_not_a_pass(self):
         x=self.fixture()
-        x["events"][1]["t_ns"]=150
+        x["events"][1]["t_ns"]=200
         self.assertEqual(audit(x)["ordered_cap1_service_pairs"],0)
     def test_guest_not_clocked_or_guest_written_rejected(self):
         x=self.fixture()

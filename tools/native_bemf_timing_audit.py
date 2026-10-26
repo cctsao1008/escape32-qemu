@@ -125,6 +125,7 @@ def audit(document):
     if max_angle_step>=175:
         raise ValueError("WFI sampling cannot unwrap rotor phase reliably")
     crossings=_threshold_crossings(samples)
+    max_wfi_gap_ns=max(b-a for a,b in zip(times,times[1:]))
     grouped={}
     for event in events:
         if event.get("kind") not in ("CAP1_ACCEPTED","TIMG12_SERVICED"):
@@ -150,12 +151,21 @@ def audit(document):
         phase=(selected&3)-1
         rising=bool(selected&4)
         expected_edge="rising" if rising else "falling"
-        # For expected analog threshold, prefer the observed model crossing
-        # interval containing CAP1, then nearest preceding WFI bracket.
+        # BEMF is injected *at the end of* each WFI observation. CAP1 is
+        # necessarily later, following digital filter qualification. A
+        # physical crossing between preceding/current WFI samples is
+        # BRACKETED by those samples; a CAP1 just after the second sample
+        # is therefore valid, not "missing" as the earlier audit said.
+        # Still fail diagnostic pairing if a source edge is older than
+        # one actually observed WFI interval; no unbounded nearest match.
         matches=[c for c in crossings if c["phase"]==phase and
                  c["edge"]==expected_edge and
-                 c["bracket_ns"][0]<=cap["t_ns"]<=c["bracket_ns"][1]]
-        candidate=min(matches,key=lambda c:abs(c["estimate_ns"]-cap["t_ns"])) if matches else None
+                 c["bracket_ns"][0]<=cap["t_ns"] and
+                 c["bracket_ns"][1]<=cap["t_ns"]<=
+                     c["bracket_ns"][1]+max_wfi_gap_ns]
+        candidate=(min(matches,
+                       key=lambda c:cap["t_ns"]-c["bracket_ns"][1])
+                   if matches else None)
         if candidate is None:
             unbracketed+=1
         cases.append({
@@ -170,6 +180,10 @@ def audit(document):
             "actual_timg12_electrical_angle_deg_estimated":
                 _angle_at(samples,times,svc["t_ns"]),
             "model_zero_crossing_bracket":candidate,
+            "cap1_after_crossing_bracket_end_ns":(
+                cap["t_ns"]-candidate["bracket_ns"][1]
+                if candidate is not None else None),
+            "cap1_after_crossing_bracket_end_is_exact_filter_delay":False,
             "capture_has_matching_wfi_crossing_bracket":candidate is not None,
             "time_source":"ORIGINAL_ECAP1_TICKS_WHILE_WFI_ROTOR_IS_INTERPOLATED",
         })
@@ -187,6 +201,8 @@ def audit(document):
         "model_to_fixture_bemf_consistency_pass":
             voltage_code_mismatches==0 and max_bemf_error<1e-6,
         "theoretical_sample_bracketed_crossings":len(crossings),
+        "max_observed_wfi_gap_ns":max_wfi_gap_ns,
+        "accepted_cap1_with_matching_wfi_threshold_bracket":len(cases)-unbracketed,
         "accepted_cap1_without_matching_wfi_threshold_bracket":unbracketed,
         "crossings_are_not_instantaneous_or_exhaustive":True,
         "first_16_crossings":crossings[:16],
@@ -212,6 +228,17 @@ def main():
           json.dumps({k:v for k,v in evidence.items()
                       if k not in ("sector_timing","first_16_crossings")},sort_keys=True),
           flush=True)
+    for sector in evidence["sector_timing"]:
+        print("G18_ORIGINAL_CAP1_TIMG12_BEMF_SECTOR " +
+              json.dumps({k:sector[k] for k in (
+                  "sector","original_guest_step_before",
+                  "expected_comparator_phase","expected_comparator_edge",
+                  "cap1_to_service_us",
+                  "capture_has_matching_wfi_crossing_bracket",
+                  "cap1_after_crossing_bracket_end_ns",
+                  "actual_cap1_electrical_angle_deg_estimated",
+                  "actual_timg12_electrical_angle_deg_estimated")},
+                  sort_keys=True),flush=True)
 
 
 if __name__=="__main__":
