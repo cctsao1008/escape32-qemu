@@ -32,6 +32,57 @@ ORIGINAL_SHA = "05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0
 
 
 
+
+class TimedAutonomousQTest(QTest):
+    """Original QTest protocol with per-command forensic provenance.
+
+    The original common QTest defaults to a 5s socket deadline; that
+    timeout corrupts the buffered stream and must NOT be retried.
+    This subclass never mutates emulator time, CPU, or Guest state.
+    """
+    def __init__(self, sock, *, response_timeout_s):
+        super().__init__(sock)
+        self.sock.settimeout(response_timeout_s)
+        self.last_command_started = None
+        self.last_command_completed = None
+        self.last_command_failed = None
+        self.inflight_command = None
+        self.max_successful_command_wall_s = 0.0
+        self.command_started_at = 0.0
+
+    def cmd(self, command):
+        self.inflight_command = command
+        self.command_started_at = time.monotonic()
+        self.last_command_started = command
+        try:
+            response = super().cmd(command)
+            self.last_command_completed = command
+            self.max_successful_command_wall_s = max(
+                self.max_successful_command_wall_s,
+                time.monotonic()-self.command_started_at)
+            return response
+        except Exception as exc:
+            self.last_command_failed = {
+                "command": command,
+                "exception": type(exc).__name__+": "+str(exc),
+                "elapsed_wall_s": round(
+                    time.monotonic()-self.command_started_at,3)
+            }
+            raise
+        finally:
+            self.inflight_command = None
+
+
+def _autonomous_liveness(read32):
+    """Constant-cost asynchronous monitor, not a synchronized snapshot."""
+    r = lambda k: read32(AUTO_BASE+REG[k])
+    return {
+        "status": r("status"),
+        "sent": r("sent"),
+        "stage": r("stage"),
+    }
+
+
 def _continuous_dshot_stages(*, neutral_ms, ramp_ms, hold_ms, coast_ms,
                              drive_permille, ramp_update_ms):
     """External flight-controller profile, entirely independent of Guest.
@@ -346,7 +397,8 @@ def run(args):
             try:
                 conn, _ = listener.accept()
                 with conn:
-                    qtest = QTest(conn)
+                    qtest = TimedAutonomousQTest(
+                        conn, response_timeout_s=args.qtest_response_timeout_s)
                     evidence["motor_before"] = _motor_snapshot(qtest)
                     evidence["pwm_source_before"] = _pwm_source_snapshot(qtest)
                     evidence["original_guest_before"] = _read_original_guest_telemetry(qtest,symbol_addrs)
@@ -377,36 +429,57 @@ def run(args):
                         drive_permille=args.drive_permille,
                         ramp_update_ms=args.ramp_update_ms)
                     deadline = time.monotonic() + args.wall_timeout_s
-                    last = None
+                    last_stage = None
+                    previous_sent = -1
+                    last_advance_wall = time.monotonic()
+                    last_progress_bucket = -1
+                    # Only three MMIO reads per routine poll; no WFI/GDB
+                    # and no dozens of asynchronous Guest/peripheral reads
+                    # at every 20ms host iteration. Stage diagnostics are
+                    # optional observations and never gate physical input.
                     while time.monotonic() < deadline:
                         if proc.poll() is not None:
                             raise RuntimeError("QEMU exited during autonomous motor test")
-                        auto = read_auto(qtest.read)
-                        motor = _motor_snapshot(qtest)
-                        last = dict(autonomous_dshot=auto, native_motor=motor)
-                        if (not evidence["runtime_diagnostics_by_stage"] or
-                                auto["stage"] != evidence["runtime_diagnostics_by_stage"][-1]["stage"]):
+                        poll = _autonomous_liveness(qtest.read)
+                        evidence["last_successful_dshot_poll"] = poll
+                        if poll["sent"] != previous_sent:
+                            last_advance_wall = time.monotonic()
+                            previous_sent = poll["sent"]
+                        bucket = poll["sent"] // 250
+                        if bucket > last_progress_bucket:
+                            last_progress_bucket = bucket
+                            print("E62_NATIVE_DSHOT_LIVENESS "+
+                                  json.dumps(poll,sort_keys=True),flush=True)
+                        if poll["stage"] != last_stage:
                             evidence["runtime_diagnostics_by_stage"].append({
-                                "stage": auto["stage"],
-                                "sent_frames":auto["sent"],
-                                "virtual_elapsed_ns": auto["elapsed_ns"],
-                                "original_guest":_read_original_guest_telemetry(qtest,symbol_addrs),
-                                "pwm_source":_pwm_source_snapshot(qtest),
-                                "native_motor":motor,
-                                "receiver_and_cpu": _receiver_snapshot(qtest.read),
+                                "stage":poll["stage"],
+                                "sent_frames":poll["sent"],
+                                "monitor_only":True,
                             })
-                        if auto["status"] & 4:
-                            raise RuntimeError("Autonomous PA26 DShot timer failed: "+
-                                               str(auto["error"]))
-                        if motor["model_fault"] or motor["status_flags"] & 4:
-                            raise RuntimeError("Native motor fail-closed: "+
-                                               str(motor["model_fault"]))
-                        if auto["status"] & 2:
+                            last_stage = poll["stage"]
+                        if poll["status"] & 4:
+                            error_code = qtest.read(AUTO_BASE+REG["error"])
+                            raise RuntimeError("Native autonomous DShot source "
+                                               "failed code="+str(error_code))
+                        if poll["status"] & 2:
                             break
-                        time.sleep(.02)
+                        # Report a virtual-time/progress stall as a separate
+                        # failure from an MMIO socket response timeout.
+                        if time.monotonic()-last_advance_wall > args.stall_wall_timeout_s:
+                            raise TimeoutError(
+                                "DShot source progress stalled while QTest "
+                                "remained responsive: "+json.dumps(poll))
+                        time.sleep(.15)
                     else:
-                        raise TimeoutError("QEMU autonomous virtual clock did not finish")
-                    evidence.update(last)
+                        raise TimeoutError(
+                            "QEMU autonomous run exceeded wall timeout; "+
+                            json.dumps(evidence.get("last_successful_dshot_poll")))
+                    # Complete original-source diagnostics once per run.
+                    # These are non-atomic read-only observations, not a
+                    # source of physical model updates.
+                    auto = read_auto(qtest.read)
+                    motor = _motor_snapshot(qtest)
+                    evidence.update(autonomous_dshot=auto,native_motor=motor)
                     evidence["pwm_source_after"] = _pwm_source_snapshot(qtest)
                     evidence["original_guest_after"] = _read_original_guest_telemetry(qtest,symbol_addrs)
                     evidence["receiver_after"] = _receiver_snapshot(qtest.read)
@@ -456,17 +529,28 @@ def run(args):
             except Exception as exc:
                 evidence["status"] = "FAIL_NATIVE_AUTONOMOUS_WIRING_SMOKE"
                 evidence["exception"] = type(exc).__name__+": "+str(exc)
-                # Failure may occur while waiting for natural Guest ARM,
-                # before any autonomous DShot frame runs. Never leave
-                # receiver_after:null as an unexplained artifact.
+                evidence["qemu_alive_at_failure"] = proc.poll() is None
                 if "qtest" in locals():
-                    try:
-                        evidence["receiver_at_failure"] = _receiver_snapshot(qtest.read)
-                        evidence["original_guest_at_failure"] = (
-                            _read_original_guest_telemetry(qtest,symbol_addrs))
-                    except Exception as diagnostic_exc:
-                        evidence["failure_snapshot_error"] = (
-                            type(diagnostic_exc).__name__+": "+str(diagnostic_exc))
+                    evidence["qtest_last_command_started"] = (
+                        qtest.last_command_started)
+                    evidence["qtest_last_command_completed"] = (
+                        qtest.last_command_completed)
+                    evidence["qtest_last_command_failed"] = (
+                        qtest.last_command_failed)
+                    evidence["qtest_max_successful_command_wall_s"] = (
+                        round(qtest.max_successful_command_wall_s,3))
+                    # TimeoutError poisons the buffered socket stream;
+                    # NEVER retry QTest readl on that same file object.
+                    # This also prevents another misleading 5s hang.
+                    if not isinstance(exc, (OSError,TimeoutError)):
+                        try:
+                            evidence["receiver_at_failure"] = (
+                                _receiver_snapshot(qtest.read))
+                            evidence["original_guest_at_failure"] = (
+                                _read_original_guest_telemetry(qtest,symbol_addrs))
+                        except Exception as diagnostic_exc:
+                            evidence["failure_snapshot_error"] = (
+                                type(diagnostic_exc).__name__+": "+str(diagnostic_exc))
                 print("E62_NATIVE_AUTONOMOUS_NO_WFI_FAIL "+
                       json.dumps(evidence,sort_keys=True),flush=True)
                 raise
@@ -503,9 +587,15 @@ def main():
                         help="Native integer-permille throttle step interval")
     parser.add_argument("--drive-permille",type=int,default=200)
     parser.add_argument("--wall-timeout-s",type=int,default=180)
+    parser.add_argument("--qtest-response-timeout-s",type=int,default=20,
+                        help="Individual QTest readl deadline, not a CPU halt")
+    parser.add_argument("--stall-wall-timeout-s",type=int,default=30,
+                        help="Fail if DShot sent counter is unchanged while responsive")
     args = parser.parse_args()
-    if not 10 <= args.wall_timeout_s <= 600:
-        parser.error("Explicit bounded wall timeout required")
+    if (not 30 <= args.wall_timeout_s <= 600 or
+        not 5 <= args.qtest_response_timeout_s <= 60 or
+        not 5 <= args.stall_wall_timeout_s <= 120):
+        parser.error("Explicit bounded wall/QTest/progress timeouts required")
     try:
         _continuous_dshot_stages(
             neutral_ms=args.arm_ms, ramp_ms=args.drive_ms,

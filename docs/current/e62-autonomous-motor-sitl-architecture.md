@@ -249,3 +249,30 @@ Receiver could be un-rearmed after first complete DMA frame. Continuous
 streaming is the correct *input architecture*, not proof that Guest
 DMA/IRQ delivery is correct. The new run must inspect read-only IRQ raw,
 CPU IPSR, original callbacks and rearm without changing device behavior.
+
+### First full 3,000-frame experiment: QTest read-response timeout
+
+The no-WFI continuous DShot test scheduled all 3,000 frames but
+reported only the first running-stage observation at 215,288
+**virtual nanoseconds** before the host QTest `readl` socket timed out.
+The generic `g0_memory.QTest` socket used a fixed five-second
+per-command deadline. A socket timeout makes its buffered `readline()`
+stream unrecoverable: a repeat read cannot safely recover a final
+peripheral snapshot. This outcome is **HOST_OBSERVER_TIMEOUT**, not
+evidence that 3,000 DShot frames were emitted, that QEMU exited,
+or that motor dynamics failed. Its root cause (CPU execution
+starvation vs slow QTest response vs QEMU internal stall) remains OPEN.
+
+The probe now uses a local, opt-in QTest adapter with a configurable
+per-response deadline (20s default) that records the exact last
+issued/complete/failed command and its host-wall elapsed time. It uses
+three read-only simulator status registers for its regular 150ms
+host-wall liveness check instead of collecting dozens of independent
+MMIO/Guest reads every 20ms. Full Guest/PWM/motor diagnostic readback
+is performed at run completion; only lightweight simulator stage
+transitions are sampled during execution. Its read-only progress
+watch distinguishes a QTest socket timeout from a sent-frame stall
+while the observer is responsive. No Guest WFI, CPU stop, GDB control,
+injecting CAP1, bypassing DShot RX, or moving motor dynamics to the
+host is permitted. The 1kHz continuous DShot scenario remains
+unchanged and original strict gate still OPEN.
