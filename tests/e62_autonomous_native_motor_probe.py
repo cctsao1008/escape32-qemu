@@ -298,8 +298,11 @@ def _wiring_failure_reasons(autonomous, motor, pwm):
     reasons = []
     if not autonomous["pa26_capture"] or not autonomous["pa26_dma"]:
         reasons.append("ORIGINAL_PA26_TIMG4_DMA_INPUT_NOT_SEEN")
-    if not pwm["running"] or not pwm["native_pwm_zero_callbacks"]:
-        reasons.append("NATIVE_MCPWM_CARRIER_NOT_RUNNING")
+    # Final-stage throttle is deliberately DShot=0. A stopped carrier
+    # at teardown is EXPECTED, not proof that PWM never ran. Keep the
+    # fail-closed test on source-owned zero-callback history instead.
+    if not pwm["native_pwm_zero_callbacks"]:
+        reasons.append("NATIVE_MCPWM_CARRIER_NEVER_CLOCKED")
     if not pwm["total_events"]:
         reasons.append("NO_NATIVE_PWM_HISTORY_EVENTS")
     if not pwm["evaluator_valid"] or pwm["native_pwm_invalid_level_events"]:
