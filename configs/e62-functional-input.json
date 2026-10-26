@@ -1,0 +1,10 @@
+{
+  "schema": "e62.esc-input.v1",
+  "protocol": "DSHOT300",
+  "dshot": {
+    "frame_rate_hz": 1000
+  },
+  "pwm": {
+    "pulse_width_us": 1500
+  }
+}
