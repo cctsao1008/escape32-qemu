@@ -11,6 +11,7 @@
  * Kt=0.0649, J=1.3e-4 kg*m^2. 24V, friction and ideal diode drop,
  * -30deg initial pose are UNCALIBRATED SIM_ONLY assumptions.
  */
+#include <math.h> /* sin, remainder, isfinite, INFINITY, lround */
 #define AM13E_NATIVE_MOTOR_BASE UINT32_C(0x5ffeb000)
 #define AM13E_NATIVE_MOTOR_SIZE 0x60U
 #define AM13E_NATIVE_MOTOR_STEP_NS INT64_C(1000)
