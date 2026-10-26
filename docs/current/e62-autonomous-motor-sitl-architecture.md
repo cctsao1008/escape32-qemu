@@ -55,17 +55,20 @@ Commit directly to `main`, never use PR. Keep old host/WFI fixtures as clearly l
 
 Build the new machine from source and generate a SIM_ONLY ECX87-KV147
 preboot configuration (the old archived QEMU binary predates this mode).
+The `sim_motor_cfg.py` CLI intentionally requires **`g13b3` in the
+output basename and a `.bin` extension**; use the dedicated name below.
+Do not weaken this safeguard just to accommodate an incorrectly named file.
 
 ```bash
 ./build.sh
 python3 tools/sim_motor_cfg.py --sim-only-opt-in \
   --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
   --motor-profile ecx87-kv147 \
-  --output artifacts/e62-native-autonomous-cfg.bin
+  --output artifacts/e62-g13b3-native-autonomous-cfg-flash.bin
 python3 tests/e62_autonomous_native_motor_probe.py \
   --qemu .build/qemu-src/build/qemu-system-arm \
   --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
-  --cfg-flash artifacts/e62-native-autonomous-cfg.bin \
+  --cfg-flash artifacts/e62-g13b3-native-autonomous-cfg-flash.bin \
   --artifact artifacts/e62-native-autonomous-smoke.json
 ```
 
