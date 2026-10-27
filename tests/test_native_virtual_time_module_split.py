@@ -13,7 +13,7 @@ import subprocess
 import sys
 import unittest
 
-ROOT=pathlib.Path(__file__).resolve().parents[2]
+ROOT=pathlib.Path(__file__).resolve().parents[1]
 OLD_HEAD="ed29fc304c45465d9144343ef8a9264ddad8b067"
 MACHINE=ROOT/"machine"
 ORIGINAL="am13e_native_motor_plant.inc"
