@@ -92,6 +92,13 @@ def audit(events, verdict, case):
                 e["vns"] < (t12["vns"] if t12 else t0+WINDOW_NS)]
     filter_pre_cap=next((e for e in reversed(events) if cap and
             e["kind"]=="CMP_FILTER" and e["vns"]<=cap["vns"]),None)
+    prior_caps=[one(e,t0) for e in before_t12[:8]]
+    prior_acks=[one(e,t0) for e in events if e["kind"]=="CAP1_ACK"
+                and cap and cap["vns"]<=e["vns"]<
+                  (t12["vns"] if t12 else t0+WINDOW_NS)][:8]
+    prior_cmp=[one(e,t0) for e in events if e["kind"]=="CMP_FILTER"
+               and t0<=e["vns"]<
+                 (t12["vns"] if t12 else t0+WINDOW_NS)][:12]
     source_rotor=[e for e in events if e["kind"]=="ROTOR" and
                   t0<=e["vns"]<t0+WINDOW_NS]
     neg=next((e for e in source_rotor if e["data"][5]<-100000),None)
@@ -149,6 +156,9 @@ def audit(events, verdict, case):
         "first_capture_to_first_following_new_pwm_pair_ms":(
              ms(nextpair["vns"]-cap["vns"]) if cap and nextpair else None),
         "cap1_events_before_first_following_timg12":len(before_t12),
+        "cap1_source_events_before_first_timg12":prior_caps,
+        "cap1_ack_source_events_before_first_timg12":prior_acks,
+        "cmp_filter_source_events_before_first_timg12":prior_cmp,
         "cap1_to_timg12_pairing_not_proven":True,
         "first_negative_torque_below_minus0p1nm":one(neg,t0),
         "first_reverse_below_minus50rpm":one(rev,t0),
@@ -205,6 +215,12 @@ def main():
                 "first_capture_to_first_following_timg12_ms"),
             "capture_count_before_timg12":result.get(
                 "cap1_events_before_first_following_timg12"),
+            "prior_cap1_sources":result.get(
+                "cap1_source_events_before_first_timg12"),
+            "prior_cap1_ack_sources":result.get(
+                "cap1_ack_source_events_before_first_timg12"),
+            "prior_cmp_filter_sources":result.get(
+                "cmp_filter_source_events_before_first_timg12"),
             "first_next_pwm_pair_ms":(result.get(
                 "first_next_physical_pwm_pair") or {}).get("relative_ms"),
             "negative_torque_ms":(result.get(
