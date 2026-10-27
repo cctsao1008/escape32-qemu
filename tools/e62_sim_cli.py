@@ -536,7 +536,7 @@ class E62SimConsole(cmd.Cmd):
                     if "E62_P0_EVENT " in line and (
                         "kind=DSHOT " in line or "kind=THROT_SET " in line):
                         q.append(line[line.index("E62_P0_EVENT "):].strip())
-            print("\\n".join(q) if q else "No FC source events flushed yet")
+            print("\n".join(q) if q else "No FC source events flushed yet")
         self._command("history",act)
 
     def do_stop(self,arg):
