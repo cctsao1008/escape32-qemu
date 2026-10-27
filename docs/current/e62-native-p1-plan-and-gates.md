@@ -192,3 +192,43 @@ or substitute a Host WFI test to get green.
 
 The script intentionally makes NO claims about loaded real ECX87,
 12S, Si/GaN, hardware Trip calibration or recovered fault restart.
+
+## Direct20 vs ramp startup physics root-cause isolation
+
+Run with the **unchanged** original Rel17.3 Guest ELF and the Native
+source event logs, without CLI, synthetic BEMF or a motor model patch:
+
+```sh
+python3 tools/native_p1_startup_transient.py \\
+  --case smoke=artifacts/e62-p1-scripted/e62-p1-script-smoke.p0.events.log \\
+  --case gentle=artifacts/e62-p1-scripted/e62-p1-script-gentle.p0.events.log \\
+  --case direct20=artifacts/e62-p1-scripted/e62-p1-script-direct20.p0.events.log \\
+  --case steps=artifacts/e62-p1-scripted/e62-p1-script-steps.p0.events.log \\
+  --output artifacts/e62-p1-scripted/e62-p1-startup-transients.json
+```
+
+This script reads the ORIGINAL first 50ms after each case's first
+positive DShot Frame and compares source-native current and torque
+against CAP1, TIMG12 and first/second actual Guest PWM commutation.
+It has `qualified=false` **by design**: it is a source-owned fault
+isolation tool, not a way to override the failing P1 rotor gate.
+
+The Oct 27 four-case CI artifact showed:
+
+| Case | Max abs phase I (A), first 50ms | Lowest torque (N·m) | First -50RPM sample vs positive DShot | First original TIMG12 |
+| --- | ---: | ---: | ---: | ---: |
+| Smoke | 0.773 | 0.000 | no reversal | 19.996ms |
+| Gentle | 0.483 | 0.000 | no reversal | 21.023ms |
+| Direct20 | 45.250 | -3.509 | 7.209ms | 13.743ms |
+| Steps (initial 10% stage) | 0 | 0 | no motion | 513.790ms (after 20% step) |
+
+`direct20` rotor first reverses BEFORE the original Guest can
+commutate into its second PWM sector; so a high-current startup
+response in the first power pair is already unstable. It is premature
+to attribute that first reversal to missing CAP1/TIMG12 IRQ delivery.
+However, the model's current gain/zero-load mechanical dynamics and
+real ESC startup duty calibration are **SIM_ONLY, not verified against
+physical ECX87 hardware**. This is a root-cause *boundary*, not proof
+of an original-firmware bug. Next experiments should isolate
+startup duty slew and motor/propeller inertia with labeled A/B
+parameters, preserving the originally pinned Guest and strict gates.

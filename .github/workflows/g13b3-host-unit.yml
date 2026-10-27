@@ -61,6 +61,7 @@ on:
       - 'tests/test_e62_native_p0_strict.py'
       - 'tests/test_e62_sim_cli.py'
       - 'tests/test_native_p1_qualification.py'
+      - 'tests/test_native_p1_startup_transient.py'
       - 'tests/test_e62_native_scripted_test.py'
       - 'scenarios/e62-native-console-10s.json'
       - 'scenarios/e62-native-p0-smoke.json'
@@ -156,6 +157,7 @@ jobs:
           python3 tests/test_e62_native_p0_strict.py
           python3 tests/test_e62_sim_cli.py
           python3 tests/test_native_p1_qualification.py
+          python3 tests/test_native_p1_startup_transient.py
           python3 tests/test_e62_native_scripted_test.py
           python3 -m py_compile tools/e62_sim_cli.py
           python3 tests/test_e62_native_p0_export.py

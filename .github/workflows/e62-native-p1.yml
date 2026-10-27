@@ -7,6 +7,8 @@ on:
       - 'tests/e62_autonomous_native_motor_probe.py'
       - 'tools/native_p1_qualification.py'
       - 'tools/e62_native_scripted_test.py'
+      - 'tools/native_p1_startup_transient.py'
+      - 'tests/test_native_p1_startup_transient.py'
       - 'tests/test_e62_native_scripted_test.py'
       - 'tools/native_dshot_scenario.py'
       - 'tools/native_p0_strict.py'
@@ -61,6 +63,16 @@ jobs:
             --cfg-flash artifacts/e62-g13b3-native-autonomous-cfg-flash.bin \
             --output artifacts/e62-p1-scripted \
             --wall-timeout-s 300
+      - name: Read-only original source 50ms startup torque/current/IRQ A/B diagnosis
+        if: always()
+        run: |
+          set -euo pipefail
+          python3 tools/native_p1_startup_transient.py \
+            --case smoke=artifacts/e62-p1-scripted/e62-p1-script-smoke.p0.events.log \
+            --case gentle=artifacts/e62-p1-scripted/e62-p1-script-gentle.p0.events.log \
+            --case direct20=artifacts/e62-p1-scripted/e62-p1-script-direct20.p0.events.log \
+            --case steps=artifacts/e62-p1-scripted/e62-p1-script-steps.p0.events.log \
+            --output artifacts/e62-p1-scripted/e62-p1-startup-transients.json
       - name: Preserve scenarios, source events and negative results without discarding FAIL
         if: always()
         uses: actions/upload-artifact@v4
