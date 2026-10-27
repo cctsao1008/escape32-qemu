@@ -57,6 +57,9 @@ static void am13e_native_motor_reset(AM13ENativeMotor *m)
     m->energy_max_star_sum_a = 0.0;
     m->energy_steps = m->energy_diode_steps = 0U;
     m->p0_last_pair = UINT32_MAX;
+    m->p0_first_switch_ns = -1;
+    m->p0_last_logged_mask = UINT32_MAX;
+    m->p0_last_logged_gate = false;
 }
 static void am13e_native_motor_fault(AM13ENativeMotor *m, uint32_t code)
 {
@@ -244,7 +247,8 @@ static bool am13e_native_motor_current_step(AM13ENativeMotor *m, double dt)
     m->energy_backward_euler_j += euler_j;
     m->energy_abs_residual_j += fabs(residual);
     m->energy_max_residual_j = MAX(m->energy_max_residual_j,fabs(residual));
-    m->energy_max_star_sum_a = MAX(m->energy_max_star_sum_a,fabs(icheck));
+    m->energy_max_star_sum_a = MAX(m->energy_max_star_sum_a,
+                                   fabs(currents[0]+currents[1]+currents[2]));
     ++m->energy_steps;
     m->energy_diode_steps += diode_used;
     return true;
@@ -379,6 +383,21 @@ static void am13e_native_motor_pwm_event(AM13ESimPWM *p,
                 }
             }
         }
+        if(m->p0_first_switch_ns < 0 && gate && valid && newmask) {
+            m->p0_first_switch_ns = now;
+        }
+        if(m->p0_first_switch_ns >= 0 &&
+           now-m->p0_first_switch_ns <= INT64_C(120000000) &&
+           (newmask != m->p0_last_logged_mask ||
+            (gate && valid) != m->p0_last_logged_gate)) {
+            /* Full *bounded* 120ms real-clocked six-pad switching source
+             * for independent current-step replay. NO host motor drive. */
+            am13e_p0_event(p->machine,"SWITCH",newmask & 0x3fU,
+                           gate && valid,am13e_pwm4_hist_gate_word(p),
+                           m->energy_steps,0,0);
+            m->p0_last_logged_mask=newmask;
+            m->p0_last_logged_gate=gate && valid;
+        }
         m->mask = newmask & 0x3fU;
         m->gate = gate && valid;
         ++m->switch_events;
@@ -419,6 +438,11 @@ static void am13e_native_motor_tick(void *opaque)
                        (int64_t)llround(m->energy_bemf_j*1e9),
                        (int64_t)llround(m->energy_magnetic_j*1e9),
                        (int64_t)llround(m->energy_backward_euler_j*1e9));
+        am13e_p0_event(m->machine,"INVARIANT",m->energy_steps,
+                       m->energy_diode_steps,
+                       (int64_t)llround(m->energy_abs_residual_j*1e12),
+                       (int64_t)llround(m->energy_max_residual_j*1e12),
+                       (int64_t)llround(m->energy_max_star_sum_a*1e6),0);
     }
     am13e_native_motor_publish(m);
     if (!m->faulted) {

@@ -369,6 +369,9 @@ typedef struct AM13ENativeMotor {
     double energy_backward_euler_j, energy_abs_residual_j;
     double energy_max_residual_j, energy_max_star_sum_a;
     uint32_t energy_steps, energy_diode_steps, p0_last_pair;
+    int64_t p0_first_switch_ns;
+    uint32_t p0_last_logged_mask;
+    bool p0_last_logged_gate;
     /* First actual hardware OST3 activation, read-only forensic latch.
      * No CPU/IRQ/PWM register changes or synthetic comparator writes. */
     bool first_ost3_seen;
