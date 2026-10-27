@@ -49,6 +49,7 @@ python3 tools/native_p0_reference_replay.py \
 python3 tools/native_p0_strict.py \
   --events artifacts/e62-native-p0-steps.p0.events.log \
   --evidence artifacts/e62-native-p0-steps.json \
+  --physics artifacts/e62-native-p0-steps.physics.json \
   --output artifacts/e62-native-p0-steps.strict.json
 ```
 
