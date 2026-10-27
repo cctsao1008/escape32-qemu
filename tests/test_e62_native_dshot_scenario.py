@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Native DShot JSON stage/ELF/clock boundaries fail-closed."""
-import json, tempfile, unittest
+import json, tempfile, unittest, sys
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from tools.native_dshot_scenario import load_native_scenario, ScenarioError
