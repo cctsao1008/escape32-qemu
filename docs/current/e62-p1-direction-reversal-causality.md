@@ -74,23 +74,23 @@ No-WFI motor strict [40557926065](https://github.com/cctsao1008/escape32-qemu/ac
 P1 [40557926101](https://github.com/cctsao1008/escape32-qemu/actions/runs/40557926101)
 remains **RED**, with smoke PASS (0 reversals), gentle PASS (0),
 direct20 FAIL (337), steps FAIL (223), each FAIL solely
-\`STARTUP_SIGNIFICANT_DIRECTION_REVERSAL\`.
+`STARTUP_SIGNIFICANT_DIRECTION_REVERSAL`.
 The distinct 100ms ramp FAIL (238) and 500ms ramp PASS (0)
 are diagnostic A/B, not substituted P1 acceptance.
 
 ### Original Rel17.3 firmware policy (not a new Host rule)
 
-The pinned [Original \`src/main.c\`](https://github.com/cctsao1008/ESCape32/blob/b0204670515d2de0b2480b52273038f1ee13d30a/src/main.c)
-initializes \`ival = 10000 << MOTOR_TIME_SHIFT\` at six-step start
-and \`bemf_zero_cross_delay()\` returns **zero** when
-\`capture_ticks < ival >> 1\`: a nominal **5,000 µs** startup
+The pinned [Original `src/main.c`](https://github.com/cctsao1008/ESCape32/blob/b0204670515d2de0b2480b52273038f1ee13d30a/src/main.c)
+initializes `ival = 10000 << MOTOR_TIME_SHIFT` at six-step start
+and `bemf_zero_cross_delay()` returns **zero** when
+`capture_ticks < ival >> 1`: a nominal **5,000 µs** startup
 half-interval capture-rejection window. Its AM13E
-[\`motor_bemf.c\`](https://github.com/cctsao1008/ESCape32/blob/b0204670515d2de0b2480b52273038f1ee13d30a/mcu/AM13E/hal/motor_bemf.c)
-calls this original policy via \`am13e_app_motor_on_bemf_event()\`.
-On rejection it increments \`rejected_events\` and leaves ECAP
-capturing; on acceptance it updates \`crossing_epoch\` and
-\`capture_stop()\`. Accepted crossings arm the *original* TIMG12
-one-shot in [\`motor_event_timer.c\`](https://github.com/cctsao1008/ESCape32/blob/b0204670515d2de0b2480b52273038f1ee13d30a/mcu/AM13E/hal/motor_event_timer.c).
+[`motor_bemf.c`](https://github.com/cctsao1008/ESCape32/blob/b0204670515d2de0b2480b52273038f1ee13d30a/mcu/AM13E/hal/motor_bemf.c)
+calls this original policy via `am13e_app_motor_on_bemf_event()`.
+On rejection it increments `rejected_events` and leaves ECAP
+capturing; on acceptance it updates `crossing_epoch` and
+`capture_stop()`. Accepted crossings arm the *original* TIMG12
+one-shot in [`motor_event_timer.c`](https://github.com/cctsao1008/ESCape32/blob/b0204670515d2de0b2480b52273038f1ee13d30a/mcu/AM13E/hal/motor_event_timer.c).
 No host intervention or alternate timing control is part of this path.
 
 ### Source evidence after first real powered PWM_PAIR
@@ -120,15 +120,15 @@ occurs at ~11ms and TIMG12 follows only ~2.6ms later.
 This is **consistent with the original Guest accepting only the second
 capture**, not with an unexplained 11–13ms hardware timer latency
 after a single accepted capture. The trace does not expose the exact
-Guest-local \`crossing_epoch\` or computed \`capture_us\`, so this
+Guest-local `crossing_epoch` or computed `capture_us`, so this
 causal classification remains **source-supported inference** rather
 than a direct per-capture accepted/rejected log assertion.
 
 The first physical pair is *identical* in all four cases:
-Phase 2 high / Phase 1 low, six-pad mask \`0x18\`,
+Phase 2 high / Phase 1 low, six-pad mask `0x18`,
 initial rotor phase about −30° electrical. For ideal positive
 source-to-sink pair current, its forward-torque basis is
-\`sqrt(3) * cos(theta_e)\`, with zero at +90°. In direct20 and
+`sqrt(3) * cos(theta_e)`, with zero at +90°. In direct20 and
 the powered steps runs, the rotor crosses +90° and recorded
 current-based torque becomes negative **before first TIMG12
 and before first new physical PWM pair**. In smoke/gentle,
@@ -156,25 +156,25 @@ that the first sector was wired backward.
   ELF identity, current-continuous plant, source-driven BEMF/CAP1,
   no-host-write rule, and original strict scenario JSON remain unchanged.
 
-New diagnostic: \`tools/native_p1_first_feedback_latency.py\`; test:
-\`tests/test_native_p1_first_feedback_latency.py\`; automated historic
-comparison: \`.github/workflows/e62-native-p1-first-feedback-replay.yml\`.
+New diagnostic: `tools/native_p1_first_feedback_latency.py`; test:
+`tests/test_native_p1_first_feedback_latency.py`; automated historic
+comparison: `.github/workflows/e62-native-p1-first-feedback-replay.yml`.
 The result is evidence only, never an alternate P1 qualification.
 
 
 ### Motion-induced comparator transitions (source-recorded, not synthesized)
 
 The source motor BEMF formula in
-\`machine/am13e_native_motor_dynamics.inc\` remains
-\`e[p] = Ke * omega * sin(theta_e + phase_offset[p])\`. Thus
-a change of \`omega\` sign can reverse the selected comparator
+`machine/am13e_native_motor_dynamics.inc` remains
+`e[p] = AM13E_NATIVE_KT * omega_mechanical * sin(theta_e + phase_offset[p])`. Thus
+a change of `omega` sign can reverse the selected comparator
 polarity even if the rotor's phase sine does **not** change sign.
 The original physical comparator output is still the actual
-\`machine/am13e_motor_feedback.inc\` filtered CMPSS0 output; no
+`machine/am13e_motor_feedback.inc` filtered CMPSS0 output; no
 software edge or BEMF is injected by the observer.
 
 The source-timestamped [run 40557926101](https://github.com/cctsao1008/escape32-qemu/actions/runs/40557926101)
-\`direct20\` selected-phase \`CMP_FILTER\` transitions before first
+`direct20` selected-phase `CMP_FILTER` transitions before first
 TIMG12 are:
 
 | Edge / source offset from first powered pair | Bracketing signed RPM from **real** 1ms ROTOR | Bracketing electrical angle | Selected phase sine sign |
@@ -184,16 +184,16 @@ TIMG12 are:
 | **rise 10.897ms** | **−169.419 → +12.820** | 61.59° → 51.45° | **unchanged positive** |
 
 The latter two transitions occur in rotor-speed-zero brackets while
-selected-phase \`sin(theta_e)\` retains its sign. They are therefore
-**consistent with reversals of BEMF from \`omega\` changing sign**,
+selected-phase `sin(theta_e)` retains its sign. They are therefore
+**consistent with reversals of BEMF from `omega` changing sign**,
 not evidence of the rotor completing additional spatial forward
 zero-crossings. The second rising comparator event coincides with
 the second source CAP1, which the Guest can accept after the original
 early-capture rejection window.
 
-In the older \`steps\` (328 reversals), both the filtered falling
+In the older `steps` (328 reversals), both the filtered falling
 and subsequent rising transition also have signed-speed reversals
-within adjacent 1ms rotor samples. In the newer \`steps\` (223),
+within adjacent 1ms rotor samples. In the newer `steps` (223),
 the falling transition is so bracketed but the second rising
 transition falls just after a sampled return to positive RPM.
 For the latter case a 1ms bracket does **not** directly establish
