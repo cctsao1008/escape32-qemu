@@ -7,7 +7,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
-from tools.e62_sim_cli import E62SimConsole,percent_to_permille
+from tools.e62_sim_cli import E62SimConsole,percent_to_permille,_six_pad_levels
 from tools.sitl_autonomous_transport import AUTO_BASE,REG
 
 
@@ -78,6 +78,42 @@ class E62PythonConsoleContracts(unittest.TestCase):
             c.do_load(str(ROOT/"scenarios/e62-native-p0-smoke.json"))
         self.assertIn("ERROR load:",out.getvalue())
         self.assertEqual(c.meta["sha256"],oldsha)
+
+    def test_raw_six_pad_mask_is_not_misreported_as_motor_drive(self):
+        self.assertEqual(_six_pad_levels(0x0a),"U_L,V_L")
+        self.assertEqual(_six_pad_levels(0),"none")
+        self.assertEqual(_six_pad_levels(0x21),"U_H,W_L")
+
+    def test_scenario_shows_named_percent_fields(self):
+        c=console()
+        with redirect_stdout(io.StringIO()) as out:
+            c.do_show("scenario")
+        data=out.getvalue()
+        self.assertIn('"from_percent": 0.0',data)
+        self.assertIn('"duration_ms": 1500',data)
+        self.assertIn('"total_virtual_ms": 10000',data)
+        self.assertNotIn('"stage_rows"',data)
+
+    def test_manual_stop_preserves_explicit_unqualified_json_and_trace(self):
+        import json
+        import tempfile
+        c=console()
+        with tempfile.TemporaryDirectory() as tmp:
+            c.run_artifact=Path(tmp)/"console.json"
+            c.log_path=Path(tmp)/"console.qemu.log"
+            c.log_path.write_text(
+                "E62_P0_EVENT seq=1 vns=0 kind=DSHOT a=0 b=0 c=0 d=0 e=0 f=0\\n"
+                "E62_P0_EVENT seq=2 vns=1 kind=THROT_SET a=1 b=1 c=0 d=2 e=0 f=0\\n")
+            result=c._write_interrupted_evidence({"sent":90},10,None)
+            record=json.loads(result.read_text())
+            self.assertEqual(record["status"],"STOPPED_BY_OPERATOR_NOT_A_TEST_PASS")
+            self.assertFalse(record["qualified"])
+            self.assertFalse(record["motor_safe_stop_proven"])
+            self.assertEqual(record["source_dshot_before_stop"]["sent"],90)
+            self.assertTrue(record["neutral_source_frames_confirmed"])
+            self.assertEqual(record["p0_source_event_count"],2)
+            self.assertEqual(
+                Path(record["p0_event_trace_path"]).read_text().count("E62_P0_EVENT"),2)
 
     def test_cfg_and_history_only_read_local_evidence(self):
         import tempfile
