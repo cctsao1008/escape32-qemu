@@ -90,6 +90,7 @@ def audit(events, verdict, case):
     # more than once or an IRQ may schedule a different TIMG12 event.
     before_t12=[e for e in events if e["kind"]=="CAP1" and t0<=
                 e["vns"] < (t12["vns"] if t12 else t0+WINDOW_NS)]
+    last_cap_before_t12=before_t12[-1] if before_t12 else None
     filter_pre_cap=next((e for e in reversed(events) if cap and
             e["kind"]=="CMP_FILTER" and e["vns"]<=cap["vns"]),None)
     prior_caps=[one(e,t0) for e in before_t12[:8]]
@@ -108,6 +109,10 @@ def audit(events, verdict, case):
     current_pair=(physical["hi_phase"],physical["lo_phase"])
     if current_pair != (2,1):
         theta_zero=None
+    # Sampled unwrapped electrical angle crossing the positive-current
+    # source-pair sign limit; not a fictitious BEMF event or imposed sector.
+    first_crossing=next((e for e in source_rotor if theta_zero is not None
+             and 90<=math.degrees(e["data"][1]/1000)<180),None)
     stage=next((e for e in reversed(events) if e["kind"]=="DSHOT"
                 and e["vns"]<=t0),None)
     selected=[e for e in events if e["kind"] in KINDS and
@@ -156,6 +161,19 @@ def audit(events, verdict, case):
         "first_capture_to_first_following_new_pwm_pair_ms":(
              ms(nextpair["vns"]-cap["vns"]) if cap and nextpair else None),
         "cap1_events_before_first_following_timg12":len(before_t12),
+        "last_cap1_before_first_timg12":one(last_cap_before_t12,t0),
+        "last_cap1_to_first_timg12_ms":(
+            ms(t12["vns"]-last_cap_before_t12["vns"])
+            if t12 and last_cap_before_t12 else None),
+        "first_powered_to_first_cap1_us":(
+            round((cap["vns"]-t0)/1000,3) if cap else None),
+        "pinned_rel17_initial_ival_us":10000,
+        "pinned_rel17_half_interval_ignore_before_us":5000,
+        "first_cap1_early_rejection_policy_consistent_not_proven":bool(
+            cap and len(before_t12)>1 and cap["vns"]-t0<5_000_000),
+        "original_ival_and_capture_epoch_not_directly_recorded":True,
+        "first_sample_at_90deg_electrical_before_timg12":one(
+            first_crossing,t0),
         "cap1_source_events_before_first_timg12":prior_caps,
         "cap1_ack_source_events_before_first_timg12":prior_acks,
         "cmp_filter_source_events_before_first_timg12":prior_cmp,
@@ -213,6 +231,13 @@ def main():
                 "relative_ms"),
             "cap1_to_timg12_ms":result.get(
                 "first_capture_to_first_following_timg12_ms"),
+            "last_cap1_to_timg12_ms":result.get(
+                "last_cap1_to_first_timg12_ms"),
+            "first_cross90_ms":(result.get(
+                "first_sample_at_90deg_electrical_before_timg12") or {}).get(
+                "relative_ms"),
+            "original_startup_half_interval_consistent":result.get(
+                "first_cap1_early_rejection_policy_consistent_not_proven"),
             "capture_count_before_timg12":result.get(
                 "cap1_events_before_first_following_timg12"),
             "prior_cap1_sources":result.get(
