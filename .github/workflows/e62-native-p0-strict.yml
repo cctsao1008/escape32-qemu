@@ -6,6 +6,7 @@ on:
       - 'machine/**'
       - 'tools/native_p0_strict.py'
       - 'tools/native_p0_reference_replay.py'
+      - 'tools/native_p0_export.py'
       - 'tools/native_dshot_scenario.py'
       - 'scenarios/e62-native-p0-*.json'
       - 'tests/e62_autonomous_native_motor_probe.py'
@@ -54,6 +55,14 @@ jobs:
             --wall-timeout-s 240 \
             --artifact artifacts/e62-native-autonomous-smoke.json \
             2>&1 | tee artifacts/e62-native-p0-probe.log
+      - name: Export original Rotor Dynamics and actual six-switch time series
+        if: always()
+        run: |
+          set -euo pipefail
+          python3 tools/native_p0_export.py \
+            --events artifacts/e62-native-autonomous-smoke.p0.events.log \
+            --rotor-csv artifacts/e62-native-p0-rotor.csv \
+            --switch-csv artifacts/e62-native-p0-switch.csv
       - name: P0 frozen PWM original native physics 1/0.5/0.25us reference
         run: |
           set -euo pipefail
@@ -82,5 +91,6 @@ jobs:
             artifacts/e62-native-autonomous-smoke.p0.events.log
             artifacts/e62-native-p0*.json
             artifacts/e62-native-p0*.log
+            artifacts/e62-native-p0*.csv
           retention-days: 21
           if-no-files-found: warn

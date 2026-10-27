@@ -55,6 +55,8 @@ on:
       - 'tools/native_dshot_scenario.py'
       - 'tools/native_p0_strict.py'
       - 'tools/native_p0_reference_replay.py'
+      - 'tools/native_p0_export.py'
+      - 'tests/test_e62_native_p0_export.py'
       - 'tests/test_e62_native_dshot_scenario.py'
       - 'tests/test_e62_native_p0_strict.py'
       - 'scenarios/e62-native-p0-smoke.json'
@@ -148,6 +150,7 @@ jobs:
           python3 tests/test_e62_native_qtest_pipe_and_trip_log.py
           python3 tests/test_e62_native_dshot_scenario.py
           python3 tests/test_e62_native_p0_strict.py
+          python3 tests/test_e62_native_p0_export.py
           python3 -m py_compile tests/e62_autonomous_native_motor_probe.py
           python3 tests/test_native_frozen_pwm_convergence.py
           python3 tests/test_current_continuous_bldc.py
