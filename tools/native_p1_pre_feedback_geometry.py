@@ -233,6 +233,7 @@ def analyze_records(records):
                 "first_reverse_50rpm_relative_ms"),
             "first_timg12_ms":result.get(
                 "first_feedback_relative_ms",{}).get("TIMG12"),
+            "first_feedback_ms":result.get("first_feedback_relative_ms"),
             "pre_timg12_min_torque_nm":pf.get("first50ms_min_torque_nm"),
             "pre_timg12_peak_current_a":pf.get("first50ms_max_abs_current_a"),
             "pre_timg12_power_pairs":pf.get("full_power_pairs"),
@@ -244,6 +245,7 @@ def analyze_records(records):
                 "source_torque_reconstruction",{}).get("mismatch_examples"),
             "first_12_rotor_samples":result.get(
                 "first_20ms_rotor_current_torque",[])[:12],
+            "early_sixpad_masks":result.get("first_50ms_sixpad_mask_histogram"),
         },sort_keys=True),flush=True)
     return {"status":"COMPLETE_SOURCE_ONLY_GEOMETRY" if not issues else
             "FAIL_CLOSED_SOURCE_GEOMETRY_INCOMPLETE",
