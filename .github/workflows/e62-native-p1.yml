@@ -6,6 +6,8 @@ on:
       - 'machine/**'
       - 'tests/e62_autonomous_native_motor_probe.py'
       - 'tools/native_p1_qualification.py'
+      - 'tools/e62_native_scripted_test.py'
+      - 'tests/test_e62_native_scripted_test.py'
       - 'tools/native_dshot_scenario.py'
       - 'tools/native_p0_strict.py'
       - 'scenarios/e62-native-p0-*.json'
@@ -48,49 +50,23 @@ jobs:
             --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
             --motor-profile ecx87-kv147 \
             --output artifacts/e62-g13b3-native-autonomous-cfg-flash.bin
-      - name: P1 independently clocked three JSON throttle scenarios and strict observations
+      - name: Script-first isolated three-case original Guest source and rotor matrix
         shell: bash
         run: |
-          set -uo pipefail
-          failures=0
-          for kind in smoke gentle steps; do
-            scenario="scenarios/e62-native-p0-${kind}.json"
-            root="artifacts/e62-native-p1-${kind}"
-            echo "::group::Native P1 scenario ${kind}"
-            if python3 tests/e62_autonomous_native_motor_probe.py \
-              --qemu .build/qemu-src/build/qemu-system-arm \
-              --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
-              --cfg-flash artifacts/e62-g13b3-native-autonomous-cfg-flash.bin \
-              --scenario "$scenario" \
-              --wall-timeout-s 300 \
-              --artifact "${root}.json" > "${root}.probe.log" 2>&1; then
-              echo "P1_NATIVE_WIRING_CASE_PASS=${kind}"
-            else
-              echo "P1_NATIVE_WIRING_CASE_FAIL=${kind}"
-              failures=$((failures+1))
-            fi
-            tail -n 3 "${root}.probe.log"
-            if python3 tools/native_p1_qualification.py \
-              --scenario "$scenario" \
-              --evidence "${root}.json" \
-              --events "${root}.p0.events.log" \
-              --output "${root}.p1.json" > "${root}.p1.log" 2>&1; then
-              echo "P1_NATIVE_FRONTEND_AND_THROTTLE_CASE_PASS=${kind}"
-            else
-              echo "P1_NATIVE_FRONTEND_AND_THROTTLE_CASE_FAIL=${kind}"
-              failures=$((failures+1))
-            fi
-            tail -n 2 "${root}.p1.log"
-            echo "::endgroup::"
-          done
-          echo "P1_CASE_FAILURE_COUNT=${failures}"
-          test "$failures" -eq 0
+          set -euo pipefail
+          python3 tools/e62_native_scripted_test.py \
+            --case smoke --case gentle --case steps \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --cfg-flash artifacts/e62-g13b3-native-autonomous-cfg-flash.bin \
+            --output artifacts/e62-p1-scripted \
+            --wall-timeout-s 300
       - name: Preserve scenarios, source events and negative results without discarding FAIL
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: e62-native-p1-scenario-suite
           path: |
-            artifacts/e62-native-p1-*
+            artifacts/e62-p1-scripted/**
           retention-days: 21
           if-no-files-found: warn

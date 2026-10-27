@@ -132,7 +132,7 @@ def main():
         "status":"PASS_P1_SCRIPTED_MATRIX" if all_pass else
                  "FAIL_P1_SCRIPTED_MATRIX",
         "qualified":all_pass,
-        "original_guest_model":"ESCape32_RE L17_3_PINNED_ELF".replace(" ",""),
+        "original_guest_model":"ESCape32_REL17_3_PINNED_ELF",
         "host_guest_register_writes":False,
         "no_wfi_or_gdb":True,
         "sim_only":True,

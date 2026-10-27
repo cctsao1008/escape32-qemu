@@ -136,3 +136,54 @@ exact event/frame evidence.
 a separate disarm/rearm command protocol, DShot signal-loss watchdog
 reset, live Si/GaN hardware, 12S/propeller power, OC threshold accuracy,
 or a real ECX87 motor. Do not count this PASS as recovery.
+
+## Script-first policy, 2026-10-27
+
+**The Python interactive console is frozen and is NOT a qualification
+input.** Use a *fresh original Guest QEMU process per deterministic
+versioned DShot source profile* and inspect real PA26/DMA/Guest ISR/
+native switching, rotor dynamics, BEMF and current-sense source events.
+
+After `./build.sh` and generation of the pinned SIM_ONLY preboot CFG:
+
+```sh
+python3 tools/e62_native_scripted_test.py --case smoke
+python3 tools/e62_native_scripted_test.py --case gentle
+python3 tools/e62_native_scripted_test.py --case steps
+```
+
+Omitting `--case` runs all three cases independently. Every run
+saves `artifacts/e62-p1-scripted/e62-p1-script-<case>.json`,
+`*.p0.events.log`, `*.p1.json`, probe/analyzer logs and
+`e62-p1-scripted-matrix.json`. The process exits nonzero unless
+**every specified case** has both a successful original-Guest
+No-WFI Wiring Smoke and an independent P1 source strict verdict.
+
+The fixed P1 DShot source-time oracle permits the *first* QEMU
+physical timer callback to dispatch late within the existing 1ms
+period (with at least 30us of next-frame idle). Subsequent frames
+remain bound to absolute 1ms QEMU virtual deadlines with
+no more than **100ns** of QEMU instruction-dispatch delay, an
+explicit byte/word/time budget far below a 1.667us DShot600 bit.
+Frame count, command, stage, index, Guest source ISR, BEMF, OC and
+motor reversal checks remain fail-closed.
+
+Historical CI [#40519051148](https://github.com/cctsao1008/escape32-qemu/actions/runs/40519051148)
+contained QEMU physical source trace with 11 late callbacks of
+**2ns** across 3000 Smoke frames, while Gentle and Steps
+were precisely on deadline from Frame 1 onward. The old
+audit incorrectly treated the first callback dispatch time as the
+fixed source-timer epoch; that diagnostic error has been corrected.
+
+**Steps remains truly OPEN / FAIL:** old native rotor trace had
+no motion above 50 RPM during the initial 500ms at 10% command.
+After stepping to 20%, it oscillated between positive and negative
+RPM. The previous entire positive-command window had **223
+significant direction reversals**. This is a motor-control/plant
+dynamics problem, not a DShot clock issue; the Script-First
+Matrix must remain red until the fixed source Guest control
+proves stable. Do not tune down the 50RPM direction criterion
+or substitute a Host WFI test to get green.
+
+The script intentionally makes NO claims about loaded real ECX87,
+12S, Si/GaN, hardware Trip calibration or recovered fault restart.

@@ -70,6 +70,8 @@ class P1QualificationTest(unittest.TestCase):
         self.assertEqual(r["dshot_max_observed_dispatch_error_ns"],0)
         self.assertEqual(r["source_guest_cap1_w1c_ack"],13)
         self.assertEqual(r["significant_rotor_direction_changes"],0)
+        self.assertEqual(len(r["scenario_stage_motor_dynamics"]),3)
+        self.assertEqual(r["scenario_stage_motor_dynamics"][1]["duration_ms"],20)
         self.assertFalse(r["signal_loss_and_fault_recovery_qualified"])
 
     def test_interactive_live_override_cannot_pass_scenario_json(self):
