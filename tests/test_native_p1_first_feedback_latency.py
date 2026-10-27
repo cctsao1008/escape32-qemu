@@ -89,6 +89,22 @@ class FirstFeedbackTest(unittest.TestCase):
         self.assertIsNone(result[
             "first_sample_at_90deg_electrical_before_first_commutation"])
 
+    def test_bemf_comparator_flip_can_be_speed_reversal_not_angle_zero(self):
+        records=demo()
+        records.extend([
+            ev(13,6_000_000,"ROTOR",180000,2330,0,-25000,25000,-2000000),
+            ev(14,6_500_000,"CMP_FILTER",0,0,2048,2048,0,0),
+            ev(15,7_000_000,"ROTOR",-70000,2440,0,-34000,34000,-3000000),
+        ])
+        records.sort(key=lambda x:x["vns"])
+        for i,e in enumerate(records,1):
+            e["seq"]=i
+        result=audit(records,self.verdict(),"direct20")
+        candidates=result["cmp_filter_motion_brackets_before_first_timg12"]
+        self.assertTrue(any(x["classification"] ==
+            "RPM_SIGN_CHANGE_WITH_STABLE_PHASE_SINE" for x in candidates))
+        self.assertTrue(result["cap1_to_timg12_pairing_not_proven"])
+
     def test_missing_physical_event_fails_closed(self):
         rec=[ev(1,0,"DSHOT",1,0,448,0,0,0)]
         with self.assertRaisesRegex(ValueError,"No physical original Guest PWM_PAIR"):
