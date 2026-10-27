@@ -88,9 +88,9 @@ class E62PythonConsoleContracts(unittest.TestCase):
         self.assertEqual(_six_pad_levels(0x21),"U_H,W_L")
 
     def test_original_guest_arming_window_read_only_unaligned_byte(self):
-        nm=("20000103 b window_active\\n"
-            "20000108 b window_started_at\\n"
-            "2000010c B tick\\n")
+        nm=("20000103 b window_active\n"
+            "20000108 b window_started_at\n"
+            "2000010c B tick\n")
         symbols=_optional_original_arming_symbols(nm)
         self.assertEqual(symbols,{
             "window_active":0x20000103,
@@ -112,7 +112,7 @@ class E62PythonConsoleContracts(unittest.TestCase):
         self.assertEqual(guest.calls,[0x20000100,0x20000108,0x2000010c])
         self.assertEqual(_read_guest_arming_window(guest,{} )["availability"],
                          "UNKNOWN_ORIGINAL_ELF_SYMBOLS")
-        duplicates=nm+"20000120 b window_active\\n"
+        duplicates=nm+"20000120 b window_active\n"
         self.assertNotIn("window_active",
                          _optional_original_arming_symbols(duplicates))
 
