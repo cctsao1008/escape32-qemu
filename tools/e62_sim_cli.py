@@ -596,7 +596,7 @@ class E62SimConsole(cmd.Cmd):
             "p0_source_event_count":count,
             "interrupted_before_scenario_completion":True,
         }
-        self.run_artifact.write_text(_present(evidence)+"\\n")
+        self.run_artifact.write_text(_present(evidence)+"\n")
         self.last_report=self.run_artifact
         return self.run_artifact
 
