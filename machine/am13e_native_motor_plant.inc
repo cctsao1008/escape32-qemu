@@ -466,6 +466,32 @@ static void am13e_native_motor_tick(void *opaque)
                        (int64_t)llround(m->energy_abs_residual_j*1e12),
                        (int64_t)llround(m->energy_max_residual_j*1e12),
                        (int64_t)llround(m->energy_max_star_sum_a*1e6),0);
+        /* P1 frontend source-only monitor. Phase voltage ADC codes
+         * originate from the native rotor BEMF, not a host fixture.
+         * OC is independent current-sense hardware path.
+         * Fields: three BEMF 12-bit codes, selected phase,
+         * selected 12-bit DAC threshold, cmp filter output.
+         */
+        unsigned selected=m->machine->sim_mc_mux[0]&7U;
+        AM13ESimFeedback *fb=&m->machine->feedback;
+        am13e_p0_event(m->machine,"BEMF_FRONTEND",
+                       m->bemf_codes[0],m->bemf_codes[1],
+                       m->bemf_codes[2],selected,
+                       fb->cmp[0x0eU/2U]&0xfffU,
+                       fb->filtered);
+        /* Source native physical OC before any interposing Host MMIO:
+         * code12+VALID16 on each of three actual modeled comparators.
+         */
+        AM13ETrip *trip=&m->machine->trip;
+        uint32_t valid=0,ready=0,above=0;
+        for(unsigned i=0;i<3U;++i) {
+            if(trip->oc_valid[i]) valid|=(1U<<i);
+            if(am13e_g13b2_cmp_ready(m->machine,i)) ready|=(1U<<i);
+            if(am13e_g13b2_cmp_trip(m->machine,i)) above|=(1U<<i);
+        }
+        am13e_p0_event(m->machine,"OC_FRONTEND",
+                       trip->oc_input[0],trip->oc_input[1],
+                       trip->oc_input[2],valid,ready,above);
     }
     am13e_native_motor_publish(m);
     if (!m->faulted) {

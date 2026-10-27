@@ -250,6 +250,11 @@ static void am13e_auto_dshot_event(void *opaque)
         am13e_auto_fail(a, 2U); /* Wire busy/malformed input. */
         return;
     }
+    /* Source-authentic independent FC commanded frame; the 1kHz
+     * physical PA26 wave is scheduled above. This does not imply
+     * original Guest CRC acceptance or a measured motor response. */
+    am13e_p0_event(a->machine,"DSHOT",
+                   a->sent,a->current_stage,target,0,0,0);
     a->last_dshot = target;
     ++a->sent;
     /* Absolute deadlines: timer callback overhead must never turn

@@ -427,6 +427,7 @@ def run(args):
                 "readable_original_guest_diagnostics": sorted(symbol_addrs),
                 "unavailable_original_guest_diagnostics": unresolved_guest_symbols,
             }
+            run_wall_started = time.monotonic()
             try:
                 conn, _ = listener.accept()
                 with conn:
@@ -590,6 +591,8 @@ def run(args):
                       json.dumps(evidence,sort_keys=True),flush=True)
                 raise
             finally:
+                evidence["qemu_run_wall_elapsed_s"] = round(
+                    time.monotonic()-run_wall_started,6)
                 if proc.poll() is None:
                     proc.terminate()
                 try:
@@ -615,6 +618,7 @@ def run(args):
                             event_count+=1
                 evidence["p0_event_trace_path"]=str(p0_path)
                 evidence["p0_source_event_count"]=event_count
+                evidence["qemu_log_bytes"]=qemu_log_path.stat().st_size
                 log_tail = qemu_log_path.read_bytes()[-65536:].decode(
                     "utf-8",errors="replace")
                 trip_events = [
