@@ -74,6 +74,18 @@ class FirstFeedbackTest(unittest.TestCase):
         self.assertEqual(r["first_powered_pwm_after_positive_dshot"]["relative_ms"],501)
         self.assertEqual(r["preceding_source_command_at_first_power"]["data"][2],448)
         self.assertEqual(r["first_capture_to_first_following_timg12_ms"],11)
+    def test_first_pair_geometry_cannot_be_assigned_after_commutation(self):
+        records=demo()
+        # A +110-degree sample AFTER first changed pair is not a
+        # first-sector geometric crossing. Do not misdiagnose PASS ramps.
+        records.append(ev(12,18_000_000,"ROTOR",80000,1920,0,-250,250,1000))
+        records.sort(key=lambda x:x["vns"])
+        for i,x in enumerate(records,1):
+            x["seq"]=i
+        result=audit(records,self.verdict(),"direct20")
+        self.assertIsNone(result[
+            "first_sample_at_90deg_electrical_before_first_commutation"])
+
     def test_missing_physical_event_fails_closed(self):
         rec=[ev(1,0,"DSHOT",1,0,448,0,0,0)]
         with self.assertRaisesRegex(ValueError,"No physical original Guest PWM_PAIR"):
