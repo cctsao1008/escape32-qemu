@@ -10,6 +10,8 @@ import argparse
 import json
 import math
 from pathlib import Path
+import sys
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from tools.native_p0_strict import parse_events, TraceError
 from tools.current_continuous_bldc import CurrentContinuousBLDC, LegTopology
 from tools.native_motor_model_profiles import native_motor_parameters

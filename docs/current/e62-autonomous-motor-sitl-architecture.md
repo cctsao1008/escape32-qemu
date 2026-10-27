@@ -376,3 +376,40 @@ the QEMU stderr tail, and the last successful QTest command in its
 existing JSON. **No event** is distinct from "event occurred but a
 blocked QTest prevented readback". The source-backed OC/TZ protection,
 DMA and original Guest ELF remain unchanged.
+
+### P0 native source-clocked strict, rotor and independent physics (October 27)
+
+The following P0 implementation is opt-in and **does not inherit a PASS**
+from any 3s Wiring Smoke or WFI host replay:
+
+- `machine/am13e23019.c` emits monotone original QEMU virtual-time
+  `E62_P0_EVENT` records from the existing CMPSS filter callback.
+  The PA26/Guest source CAP1 and TIMG12 native IRQ callbacks emit
+  `CAP1` and `TIMG12`. Native PWM model emits observed full six-pad
+  `SWITCH` records for the first 120ms of actual motor activity and
+  deduplicated `PWM_PAIR` sector changes. No invented Guest ISR/service.
+- The native 1us rotor clock emits source `ROTOR` (RPM in milliRPM,
+  **unwrapped** electrical angle in milliradians, 3 currents in mA
+  and torque in micro-Nm) and `ENERGY` (all six cumulative fields in
+  nanojoules), plus `INVARIANT` star-KCL and energy residual diagnostics.
+  Native backward-Euler step rejects a failed energy identity.
+- `tools/native_p0_reference_replay.py` freezes EXACT original
+  QEMU six-pad switching events for an independent 90ms Python
+  `CurrentContinuousBLDC` replay and step halving 1000/500/250ns.
+  It does not drive the Guest or inject BEMF.
+- `tools/native_p0_strict.py` applies fail-closed 12 source-ordered
+  filtered comparator→CAP1→TIMG12→PWM power pair observations spanning
+  90ms, a significant speed and direction check, unwrapped rotor
+  kinematics, switch overlap, star KCL, cumulative energy balance,
+  and original Guest CRC/capture ISR provenance. A *temporal* ordered
+  event chain is not by itself an ironclad causal attribution.
+- `scenarios/e62-native-p0-smoke.json` is a live **native** 1kHz
+  DShot600 file; gentle and step-sweep examples are versioned alongside
+  it. JSON is mandatory in the dedicated P0 CI, matching the original
+  Rel17.3 SHA256. It never blocks the external FC on Guest READY.
+
+CI: `.github/workflows/e62-native-p0-strict.yml` always uploads
+full QEMU log, native events, independent physics report, and strict
+report **even when red**. Strict is intentionally different from a
+no-WFI wiring smoke PASS. The model remains SIM_ONLY and uncalibrated:
+current-sense gain, switching losses and propeller load are not physical.

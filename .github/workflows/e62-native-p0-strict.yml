@@ -1,0 +1,83 @@
+name: E62 P0 No-WFI Strict Rotor, Causality, Physics (fail closed)
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'machine/**'
+      - 'tools/native_p0_strict.py'
+      - 'tools/native_p0_reference_replay.py'
+      - 'tools/native_dshot_scenario.py'
+      - 'scenarios/e62-native-p0-*.json'
+      - 'tests/e62_autonomous_native_motor_probe.py'
+      - 'tests/test_e62_native_p0_strict.py'
+      - '.github/workflows/e62-native-p0-strict.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-original-guest-p0-strict:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Source-pinned QEMU and original Guest build dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            libglib2.0-dev libpixman-1-dev libfdt-dev pkg-config \
+            meson ninja-build binutils-arm-none-eabi
+      - name: Verify original ELF, compile native QEMU and validate scenario
+        run: |
+          set -euo pipefail
+          git submodule update --init --depth 1 qemu
+          echo '05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0  baseline/e62-g13b3/firmware/AM13E-rev17.3.elf' | sha256sum -c -
+          python3 tests/test_e62_native_dshot_scenario.py
+          python3 tests/test_e62_native_p0_strict.py
+          ./build.sh
+      - name: Original Guest PA26 1kHz JSON Flight Controller run
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          python3 tools/sim_motor_cfg.py --sim-only-opt-in \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --motor-profile ecx87-kv147 \
+            --output artifacts/e62-g13b3-native-autonomous-cfg-flash.bin
+          python3 tests/e62_autonomous_native_motor_probe.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --cfg-flash artifacts/e62-g13b3-native-autonomous-cfg-flash.bin \
+            --scenario scenarios/e62-native-p0-smoke.json \
+            --wall-timeout-s 240 \
+            --artifact artifacts/e62-native-autonomous-smoke.json \
+            2>&1 | tee artifacts/e62-native-p0-probe.log
+      - name: P0 frozen PWM original native physics 1/0.5/0.25us reference
+        run: |
+          set -euo pipefail
+          python3 tools/native_p0_reference_replay.py \
+            --events artifacts/e62-native-autonomous-smoke.p0.events.log \
+            --output artifacts/e62-native-p0-physics.json \
+            2>&1 | tee artifacts/e62-native-p0-physics.log
+      - name: P0 source-causal and 12-sector/90ms strict rotor gate
+        run: |
+          set -euo pipefail
+          python3 tools/native_p0_strict.py \
+            --events artifacts/e62-native-autonomous-smoke.p0.events.log \
+            --evidence artifacts/e62-native-autonomous-smoke.json \
+            --output artifacts/e62-native-p0-strict.json \
+            2>&1 | tee artifacts/e62-native-p0-strict.log
+      - name: Preserve original QEMU event and all failing evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-p0-source-physics-strict
+          path: |
+            artifacts/e62-native-autonomous-smoke.json
+            artifacts/e62-native-autonomous-smoke.qemu.log
+            artifacts/e62-native-autonomous-smoke.p0.events.log
+            artifacts/e62-native-p0*.json
+            artifacts/e62-native-p0*.log
+          retention-days: 21
+          if-no-files-found: warn
