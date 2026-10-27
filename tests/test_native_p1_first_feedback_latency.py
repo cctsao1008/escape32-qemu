@@ -76,6 +76,9 @@ class FirstFeedbackTest(unittest.TestCase):
         self.assertEqual(r["first_capture_to_first_following_timg12_ms"],11)
     def test_first_pair_geometry_cannot_be_assigned_after_commutation(self):
         records=demo()
+        # Earlier samples remain below +90deg in the first sector.
+        records[6]["data"]=(330000,800,0,-27888,27888,-493476)
+        records[7]["data"]=(-75000,1400,0,-34589,34589,-2973882)
         # A +110-degree sample AFTER first changed pair is not a
         # first-sector geometric crossing. Do not misdiagnose PASS ramps.
         records.append(ev(12,18_000_000,"ROTOR",80000,1920,0,-250,250,1000))
