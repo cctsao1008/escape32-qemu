@@ -316,6 +316,11 @@ static bool am13e_g10_ecap_put16(AM13ESimFeedback *f,
         am13e_g10_irq_update(f);
         return true;
     case 0x30:
+        if ((v & 2U) && (f->ecflg & 2U)) {
+            /* Original Guest W1C actually serviced the CAP1 source. */
+            am13e_p0_event(f->machine,"CAP1_ACK",v,f->ecflg,
+                           f->cap[0],f->eceint,0,0);
+        }
         f->ecflg &= ~(v & 0xffU);
         am13e_g10_irq_update(f);
         return true;

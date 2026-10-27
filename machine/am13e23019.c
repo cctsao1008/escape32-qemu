@@ -1157,6 +1157,14 @@ static MemTxResult am13e_timer_write(void *opaque, hwaddr off,
             t->irq_raw[group] |= data;
             break;
         case 0x28U:
+            if(t->base == 0x40188000U && group == 0 &&
+               (data & AM13E_SIM_TIMER_ZERO) &&
+               (t->irq_raw[group] & AM13E_SIM_TIMER_ZERO)) {
+                /* Original Guest ISR W1C on genuine TIMG12 ZERO. */
+                am13e_p0_event(t->machine,"TIMG12_ACK",
+                               data,t->irq_raw[group],t->irq_mask[group],
+                               t->reg[0x808U/4U],0,0);
+            }
             t->irq_raw[group] &= ~data;
             break;
         default:

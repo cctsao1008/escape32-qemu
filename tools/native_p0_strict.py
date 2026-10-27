@@ -19,7 +19,7 @@ EVENT = re.compile(
     r"e=(-?\d+) f=(-?\d+)"
 )
 KINDS={"CMP_FILTER","CAP1","TIMG12","PWM_PAIR","ROTOR",
-       "ENERGY","INVARIANT","SWITCH"}
+       "ENERGY","INVARIANT","SWITCH","CAP1_ACK","TIMG12_ACK"}
 STABILITY_MIN_SECTORS=12
 STABILITY_MIN_TIME_NS=90_000_000
 SIGNIFICANT_SPEED_RPM=50.0
@@ -92,7 +92,7 @@ def audit(events, evidence, physics=None):
     # Ordered source-callback evidence: CMPSS filtered event, enabled
     # CAP1, native TIMG12 ZERO and subsequently changed original six-pad
     # power pair. No fabricated Guest ISR timing is inserted.
-    last_comp=last_cap=last_t12=None
+    last_comp=last_cap=last_cap_ack=last_t12=last_t12_ack=None
     chains=[]
     seen_pairs=set()
     last_pair=None
@@ -105,25 +105,33 @@ def audit(events, evidence, physics=None):
             if (last_comp and t-last_comp["vns"]<=3_000_000 and
                 event["data"][1]==last_comp["data"][0]):
                 last_cap=(last_comp,event)
+        elif typ=="CAP1_ACK":
+            if (last_cap and t-last_cap[1]["vns"]<=3_000_000):
+                last_cap_ack=(*last_cap,event)
         elif typ=="TIMG12":
-            if last_cap and t-last_cap[1]["vns"]<=3_000_000:
-                last_t12=(last_cap[0],last_cap[1],event)
+            if (last_cap_ack and t-last_cap_ack[2]["vns"]<=3_000_000):
+                last_t12=(*last_cap_ack,event)
+        elif typ=="TIMG12_ACK":
+            if last_t12 and t-last_t12[3]["vns"]<=3_000_000:
+                last_t12_ack=(*last_t12,event)
         elif typ=="PWM_PAIR":
             pair=event["data"][0]
             if pair==last_pair:
                 continue
             last_pair=pair
-            if (last_t12 and t-last_t12[2]["vns"]<=3_000_000 and
+            if (last_t12_ack and t-last_t12_ack[4]["vns"]<=3_000_000 and
                 event["data"][2]&15==15):
                 chains.append({
-                    "cmp_ns":last_t12[0]["vns"],
-                    "cap1_ns":last_t12[1]["vns"],
-                    "timg12_ns":last_t12[2]["vns"],
+                    "cmp_ns":last_t12_ack[0]["vns"],
+                    "cap1_ns":last_t12_ack[1]["vns"],
+                    "guest_cap1_ack_ns":last_t12_ack[2]["vns"],
+                    "timg12_ns":last_t12_ack[3]["vns"],
+                    "guest_timg12_ack_ns":last_t12_ack[4]["vns"],
                     "pwm_pair_ns":t,
                     "pair":pair
                 })
                 seen_pairs.add(pair)
-                last_t12=None
+                last_t12_ack=None
     if len(chains)<STABILITY_MIN_SECTORS:
         flags.append("NO_12_SOURCE_ORDERED_CAUSAL_CHAINS")
     if len(chains)>=STABILITY_MIN_SECTORS and (
