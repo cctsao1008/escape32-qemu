@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - 'machine/**'
+      - 'build.sh'
       - 'tests/e62_autonomous_native_motor_probe.py'
       - 'tools/native_p1_qualification.py'
       - 'tools/e62_native_scripted_test.py'

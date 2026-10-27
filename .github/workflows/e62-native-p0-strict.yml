@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - 'machine/**'
+      - 'build.sh'
       - 'tools/native_p0_strict.py'
       - 'tools/native_p0_reference_replay.py'
       - 'tools/native_p0_export.py'

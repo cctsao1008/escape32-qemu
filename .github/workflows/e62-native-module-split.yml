@@ -3,6 +3,7 @@ on:
   push:
     branches: [main]
     paths:
+      - 'build.sh'
       - 'machine/am13e_native_motor_plant.inc'
       - 'machine/am13e_native_motor_dynamics.inc'
       - 'machine/am13e_native_analog_frontend.inc'

@@ -75,6 +75,17 @@ class OriginalVirtualClockModuleContract(unittest.TestCase):
         self.assertIn("am13e_g10_cmp_evaluate(f)",feedback)
         self.assertIn("am13e_g10_ecap_edge(f, level)",feedback)
 
+    def test_qemu_worktree_materializes_every_native_module(self):
+        script=(ROOT/"build.sh").read_text()
+        for name in MODULES:
+            self.assertIn(f"'{name}'",script)
+        self.assertIn("module_source.is_symlink()",script)
+        self.assertIn("module_target.is_symlink()",script)
+        self.assertIn("module_target.write_bytes(module_source.read_bytes())",
+                      script)
+        self.assertIn("module_target.read_bytes() != module_source.read_bytes()",
+                      script)
+
     def test_p1_diagnostic_and_qualification_source_not_replaced(self):
         controller=(ROOT/"tools/native_p1_qualification.py").read_text()
         self.assertIn("STARTUP_SIGNIFICANT_DIRECTION_REVERSAL",controller)

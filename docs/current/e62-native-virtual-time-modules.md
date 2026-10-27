@@ -73,3 +73,13 @@ overruns that fixed sector's forward-torque electrical range before its
 first observed TIMG12. This refactor **does not** hide or correct that
 problem. Future changes to plant physics or guest startup timing require
 separate A/B evidence, not an unreviewed part of modularization.
+
+## Generated QEMU build staging (required)
+
+`./build.sh` now stages all three new native `.inc` modules into the
+ignored `.build/qemu-src/hw/arm/` worktree before QEMU compilation, in
+addition to the original machine and analog/PWM includes. Missing or
+symlinked module inputs/outputs fail closed; changed module bytes are
+resynchronized. P0 and P1 workflows now watch `build.sh` so build-staging
+changes are exercised by actual source-built QEMU tests. No source or
+Guest firmware mutation happens inside the virtual motor.

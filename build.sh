@@ -135,6 +135,25 @@ if motor_target.is_symlink():
     sys.exit('ERROR: generated native motor path is a symlink')
 if not motor_target.exists() or motor_target.read_bytes() != motor_source.read_bytes():
     motor_target.write_bytes(motor_source.read_bytes())
+# The native coordinator now includes three single-QEMU-thread source
+# modules. Materialize ALL includes in the generated (ignored) QEMU
+# worktree. No Guest state write; refuse symlinks and missing files.
+for module_name in (
+    'am13e_native_motor_dynamics.inc',
+    'am13e_native_analog_frontend.inc',
+    'am13e_native_pwm_coupling.inc',
+):
+    module_source = root / 'machine' / module_name
+    module_target = qemu / 'hw/arm' / module_name
+    if not module_source.is_file() or module_source.is_symlink():
+        sys.exit('ERROR: missing/unsafe native model module: ' + module_name)
+    if f'#include "{module_name}"' not in motor_source.read_text():
+        sys.exit('ERROR: native coordinator lost module include: ' + module_name)
+    if module_target.is_symlink():
+        sys.exit('ERROR: QEMU generated module path is symlink: ' + module_name)
+    if (not module_target.exists() or
+            module_target.read_bytes() != module_source.read_bytes()):
+        module_target.write_bytes(module_source.read_bytes())
 history_source = root / 'machine/am13e_pwm_history.inc'
 history_target = qemu / 'hw/arm/am13e_pwm_history.inc'
 if history_target.is_symlink():
