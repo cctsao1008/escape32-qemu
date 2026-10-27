@@ -345,13 +345,27 @@ class E62SimConsole(cmd.Cmd):
         self._command("fault",act)
 
     def do_show(self,arg):
-        """show [scenario|sim|guest|all]: scenario and live *read-only* telemetry."""
+        """show [scenario|sim|guest|cfg|all]: simulated input and read-only Guest telemetry."""
         def act():
             tokens=_tokens(arg)
-            if len(tokens)>1:raise ValueError("usage: show [scenario|sim|guest|all]")
+            if len(tokens)>1:raise ValueError("usage: show [scenario|sim|guest|cfg|all]")
             key=tokens[0] if tokens else "all"
-            if key not in ("scenario","sim","guest","all"):
+            if key not in ("scenario","sim","guest","cfg","all"):
                 raise ValueError("Unknown view")
+            if key in ("cfg","all"):
+                if not self.cfg_flash.is_file():
+                    print("CFG: no dedicated SIM_ONLY preboot flash image; run first")
+                else:
+                    raw=self.cfg_flash.read_bytes()
+                    if len(raw)!=336 or not 1<=raw[57]<=255:
+                        raise RuntimeError("SIM_ONLY flash CFG size/telem_poles invalid")
+                    print("CFG "+_present({
+                        "scope":"DEDICATED_SIM_ONLY_PREBOOT_CFG_IMAGE",
+                        "flash_base":"0x00004000",
+                        "byte_offset_57_telem_poles":raw[57],
+                        "guest_uart_settings_not_read":True,
+                        "firmware_cfg_not_editable":True,
+                    }))
             if key in ("scenario","all"):
                 print("SCENARIO "+_present({
                     "path":str(self.scenario),"sha256":self.meta["sha256"],
@@ -378,6 +392,14 @@ class E62SimConsole(cmd.Cmd):
             if len(token)!=1 or "." not in token[0]:
                 raise ValueError("usage: get <domain.param> ; show all lists fields")
             domain,key=token[0].split(".",1)
+            if domain=="cfg" and key=="telem_poles":
+                if not self.cfg_flash.is_file():
+                    raise RuntimeError("Dedicated SIM_ONLY cfg not yet generated")
+                raw=self.cfg_flash.read_bytes()
+                if len(raw)!=336 or not 1<=raw[57]<=255:
+                    raise RuntimeError("Unknown or unqualified SIM_ONLY CFG image")
+                print(f"cfg.telem_poles = {raw[57]} (SIM_ONLY preboot only)")
+                return
             snap=self._snapshot()
             if domain=="dshot":domain="source_dshot"
             if domain=="guest":domain="original_guest"
@@ -494,6 +516,28 @@ class E62SimConsole(cmd.Cmd):
             print("Run native_p0_strict.py/native_p1_qualification.py separately "
                   "only on compatible, unmodified JSON scenarios.")
         self._command("results",act)
+
+    def do_history(self,arg):
+        """history [n]: last virtual-time DShot/THROT_SET FC source events."""
+        def act():
+            from collections import deque
+            tok=_tokens(arg)
+            if len(tok)>1:raise ValueError("usage: history [1..100]")
+            limit=int(tok[0]) if tok else 10
+            if not 1<=limit<=100:raise ValueError("history limit 1..100")
+            log=self.log_path
+            if (log is None or not log.is_file()) and self.last_report:
+                log=self.last_report.with_suffix(".qemu.log")
+            if not log or not log.is_file():
+                raise RuntimeError("No QEMU source log; run first")
+            q=deque(maxlen=limit)
+            with log.open(errors="replace") as source:
+                for line in source:
+                    if "E62_P0_EVENT " in line and (
+                        "kind=DSHOT " in line or "kind=THROT_SET " in line):
+                        q.append(line[line.index("E62_P0_EVENT "):].strip())
+            print("\\n".join(q) if q else "No FC source events flushed yet")
+        self._command("history",act)
 
     def do_stop(self,arg):
         """stop: terminate SIMULATOR; does not claim Guest safe-off/recovery."""
