@@ -22,7 +22,10 @@ CASES={
     "gentle": ROOT/"scenarios/e62-native-p0-gentle.json",
     "direct20": ROOT/"scenarios/e62-native-p0-direct20.json",
     "steps": ROOT/"scenarios/e62-native-p0-steps.json",
+    "ramp20_100ms":ROOT/"scenarios/e62-native-p1-ramp20-100ms.json",
+    "ramp20_500ms":ROOT/"scenarios/e62-native-p1-ramp20-500ms.json",
 }
+DEFAULT_CASES=("smoke","gentle","direct20","steps")
 
 
 def decide(probe_exit,analyzer_exit,verdict):
@@ -117,7 +120,7 @@ def main():
     if args.wall_timeout_s<20 or args.wall_timeout_s>1800:
         parser.error("Wall timeout must be in [20,1800] seconds")
     args.output.mkdir(parents=True,exist_ok=True)
-    cases=list(dict.fromkeys(args.case or CASES))
+    cases=list(dict.fromkeys(args.case or DEFAULT_CASES))
     results=[]
     for name in cases:
         print("E62_P1_SCRIPT_START "+name,flush=True)

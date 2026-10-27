@@ -232,3 +232,28 @@ physical ECX87 hardware**. This is a root-cause *boundary*, not proof
 of an original-firmware bug. Next experiments should isolate
 startup duty slew and motor/propeller inertia with labeled A/B
 parameters, preserving the originally pinned Guest and strict gates.
+
+## Optional diagnostic external-FC ramp A/B, without original Guest changes
+
+The `direct20` test gives a full 20% DShot command immediately
+following 1.5s neutral. The `smoke` case instead ramps 0→20% over
+1000ms. To distinguish the **command slew sensitivity** from the
+absolute final command and hold time, two additional *characterization*
+cases have been versioned (not silently added to the baseline four-case
+qualification matrix):
+
+```sh
+python3 tools/e62_native_scripted_test.py --case ramp20_100ms
+python3 tools/e62_native_scripted_test.py --case ramp20_500ms
+```
+
+Both continue DShot600 at 1kHz and begin with the same 1500ms
+zero command, then reach **20%** in 100ms or 500ms with 5ms updates,
+hold for 1000ms, then send 200ms zero. No Guest WFI/CFG/IRQ/PWM
+writes and no synthetic timed BEMF. Source trace will show whether
+First-Sector high current/negative torque is reduced and whether
+Guest TIMG12/rotor remain stable. The CI records both cases even
+when any fails; the A/B outcome never turns the failing `direct20`
+or `steps` case green. An observed numerical optimum does **not**
+replace physical motor/prop calibration or original firmware
+acceleration requirements.

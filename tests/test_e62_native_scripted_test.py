@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
-from tools.e62_native_scripted_test import decide,run_case,CASES
+from tools.e62_native_scripted_test import decide,run_case,CASES,DEFAULT_CASES
 from tools.native_dshot_scenario import load_native_scenario
 
 
@@ -14,7 +14,11 @@ class P1ScriptedTest(unittest.TestCase):
         for name,p in CASES.items():
             stages,meta=load_native_scenario(p)
             self.assertEqual(meta["dshot_frames"],sum(x[0] for x in stages))
-        self.assertEqual(set(CASES),{"smoke","gentle","direct20","steps"})
+        self.assertEqual(set(CASES),{
+            "smoke","gentle","direct20","steps",
+            "ramp20_100ms","ramp20_500ms",
+        })
+        self.assertEqual(DEFAULT_CASES,("smoke","gentle","direct20","steps"))
 
     def test_wiring_smoke_never_overrides_rotor_failure(self):
         verdict={"qualified":True,"status":"PASS_P1_SIM_ONLY_OBSERVABILITY"}
