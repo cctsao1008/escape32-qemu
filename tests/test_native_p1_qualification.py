@@ -66,7 +66,8 @@ class P1QualificationTest(unittest.TestCase):
         self.assertTrue(r["qualified"],r["unwaived_observability_failures"])
         self.assertEqual(r["first_observed_50rpm_delay_ms"],5.0001)
         self.assertEqual(r["performance"]["virtual_s"],.06)
-        self.assertTrue(r["dshot_from_second_frame_exact_1khz"])
+        self.assertTrue(r["dshot_from_second_frame_bounded_1khz"])
+        self.assertEqual(r["dshot_max_observed_dispatch_error_ns"],0)
         self.assertEqual(r["source_guest_cap1_w1c_ack"],13)
         self.assertEqual(r["significant_rotor_direction_changes"],0)
         self.assertFalse(r["signal_loss_and_fault_recovery_qualified"])
@@ -90,9 +91,17 @@ class P1QualificationTest(unittest.TestCase):
         self.assertTrue(result["qualified"],result["unwaived_observability_failures"])
         self.assertEqual(result["dshot_first_callback_lateness_ns"],150000)
 
+    def test_two_ns_qemu_dispatch_quantization_is_accepted(self):
+        args=list(example())
+        args[0][10]["vns"]+=2
+        r=analyze(*args)
+        self.assertTrue(r["qualified"],r["unwaived_observability_failures"])
+        self.assertEqual(r["dshot_max_observed_dispatch_error_ns"],2)
+        self.assertEqual(r["dshot_steady_frames_nonzero_dispatch_ns"],1)
+
     def test_late_steady_frame_and_first_frame_overlap_are_rejected(self):
         args=list(example())
-        args[0][10]["vns"]+=1
+        args[0][10]["vns"]+=101
         result=analyze(*args)
         self.assertEqual(result["dshot_first_mismatch"]["frame_index"],10)
         self.assertIn("DSHOT_VIRTUAL_CLOCK_OR_VALUE_MISMATCH",
