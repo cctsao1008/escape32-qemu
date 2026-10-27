@@ -242,6 +242,8 @@ def analyze_records(records):
                 "source_torque_reconstruction",{}).get("max_abs_residual_nm"),
             "torque_reconstruction_mismatch_examples":result.get(
                 "source_torque_reconstruction",{}).get("mismatch_examples"),
+            "first_12_rotor_samples":result.get(
+                "first_20ms_rotor_current_torque",[])[:12],
         },sort_keys=True),flush=True)
     return {"status":"COMPLETE_SOURCE_ONLY_GEOMETRY" if not issues else
             "FAIL_CLOSED_SOURCE_GEOMETRY_INCOMPLETE",
