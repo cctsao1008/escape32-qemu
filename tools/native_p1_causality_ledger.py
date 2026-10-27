@@ -97,9 +97,11 @@ def diagnose(name, events, verdict=None):
     if onset is None or not rotor:
         raise ValueError("No physical positive DShot or 1ms native rotor")
     first20=first(dshot,lambda e:e["data"][2]>=448)
-    # Steps has a 500ms 10% hold before its 20% impulse. The primary
-    # startup anchor and the high-command comparison anchor differ.
-    anchor=first20 or onset
+    # The first positive command remains the PRIMARY startup origin:
+    # an original Guest can spin already at 10% (seen in later CI).
+    # The >=20% transition is a SECOND independent comparison anchor.
+    # Never erase earlier step-current/torque/reversal evidence.
+    anchor=onset
     end_positive=next((e["vns"] for e in reversed(dshot)
                        if e["data"][2]>0),None)
     active=[e for e in rotor if onset["vns"]<=e["vns"]<=end_positive]
@@ -157,6 +159,20 @@ def diagnose(name, events, verdict=None):
     phase_current_peak=max((abs(x) for e in preview
                            for x in e["data"][2:5]),default=0)/1000
     torque_min=min((e["data"][5] for e in preview),default=0)/1e6
+    high_preview=([e for e in rotor if first20 and
+                   first20["vns"]<=e["vns"]<
+                   first20["vns"]+50_000_000] if first20 else [])
+    def prior_dshot(event):
+        if event is None:
+            return None
+        source=next((e for e in reversed(dshot)
+                     if e["vns"]<=event["vns"]),None)
+        return compact(source)
+    critical_active_commands={k:prior_dshot(v) for k,v in critical.items()
+                              if k in ("first_reverse_minus50rpm",
+                                "first_significant_direction_change",
+                                "first_negative_torque_below_minus0p1nm",
+                                "first_phase_current_at_or_above_10a")}
     physical_pair_rows=[decoded_pair(e) for e in pairs[:24]]
     invalid_pairs=[x for x in (decoded_pair(e) for e in pairs)
                    if not x["source_pair_id_consistent"]]
@@ -173,7 +189,11 @@ def diagnose(name, events, verdict=None):
         "diagnostic_recomputed_direction_changes":changes,
         "first_50rpm_significant_direction_change":observations[
             "first_significant_direction_change"],
-        "anchor_kind":"FIRST_GE20PCT" if first20 else "FIRST_POSITIVE",
+        "anchor_kind":"FIRST_POSITIVE",
+        "first_ge20pct_relative_to_positive_ms":(
+            round((first20["vns"]-onset["vns"])/1e6,6)
+            if first20 else None),
+        "critical_witness_active_dshot":critical_active_commands,
         "source_timestamps_ns":observations,
         "relative_to_comparison_anchor_ms":delays_ms,
         "first_50ms_after_anchor":{
@@ -183,6 +203,15 @@ def diagnose(name, events, verdict=None):
             "source_event_counts":dict(Counter(e["kind"] for e in selected)),
             "rotor_samples":[rotor_sample(e) for e in preview[:50]],
         },
+        "first_50ms_after_first_ge20pct":({
+            "motor_sample_count":len(high_preview),
+            "peak_abs_phase_current_a":max(
+                (abs(x) for e in high_preview
+                 for x in e["data"][2:5]),default=0)/1000,
+            "minimum_torque_nm":min(
+                (e["data"][5] for e in high_preview),default=0)/1e6,
+            "rotor_samples":[rotor_sample(e) for e in high_preview[:50]],
+        } if first20 else None),
         "source_pwm_pair_count_after_anchor":len(pairs),
         "pwm_pair_sector_sequence_start":physical_pair_rows,
         "pwm_pair_invalid_source_masks":len(invalid_pairs),
@@ -257,6 +286,11 @@ def run(records, output):
             "first50_min_torque_nm":(
                 report.get("first_50ms_after_anchor") or {}
                 ).get("minimum_torque_nm"),
+            "first20_relative_to_positive_ms":report.get(
+                "first_ge20pct_relative_to_positive_ms"),
+            "first20_peak_phase_current_a":(
+                report.get("first_50ms_after_first_ge20pct") or {}
+                ).get("peak_abs_phase_current_a"),
         },sort_keys=True),flush=True)
     output.parent.mkdir(parents=True,exist_ok=True)
     output.write_text(json.dumps({
