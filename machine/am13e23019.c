@@ -453,6 +453,10 @@ typedef struct AM13EAutoSITL {
      * and fault handlers remain authentic and unmodified. */
     uint32_t p1_nfault_enable, p1_nfault_assert_frame;
     uint32_t p1_nfault_release_frame, p1_nfault_events;
+    /* Host interactive ESC-SIM FC override, never Guest throttle.
+     * Applied only by the existing 1kHz QEMU PA26 frame callback. */
+    uint32_t live_override_enabled, live_permille;
+    uint32_t live_changes, live_last_applied_frame;
 } AM13EAutoSITL;
 
 typedef struct AM13EDMA {

@@ -95,6 +95,8 @@ static void am13e_auto_reset(AM13EAutoSITL *a)
     a->last_sample_word = 0U;
     a->p1_nfault_enable = a->p1_nfault_assert_frame =
         a->p1_nfault_release_frame = a->p1_nfault_events = 0U;
+    a->live_override_enabled = a->live_permille = 0U;
+    a->live_changes = a->live_last_applied_frame = 0U;
     a->stage_seen_mask = a->stage_route_transitions = 0U;
     a->last_observed_state = UINT32_MAX;
     a->vector_commits = a->vector_unchanged = 0U;
@@ -269,6 +271,10 @@ static void am13e_auto_dshot_event(void *opaque)
     }
     unsigned previous_stage = a->current_stage;
     uint32_t target = am13e_auto_target_for_frame(a, a->sent);
+    if (a->live_override_enabled) {
+        target = am13e_auto_dshot_value(a->live_permille);
+        a->live_last_applied_frame = a->sent;
+    }
     if (a->sent && a->current_stage != previous_stage) {
         am13e_auto_checkpoint(a, previous_stage, now, true);
     }
@@ -280,7 +286,8 @@ static void am13e_auto_dshot_event(void *opaque)
      * physical PA26 wave is scheduled above. This does not imply
      * original Guest CRC acceptance or a measured motor response. */
     am13e_p0_event(a->machine,"DSHOT",
-                   a->sent,a->current_stage,target,0,0,0);
+                   a->sent,a->current_stage,target,
+                   a->live_override_enabled,a->live_permille,0);
     a->last_dshot = target;
     ++a->sent;
     /* Absolute deadlines: timer callback overhead must never turn
@@ -603,6 +610,10 @@ static MemTxResult am13e_auto_read(void *opaque, hwaddr off,
     case 0x124: *v = a->p1_nfault_release_frame; break;
     case 0x128: *v = a->p1_nfault_enable; break;
     case 0x12c: *v = a->p1_nfault_events; break;
+    case 0x130: *v = a->live_override_enabled; break;
+    case 0x134: *v = a->live_permille; break;
+    case 0x138: *v = a->live_changes; break;
+    case 0x13c: *v = a->live_last_applied_frame; break;
     default: return MEMTX_ERROR;
     }
     return MEMTX_OK;
@@ -643,6 +654,26 @@ static MemTxResult am13e_auto_write(void *opaque, hwaddr off,
     }
     if (off == 0x5c && v < AM13E_AUTO_MAX_STAGES) {
         a->stage_query = v; /* non-silicon, read-only evidence selection */
+        return MEMTX_OK;
+    }
+    /* Deliberate sole live write exception: independent external
+     * flight-controller throttle, applied at NEXT physical DShot frame.
+     * No Guest SRAM/UART/CLI/IRQ/PWM/CFG writes. Every change leaves a
+     * source-owned QEMU virtual timestamp and next-frame index.
+     */
+    if (a->running && !a->done && !a->error_code &&
+        (off == 0x130 || off == 0x134)) {
+        if (off == 0x130 && v > 1U) return MEMTX_ERROR;
+        if (off == 0x134 && v > 1000U) return MEMTX_ERROR;
+        if (off == 0x130) {
+            a->live_override_enabled = v;
+        } else {
+            a->live_permille = v;
+        }
+        ++a->live_changes;
+        am13e_p0_event(a->machine,"THROT_SET",
+                       a->sent,a->live_override_enabled,
+                       a->live_permille,a->live_changes,0,0);
         return MEMTX_OK;
     }
     if (a->running || a->done || a->error_code) {

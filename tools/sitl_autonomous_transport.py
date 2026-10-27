@@ -49,6 +49,8 @@ REG = {
     'vector_skipped': 0x108, 'vector_commits': 0x10c,
     'live_phase_mask': 0x110, 'live_phase_transitions': 0x114,
     'schema_magic': 0x118,
+    'live_override':0x130,'live_permille':0x134,
+    'live_changes':0x138,'live_applied_frame':0x13c,
 }
 
 
