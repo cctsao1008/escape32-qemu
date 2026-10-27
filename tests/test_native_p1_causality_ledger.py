@@ -76,11 +76,19 @@ class CausalLedgerTest(unittest.TestCase):
             ev(5,503_000_000,"DSHOT",2001,2,448,0,0,0),
         ]
         report=diagnose("steps",samples)
-        self.assertEqual(report["anchor_kind"],"FIRST_GE20PCT")
+        self.assertEqual(report["anchor_kind"],"FIRST_POSITIVE")
+        self.assertEqual(report["first_ge20pct_relative_to_positive_ms"],
+                         500.0)
         self.assertEqual(report["relative_to_comparison_anchor_ms"][
-            "first_negative_torque_below_minus0p1nm"],1.0)
+            "first_negative_torque_below_minus0p1nm"],501.0)
         self.assertEqual(report["relative_to_comparison_anchor_ms"][
-            "first_reverse_minus50rpm"],2.0)
+            "first_reverse_minus50rpm"],502.0)
+        self.assertEqual(
+            report["critical_witness_active_dshot"][
+                "first_reverse_minus50rpm"]["data"][2],448)
+        self.assertEqual(
+            report["first_50ms_after_first_ge20pct"][
+                "peak_abs_phase_current_a"],22.0)
         self.assertIsNone(report["p1_source_qualified"])
 
     def test_missing_trace_fails_closed_without_fabricating_pass(self):
