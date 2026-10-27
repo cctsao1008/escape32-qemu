@@ -102,8 +102,8 @@ class E62PythonConsoleContracts(unittest.TestCase):
             c.run_artifact=Path(tmp)/"console.json"
             c.log_path=Path(tmp)/"console.qemu.log"
             c.log_path.write_text(
-                "E62_P0_EVENT seq=1 vns=0 kind=DSHOT a=0 b=0 c=0 d=0 e=0 f=0\\n"
-                "E62_P0_EVENT seq=2 vns=1 kind=THROT_SET a=1 b=1 c=0 d=2 e=0 f=0\\n")
+                "E62_P0_EVENT seq=1 vns=0 kind=DSHOT a=0 b=0 c=0 d=0 e=0 f=0\n"
+                "E62_P0_EVENT seq=2 vns=1 kind=THROT_SET a=1 b=1 c=0 d=2 e=0 f=0\n")
             result=c._write_interrupted_evidence({"sent":90},10,None)
             record=json.loads(result.read_text())
             self.assertEqual(record["status"],"STOPPED_BY_OPERATOR_NOT_A_TEST_PASS")
