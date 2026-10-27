@@ -2,6 +2,7 @@
 """Native DShot JSON stage/ELF/clock boundaries fail-closed."""
 import json, tempfile, unittest
 from pathlib import Path
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from tools.native_dshot_scenario import load_native_scenario, ScenarioError
 ROOT=Path(__file__).resolve().parents[1]
 SC=ROOT/"scenarios/e62-native-p0-smoke.json"
