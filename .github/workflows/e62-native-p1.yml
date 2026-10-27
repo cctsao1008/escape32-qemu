@@ -9,6 +9,8 @@ on:
       - 'tools/e62_native_scripted_test.py'
       - 'tools/native_p1_startup_transient.py'
       - 'tools/native_p1_causality_ledger.py'
+      - 'tools/native_p1_pre_feedback_geometry.py'
+      - 'tests/test_native_p1_pre_feedback_geometry.py'
       - 'tests/test_native_p1_causality_ledger.py'
       - 'tests/test_native_p1_startup_transient.py'
       - 'tests/test_e62_native_scripted_test.py'
@@ -44,6 +46,7 @@ jobs:
           export PYTHONPATH="$PWD${PYTHONPATH:+:$PYTHONPATH}"
           python3 tests/test_native_p1_qualification.py
           python3 tests/test_native_p1_causality_ledger.py
+          python3 tests/test_native_p1_pre_feedback_geometry.py
           python3 tests/test_native_p1_startup_transient.py
           python3 tests/test_e62_native_scripted_test.py
           python3 tests/test_e62_native_dshot_scenario.py
@@ -104,6 +107,14 @@ jobs:
           python3 tools/native_p1_causality_ledger.py \
             --input-root artifacts/e62-p1-scripted \
             --output artifacts/e62-p1-scripted/e62-p1-causality.json
+      - name: Original Guest pre-TIMG12 physical six-pad and torque sign audit
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/native_p1_pre_feedback_geometry.py \
+            --input-root artifacts/e62-p1-scripted \
+            --output artifacts/e62-p1-scripted/e62-p1-early-geometry.json
       - name: Preserve scenarios, source events and negative results without discarding FAIL
         if: always()
         uses: actions/upload-artifact@v4
