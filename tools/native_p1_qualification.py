@@ -164,6 +164,32 @@ def analyze(events,evidence,stages,meta):
         abs(e["data"][0])>=50000 for e in rotor if e["vns"]<onset):
         failures.append("UNCOMMANDED_ROTOR_SPEED_BEFORE_POSITIVE_DSHOT")
 
+    # Attribute rotor response to the actual *commanded* JSON stage,
+    # not to an assumed fixed delay after ARM or to overall peak RPM.
+    stage_dynamics=[]
+    elapsed_ms=0
+    for idx,(duration,start,end,update) in enumerate(stages):
+        lo=(clock_epoch+elapsed_ms*1000000
+            if clock_epoch is not None else None)
+        hi=(lo+duration*1000000 if lo is not None else None)
+        sample=[e for e in rotor if lo is not None and
+                lo<=e["vns"]<hi]
+        rpmvals=[e["data"][0]/1000 for e in sample]
+        signed=[1 if x>0 else -1 for x in rpmvals if abs(x)>=50]
+        stage_pairs=sum(1 for e in events if e["kind"]=="PWM_PAIR"
+                        and lo is not None and lo<=e["vns"]<hi)
+        stage_dynamics.append({
+            "stage_index":idx,"command_start_permille":start,
+            "command_end_permille":end,"duration_ms":duration,
+            "rotor_samples":len(sample),
+            "minimum_rpm":min(rpmvals,default=None),
+            "maximum_rpm":max(rpmvals,default=None),
+            "significant_direction_changes":sum(
+                left!=right for left,right in zip(signed,signed[1:])),
+            "original_guest_pwm_pairs":stage_pairs,
+        })
+        elapsed_ms+=duration
+
     bemf=[e for e in events if e["kind"]=="BEMF_FRONTEND"]
     oc=[e for e in events if e["kind"]=="OC_FRONTEND"]
     if len(bemf)!=len(rotor) or len(oc)!=len(rotor):
@@ -238,6 +264,7 @@ def analyze(events,evidence,stages,meta):
         "source_guest_timg12_w1c_ack":len(source_t12_ack),
         "significant_rotor_direction_changes":len(significant_changes),
         "significant_rotor_direction_change_samples":significant_changes[:15],
+        "scenario_stage_motor_dynamics":stage_dynamics,
         "input_positive_start_virtual_ns":onset,
         "input_positive_end_virtual_ns":offset,
         "first_observed_50rpm_delay_ms":(
