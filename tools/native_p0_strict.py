@@ -19,7 +19,8 @@ EVENT = re.compile(
     r"e=(-?\d+) f=(-?\d+)"
 )
 KINDS={"CMP_FILTER","CAP1","TIMG12","PWM_PAIR","ROTOR",
-       "ENERGY","INVARIANT","SWITCH","CAP1_ACK","TIMG12_ACK"}
+       "ENERGY","INVARIANT","SWITCH","SWITCH_CURRENT",
+       "CAP1_ACK","TIMG12_ACK"}
 STABILITY_MIN_SECTORS=12
 STABILITY_MIN_TIME_NS=90_000_000
 SIGNIFICANT_SPEED_RPM=50.0
@@ -190,6 +191,12 @@ def audit(events, evidence, physics=None):
     # Observe full encoded waveform; independently re-validate its
     # time/edge sequencing before an optional numerical replay.
     switches=[e for e in events if e["kind"]=="SWITCH"]
+    switch_currents=[e for e in events if e["kind"]=="SWITCH_CURRENT"]
+    if (len(switches)!=len(switch_currents) or any(
+        a["vns"]!=b["vns"] or
+        b["data"][:3]!=b["data"][3:]
+        for a,b in zip(switches,switch_currents))):
+        flags.append("NATIVE_INSTANTANEOUS_SWITCH_CURRENT_DISCONTINUITY")
     if len(switches)<2:
         flags.append("INSUFFICIENT_NATIVE_SWITCH_HISTORY")
     if switches and (switches[-1]["vns"]-switches[0]["vns"])<90_000_000:

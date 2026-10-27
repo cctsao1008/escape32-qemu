@@ -364,6 +364,10 @@ static void am13e_native_motor_pwm_event(AM13ESimPWM *p,
         timer_mod(m->tick_timer, now+AM13E_NATIVE_MOTOR_STEP_NS);
     }
     if (m->active) {
+        bool p0_recorded_switch = false;
+        double switch_current_before[3] = {
+            m->currents[0],m->currents[1],m->currents[2]
+        };
         /* Log only six-step *power-pair changes*, not every 16kHz
          * PWM carrier edge. No made-up commutation from duty ratios. */
         if (gate && valid) {
@@ -397,9 +401,28 @@ static void am13e_native_motor_pwm_event(AM13ESimPWM *p,
                            m->energy_steps,0,0);
             m->p0_last_logged_mask=newmask;
             m->p0_last_logged_gate=gate && valid;
+            p0_recorded_switch = true;
         }
         m->mask = newmask & 0x3fU;
         m->gate = gate && valid;
+        if (p0_recorded_switch) {
+            /* A pure switch event has zero elapsed physical time:
+             * changing topology MUST NOT discard stored inductor
+             * current. Emit before/after phase currents at identical
+             * virtual time for the independent P0 audit. */
+            if (memcmp(switch_current_before,m->currents,
+                       sizeof(switch_current_before)) != 0) {
+                am13e_native_motor_fault(m, 7U);
+                return;
+            }
+            am13e_p0_event(p->machine,"SWITCH_CURRENT",
+                           (int64_t)llround(switch_current_before[0]*1000),
+                           (int64_t)llround(switch_current_before[1]*1000),
+                           (int64_t)llround(switch_current_before[2]*1000),
+                           (int64_t)llround(m->currents[0]*1000),
+                           (int64_t)llround(m->currents[1]*1000),
+                           (int64_t)llround(m->currents[2]*1000));
+        }
         ++m->switch_events;
         am13e_native_motor_publish(m);
         if (!m->faulted) {

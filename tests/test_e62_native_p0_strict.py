@@ -61,6 +61,15 @@ class P0SourceAuditTest(unittest.TestCase):
         self.assertIn("NATIVE_ELECTRICAL_ENERGY_IDENTITY_FAILED",
                       r["unwaived_failure_reasons"])
 
+    def test_switch_current_discontinuity_must_fail_closed(self):
+        events=parse_events([
+            line(1,1,"SWITCH",0x21,1,15,0,0,0),
+            line(2,1,"SWITCH_CURRENT",1000,-1000,0,0,0,0)
+        ])
+        r=audit(events,evidence())
+        self.assertIn("NATIVE_INSTANTANEOUS_SWITCH_CURRENT_DISCONTINUITY",
+                      r["unwaived_failure_reasons"])
+
     def test_physical_switch_decoder_rejects_overlap(self):
         with self.assertRaisesRegex(ValueError,"Unsafe"):
             decode_six_pad(3,1)
