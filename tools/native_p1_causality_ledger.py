@@ -104,8 +104,11 @@ def diagnose(name, events, verdict=None):
     anchor=onset
     end_positive=next((e["vns"] for e in reversed(dshot)
                        if e["data"][2]>0),None)
-    active=[e for e in rotor if onset["vns"]<=e["vns"]<=end_positive]
-    from_anchor=[e for e in rotor if anchor["vns"]<=e["vns"]<=end_positive]
+    # The last nonzero source DShot frame commands the full following
+    # 1ms period. Do not drop final motor samples before the coast frame.
+    active_end=end_positive+1_000_000
+    active=[e for e in rotor if onset["vns"]<=e["vns"]<active_end]
+    from_anchor=[e for e in rotor if anchor["vns"]<=e["vns"]<active_end]
     first_forward=first(active,lambda e:e["data"][0]>=50000)
     first_reverse=first(active,lambda e:e["data"][0]<=-50000)
     first_neg_torque=first(from_anchor,lambda e:e["data"][5]<-100000)
@@ -129,7 +132,7 @@ def diagnose(name, events, verdict=None):
     feedback_first={k:first(events,lambda e:e["kind"]==k and
                        e["vns"]>=anchor["vns"]) for k in feedback_kinds}
     pairs=[e for e in events if e["kind"]=="PWM_PAIR" and
-           anchor["vns"]<=e["vns"]<=end_positive]
+           anchor["vns"]<=e["vns"]<active_end]
     sixpad_switch=[e for e in events if e["kind"]=="SWITCH"]
     # SWITCH source is explicitly limited to first 120ms after the
     # very first powered edge. Lack of SWITCH later is NOT absence of AQ.
