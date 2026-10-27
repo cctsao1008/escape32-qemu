@@ -41,6 +41,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          export PYTHONPATH="$PWD${PYTHONPATH:+:$PYTHONPATH}"
           python3 tests/test_native_p1_qualification.py
           python3 tests/test_native_p1_causality_ledger.py
           python3 tests/test_native_p1_startup_transient.py
