@@ -1,0 +1,7 @@
+{
+  "schema": "e62.native.external-fault.v1",
+  "source": "pa22_nfault",
+  "assert_frame": 2100,
+  "release_frame": 2300,
+  "expectation": "OST2_LATCHED_AND_NO_AUTO_REARM"
+}
