@@ -100,6 +100,46 @@ def audit(events, verdict, case):
     prior_cmp=[one(e,t0) for e in events if e["kind"]=="CMP_FILTER"
                and t0<=e["vns"]<
                  (t12["vns"] if t12 else t0+WINDOW_NS)][:12]
+    # BEMF at source is Ke*omega*sin(theta_e+phase_offset).
+    # For a filtered comparator edge, bracket actual guest-observable
+    # 1ms rotor points. RPM changing sign while the selected phase sine
+    # retains its sign is a *motion-induced* BEMF polarity flip, not
+    # evidence of forward spatial zero-crossing. This is observational
+    # and cannot claim exact instantaneous rotor velocity at filter time.
+    phase_offsets=(0.0,-2*math.pi/3,2*math.pi/3)
+    cmp_motion=[]
+    for cmp_row in (e for e in events if e["kind"]=="CMP_FILTER" and
+                    t0<=e["vns"]<
+                      (t12["vns"] if t12 else t0+WINDOW_NS)):
+        phase=cmp_row["data"][0]
+        around=nearest_rotor(events,cmp_row["vns"])
+        a=around["preceding"]
+        b=around["following"]
+        if 0<=phase<3 and a is not None and b is not None:
+            sa=math.sin(math.radians(
+                a["theta_unwrapped_electrical_deg"])+phase_offsets[phase])
+            sb=math.sin(math.radians(
+                b["theta_unwrapped_electrical_deg"])+phase_offsets[phase])
+            flip=a["rpm"]*b["rpm"]<0
+            stable=sa*sb>0 and min(abs(sa),abs(sb))>0.2
+            classification=("RPM_SIGN_CHANGE_WITH_STABLE_PHASE_SINE"
+                            if flip and stable else
+                            "NOT_CONFIRMED_AS_SPEED_SIGN_INDUCED")
+            cmp_motion.append({
+               "cmp_source":one(cmp_row,t0),
+               "rotor_before":a,"rotor_after":b,
+               "phase_sine_before":round(sa,6),
+               "phase_sine_after":round(sb,6),
+               "rpm_sign_changed_in_sample_bracket":flip,
+               "phase_sine_sign_stable_in_sample_bracket":stable,
+               "classification":classification,
+               "timing_resolution_limit":"1ms neighboring ROTOR samples",
+            })
+        else:
+            cmp_motion.append({
+               "cmp_source":one(cmp_row,t0),
+               "classification":"INSUFFICIENT_BOUNDED_ROTOR_SAMPLES",
+            })
     source_rotor=[e for e in events if e["kind"]=="ROTOR" and
                   t0<=e["vns"]<t0+WINDOW_NS]
     neg=next((e for e in source_rotor if e["data"][5]<-100000),None)
@@ -184,6 +224,7 @@ def audit(events, verdict, case):
         "cap1_source_events_before_first_timg12":prior_caps,
         "cap1_ack_source_events_before_first_timg12":prior_acks,
         "cmp_filter_source_events_before_first_timg12":prior_cmp,
+        "cmp_filter_motion_brackets_before_first_timg12":cmp_motion,
         "cap1_to_timg12_pairing_not_proven":True,
         "first_negative_torque_below_minus0p1nm":one(neg,t0),
         "first_reverse_below_minus50rpm":one(rev,t0),
@@ -253,6 +294,18 @@ def main():
                 "cap1_ack_source_events_before_first_timg12"),
             "prior_cmp_filter_sources":result.get(
                 "cmp_filter_source_events_before_first_timg12"),
+            "cmp_motion_classification":[{
+                "at_ms":row["cmp_source"]["relative_ms"],
+                "filter_output":row["cmp_source"]["data"][1],
+                "classification":row["classification"],
+                "rpm_pre":(row.get("rotor_before") or {}).get("rpm"),
+                "rpm_post":(row.get("rotor_after") or {}).get("rpm"),
+                "theta_pre_deg":(row.get("rotor_before") or {}).get(
+                    "theta_unwrapped_electrical_deg"),
+                "theta_post_deg":(row.get("rotor_after") or {}).get(
+                    "theta_unwrapped_electrical_deg"),
+            } for row in result.get(
+                "cmp_filter_motion_brackets_before_first_timg12",[])],
             "first_next_pwm_pair_ms":(result.get(
                 "first_next_physical_pwm_pair") or {}).get("relative_ms"),
             "negative_torque_ms":(result.get(
