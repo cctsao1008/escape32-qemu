@@ -19,6 +19,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from g0_memory import QTest
 from tools.sitl_autonomous_transport import AUTO_BASE, REG, read_auto
+from tools.native_dshot_scenario import load_native_scenario
 
 MOTOR_BASE = 0x5ffeb000
 MOTOR_MAGIC = 0x4d323645
@@ -114,16 +115,17 @@ def _continuous_dshot_stages(*, neutral_ms, ramp_ms, hold_ms, coast_ms,
 
 def _configure_autonomous_dshot(qtest, *, neutral_ms, ramp_ms,
                                 hold_ms, coast_ms, drive_permille,
-                                ramp_update_ms):
+                                ramp_update_ms, scenario_stages=None):
     """Stage uninterrupted PA26 DShot traffic, not Guest synchronization."""
     get = lambda key: qtest.read(AUTO_BASE+REG[key])
     put = lambda key, val: qtest.write(AUTO_BASE+REG[key], val)
     if get("magic") != 0x41323645 or get("abi_version") != 4:
         raise RuntimeError("G13B7 original autonomous DShot engine absent")
-    stages = _continuous_dshot_stages(
-        neutral_ms=neutral_ms, ramp_ms=ramp_ms, hold_ms=hold_ms,
-        coast_ms=coast_ms, drive_permille=drive_permille,
-        ramp_update_ms=ramp_update_ms)
+    stages = (scenario_stages if scenario_stages is not None else
+              _continuous_dshot_stages(
+                  neutral_ms=neutral_ms, ramp_ms=ramp_ms, hold_ms=hold_ms,
+                  coast_ms=coast_ms, drive_permille=drive_permille,
+                  ramp_update_ms=ramp_update_ms))
     put("command", 3)
     put("stage_count", len(stages))
     for i, (duration, start, end, update) in enumerate(stages):
@@ -381,6 +383,7 @@ def run(args):
     if not args.cfg_flash.is_file():
         raise FileNotFoundError(args.cfg_flash)
     symbol_addrs, unresolved_guest_symbols = _guest_symbol_addresses(args.elf)
+    scenario_stages, scenario_meta = load_native_scenario(args.scenario)
     with tempfile.TemporaryDirectory(prefix="e62-native-no-wfi-") as td:
         tmp = Path(td)
         sockpath = tmp/"qtest.sock"
@@ -453,11 +456,13 @@ def run(args):
                         "ramp_update_ms":args.ramp_update_ms,
                         "target_permille":args.drive_permille,
                     }
+                    evidence["native_dshot_scenario"] = scenario_meta
                     evidence["configured_dshot_frames"] = _configure_autonomous_dshot(
                         qtest, neutral_ms=args.arm_ms, ramp_ms=args.drive_ms,
                         hold_ms=args.hold_ms, coast_ms=args.coast_ms,
                         drive_permille=args.drive_permille,
-                        ramp_update_ms=args.ramp_update_ms)
+                        ramp_update_ms=args.ramp_update_ms,
+                        scenario_stages=scenario_stages)
                     deadline = time.monotonic() + args.wall_timeout_s
                     last_stage = None
                     previous_sent = -1
@@ -597,6 +602,19 @@ def run(args):
                 # QTest may already have timed out, so retrieve asynchronous
                 # source-owned trip evidence from the child process file.
                 # Keep the entire original QEMU log as a separate artifact.
+                # Retain entire P0 source event trace in a separate file
+                # independently of JSON/QTest success. Host never invents
+                # event timestamps, edges, sectors or rotor samples.
+                p0_path=args.artifact.with_suffix(".p0.events.log")
+                with qemu_log_path.open("r",errors="replace") as source, (
+                        p0_path.open("w")) as trace:
+                    event_count=0
+                    for line in source:
+                        if "E62_P0_EVENT " in line:
+                            trace.write(line)
+                            event_count+=1
+                evidence["p0_event_trace_path"]=str(p0_path)
+                evidence["p0_source_event_count"]=event_count
                 log_tail = qemu_log_path.read_bytes()[-65536:].decode(
                     "utf-8",errors="replace")
                 trip_events = [
@@ -620,6 +638,10 @@ def main():
     parser.add_argument("--cfg-flash", type=Path, required=True)
     parser.add_argument("--artifact", type=Path, default=Path(
         "artifacts/e62-autonomous-native-motor-smoke.json"))
+    parser.add_argument("--scenario",type=Path,default=(
+        Path(__file__).resolve().parents[1]/
+        "scenarios/e62-native-p0-smoke.json"),
+        help="Versioned external 1kHz DShot JSON; Guest readiness NEVER gates")
     parser.add_argument("--arm-ms",type=int,default=1500,
                         help="Continuous DShot=0 cold-boot/neutral stage")
     parser.add_argument("--drive-ms",type=int,default=1000,
