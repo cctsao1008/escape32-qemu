@@ -7,7 +7,10 @@ from contextlib import redirect_stdout
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
-from tools.e62_sim_cli import E62SimConsole,percent_to_permille,_six_pad_levels
+from tools.e62_sim_cli import (
+    E62SimConsole,percent_to_permille,_six_pad_levels,
+    _optional_original_arming_symbols,_read_guest_arming_window
+)
 from tools.sitl_autonomous_transport import AUTO_BASE,REG
 
 
@@ -83,6 +86,35 @@ class E62PythonConsoleContracts(unittest.TestCase):
         self.assertEqual(_six_pad_levels(0x0a),"U_L,V_L")
         self.assertEqual(_six_pad_levels(0),"none")
         self.assertEqual(_six_pad_levels(0x21),"U_H,W_L")
+
+    def test_original_guest_arming_window_read_only_unaligned_byte(self):
+        nm=("20000103 b window_active\\n"
+            "20000108 b window_started_at\\n"
+            "2000010c B tick\\n")
+        symbols=_optional_original_arming_symbols(nm)
+        self.assertEqual(symbols,{
+            "window_active":0x20000103,
+            "window_started_at":0x20000108,
+            "tick":0x2000010c,
+        })
+        class GuestWords:
+            def __init__(self):self.calls=[]
+            def read(self,addr):
+                self.calls.append(addr)
+                return {0x20000100:0x01000000,
+                        0x20000108:4000,
+                        0x2000010c:5600}[addr]
+        guest=GuestWords()
+        d=_read_guest_arming_window(guest,symbols)
+        self.assertTrue(d["window_active"])
+        self.assertEqual(d["window_elapsed_ms"],100.0)
+        self.assertFalse(d["armed_confirmed"])
+        self.assertEqual(guest.calls,[0x20000100,0x20000108,0x2000010c])
+        self.assertEqual(_read_guest_arming_window(guest,{} )["availability"],
+                         "UNKNOWN_ORIGINAL_ELF_SYMBOLS")
+        duplicates=nm+"20000120 b window_active\\n"
+        self.assertNotIn("window_active",
+                         _optional_original_arming_symbols(duplicates))
 
     def test_scenario_shows_named_percent_fields(self):
         c=console()

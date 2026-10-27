@@ -124,3 +124,33 @@ via `get cfg.telem_poles` or `show cfg`. This is not a firmware UART
 parameter dump: it only reports the dedicated 336-byte preboot image.
 `history [n]` displays source-owned DShot and THROT_SET virtual-clock
 events from the active/completed QEMU stderr log.
+
+## Read-only Rel17 arming diagnostics
+
+The Original Guest `src/main.c` ARM loop invokes
+`am13e_app_motor_arming_window_start()`, waits **250ms of uninterrupted
+zero throttle**, and restarts this window whenever `throt != 0`.
+Manual `throt 50` before completion can therefore leave Guest throttle
+accepted via CRC while `step=0` and motor RPM=0. This is NOT evidence
+of a broken DShot receiver or a motor-physics model. The CLI now
+passively reads the original ELF's uniquely resolved
+`window_active` (uint8), `window_started_at` (uint32) and
+`tick` (16kHz), via read-only QTest Guest SRAM access.
+
+```text
+e62-sim> status
+e62-sim> show guest
+e62-sim> get arming.window_active
+e62-sim> get arming.window_elapsed_ms
+e62-sim> throt 0
+```
+
+The observation is **non-atomic** because Guest is never halted. If
+ELF symbols are missing or ambiguous it reports UNKNOWN rather than
+guessing. `window_active=false` is **not an armed confirmation**:
+Guest may not yet have entered the arming loop or may already have
+exited it. The FC source still transmits DShot independently of
+Guest arming. A warning after a positive interactive throttle when
+`window_active=true` is informational only, not a host readiness
+interlock. To ensure the clean reference startup scenario, use the
+versioned 1.5-second neutral-then-ramp JSON scenario.
