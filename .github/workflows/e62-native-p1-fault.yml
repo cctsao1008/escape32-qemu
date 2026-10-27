@@ -1,0 +1,77 @@
+name: E62 P1 Native No-WFI In-Flight nFAULT Safety (external PA22)
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'machine/**'
+      - 'tests/e62_autonomous_native_motor_probe.py'
+      - 'tests/test_native_p1_nfault.py'
+      - 'tools/native_p1_fault_plan.py'
+      - 'tools/native_p1_nfault_audit.py'
+      - 'scenarios/e62-native-p1-nfault.json'
+      - '.github/workflows/e62-native-p1-fault.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  in-flight-physical-pa22-no-wfi:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install native QEMU source build dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            libglib2.0-dev libpixman-1-dev libfdt-dev pkg-config \
+            meson ninja-build binutils-arm-none-eabi
+      - name: Verify fixture negative contract and pinned original Guest
+        run: |
+          set -euo pipefail
+          python3 tests/test_native_p1_nfault.py
+          python3 tests/test_native_p1_fault_matrix.py
+          git submodule update --init --depth 1 qemu
+          echo '05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0  baseline/e62-g13b3/firmware/AM13E-rev17.3.elf' | sha256sum -c -
+          ./build.sh
+      - name: Provision separate original Guest SIM_ONLY ECX87 flash CFG
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          python3 tools/sim_motor_cfg.py --sim-only-opt-in \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --motor-profile ecx87-kv147 \
+            --output artifacts/e62-g13b3-native-autonomous-cfg-flash.bin
+      - name: Original Guest no-WFI running rotor, exact-time physical nFAULT and release
+        run: |
+          set -euo pipefail
+          python3 tests/e62_autonomous_native_motor_probe.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --cfg-flash artifacts/e62-g13b3-native-autonomous-cfg-flash.bin \
+            --scenario scenarios/e62-native-p0-smoke.json \
+            --fault-scenario scenarios/e62-native-p1-nfault.json \
+            --wall-timeout-s 240 \
+            --artifact artifacts/e62-native-p1-nfault.json \
+            2>&1 | tee artifacts/e62-native-p1-nfault.probe.log
+      - name: Strict virtual-source fault latch and no rearm negative acceptance
+        if: always()
+        run: |
+          set -euo pipefail
+          python3 tools/native_p1_nfault_audit.py \
+            --scenario scenarios/e62-native-p0-smoke.json \
+            --fault-scenario scenarios/e62-native-p1-nfault.json \
+            --evidence artifacts/e62-native-p1-nfault.json \
+            --events artifacts/e62-native-p1-nfault.p0.events.log \
+            --output artifacts/e62-native-p1-nfault.verdict.json \
+            2>&1 | tee artifacts/e62-native-p1-nfault.verdict.log
+      - name: Preserve original-QEMU fault, source DShot and Gate evidence on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-native-p1-no-wfi-physical-nfault
+          path: artifacts/e62-native-p1-nfault*
+          retention-days: 21
+          if-no-files-found: warn
