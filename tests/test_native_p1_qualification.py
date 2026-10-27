@@ -29,6 +29,15 @@ def example():
                                "kind":k,"data":data})
     events.append({"seq":len(events)+1,"vns":45000100,
                    "kind":"CMP_FILTER","data":(1,1,2048,2047,0,0)})
+    # Fixture reproduces source Guest-completed physical CAP1/TIMG12
+    # W1C acknowledgments and six-pad sector transitions. This is only
+    # unit-test data, never injected into QEMU or a qualifying SITL run.
+    for idx in range(22,35):
+        for kind in ("PWM_PAIR","CAP1_ACK","TIMG12_ACK"):
+            events.append({"seq":len(events)+1,
+                           "vns":idx*1000000+200,
+                           "kind":kind,
+                           "data":(0,0,0,0,0,0)})
     evidence={
       "original_elf_sha256":meta["original_elf_sha256"],
       "native_dshot_scenario":{"sha256":sha},
@@ -57,6 +66,9 @@ class P1QualificationTest(unittest.TestCase):
         self.assertTrue(r["qualified"],r["unwaived_observability_failures"])
         self.assertEqual(r["first_observed_50rpm_delay_ms"],5.0001)
         self.assertEqual(r["performance"]["virtual_s"],.06)
+        self.assertTrue(r["dshot_from_second_frame_exact_1khz"])
+        self.assertEqual(r["source_guest_cap1_w1c_ack"],13)
+        self.assertEqual(r["significant_rotor_direction_changes"],0)
         self.assertFalse(r["signal_loss_and_fault_recovery_qualified"])
 
     def test_interactive_live_override_cannot_pass_scenario_json(self):
@@ -67,6 +79,47 @@ class P1QualificationTest(unittest.TestCase):
         r=analyze(*args)
         self.assertIn("MANUAL_LIVE_THROTTLE_NOT_REPRODUCIBLE_JSON_CASE",
                       r["unwaived_observability_failures"])
+
+    def test_first_qemu_timer_dispatch_lateness_not_period_drift(self):
+        args=list(example())
+        # First QEMU TB can dispatch initial PA26 callback late; source
+        # uses absolute 1ms deadlines thereafter. Do not classify that
+        # 150us startup latency as a defective DShot flight controller.
+        args[0][0]["vns"]=150000
+        result=analyze(*args)
+        self.assertTrue(result["qualified"],result["unwaived_observability_failures"])
+        self.assertEqual(result["dshot_first_callback_lateness_ns"],150000)
+
+    def test_late_steady_frame_and_first_frame_overlap_are_rejected(self):
+        args=list(example())
+        args[0][10]["vns"]+=1
+        result=analyze(*args)
+        self.assertEqual(result["dshot_first_mismatch"]["frame_index"],10)
+        self.assertIn("DSHOT_VIRTUAL_CLOCK_OR_VALUE_MISMATCH",
+                      result["unwaived_observability_failures"])
+        args=list(example())
+        args[0][0]["vns"]=999999
+        result=analyze(*args)
+        self.assertEqual(result["dshot_first_mismatch"]["frame_index"],0)
+        self.assertIn("DSHOT_VIRTUAL_CLOCK_OR_VALUE_MISMATCH",
+                      result["unwaived_observability_failures"])
+
+    def test_physical_original_guest_irq_acks_required(self):
+        args=list(example())
+        args[0][:]=[e for e in args[0] if e["kind"] not in (
+            "CAP1_ACK","TIMG12_ACK")]
+        result=analyze(*args)
+        self.assertIn("INSUFFICIENT_ORIGINAL_GUEST_CLOSED_LOOP_AFTER_ARM",
+                      result["unwaived_observability_failures"])
+
+    def test_direction_reversal_is_a_real_separate_failure(self):
+        args=list(example())
+        rotor=[e for e in args[0] if e["kind"]=="ROTOR"]
+        rotor[1]["data"]=(-200000,0,0,0,0,0)
+        result=analyze(*args)
+        self.assertIn("STARTUP_SIGNIFICANT_DIRECTION_REVERSAL",
+                      result["unwaived_observability_failures"])
+        self.assertEqual(result["significant_rotor_direction_changes"],2)
 
     def test_early_missed_command_frame_is_rejected(self):
         args=list(example())
