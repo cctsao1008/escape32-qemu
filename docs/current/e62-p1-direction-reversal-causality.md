@@ -160,3 +160,53 @@ New diagnostic: \`tools/native_p1_first_feedback_latency.py\`; test:
 \`tests/test_native_p1_first_feedback_latency.py\`; automated historic
 comparison: \`.github/workflows/e62-native-p1-first-feedback-replay.yml\`.
 The result is evidence only, never an alternate P1 qualification.
+
+
+### Motion-induced comparator transitions (source-recorded, not synthesized)
+
+The source motor BEMF formula in
+\`machine/am13e_native_motor_dynamics.inc\` remains
+\`e[p] = Ke * omega * sin(theta_e + phase_offset[p])\`. Thus
+a change of \`omega\` sign can reverse the selected comparator
+polarity even if the rotor's phase sine does **not** change sign.
+The original physical comparator output is still the actual
+\`machine/am13e_motor_feedback.inc\` filtered CMPSS0 output; no
+software edge or BEMF is injected by the observer.
+
+The source-timestamped [run 40557926101](https://github.com/cctsao1008/escape32-qemu/actions/runs/40557926101)
+\`direct20\` selected-phase \`CMP_FILTER\` transitions before first
+TIMG12 are:
+
+| Edge / source offset from first powered pair | Bracketing signed RPM from **real** 1ms ROTOR | Bracketing electrical angle | Selected phase sine sign |
+|---|---|---|---|
+| rise 2.349ms | +204.716 → +279.873 | −10.77° → +20.74° | changes near spatial crossing |
+| **fall 6.572ms** | **+180.808 → −73.545** | 133.61° → 139.86° | **unchanged positive** |
+| **rise 10.897ms** | **−169.419 → +12.820** | 61.59° → 51.45° | **unchanged positive** |
+
+The latter two transitions occur in rotor-speed-zero brackets while
+selected-phase \`sin(theta_e)\` retains its sign. They are therefore
+**consistent with reversals of BEMF from \`omega\` changing sign**,
+not evidence of the rotor completing additional spatial forward
+zero-crossings. The second rising comparator event coincides with
+the second source CAP1, which the Guest can accept after the original
+early-capture rejection window.
+
+In the older \`steps\` (328 reversals), both the filtered falling
+and subsequent rising transition also have signed-speed reversals
+within adjacent 1ms rotor samples. In the newer \`steps\` (223),
+the falling transition is so bracketed but the second rising
+transition falls just after a sampled return to positive RPM.
+For the latter case a 1ms bracket does **not** directly establish
+instantaneous reversal at that exact edge; retain that uncertainty.
+
+**Resulting root-cause classification:** The first sector geometry
+and current-torque equation are internally consistent; the immediate
+failure mechanism is a rotor electrically outrunning the first
+powered sector while the original Rel17 early-acceptance policy
+ignores a fast physical BEMF edge. Subsequent speed-sign-induced
+filtered edges can be treated as captures during the oscillation.
+The **engineering suitability** of the firmware initial 10ms
+interval versus an unloaded ECX87 plant is still unqualified without
+a motor+prop inertia/load and analog silicon timing calibration.
+Do not tune the strict acceptance gate or presume the Guest's
+unmodified policy is wrong in real hardware.
