@@ -61,7 +61,7 @@ class P1QualificationTest(unittest.TestCase):
 
     def test_early_missed_command_frame_is_rejected(self):
         args=list(example())
-        args[0][1]["data"]=(1,0,0,0,0,0)
+        args[0][1]["data"]=(99,0,0,0,0,0)
         d=analyze(*args)
         self.assertIn("DSHOT_VIRTUAL_CLOCK_OR_VALUE_MISMATCH",
                       d["unwaived_observability_failures"])
