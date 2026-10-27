@@ -1,0 +1,65 @@
+name: E62 Original Guest Native Python CLI Interactive Source Safety
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'machine/**'
+      - 'tools/e62_sim_cli.py'
+      - 'tools/sitl_autonomous_transport.py'
+      - 'tests/test_e62_sim_cli.py'
+      - 'tests/e62_sim_cli_live_probe.py'
+      - 'scenarios/e62-native-console-10s.json'
+      - '.github/workflows/e62-native-console.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  original-guest-no-wfi-interactive-fc:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test CLI syntax, non-guest command safety and throttle boundaries
+        run: |
+          set -euo pipefail
+          python3 -m py_compile tools/e62_sim_cli.py tests/e62_sim_cli_live_probe.py
+          python3 tests/test_e62_sim_cli.py
+      - name: Install pinned native QEMU build dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            libglib2.0-dev libpixman-1-dev libfdt-dev pkg-config \
+            meson ninja-build binutils-arm-none-eabi
+          git submodule update --init --depth 1 qemu
+          echo '05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0  baseline/e62-g13b3/firmware/AM13E-rev17.3.elf' | sha256sum -c -
+          ./build.sh
+      - name: Build dedicated Guest SIM_ONLY preboot cfg, no Guest ELF patch
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          python3 tools/sim_motor_cfg.py --sim-only-opt-in \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --motor-profile ecx87-kv147 \
+            --output artifacts/e62-g13b3-native-autonomous-cfg-flash.bin
+      - name: Live command throttle 10 percent then return to JSON auto on physical DShot
+        run: |
+          set -euo pipefail
+          python3 tests/e62_sim_cli_live_probe.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --cfg-flash artifacts/e62-g13b3-native-autonomous-cfg-flash.bin \
+            --artifacts artifacts --timeout 240 \
+            2>&1 | tee artifacts/e62-native-console-live-probe.log
+      - name: Save actual PA26 virtual DShot and Guest CRC evidence on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-native-interactive-fc-console
+          path: |
+            artifacts/e62-native-console*
+            artifacts/e62-sim-console*
+          if-no-files-found: warn
+          retention-days: 21
