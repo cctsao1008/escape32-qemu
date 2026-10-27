@@ -38,6 +38,10 @@ def commands_for_scenario(stages):
 
 def analyze(events,evidence,stages,meta):
     failures=[]
+    if evidence.get("live_throttle_used") is True or any(
+        e["kind"]=="THROT_SET" for e in events
+    ):
+        failures.append("MANUAL_LIVE_THROTTLE_NOT_REPRODUCIBLE_JSON_CASE")
     actual=[e for e in events if e["kind"]=="DSHOT"]
     expected=list(commands_for_scenario(stages))
     if len(actual)!=len(expected):

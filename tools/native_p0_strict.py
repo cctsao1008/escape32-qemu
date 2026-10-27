@@ -59,6 +59,10 @@ def parse_events(lines):
 def audit(events, evidence, physics=None):
     counts=Counter(e["kind"] for e in events)
     flags=[]
+    if evidence.get("live_throttle_used") is True or any(
+        e["kind"]=="THROT_SET" for e in events
+    ):
+        flags.append("LIVE_INTERACTIVE_SOURCE_NOT_PINNED_JSON_TEST")
     guest=evidence.get("original_guest_after") or {}
     auto=evidence.get("autonomous_dshot") or {}
     motor=evidence.get("native_motor") or {}

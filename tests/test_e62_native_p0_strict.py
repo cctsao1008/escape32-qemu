@@ -40,6 +40,15 @@ class P0SourceAuditTest(unittest.TestCase):
             with self.assertRaises(TraceError):
                 parse_events(bad)
 
+    def test_manual_live_override_rejects_p0_json_certificate(self):
+        events=parse_events([
+            line(1,1,"THROT_SET",10,1,100,1,0,0),
+            line(2,2,"DSHOT",10,1,248,1,100,0),
+        ])
+        d=audit(events,evidence())
+        self.assertIn("LIVE_INTERACTIVE_SOURCE_NOT_PINNED_JSON_TEST",
+                      d["unwaived_failure_reasons"])
+
     def test_no_activity_or_wfi_cannot_pass(self):
         events=parse_events([line(1,1,"CMP_FILTER",0,0,0,0,0,0)])
         r=audit(events,evidence())

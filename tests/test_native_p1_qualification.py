@@ -59,6 +59,15 @@ class P1QualificationTest(unittest.TestCase):
         self.assertEqual(r["performance"]["virtual_s"],.06)
         self.assertFalse(r["signal_loss_and_fault_recovery_qualified"])
 
+    def test_interactive_live_override_cannot_pass_scenario_json(self):
+        args=list(example())
+        args[0].append({"seq":len(args[0])+1,
+                        "vns":50000000,"kind":"THROT_SET",
+                        "data":(50,1,100,1,0,0)})
+        r=analyze(*args)
+        self.assertIn("MANUAL_LIVE_THROTTLE_NOT_REPRODUCIBLE_JSON_CASE",
+                      r["unwaived_observability_failures"])
+
     def test_early_missed_command_frame_is_rejected(self):
         args=list(example())
         args[0][1]["data"]=(99,0,0,0,0,0)
