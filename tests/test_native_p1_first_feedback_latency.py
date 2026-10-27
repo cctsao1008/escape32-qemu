@@ -37,6 +37,10 @@ class FirstFeedbackTest(unittest.TestCase):
         r=audit(demo(),"", "direct20") if False else audit(
             demo(),self.verdict(),"direct20")
         self.assertEqual(r["first_capture_to_first_following_timg12_ms"],11)
+        self.assertEqual(r["last_cap1_to_first_timg12_ms"],11)
+        self.assertTrue(r["first_cap1_early_rejection_policy_consistent_not_proven"] is False)
+        self.assertEqual(r["pinned_rel17_initial_ival_us"],10000)
+        self.assertEqual(r["pinned_rel17_half_interval_ignore_before_us"],5000)
         self.assertEqual(r["cap1_events_before_first_following_timg12"],1)
         self.assertTrue(r["negative_torque_before_first_timg12"])
         self.assertTrue(r["reverse_before_first_timg12"])
@@ -53,6 +57,8 @@ class FirstFeedbackTest(unittest.TestCase):
             rec["seq"]=idx
         r=audit(records,self.verdict(),"direct20")
         self.assertEqual(r["cap1_events_before_first_following_timg12"],2)
+        self.assertTrue(r["first_cap1_early_rejection_policy_consistent_not_proven"])
+        self.assertEqual(r["last_cap1_to_first_timg12_ms"],10.0)
         self.assertTrue(r["cap1_to_timg12_pairing_not_proven"])
     def test_initial_dshot_does_not_fake_early_motor_on_steps(self):
         records=demo()
