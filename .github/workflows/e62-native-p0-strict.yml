@@ -10,6 +10,7 @@ on:
       - 'scenarios/e62-native-p0-*.json'
       - 'tests/e62_autonomous_native_motor_probe.py'
       - 'tests/test_e62_native_p0_strict.py'
+      - 'tests/test_e62_native_dshot_scenario.py'
       - '.github/workflows/e62-native-p0-strict.yml'
   workflow_dispatch:
 
@@ -61,11 +62,13 @@ jobs:
             --output artifacts/e62-native-p0-physics.json \
             2>&1 | tee artifacts/e62-native-p0-physics.log
       - name: P0 source-causal and 12-sector/90ms strict rotor gate
+        if: always()
         run: |
           set -euo pipefail
           python3 tools/native_p0_strict.py \
             --events artifacts/e62-native-autonomous-smoke.p0.events.log \
             --evidence artifacts/e62-native-autonomous-smoke.json \
+            --physics artifacts/e62-native-p0-physics.json \
             --output artifacts/e62-native-p0-strict.json \
             2>&1 | tee artifacts/e62-native-p0-strict.log
       - name: Preserve original QEMU event and all failing evidence

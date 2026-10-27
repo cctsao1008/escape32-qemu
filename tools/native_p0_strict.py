@@ -54,7 +54,7 @@ def parse_events(lines):
     return events
 
 
-def audit(events, evidence):
+def audit(events, evidence, physics=None):
     counts=Counter(e["kind"] for e in events)
     flags=[]
     guest=evidence.get("original_guest_after") or {}
@@ -72,6 +72,8 @@ def audit(events, evidence):
     if auto.get("sent") != evidence.get("configured_dshot_frames") or (
         auto.get("sent",0)<300):
         flags.append("CONTINUOUS_DSHOT_INCOMPLETE")
+    if physics is None or physics.get("qualified") is not True:
+        flags.append("INDEPENDENT_FROZEN_SWITCH_PHYSICS_NOT_QUALIFIED")
     if guest.get("valid_frame_feeds",0)<1:
         flags.append("NO_ORIGINAL_DSHOT_CRC")
     if guest.get("serviced",0)<STABILITY_MIN_SECTORS:
@@ -219,13 +221,15 @@ def main():
     p=argparse.ArgumentParser()
     p.add_argument("--events",type=Path,required=True)
     p.add_argument("--evidence",type=Path,required=True)
+    p.add_argument("--physics",type=Path,required=True)
     p.add_argument("--output",type=Path,required=True)
     a=p.parse_args()
-    evidence=json.loads(a.evidence.read_text())
     try:
+        evidence=json.loads(a.evidence.read_text())
+        physics=json.loads(a.physics.read_text())
         with a.events.open(errors="replace") as handle:
-            result=audit(parse_events(handle),evidence)
-    except (TraceError,ValueError) as exc:
+            result=audit(parse_events(handle),evidence,physics)
+    except (TraceError,ValueError,OSError,KeyError,TypeError) as exc:
         result={"status":"FAIL_NATIVE_P0_STRICT","qualified":False,
                 "unwaived_failure_reasons":["MALFORMED_OR_MISSING_SOURCE_TRACE"],
                 "error":str(exc)}

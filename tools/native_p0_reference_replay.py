@@ -153,7 +153,7 @@ def main():
     try:
         with a.events.open(errors="replace") as f:
             result=compare(parse_events(f))
-    except (TraceError,ValueError,FloatingPointError,AssertionError) as exc:
+    except (TraceError,ValueError,FloatingPointError,AssertionError,OSError,KeyError,TypeError) as exc:
         result={"status":"FAIL_FROZEN_SWITCH_PHYSICS","qualified":False,
                 "failures":[type(exc).__name__+": "+str(exc)]}
     a.output.parent.mkdir(parents=True,exist_ok=True)
