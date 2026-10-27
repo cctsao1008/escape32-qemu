@@ -79,6 +79,25 @@ class E62PythonConsoleContracts(unittest.TestCase):
         self.assertIn("ERROR load:",out.getvalue())
         self.assertEqual(c.meta["sha256"],oldsha)
 
+    def test_cfg_and_history_only_read_local_evidence(self):
+        import tempfile
+        c=console()
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg=Path(tmp)/"cfg.bin"
+            raw=bytearray(336);raw[57]=42;cfg.write_bytes(raw)
+            c.cfg_flash=cfg
+            c.log_path=Path(tmp)/"trace.log"
+            c.log_path.write_text(
+                "E62_P0_EVENT seq=1 vns=0 kind=DSHOT a=0 b=0 c=0 d=0 e=0 f=0\\n"
+                "E62_P0_EVENT seq=2 vns=1 kind=THROT_SET a=1 b=1 c=100 d=1 e=0 f=0\\n")
+            with redirect_stdout(io.StringIO()) as out:
+                c.do_show("cfg")
+                c.do_get("cfg.telem_poles")
+                c.do_history("2")
+            self.assertIn("SIM_ONLY_PREBOOT_CFG_IMAGE",out.getvalue())
+            self.assertIn("cfg.telem_poles = 42",out.getvalue())
+            self.assertIn("THROT_SET",out.getvalue())
+
     def test_get_and_show_no_arbitrary_guest_rw(self):
         c=console()
         with redirect_stdout(io.StringIO()) as out:

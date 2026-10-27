@@ -48,6 +48,9 @@ e62-sim> show guest
 e62-sim> get guest.valid_frame_feeds
 e62-sim> get motor.rpm
 e62-sim> get safety.ost_latch
+e62-sim> show cfg
+e62-sim> get cfg.telem_poles
+e62-sim> history 10
 e62-sim> watch 1
 e62-sim> throt 0
 e62-sim> throt 15.5
@@ -111,3 +114,9 @@ flight-control certification or real ESC CLI settings are qualified.
 as a simulator-origin external command, not firmware-owned speed
 control. Never connect this tool to hardware without an independent
 review and safety interlock.
+
+The verified **SIM_ONLY preboot** CFG byte at offset 57 may be inspected
+via `get cfg.telem_poles` or `show cfg`. This is not a firmware UART
+parameter dump: it only reports the dedicated 336-byte preboot image.
+`history [n]` displays source-owned DShot and THROT_SET virtual-clock
+events from the active/completed QEMU stderr log.
