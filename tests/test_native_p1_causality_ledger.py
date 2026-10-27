@@ -4,6 +4,8 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from tools.native_p1_causality_ledger import diagnose, run
 from tools.native_p0_strict import parse_events
