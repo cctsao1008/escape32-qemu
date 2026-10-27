@@ -64,3 +64,99 @@ The P1 GitHub Actions workflow runs the read-only ledger with `if: always()` and
 4. **No premature fix:** Do not lower 50 RPM reversal threshold, smooth/remove reverse samples, force Guest sector state, inject fake BEMF, coerce PWM/AQ/DB, or make the model silently clamp abnormal current/torque.
 
 **Scope:** Uncalibrated 24V, no propeller, QEMU SIM_ONLY. Neither a PASS nor this diagnostic establishes physical ECX87/Queen Bee/12S qualification.
+
+
+## 2026-10-28 forensic update: early CAP1 **rejection**, not an 11 ms timer delay
+
+**Verified rebuilt-source baseline:** source-built QEMU on module-split
+main passed [P0 strict run 40557926125](https://github.com/cctsao1008/escape32-qemu/actions/runs/40557926125),
+No-WFI motor strict [40557926065](https://github.com/cctsao1008/escape32-qemu/actions/runs/40557926065).
+P1 [40557926101](https://github.com/cctsao1008/escape32-qemu/actions/runs/40557926101)
+remains **RED**, with smoke PASS (0 reversals), gentle PASS (0),
+direct20 FAIL (337), steps FAIL (223), each FAIL solely
+\`STARTUP_SIGNIFICANT_DIRECTION_REVERSAL\`.
+The distinct 100ms ramp FAIL (238) and 500ms ramp PASS (0)
+are diagnostic A/B, not substituted P1 acceptance.
+
+### Original Rel17.3 firmware policy (not a new Host rule)
+
+The pinned [Original \`src/main.c\`](https://github.com/cctsao1008/ESCape32/blob/b0204670515d2de0b2480b52273038f1ee13d30a/src/main.c)
+initializes \`ival = 10000 << MOTOR_TIME_SHIFT\` at six-step start
+and \`bemf_zero_cross_delay()\` returns **zero** when
+\`capture_ticks < ival >> 1\`: a nominal **5,000 µs** startup
+half-interval capture-rejection window. Its AM13E
+[\`motor_bemf.c\`](https://github.com/cctsao1008/ESCape32/blob/b0204670515d2de0b2480b52273038f1ee13d30a/mcu/AM13E/hal/motor_bemf.c)
+calls this original policy via \`am13e_app_motor_on_bemf_event()\`.
+On rejection it increments \`rejected_events\` and leaves ECAP
+capturing; on acceptance it updates \`crossing_epoch\` and
+\`capture_stop()\`. Accepted crossings arm the *original* TIMG12
+one-shot in [\`motor_event_timer.c\`](https://github.com/cctsao1008/ESCape32/blob/b0204670515d2de0b2480b52273038f1ee13d30a/mcu/AM13E/hal/motor_event_timer.c).
+No host intervention or alternate timing control is part of this path.
+
+### Source evidence after first real powered PWM_PAIR
+
+The following uses read-only QEMU source events plus original P1 verdicts.
+Timing origin is first *physical* PWM_PAIR **not** the first positive
+DShot; this difference matters for the steps profile.
+
+| Source replay | First CAP1 | Second CAP1 | Second CAP1 → first TIMG12 | First rotor electrical angle >= +90° within unchanged first physical pair |
+|---|---:|---:|---:|---:|
+| smoke (new run) | 16.782ms | none | 2.930ms | none before first commutation |
+| gentle (new run) | 17.747ms | none | 2.993ms | none before first commutation |
+| direct20 (new run) | **2.349ms** | **10.897ms** | **2.562ms** | **4.926ms** |
+| steps, 223 reversals (new run) | **2.392ms** | **10.941ms** | **2.565ms** | **4.926ms** |
+| steps, 328 reversals (older run) | **2.628ms** | **13.060ms** | **2.697ms** | **6.720ms** |
+
+Source runs:
+[40557926101](https://github.com/cctsao1008/escape32-qemu/actions/runs/40557926101)
+and [40552428592](https://github.com/cctsao1008/escape32-qemu/actions/runs/40552428592).
+
+Both failing scenarios record **two original physical CAP1 events and
+two real Guest CAP1_ACK events before the first TIMG12**. The first
+CAP1 occurs ~2–3ms after first physical energization, inside the
+nominal 5ms original Rel17 startup rejection window. The second
+occurs at ~11ms and TIMG12 follows only ~2.6ms later.
+
+This is **consistent with the original Guest accepting only the second
+capture**, not with an unexplained 11–13ms hardware timer latency
+after a single accepted capture. The trace does not expose the exact
+Guest-local \`crossing_epoch\` or computed \`capture_us\`, so this
+causal classification remains **source-supported inference** rather
+than a direct per-capture accepted/rejected log assertion.
+
+The first physical pair is *identical* in all four cases:
+Phase 2 high / Phase 1 low, six-pad mask \`0x18\`,
+initial rotor phase about −30° electrical. For ideal positive
+source-to-sink pair current, its forward-torque basis is
+\`sqrt(3) * cos(theta_e)\`, with zero at +90°. In direct20 and
+the powered steps runs, the rotor crosses +90° and recorded
+current-based torque becomes negative **before first TIMG12
+and before first new physical PWM pair**. In smoke/gentle,
+the first commutation happens before that particular first-pair
+angle is reached. This is a fixed-sector overrun, not evidence
+that the first sector was wired backward.
+
+### Engineering root-cause status
+
+- **Observed mechanism:** rapid high command → fast simulated rotor
+  acceleration with real AQ/DB pair → early filtered CMPSS edge and
+  CAP1 → original startup minimum-half-interval rejection **consistent
+  with trace** → rotor electrically outruns the unchanged sector →
+  negative torque/reversal → later CAP1 → Guest TIMG12 → sector change.
+- **Still open:** whether the simulated ECX87 rotor inertia/no-load
+  dynamics unrealistically outrun the guest's original conservative
+  5ms half-interval, versus whether the firmware startup policy
+  requires a separately approved product adaptation. Do **not** assert
+  that an uncalibrated simulation proves a real ESC firmware defect.
+- **Reproducibility issue:** steps sometimes energizes at the initial
+  10% command (328 reversals), and sometimes only at the later 20%
+  command (~500ms into the profile, 223 reversals). Both need separate
+  stage attribution; neither may be re-labelled PASS.
+- **Immutable acceptance:** 50 RPM significant-reversal gate, original
+  ELF identity, current-continuous plant, source-driven BEMF/CAP1,
+  no-host-write rule, and original strict scenario JSON remain unchanged.
+
+New diagnostic: \`tools/native_p1_first_feedback_latency.py\`; test:
+\`tests/test_native_p1_first_feedback_latency.py\`; automated historic
+comparison: \`.github/workflows/e62-native-p1-first-feedback-replay.yml\`.
+The result is evidence only, never an alternate P1 qualification.
