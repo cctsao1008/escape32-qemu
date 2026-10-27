@@ -56,6 +56,18 @@ def _present(value):
     return json.dumps(value,indent=2,sort_keys=True,ensure_ascii=False)
 
 
+def _six_pad_levels(mask):
+    """Decode QEMU MCPWM AQ/DB raw pad bits, NOT actual gate-driver voltage."""
+    names=("U","V","W")
+    legs=[]
+    for i,phase in enumerate(names):
+        if mask & (1 << (2*i)):
+            legs.append(phase+"_H")
+        if mask & (1 << (2*i+1)):
+            legs.append(phase+"_L")
+    return ",".join(legs) if legs else "none"
+
+
 class E62SimConsole(cmd.Cmd):
     intro=("E62 Native ESC-SIM Console [SIM_ONLY, Original Guest, No-WFI]\n"
            "Type help for commands. 'throt' changes the *external* FC PA26 "
@@ -226,6 +238,9 @@ class E62SimConsole(cmd.Cmd):
             "motor":{
                 "rpm":m["model_rpm_integer"],
                 "six_pad_mask":m["actual_pwm_six_bit_mask"],
+                "raw_six_pad_levels":_six_pad_levels(
+                    m["actual_pwm_six_bit_mask"]),
+                "raw_mask_not_verified_gate_driver_state":True,
                 "analog_codes":m["analog_codes"],
                 "physics_ticks":m["native_1us_physics_ticks"],
                 "fault_code":m["model_fault"],
@@ -369,7 +384,14 @@ class E62SimConsole(cmd.Cmd):
             if key in ("scenario","all"):
                 print("SCENARIO "+_present({
                     "path":str(self.scenario),"sha256":self.meta["sha256"],
-                    "stage_rows":self.meta["stages"],
+                    "stages":[{
+                        "index":i,
+                        "duration_ms":stage[0],
+                        "from_percent":stage[1]/10,
+                        "to_percent":stage[2]/10,
+                        "update_ms":stage[3],
+                    } for i,stage in enumerate(self.stages)],
+                    "total_virtual_ms":self.meta["dshot_frames"],
                     "fault":self.fault_plan,
                     "continuous_dshot_hz":1000,
                     "signal_is_external_simulated_pa26":True,
@@ -421,7 +443,9 @@ class E62SimConsole(cmd.Cmd):
                 f"virtual_ms={d['virtual_elapsed_ms']} "
                 f"last_dshot={d['last_dshot']} "
                 f"live={d['live_override']}({d['live_permille']/10:.1f}%) | "
-                f"motor={m['rpm']}rpm mask=0x{m['six_pad_mask']:02x} "
+                f"motor={m['rpm']}rpm "
+                f"pwm_raw=0x{m['six_pad_mask']:02x}"
+                f"({m['raw_six_pad_levels']}) "
                 f"ticks={m['physics_ticks']} | "
                 f"Guest crc_feed={g.get('valid_frame_feeds','NA')} "
                 f"throt={g.get('throt','NA')} | "
@@ -539,33 +563,98 @@ class E62SimConsole(cmd.Cmd):
             print("\n".join(q) if q else "No FC source events flushed yet")
         self._command("history",act)
 
+    def _write_interrupted_evidence(self, source_before, neutral_frames, stop_error):
+        """Write source log AFTER child exit. Not a Guest/SITL qualification."""
+        if not self.run_artifact or not self.log_path:
+            return None
+        trace_path=self.run_artifact.with_suffix(".p0.events.log")
+        count=0
+        with self.log_path.open(errors="replace") as source, trace_path.open("w") as out:
+            for line in source:
+                if "E62_P0_EVENT " in line:
+                    out.write(line)
+                    count+=1
+        evidence={
+            "status":"STOPPED_BY_OPERATOR_NOT_A_TEST_PASS",
+            "qualified":False,
+            "motor_safe_stop_proven":False,
+            "qemu_simulator_terminated":True,
+            "source_dshot_before_stop":source_before,
+            "neutral_source_frames_observed_after_stop_command":neutral_frames,
+            "neutral_source_frames_target":10,
+            "neutral_source_frames_confirmed":neutral_frames>=10,
+            "stop_diagnostic_error":stop_error,
+            "original_elf_sha256":SHA,
+            "original_guest_config_changed":False,
+            "host_guest_register_writes":False,
+            "used_guest_wfi_or_gdb":False,
+            "native_dshot_scenario":self.meta,
+            "native_external_fault_plan":self.fault_plan,
+            "live_throttle_used":self.live_changed,
+            "qemu_log_path":str(self.log_path),
+            "p0_event_trace_path":str(trace_path),
+            "p0_source_event_count":count,
+            "interrupted_before_scenario_completion":True,
+        }
+        self.run_artifact.write_text(_present(evidence)+"\\n")
+        self.last_report=self.run_artifact
+        return self.run_artifact
+
     def do_stop(self,arg):
-        """stop: terminate SIMULATOR; does not claim Guest safe-off/recovery."""
+        """stop: external zero DShot (10 frames if possible), terminate and retain evidence."""
         def act():
             if arg.strip():raise ValueError("usage: stop")
-            if self.active:
-                q=self.qtest
-                if q.read(AUTO_BASE+REG["status"])==1:
-                    # Hand source command to neutral first; allow at least
-                    # one real PA26 frame, then stop simulator. Does not
-                    # claim rotor stopped or silicon-safe shutdown.
-                    q.write(AUTO_BASE+REG["live_permille"],0)
-                    q.write(AUTO_BASE+REG["live_override"],1)
-                    start=q.read(AUTO_BASE+REG["sent"])
-                    limit=time.monotonic()+5
-                    while time.monotonic()<limit:
-                        if q.read(AUTO_BASE+REG["sent"])>=start+10:
-                            break
-                        time.sleep(.05)
-                self._teardown()
-                print("OK QEMU terminated (SIM_ONLY); not an ESC safe-off acceptance")
-            else:
+            if self.proc is None:
                 print("OK simulator not running")
+                return
+            source_before=None
+            neutral_frames=0
+            diagnostic_error=None
+            try:
+                if self.active:
+                    q=self.qtest
+                    status=q.read(AUTO_BASE+REG["status"])
+                    if status & 2:
+                        self._finish()
+                        print(f"OK scenario already completed: {self.last_report}")
+                        return
+                    source_before=read_auto(q.read)
+                    if status==1:
+                        # Source-only FC neutral; Guest still decides whether
+                        # to receive, disarm or brake. This is not a safe-off
+                        # gate and no QEMU virtual-clock pause is inserted.
+                        q.write(AUTO_BASE+REG["live_permille"],0)
+                        q.write(AUTO_BASE+REG["live_override"],1)
+                        self.live_changed=True
+                        start=q.read(AUTO_BASE+REG["sent"])
+                        until=time.monotonic()+5
+                        while time.monotonic()<until:
+                            observed=q.read(AUTO_BASE+REG["sent"])
+                            neutral_frames=max(neutral_frames,observed-start)
+                            if neutral_frames>=10:
+                                break
+                            time.sleep(.05)
+                else:
+                    diagnostic_error="QEMU process already exited before stop"
+            except (OSError,RuntimeError,TimeoutError,ValueError) as exc:
+                diagnostic_error=type(exc).__name__+": "+str(exc)
+            finally:
+                # Never strand QEMU if the QTest observation channel fails.
+                self._teardown()
+            path=self._write_interrupted_evidence(
+                source_before,neutral_frames,diagnostic_error)
+            print("OK SIM_ONLY QEMU terminated; "
+                  f"zero DShot frames observed={neutral_frames}/10; "
+                  "this is NOT original ESC safe-off proof.")
+            if diagnostic_error:
+                print("STOP OBSERVATION WARNING: "+diagnostic_error)
+            if path:
+                print("STOP evidence: "+str(path))
         self._command("stop",act)
 
     def do_quit(self,arg):
         """quit: exit CLI and terminate owned QEMU (simulator only)."""
-        if self.active:
+        if self.proc is not None:
             self.do_stop("")
         return True
 
