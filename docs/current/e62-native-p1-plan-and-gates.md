@@ -97,3 +97,42 @@ or signal-loss timeout. They require separately versioned acceptance
 tests and actual bench correlation. The SIM_ONLY gain/bias and
 physical-model placeholders must not be hidden by changing limits
 until the reports show acceptable RPM.
+
+
+## First Verified Native P1 No-WFI Fault Gate PASS
+
+GitHub Actions
+[#40514844955](https://github.com/cctsao1008/escape32-qemu/actions/runs/40514844955)
+completed successfully against the exact source at
+`f75c290250ce11ecc401f29585123314160855f2`.
+The original Guest ELF and QEMU physics are unchanged.
+
+**Source-owned simulation evidence:**
+
+- Continuous external PA26 DShot frames: **3000/3000**.
+- Actual Guest valid frame feeds before non-returning fault shutdown:
+  **1711**. After Guest disables IRQ, the external FC still sends.
+  Its completed frame count is **not** original Guest CRC acceptance.
+- The external PA22 nFAULT was asserted at QEMU virtual frame **2100**
+  and released at frame **2300**. No Host timed poll or Guest
+  synthetic PWM/TZ/IRQ write was used.
+- Native MCPWM4 OST2 hardware bit `0x00020000` was asserted and
+  **latched after physical release**.
+- CPU final IPSR was **44** (original MCPWM4 IRQ), with
+  `PRIMASK=1`, PC `0xA284` (original fault reset path).
+- Rotor/PWM activity prior to the injected fault was genuine:
+  203 original Guest CAP1/TIMG12 events. No later PWM pair
+  commutation or final gate output was present.
+- Native Motor model fault was 0; final six-bit gate mask=0.
+- Separate source-owned verdict `PASS_P1_NATIVE_IN_FLIGHT_NFAULT_SAFE_OFF`,
+  `qualified=true`, no waivers.
+
+**Qualified:** Under the uncalibrated SIM_ONLY model, a real
+external PA22 level has a modeled physical safety route into OST2,
+with no automatic Guest rearm after its release; QEMU preserves the
+exact event/frame evidence.
+
+**NOT Qualified:** A recoverable in-flight shutdown/restart sequence,
+a separate disarm/rearm command protocol, DShot signal-loss watchdog
+reset, live Si/GaN hardware, 12S/propeller power, OC threshold accuracy,
+or a real ECX87 motor. Do not count this PASS as recovery.
