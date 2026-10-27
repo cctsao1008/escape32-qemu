@@ -75,6 +75,10 @@ class OriginalVirtualClockModuleContract(unittest.TestCase):
         self.assertIn("am13e_g10_cmp_evaluate(f)",feedback)
         self.assertIn("am13e_g10_ecap_edge(f, level)",feedback)
 
+    def test_qemu_build_entrypoint_is_executable(self):
+        self.assertTrue(((ROOT/"build.sh").stat().st_mode & 0o111) != 0,
+                        "QEMU build.sh must keep git executable mode 100755")
+
     def test_qemu_worktree_materializes_every_native_module(self):
         script=(ROOT/"build.sh").read_text()
         for name in MODULES:
