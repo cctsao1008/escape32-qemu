@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/cctsao1008/escape32-qemu/blob/main/scenarios/e62-native-dshot-v1.schema.json",
+  "title": "E62 Native QEMU autonomous external DShot600, schema v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "name",
+    "target_elf_sha256",
+    "protocol",
+    "frame_period_ns",
+    "guest_ready_gating",
+    "stages"
+  ],
+  "properties": {
+    "schema": {
+      "const": "e62.native.dshot.v1"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "target_elf_sha256": {
+      "const": "05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0"
+    },
+    "protocol": {
+      "const": "DSHOT600"
+    },
+    "frame_period_ns": {
+      "const": 1000000
+    },
+    "guest_ready_gating": {
+      "const": false
+    },
+    "stages": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 16,
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "duration_ms",
+              "permille"
+            ],
+            "properties": {
+              "kind": {
+                "const": "hold"
+              },
+              "duration_ms": {
+                "type": "integer",
+                "minimum": 10,
+                "maximum": 120000
+              },
+              "permille": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "duration_ms",
+              "from_permille",
+              "to_permille",
+              "update_ms"
+            ],
+            "properties": {
+              "kind": {
+                "const": "ramp"
+              },
+              "duration_ms": {
+                "type": "integer",
+                "minimum": 10,
+                "maximum": 120000
+              },
+              "from_permille": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000
+              },
+              "to_permille": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000
+              },
+              "update_ms": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 120000
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "description": "Exact divisibility, ramp transition continuity, original ELF pinning and required initial/final zero frames are enforced by tools/native_dshot_scenario.py, beyond JSON Schema."
+}
