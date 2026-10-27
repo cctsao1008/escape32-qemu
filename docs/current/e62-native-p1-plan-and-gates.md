@@ -152,7 +152,12 @@ python3 tools/e62_native_scripted_test.py --case gentle
 python3 tools/e62_native_scripted_test.py --case steps
 ```
 
-Omitting `--case` runs all three cases independently. Every run
+Omitting `--case` runs all four cases independently. The
+`direct20` (1500ms neutral → 1500ms immediate 20% → 300ms neutral)
+case distinguishes a direct acceleration step from the `steps`
+scenario's initial 500ms stall at 10% before its first 20% command.
+Both use the same Original Guest pin/physics, without scripted Guest
+state mutation. Every run
 saves `artifacts/e62-p1-scripted/e62-p1-script-<case>.json`,
 `*.p0.events.log`, `*.p1.json`, probe/analyzer logs and
 `e62-p1-scripted-matrix.json`. The process exits nonzero unless

@@ -12,7 +12,8 @@ class TestNativeScenarios(unittest.TestCase):
     def test_presets(self):
         for fn,total in [("e62-native-p0-smoke.json",3000),
                          ("e62-native-p0-gentle.json",5000),
-                         ("e62-native-p0-steps.json",3300)]:
+                         ("e62-native-p0-steps.json",3300),
+                         ("e62-native-p0-direct20.json",3300)]:
             stages,info=load_native_scenario(ROOT/"scenarios"/fn)
             self.assertEqual(info["dshot_frames"],total)
             self.assertEqual(stages[0][1:3],(0,0))

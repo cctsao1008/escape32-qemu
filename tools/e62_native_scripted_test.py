@@ -20,6 +20,7 @@ from tools.native_dshot_scenario import load_native_scenario
 CASES={
     "smoke": ROOT/"scenarios/e62-native-p0-smoke.json",
     "gentle": ROOT/"scenarios/e62-native-p0-gentle.json",
+    "direct20": ROOT/"scenarios/e62-native-p0-direct20.json",
     "steps": ROOT/"scenarios/e62-native-p0-steps.json",
 }
 
