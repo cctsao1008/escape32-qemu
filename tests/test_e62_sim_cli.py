@@ -114,6 +114,10 @@ class E62PythonConsoleContracts(unittest.TestCase):
             self.assertEqual(record["p0_source_event_count"],2)
             self.assertEqual(
                 Path(record["p0_event_trace_path"]).read_text().count("E62_P0_EVENT"),2)
+            with redirect_stdout(io.StringIO()) as out:
+                c.do_results("")
+            self.assertIn("STOPPED_BY_OPERATOR_NOT_A_TEST_PASS",out.getvalue())
+            self.assertIn('"frames": 90',out.getvalue())
 
     def test_cfg_and_history_only_read_local_evidence(self):
         import tempfile

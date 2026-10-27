@@ -89,10 +89,14 @@ e62-sim> quit
 - `results`: after DONE, save Guest snapshots and complete
   native source events as JSON and `*.p0.events.log`.
   A console observation file is **not** a P0/P1 strict PASS.
-- `stop`: request external FC zero throttle and wait for at
-  least ten further virtual frames if active, then terminate
-  the QEMU *simulator*. This is not evidence of real-motor safe
-  stop or firmware fault recovery.
+- `stop`: request external FC zero throttle and attempt to observe
+  ten further virtual frames if active, then terminate the QEMU
+  *simulator*. It always preserves `STOPPED_BY_OPERATOR_NOT_A_TEST_PASS`
+  JSON plus a complete `*.p0.events.log` after QEMU exits, including
+  the number of actual subsequent FC frames (which may be fewer than ten
+  if communication/progress fails). These are **aborted-run evidence**,
+  not a qualified P0/P1 result or proof of actual motor safe-off.
+  `results` can inspect the interrupted run's status and frame count.
 
 **Distinguish:**
 - **ORIGINAL GUEST CLI**: original `help/info/show/get/set/save/reset/

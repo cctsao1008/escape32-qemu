@@ -529,7 +529,14 @@ class E62SimConsole(cmd.Cmd):
                 "file":str(self.last_report),
                 "event_file":doc.get("p0_event_trace_path"),
                 "event_count":doc.get("p0_source_event_count"),
-                "frames":(doc.get("autonomous_dshot") or {}).get("sent"),
+                "status":doc.get("status"),
+                "frames":(doc.get("autonomous_dshot") or
+                          doc.get("source_dshot_before_stop") or {}).get("sent"),
+                "target_frames":(doc.get("native_dshot_scenario") or {}).get(
+                    "dshot_frames"),
+                "neutral_frames_before_operator_stop":doc.get(
+                    "neutral_source_frames_observed_after_stop_command"),
+                "manual_stop_source_error":doc.get("stop_diagnostic_error"),
                 "guest_crc_feeds":(doc.get("original_guest_after") or {}).get(
                     "valid_frame_feeds"),
                 "native_motor_model_fault":(doc.get("native_motor") or {}).get(
