@@ -67,7 +67,7 @@ def _optional_original_arming_symbols(nm_text):
     wanted={"window_active","window_started_at","tick"}
     locations={name:set() for name in wanted}
     pattern=re.compile(
-        r"([0-9a-fA-F]{8,16})\\s+[bBdD]\\s+([A-Za-z_][A-Za-z0-9_]*)"
+        r"([0-9a-fA-F]{8,16})\s+[bBdD]\s+([A-Za-z_][A-Za-z0-9_]*)"
     )
     for line in nm_text.splitlines():
         m=pattern.fullmatch(line.strip())
