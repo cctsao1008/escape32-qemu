@@ -12,6 +12,7 @@ import cmd
 from decimal import Decimal, InvalidOperation
 import hashlib
 import json
+import re
 from pathlib import Path
 import shlex
 import socket
@@ -56,6 +57,59 @@ def _present(value):
     return json.dumps(value,indent=2,sort_keys=True,ensure_ascii=False)
 
 
+def _optional_original_arming_symbols(nm_text):
+    """Resolve exactly one original Guest SRAM address per optional symbol.
+
+    AM13E Rel17.3 arming_window.c owns window_active (uint8),
+    window_started_at (uint32), and the original main.c tick (uint32).
+    Missing/duplicate symbols stay unavailable; never guess a location.
+    """
+    wanted={"window_active","window_started_at","tick"}
+    locations={name:set() for name in wanted}
+    pattern=re.compile(
+        r"([0-9a-fA-F]{8,16})\\s+[bBdD]\\s+([A-Za-z_][A-Za-z0-9_]*)"
+    )
+    for line in nm_text.splitlines():
+        m=pattern.fullmatch(line.strip())
+        if m and m[2] in wanted:
+            addr=int(m[1],16)
+            if 0x20000000<=addr<0x20020000:
+                locations[m[2]].add(addr)
+    return {
+        name:next(iter(addresses)) for name,addresses in locations.items()
+        if len(addresses)==1
+    }
+
+
+def _read_guest_arming_window(qtest, symbols):
+    """Non-atomic, read-only original SRAM observations; NOT an ARM permit."""
+    missing=sorted({"window_active","window_started_at","tick"}-set(symbols))
+    if missing:
+        return {"availability":"UNKNOWN_ORIGINAL_ELF_SYMBOLS",
+                "missing_symbols":missing,"armed_confirmed":False}
+    # QTest readl is word-width. The original uint8 window_active may be
+    # placed at an unaligned address. Read aligned word and extract byte.
+    address=symbols["window_active"]
+    raw=qtest.read(address&~3)
+    active=(raw>>(8*(address&3)))&0xff
+    started=qtest.read(symbols["window_started_at"])
+    tick=qtest.read(symbols["tick"])
+    if active not in (0,1):
+        return {"availability":"INVALID_OR_NONATOMIC_SNAPSHOT",
+                "window_active_raw":active,"armed_confirmed":False}
+    ticks=(tick-started)&0xffffffff
+    return {
+        "availability":"READ_ONLY_NON_ATOMIC_GUEST_SRAM",
+        "window_active":bool(active),
+        "window_elapsed_ms":round(ticks/16,3) if active else None,
+        "neutral_window_required_ms":250,
+        "guest_tick_16khz":tick,
+        "window_started_at_tick":started,
+        "armed_confirmed":False,
+        "inactive_is_not_proof_of_arming":True,
+    }
+
+
 def _six_pad_levels(mask):
     """Decode QEMU MCPWM AQ/DB raw pad bits, NOT actual gate-driver voltage."""
     names=("U","V","W")
@@ -94,6 +148,7 @@ class E62SimConsole(cmd.Cmd):
         self.run_artifact=None
         self.started_wall=None
         self.original_symbols=None
+        self.arming_symbols={}
         self.last_report=None
         self.monitor_interval_s=1.0
         self.live_changed=False
@@ -182,6 +237,11 @@ class E62SimConsole(cmd.Cmd):
             self.conn,_=listener.accept()
             self.qtest=TimedAutonomousQTest(self.conn,response_timeout_s=20)
             self.original_symbols,_=_guest_symbol_addresses(self.elf)
+            nm_result=subprocess.run(
+                ["arm-none-eabi-nm","-n",str(self.elf)],
+                capture_output=True,text=True,check=True,timeout=15)
+            self.arming_symbols=_optional_original_arming_symbols(
+                nm_result.stdout)
             fault=self.fault_plan
             frames=_configure_autonomous_dshot(
                 self.qtest,neutral_ms=1500,ramp_ms=1000,
@@ -251,6 +311,8 @@ class E62SimConsole(cmd.Cmd):
             },
             "original_guest":_read_original_guest_telemetry(
                 q,self.original_symbols),
+            "guest_arming":_read_guest_arming_window(
+                q,self.arming_symbols),
         }
 
     def _finish(self):
@@ -273,6 +335,8 @@ class E62SimConsole(cmd.Cmd):
             "native_motor":_motor_snapshot(q),
             "original_guest_after":_read_original_guest_telemetry(
                 q,self.original_symbols),
+            "guest_arming_after":_read_guest_arming_window(
+                q,self.arming_symbols),
             "receiver_after":_receiver_snapshot(q.read),
             "pwm_source_after":_pwm_source_snapshot(q),
             "legacy_synthetic_bemf_callbacks":auto["bemf_timer_callbacks"],
@@ -404,7 +468,8 @@ class E62SimConsole(cmd.Cmd):
                     print(_present({k:v for k,v in snap.items()
                                     if key=="all" or
                                     (key=="sim" and k!="original_guest") or
-                                    (key=="guest" and k=="original_guest")}))
+                                    (key=="guest" and
+                                     k in ("original_guest","guest_arming"))}))
         self._command("show",act)
 
     def do_get(self,arg):
@@ -425,6 +490,7 @@ class E62SimConsole(cmd.Cmd):
             snap=self._snapshot()
             if domain=="dshot":domain="source_dshot"
             if domain=="guest":domain="original_guest"
+            if domain=="arming":domain="guest_arming"
             if domain not in snap or key not in snap[domain]:
                 raise ValueError("unavailable or ambiguous property: "+token[0])
             print(f"{token[0]} = "+_present(snap[domain][key]))
@@ -438,6 +504,13 @@ class E62SimConsole(cmd.Cmd):
             d=snap["source_dshot"]
             m=snap["motor"]
             g=snap["original_guest"]
+            arm=snap["guest_arming"]
+            arm_text=(
+                ("ACTIVE neutral_timer_ms="+str(arm["window_elapsed_ms"]))
+                if arm.get("window_active") is True else
+                ("INACTIVE (not proof of armed)" if
+                 arm.get("window_active") is False else "UNKNOWN")
+            )
             print(
                 f"FC {d['sent']}/{d['expected']} frame stage={d['stage']} "
                 f"virtual_ms={d['virtual_elapsed_ms']} "
@@ -449,6 +522,7 @@ class E62SimConsole(cmd.Cmd):
                 f"ticks={m['physics_ticks']} | "
                 f"Guest crc_feed={g.get('valid_frame_feeds','NA')} "
                 f"throt={g.get('throt','NA')} | "
+                f"ARM_WINDOW={arm_text} | "
                 f"OST=0x{snap['safety']['ost_latch']:x}")
             if d["done"]:
                 self._finish()
@@ -491,6 +565,15 @@ class E62SimConsole(cmd.Cmd):
                 raise RuntimeError("FC throttle enable rejected")
             self.live_changed=True
             start=q.read(AUTO_BASE+REG["sent"])
+            # Read-only Guest arming hint only; never gate external
+            # DShot transmission on this state.
+            if value>0:
+                arm=_read_guest_arming_window(q,self.arming_symbols)
+                if arm.get("window_active") is True:
+                    print("WARNING: Original Guest 250ms zero-throttle "
+                          "ARM window is active. Positive DShot may "
+                          "keep restarting it; 'throt 0' sends "
+                          "continuous neutral frames.")
             print(f"OK FC command requested {value/10:.1f}% at observed "
                   f"frame={start}; takes effect on NEXT QEMU virtual "
                   "1kHz frame, consult THROT_SET/DSHOT source trace")
