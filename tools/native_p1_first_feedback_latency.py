@@ -111,7 +111,13 @@ def audit(events, verdict, case):
         theta_zero=None
     # Sampled unwrapped electrical angle crossing the positive-current
     # source-pair sign limit; not a fictitious BEMF event or imposed sector.
-    first_crossing=next((e for e in source_rotor if theta_zero is not None
+    # Once Guest has changed the physical power pair, 90 degrees is
+    # no longer the zero-torque angle for the *first* pair. Reject
+    # post-commutation crossings instead of crediting them to startup.
+    first_pair_end=min((e["vns"] for e in (nextpair,t12)
+                        if e is not None),default=t0+WINDOW_NS)
+    first_crossing=next((e for e in source_rotor if
+             e["vns"]<first_pair_end and theta_zero is not None
              and 90<=math.degrees(e["data"][1]/1000)<180),None)
     stage=next((e for e in reversed(events) if e["kind"]=="DSHOT"
                 and e["vns"]<=t0),None)
@@ -172,8 +178,9 @@ def audit(events, verdict, case):
         "first_cap1_early_rejection_policy_consistent_not_proven":bool(
             cap and len(before_t12)>1 and cap["vns"]-t0<5_000_000),
         "original_ival_and_capture_epoch_not_directly_recorded":True,
-        "first_sample_at_90deg_electrical_before_timg12":one(
+        "first_sample_at_90deg_electrical_before_first_commutation":one(
             first_crossing,t0),
+        "first_pair_geometry_valid_until_ms":ms(first_pair_end-t0),
         "cap1_source_events_before_first_timg12":prior_caps,
         "cap1_ack_source_events_before_first_timg12":prior_acks,
         "cmp_filter_source_events_before_first_timg12":prior_cmp,
@@ -234,7 +241,7 @@ def main():
             "last_cap1_to_timg12_ms":result.get(
                 "last_cap1_to_first_timg12_ms"),
             "first_cross90_ms":(result.get(
-                "first_sample_at_90deg_electrical_before_timg12") or {}).get(
+                "first_sample_at_90deg_electrical_before_first_commutation") or {}).get(
                 "relative_ms"),
             "original_startup_half_interval_consistent":result.get(
                 "first_cap1_early_rejection_policy_consistent_not_proven"),
