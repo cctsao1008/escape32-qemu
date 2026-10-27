@@ -448,6 +448,11 @@ typedef struct AM13EAutoSITL {
     bool epoch_valid, running, done;
     int64_t start_ns, end_ns, phase_epoch_ns;
     uint32_t last_sample_word;
+    /* Opt-in P1 virtual-time EXTERNAL PA22 nFAULT fixture.
+     * Solely driven by QEMU FC frame timer; original Guest IRQ/PWM
+     * and fault handlers remain authentic and unmodified. */
+    uint32_t p1_nfault_enable, p1_nfault_assert_frame;
+    uint32_t p1_nfault_release_frame, p1_nfault_events;
 } AM13EAutoSITL;
 
 typedef struct AM13EDMA {

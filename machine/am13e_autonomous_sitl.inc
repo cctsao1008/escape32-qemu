@@ -93,6 +93,8 @@ static void am13e_auto_reset(AM13EAutoSITL *a)
     a->epoch_valid = a->running = a->done = false;
     a->start_ns = a->end_ns = a->phase_epoch_ns = 0;
     a->last_sample_word = 0U;
+    a->p1_nfault_enable = a->p1_nfault_assert_frame =
+        a->p1_nfault_release_frame = a->p1_nfault_events = 0U;
     a->stage_seen_mask = a->stage_route_transitions = 0U;
     a->last_observed_state = UINT32_MAX;
     a->vector_commits = a->vector_unchanged = 0U;
@@ -131,6 +133,12 @@ static bool am13e_auto_validate(AM13EAutoSITL *a)
         if (total > 1000000U) {
             return false;
         }
+    }
+    if (a->p1_nfault_enable && (!a->machine->native_motor.enabled ||
+        !a->p1_nfault_assert_frame ||
+        a->p1_nfault_assert_frame >= a->p1_nfault_release_frame ||
+        a->p1_nfault_release_frame >= total)) {
+        return false; /* no physical fault scheduled outside live frames */
     }
     a->total_frames = total; /* Exactly 1ms per DShot frame. */
     a->target_frames = a->max_frames ? a->max_frames : a->total_frames;
@@ -240,6 +248,24 @@ static void am13e_auto_dshot_event(void *opaque)
         a->done = true;
         if (a->bemf_timer) timer_del(a->bemf_timer);
         return;
+    }
+    /* Exact QEMU-clock external fault fixture. It is NOT a Guest
+     * TZCLR/IRQ write or a Host poll-injected level. PA22 asserted
+     * active-low at a chosen frame boundary and subsequently released.
+     * Hardware trip latch persistence remains original hardware policy.
+     */
+    AM13EMachineState *machine=a->machine;
+    if (a->p1_nfault_enable &&
+        (a->sent==a->p1_nfault_assert_frame ||
+         a->sent==a->p1_nfault_release_frame)) {
+        bool asserted = a->sent==a->p1_nfault_assert_frame;
+        machine->gpio[0].nfault_asserted=asserted;
+        am13e_g13b2_trip_update(machine);
+        ++a->p1_nfault_events;
+        am13e_p0_event(machine,"NFAULT_EDGE",
+                       asserted,a->sent,
+                       machine->pwm4.reg[0xb0U/4U],
+                       machine->pwm4.irqs,0,0);
     }
     unsigned previous_stage = a->current_stage;
     uint32_t target = am13e_auto_target_for_frame(a, a->sent);
@@ -573,6 +599,10 @@ static MemTxResult am13e_auto_read(void *opaque, hwaddr off,
     case 0x110: *v = a->stage_seen_mask; break;
     case 0x114: *v = a->stage_route_transitions; break;
     case 0x118: *v = UINT32_C(0x53363134); break; /* S614 schema */
+    case 0x120: *v = a->p1_nfault_assert_frame; break;
+    case 0x124: *v = a->p1_nfault_release_frame; break;
+    case 0x128: *v = a->p1_nfault_enable; break;
+    case 0x12c: *v = a->p1_nfault_events; break;
     default: return MEMTX_ERROR;
     }
     return MEMTX_OK;
@@ -630,6 +660,15 @@ static MemTxResult am13e_auto_write(void *opaque, hwaddr off,
     case 0x1c: a->stages[a->stage_index].to_permille = v; return MEMTX_OK;
     case 0x20: a->stages[a->stage_index].update_ms = v; return MEMTX_OK;
     case 0x24: a->max_frames = v; return MEMTX_OK;
+    /* SIM_ONLY external PA22 physical level calendar. Never writable
+     * while FC timer is running. No direct guest register writes. */
+    case 0x120: a->p1_nfault_assert_frame = v; return MEMTX_OK;
+    case 0x124: a->p1_nfault_release_frame = v; return MEMTX_OK;
+    case 0x128:
+        if (v>1U || (v && !a->machine->native_motor.enabled))
+            return MEMTX_ERROR;
+        a->p1_nfault_enable = v;
+        return MEMTX_OK;
     default: return MEMTX_ERROR;
     }
 }
