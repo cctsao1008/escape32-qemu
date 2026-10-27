@@ -109,7 +109,7 @@ def analyze(events,evidence,stages,meta):
         failures.append("SIMULATOR_TRANSMITTER_INCOMPLETE")
 
     active_indices=[i for i,(_,value) in enumerate(expected) if value!=0]
-    if not active_indices or tzero is None:
+    if not active_indices or clock_epoch is None:
         failures.append("NO_POSITIVE_DSHOT_COMMAND")
     onset=(clock_epoch+active_indices[0]*1000000
            if active_indices and clock_epoch is not None else None)
