@@ -46,12 +46,40 @@ def analyze(events,evidence,stages,meta):
     expected=list(commands_for_scenario(stages))
     if len(actual)!=len(expected):
         failures.append("DSHOT_SOURCE_FRAME_COUNT_MISMATCH")
-    tzero=actual[0]["vns"] if actual else None
+    # The very FIRST QEMU virtual-timer callback can dispatch late
+    # because the guest CPU is executing its initial TB. Its next
+    # deadline is source-owned and absolute (start_ns+1ms), so use the
+    # SECOND frame to establish this deadline epoch. Preserve exact
+    # nanosecond equality for every later 1kHz frame; the first
+    # callback must still leave at least 30us before the next DShot
+    # frame (16 x 1.667us wire bits + idle). Never relax a lost frame,
+    # bad throttle command, stage mismatch or accumulated clock drift.
+    clock_epoch=(actual[1]["vns"]-1000000 if len(actual)>1 else None)
+    first_frame_lateness_ns=(
+        actual[0]["vns"]-clock_epoch if clock_epoch is not None else None)
+    source_first_gap_ns=(
+        actual[1]["vns"]-actual[0]["vns"] if len(actual)>1 else None)
+    first_mismatch=None
     for idx,(event,want) in enumerate(zip(actual,expected)):
-        if (event["data"][0]!=idx or
-            event["data"][1]!=want[0] or
-            event["data"][2]!=want[1] or
-            event["vns"]!=tzero+idx*1000000):
+        got=event["data"]
+        value_ok=(got[0]==idx and got[1]==want[0] and
+                  got[2]==want[1] and got[3]==0 and got[4]==0)
+        time_ok=(clock_epoch is not None and
+                 (event["vns"]==clock_epoch+idx*1000000
+                  if idx>0 else
+                  0<=first_frame_lateness_ns<=970000))
+        if not value_ok or not time_ok:
+            first_mismatch={
+                "frame_index":idx,"expected_stage":want[0],
+                "observed_stage":got[1],"expected_dshot_value":want[1],
+                "observed_dshot_value":got[2],
+                "observed_virtual_ns":event["vns"],
+                "expected_deadline_virtual_ns":(
+                    clock_epoch+idx*1000000 if clock_epoch is not None
+                    else None),
+                "reason":("DSHOT_VALUE_OR_FRAME_INDEX" if not value_ok
+                          else "SOURCE_VIRTUAL_CLOCK"),
+            }
             failures.append("DSHOT_VIRTUAL_CLOCK_OR_VALUE_MISMATCH")
             break
     if evidence.get("native_dshot_scenario",{}).get("sha256")!=meta["sha256"]:
@@ -68,8 +96,10 @@ def analyze(events,evidence,stages,meta):
     active_indices=[i for i,(_,value) in enumerate(expected) if value!=0]
     if not active_indices or tzero is None:
         failures.append("NO_POSITIVE_DSHOT_COMMAND")
-    onset=tzero+active_indices[0]*1000000 if active_indices and tzero is not None else None
-    offset=tzero+(active_indices[-1]+1)*1000000 if active_indices and tzero is not None else None
+    onset=(clock_epoch+active_indices[0]*1000000
+           if active_indices and clock_epoch is not None else None)
+    offset=(clock_epoch+(active_indices[-1]+1)*1000000
+            if active_indices and clock_epoch is not None else None)
     rotor=[e for e in events if e["kind"]=="ROTOR"]
     positive_rotor=[e for e in rotor if onset is not None and
                     onset<=e["vns"]<offset]
@@ -84,9 +114,40 @@ def analyze(events,evidence,stages,meta):
     if peak<50:
         failures.append("NO_50RPM_SOURCE_STARTUP_RESPONSE")
     sign={1 if r>0 else -1 for r in active_rpms if abs(r)>=50}
-    if len(sign)>1:
+    significant_changes=[]
+    preceding_sign=None
+    for rotor_sample in positive_rotor:
+        rpm=rotor_sample["data"][0]/1000
+        if abs(rpm)<50:
+            continue
+        observed_sign=1 if rpm>0 else -1
+        if preceding_sign is not None and observed_sign!=preceding_sign:
+            significant_changes.append({
+                "virtual_ns":rotor_sample["vns"],
+                "relative_to_first_positive_ms":round(
+                    (rotor_sample["vns"]-onset)/1e6,3),
+                "rpm":rpm,
+            })
+        preceding_sign=observed_sign
+    if significant_changes:
         failures.append("STARTUP_SIGNIFICANT_DIRECTION_REVERSAL")
     last_rotor=rotor[-1]["data"][0]/1000 if rotor else None
+    # Verify real, source-ordered feedback in positive-command interval.
+    source_pairs=[e for e in events if e["kind"]=="PWM_PAIR" and
+                  onset is not None and onset<=e["vns"]<offset]
+    source_cap1_ack=[e for e in events if e["kind"]=="CAP1_ACK" and
+                     onset is not None and onset<=e["vns"]<offset]
+    source_t12_ack=[e for e in events if e["kind"]=="TIMG12_ACK" and
+                    onset is not None and onset<=e["vns"]<offset]
+    if (len(source_pairs)<12 or len(source_cap1_ack)<12 or
+        len(source_t12_ack)<12):
+        # A genuine six-step sensorless start MUST achieve a sequence
+        # of original Guest-acknowledged interrupts and six-pad sectors,
+        # not just CRC+throttle or a command speed estimate.
+        failures.append("INSUFFICIENT_ORIGINAL_GUEST_CLOSED_LOOP_AFTER_ARM")
+    if rotor and onset is not None and any(
+        abs(e["data"][0])>=50000 for e in rotor if e["vns"]<onset):
+        failures.append("UNCOMMANDED_ROTOR_SPEED_BEFORE_POSITIVE_DSHOT")
 
     bemf=[e for e in events if e["kind"]=="BEMF_FRONTEND"]
     oc=[e for e in events if e["kind"]=="OC_FRONTEND"]
@@ -149,6 +210,16 @@ def analyze(events,evidence,stages,meta):
         "scenario_sha256":meta["sha256"],
         "dshot_frames":len(actual),
         "source_expected_frames":len(expected),
+        "dshot_first_callback_lateness_ns":first_frame_lateness_ns,
+        "dshot_first_to_second_frame_gap_ns":source_first_gap_ns,
+        "dshot_source_absolute_timer_epoch_ns":clock_epoch,
+        "dshot_first_mismatch":first_mismatch,
+        "dshot_from_second_frame_exact_1khz":first_mismatch is None,
+        "source_guest_closed_loop_pwm_pairs":len(source_pairs),
+        "source_guest_cap1_w1c_ack":len(source_cap1_ack),
+        "source_guest_timg12_w1c_ack":len(source_t12_ack),
+        "significant_rotor_direction_changes":len(significant_changes),
+        "significant_rotor_direction_change_samples":significant_changes[:15],
         "input_positive_start_virtual_ns":onset,
         "input_positive_end_virtual_ns":offset,
         "first_observed_50rpm_delay_ms":(
