@@ -1,0 +1,20 @@
+{
+  "schema": "e62.native.dshot.v1",
+  "name": "E62 native interactive console 10s external FC neutral baseline",
+  "target_elf_sha256": "05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0",
+  "protocol": "DSHOT600",
+  "frame_period_ns": 1000000,
+  "guest_ready_gating": false,
+  "stages": [
+    {
+      "kind": "hold",
+      "duration_ms": 1500,
+      "permille": 0
+    },
+    {
+      "kind": "hold",
+      "duration_ms": 8500,
+      "permille": 0
+    }
+  ]
+}
