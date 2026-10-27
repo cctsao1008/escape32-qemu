@@ -148,6 +148,10 @@ static void am13e_g10_output(AM13ESimFeedback *f, bool level)
         return;
     }
     f->filtered = level;
+    unsigned phase = f->machine->sim_mc_mux[0] & 7U;
+    am13e_p0_event(f->machine, "CMP_FILTER", phase,level,
+                   phase < 3U ? f->phase_code[phase] : 0,
+                   f->cmp[0x0eU / 2U] & 0xfffU,0,0);
     if (level) {
         f->cmp_latch = true;
     }

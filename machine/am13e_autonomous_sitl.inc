@@ -412,6 +412,9 @@ static void am13e_auto_trace_cap1(AM13EMachineState *s)
     if (!a->running) return;
     const int64_t now = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
     ++a->trace_cap1;
+    AM13ESimFeedback *fb = &s->feedback;
+    am13e_p0_event(s, "CAP1", fb->cap[0],
+                   s->sim_mc_mux[0]&7U,fb->ecflg,fb->eceint,0,0);
     bool linked = false;
     if (a->trace_cross_pending && now >= a->trace_last_cross_ns &&
         now - a->trace_last_cross_ns <= AM13E_AUTO_TRACE_PAIR_MAX_NS) {
@@ -447,6 +450,8 @@ static void am13e_auto_trace_timg12_zero(AM13ESimTimer *t)
     if (!a->running) return;
     const int64_t now = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
     ++a->trace_t12;
+    am13e_p0_event(s, "TIMG12", t->irq_raw[0],
+                   t->irq_mask[0],t->reg[0x808U / 4U],0,0,0);
     a->trace_last_t12_ns = now;
     if (a->trace_cap_pending && now >= a->trace_last_cap_ns &&
         now - a->trace_last_cap_ns <= AM13E_AUTO_TRACE_PAIR_MAX_NS) {

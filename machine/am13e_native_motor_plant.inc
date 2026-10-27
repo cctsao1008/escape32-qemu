@@ -49,6 +49,14 @@ static void am13e_native_motor_reset(AM13ENativeMotor *m)
     m->theta = -30.0 * AM13E_NATIVE_PI / 180.0;
     m->omega = 0.0;
     m->last_torque = 0.0;
+    m->theta_unwrapped = m->theta;
+    m->energy_bus_j = m->energy_copper_j = m->energy_diode_j = 0.0;
+    m->energy_bemf_j = m->energy_magnetic_j = 0.0;
+    m->energy_backward_euler_j = 0.0;
+    m->energy_abs_residual_j = m->energy_max_residual_j = 0.0;
+    m->energy_max_star_sum_a = 0.0;
+    m->energy_steps = m->energy_diode_steps = 0U;
+    m->p0_last_pair = UINT32_MAX;
 }
 static void am13e_native_motor_fault(AM13ENativeMotor *m, uint32_t code)
 {
@@ -167,6 +175,47 @@ static bool am13e_native_motor_current_step(AM13ENativeMotor *m, double dt)
     if (!solved) {
         return false;
     }
+    /* Electrical energy identity is independently checked at EACH
+     * backward-Euler step. At floating-open terminals endpoint I=0;
+     * diode voltages are modeled explicitly, no switch projection.
+     * delta E_magnetic + numerical Euler loss + I²R + eI == VI.
+     * This is not a calibration or convergence certificate by itself.
+     */
+    double terminal_j=0.0, bus_j=0.0, diode_j=0.0;
+    double copper_j=0.0, bemf_j=0.0, magnetic_j=0.0, euler_j=0.0;
+    bool diode_used=false;
+    for (int p=0;p<3;p++) {
+        int state = driven[p];
+        /* The winning active-set diode state must be remembered; it
+         * is not simply the initially commanded MOSFET leg. */
+        if (state == 0 && currents[p] != 0.0) {
+            /* inferred from the actual terminal diode voltage and
+             * current polarity; the current solver checks signs. */
+            state = currents[p] > 0.0 ? 3 : 4;
+        }
+        double voltage = state == 1 ? AM13E_NATIVE_VBUS :
+                         state == 2 ? 0.0 :
+                         state == 3 ? -AM13E_NATIVE_DIODE :
+                         state == 4 ? AM13E_NATIVE_VBUS+AM13E_NATIVE_DIODE :
+                         0.0;
+        double i = currents[p], di=i-old[p];
+        terminal_j += voltage*i*dt;
+        if (state == 1 || state == 4) bus_j += AM13E_NATIVE_VBUS*i*dt;
+        if (state == 3 || state == 4) {
+            diode_j += AM13E_NATIVE_DIODE*fabs(i)*dt;
+            diode_used=true;
+        }
+        copper_j += AM13E_NATIVE_R*i*i*dt;
+        bemf_j += e[p]*i*dt;
+        magnetic_j += 0.5*AM13E_NATIVE_L*(i*i-old[p]*old[p]);
+        euler_j += 0.5*AM13E_NATIVE_L*di*di;
+    }
+    double residual = terminal_j-copper_j-bemf_j-magnetic_j-euler_j;
+    double scale = MAX(1.0,fabs(terminal_j));
+    if (!isfinite(residual) || fabs(residual)>1e-8*scale ||
+        fabs(bus_j-diode_j-terminal_j)>1e-8*scale) {
+        return false; /* energy identity fails CLOSED */
+    }
     double torque = 0.0;
     for (int p = 0; p < 3; p++) {
         torque += currents[p]*basis[p];
@@ -184,8 +233,20 @@ static bool am13e_native_motor_current_step(AM13ENativeMotor *m, double dt)
     }
     memcpy(m->currents, currents, sizeof(currents));
     m->omega = omega;
+    m->theta_unwrapped += AM13E_NATIVE_PP*(previous+omega)*dt/2.0;
     m->theta = theta;
     m->last_torque = torque;
+    m->energy_bus_j += bus_j;
+    m->energy_diode_j += diode_j;
+    m->energy_copper_j += copper_j;
+    m->energy_bemf_j += bemf_j;
+    m->energy_magnetic_j += magnetic_j;
+    m->energy_backward_euler_j += euler_j;
+    m->energy_abs_residual_j += fabs(residual);
+    m->energy_max_residual_j = MAX(m->energy_max_residual_j,fabs(residual));
+    m->energy_max_star_sum_a = MAX(m->energy_max_star_sum_a,fabs(icheck));
+    ++m->energy_steps;
+    m->energy_diode_steps += diode_used;
     return true;
 }
 static bool am13e_native_motor_advance(AM13ENativeMotor *m, int64_t now)
@@ -299,6 +360,25 @@ static void am13e_native_motor_pwm_event(AM13ESimPWM *p,
         timer_mod(m->tick_timer, now+AM13E_NATIVE_MOTOR_STEP_NS);
     }
     if (m->active) {
+        /* Log only six-step *power-pair changes*, not every 16kHz
+         * PWM carrier edge. No made-up commutation from duty ratios. */
+        if (gate && valid) {
+            unsigned hi=0U,lo=0U,hi_phase=0U,lo_phase=0U;
+            for(unsigned k=0;k<3U;++k) {
+                if(newmask & (1U<<(2*k))) { ++hi; hi_phase=k; }
+                if(newmask & (1U<<(2*k+1))) { ++lo; lo_phase=k; }
+            }
+            if(hi==1U && lo==1U && hi_phase!=lo_phase) {
+                uint32_t pair=1U+hi_phase*3U+lo_phase;
+                if(pair!=m->p0_last_pair) {
+                    m->p0_last_pair=pair;
+                    am13e_p0_event(p->machine,"PWM_PAIR",pair,
+                                   newmask,am13e_pwm4_hist_gate_word(p),
+                                   (int64_t)llround(m->theta_unwrapped*1000.0),
+                                   p->zero_events,0);
+                }
+            }
+        }
         m->mask = newmask & 0x3fU;
         m->gate = gate && valid;
         ++m->switch_events;
@@ -323,6 +403,23 @@ static void am13e_native_motor_tick(void *opaque)
         return;
     }
     ++m->ticks;
+    if(m->ticks % 1000U == 0U) {
+        am13e_p0_event(m->machine,"ROTOR",
+                       (int64_t)llround(m->omega*60.0/
+                                           (2.0*AM13E_NATIVE_PI)*1000.0),
+                       (int64_t)llround(m->theta_unwrapped*1000.0),
+                       (int64_t)llround(m->currents[0]*1000.0),
+                       (int64_t)llround(m->currents[1]*1000.0),
+                       (int64_t)llround(m->currents[2]*1000.0),
+                       (int64_t)llround(m->last_torque*1000000.0));
+        am13e_p0_event(m->machine,"ENERGY",
+                       (int64_t)llround(m->energy_bus_j*1e9),
+                       (int64_t)llround(m->energy_diode_j*1e9),
+                       (int64_t)llround(m->energy_copper_j*1e9),
+                       (int64_t)llround(m->energy_bemf_j*1e9),
+                       (int64_t)llround(m->energy_magnetic_j*1e9),
+                       (int64_t)llround(m->energy_backward_euler_j*1e9));
+    }
     am13e_native_motor_publish(m);
     if (!m->faulted) {
         am13e_native_motor_publish_oc(m);

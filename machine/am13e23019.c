@@ -364,6 +364,11 @@ typedef struct AM13ENativeMotor {
     int64_t last_ns;
     double currents[3], theta, omega, last_torque;
     uint32_t bemf_codes[3];
+    double theta_unwrapped, energy_bus_j, energy_copper_j;
+    double energy_diode_j, energy_bemf_j, energy_magnetic_j;
+    double energy_backward_euler_j, energy_abs_residual_j;
+    double energy_max_residual_j, energy_max_star_sum_a;
+    uint32_t energy_steps, energy_diode_steps, p0_last_pair;
     /* First actual hardware OST3 activation, read-only forensic latch.
      * No CPU/IRQ/PWM register changes or synthetic comparator writes. */
     bool first_ost3_seen;
@@ -557,6 +562,7 @@ struct AM13EMachineState {
     AM13EPA26Wave pa26_wave;
     AM13EAutoSITL auto_sitl; /* SIM_ONLY, autonomous functional stimulus */
     AM13ENativeMotor native_motor; /* opt-in, NO WFI/GDB motor coupling */
+    uint64_t p0_trace_sequence; /* first-party virtual event trace, log only */
     uint32_t sim_pa26_level;
     uint32_t sim_pa26_transitions;
     uint32_t sim_pa26_captures;
@@ -604,6 +610,25 @@ struct AM13EMachineState {
 
 /* Defined after the autonomous include; Guest MMIO hooks merely request
  * a QEMU Virtual Clock re-evaluation, no comparator/CAP1/IRQ injection. */
+/* Source-owned event audit. Every record is emitted INSIDE its native
+ * callback with one shared virtual timestamp and monotone sequence.
+ * Guest memory, hardware interrupts, physics clocks are never changed.
+ * Event tags are observational; temporal adjacency alone does NOT prove
+ * a complete closed-loop causal chain.
+ */
+static void am13e_p0_event(AM13EMachineState *s, const char *kind,
+                           int64_t a,int64_t b,int64_t c,
+                           int64_t d,int64_t e,int64_t f)
+{
+    if (!s->native_motor.enabled || !s->auto_sitl.running) return;
+    error_report("E62_P0_EVENT seq=%" PRIu64 " vns=%" PRId64
+                 " kind=%s a=%" PRId64 " b=%" PRId64
+                 " c=%" PRId64 " d=%" PRId64
+                 " e=%" PRId64 " f=%" PRId64,
+                 ++s->p0_trace_sequence,
+                 qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL),
+                 kind,a,b,c,d,e,f);
+}
 static void am13e_auto_route_changed(AM13EMachineState *s);
 static void am13e_auto_trace_cap1(AM13EMachineState *s);
 static void am13e_auto_trace_timg12_zero(AM13ESimTimer *t);
@@ -3798,6 +3823,7 @@ static void am13e_handoff_reset(void *opaque)
     env->v7m.primask[M_REG_NS] = 1;
     s->sysctl_mclkcfg = AM13E_SYSCTL_MCLKCFG_INITIAL;
     s->sysctl_systemcfg = 0U;
+    s->p0_trace_sequence = 0U;
     am13e_sim_motor_sysctl_reset(s);
     am13e_g13b2_reset(s);
     /* Device reset cleared physical OC sample-valid flags. Re-publish
