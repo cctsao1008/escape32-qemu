@@ -1,0 +1,57 @@
+name: E62 P1 Early CAP1-to-TIMG12 Source Replay (no acceptance waiver)
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/native_p1_first_feedback_latency.py'
+      - 'tests/test_native_p1_first_feedback_latency.py'
+      - '.github/workflows/e62-native-p1-first-feedback-replay.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  compare-archived-original-guest-traces:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - run: 40552428592
+            name: before-module-split-source
+          - run: 40557926101
+            name: after-module-split-source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download original (not synthesized) four-case P1 events
+        uses: actions/download-artifact@v4
+        with:
+          name: e62-native-p1-scenario-suite
+          run-id: ${{ matrix.run }}
+          github-token: ${{ github.token }}
+          path: artifacts
+      - name: Validate read-only first-feedback source timing and archived P1 verdicts
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="$PWD"
+          python3 tests/test_native_p1_first_feedback_latency.py
+          for case in smoke gentle direct20 steps; do
+            test -s "artifacts/e62-p1-scripted/e62-p1-script-$case.p0.events.log"
+            test -s "artifacts/e62-p1-scripted/e62-p1-script-$case.p1.json"
+          done
+          python3 tools/native_p1_first_feedback_latency.py \
+            --input-root artifacts/e62-p1-scripted \
+            --output artifacts/e62-p1-first-feedback-${{ matrix.run }}.json
+          echo "PASS_SOURCE_DIAGNOSTIC_ONLY_ARCHIVED_RUN=${{ matrix.run }}"
+      - name: Keep the real source event timing, including source FAIL cases
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-first-feedback-${{ matrix.name }}-${{ matrix.run }}
+          path: artifacts/e62-p1-first-feedback-${{ matrix.run }}.json
+          if-no-files-found: warn
+          retention-days: 21
