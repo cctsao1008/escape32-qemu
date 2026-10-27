@@ -1,0 +1,27 @@
+name: E62 P1 Original Guest Causality Unit Contract (read-only)
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/native_p1_causality_ledger.py'
+      - 'tests/test_native_p1_causality_ledger.py'
+      - '.github/workflows/e62-native-p1-causality-unit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-ledger-unit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check original event and P1 no-waiver contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PYTHONPATH="$PWD${PYTHONPATH:+:$PYTHONPATH}"
+          python3 tests/test_native_p1_causality_ledger.py
+          python3 -m py_compile tools/native_p1_causality_ledger.py
+          echo "E62_P1_CAUSALITY_UNIT_PASS diagnostic-only (P1 acceptance unchanged)"
