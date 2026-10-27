@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from g0_memory import QTest
 from tools.sitl_autonomous_transport import AUTO_BASE, REG, read_auto
 from tools.native_dshot_scenario import load_native_scenario
+from tools.native_p1_fault_plan import load_fault_plan
 
 MOTOR_BASE = 0x5ffeb000
 MOTOR_MAGIC = 0x4d323645
@@ -115,7 +116,8 @@ def _continuous_dshot_stages(*, neutral_ms, ramp_ms, hold_ms, coast_ms,
 
 def _configure_autonomous_dshot(qtest, *, neutral_ms, ramp_ms,
                                 hold_ms, coast_ms, drive_permille,
-                                ramp_update_ms, scenario_stages=None):
+                                ramp_update_ms, scenario_stages=None,
+                                external_fault=None):
     """Stage uninterrupted PA26 DShot traffic, not Guest synchronization."""
     get = lambda key: qtest.read(AUTO_BASE+REG[key])
     put = lambda key, val: qtest.write(AUTO_BASE+REG[key], val)
@@ -137,6 +139,17 @@ def _configure_autonomous_dshot(qtest, *, neutral_ms, ramp_ms,
             if get(key) != val:
                 raise RuntimeError("DShot input staging readback changed")
     put("max_frames", 0)
+    if external_fault is not None:
+        # Physical PA22 input calendar ONLY; QEMU timer asserts and
+        # releases the external pin at exact 1ms DShot frame boundaries.
+        for offset,value in (
+            (0x120,external_fault["assert_frame"]),
+            (0x124,external_fault["release_frame"]),
+            (0x128,1),
+        ):
+            qtest.write(AUTO_BASE+offset,value)
+            if qtest.read(AUTO_BASE+offset)!=value:
+                raise RuntimeError("Native external nFAULT plan readback failed")
     put("command", 1)
     return sum(stage[0] for stage in stages)
 
@@ -384,6 +397,8 @@ def run(args):
         raise FileNotFoundError(args.cfg_flash)
     symbol_addrs, unresolved_guest_symbols = _guest_symbol_addresses(args.elf)
     scenario_stages, scenario_meta = load_native_scenario(args.scenario)
+    external_fault=(load_fault_plan(args.fault_scenario,scenario_stages)
+                    if args.fault_scenario else None)
     with tempfile.TemporaryDirectory(prefix="e62-native-no-wfi-") as td:
         tmp = Path(td)
         sockpath = tmp/"qtest.sock"
@@ -458,12 +473,14 @@ def run(args):
                         "target_permille":args.drive_permille,
                     }
                     evidence["native_dshot_scenario"] = scenario_meta
+                    evidence["native_external_fault_plan"] = external_fault
                     evidence["configured_dshot_frames"] = _configure_autonomous_dshot(
                         qtest, neutral_ms=args.arm_ms, ramp_ms=args.drive_ms,
                         hold_ms=args.hold_ms, coast_ms=args.coast_ms,
                         drive_permille=args.drive_permille,
                         ramp_update_ms=args.ramp_update_ms,
-                        scenario_stages=scenario_stages)
+                        scenario_stages=scenario_stages,
+                        external_fault=external_fault)
                     deadline = time.monotonic() + args.wall_timeout_s
                     last_stage = None
                     previous_sent = -1
@@ -560,6 +577,8 @@ def run(args):
                             "No source-clocked PWM motor BEMF coupling: "+
                             ",".join(evidence["wiring_failure_reasons"]))
                     evidence["status"] = (
+                        "OBSERVED_P1_EXTERNAL_NFAULT_NO_RECOVERY_CLAIM"
+                        if external_fault is not None else
                         "PASS_NATIVE_AUTONOMOUS_WIRING_SMOKE_SIM_ONLY_"
                         "STRICT_STABILITY_STILL_OPEN")
             except Exception as exc:
@@ -646,6 +665,10 @@ def main():
         Path(__file__).resolve().parents[1]/
         "scenarios/e62-native-p0-smoke.json"),
         help="Versioned external 1kHz DShot JSON; Guest readiness NEVER gates")
+    parser.add_argument("--fault-scenario",type=Path,default=None,
+                        help="Optional SIM_ONLY external PA22 nFAULT JSON "
+                             "scheduled by QEMU virtual 1kHz clock; no "
+                             "original Guest register/IRQ writes")
     parser.add_argument("--arm-ms",type=int,default=1500,
                         help="Continuous DShot=0 cold-boot/neutral stage")
     parser.add_argument("--drive-ms",type=int,default=1000,
