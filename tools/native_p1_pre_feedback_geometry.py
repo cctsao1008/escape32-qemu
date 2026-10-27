@@ -27,14 +27,25 @@ PINNED_ELF="05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0"
 def torque_from_trace(data):
     """Rounding-aware independent check of model's continuous-current torque.
     Source: current in mA, unwrapped angle in mrad, torque in uNm."""
-    theta=data[1]/1000
+    theta_post=data[1]/1000
+    # Source motor_current_step computes torque against pre-integration
+    # theta, then advances theta using mean(old_omega,omega). The ROTOR
+    # event reports the post-integration theta and last torque. Retrodict
+    # the 1us prior electrical phase from observed post-step omega. This
+    # is read-only, and does not alter the QEMU integrator or observations.
+    mechanical_omega=data[0]/1000*(2*math.pi/60)
+    theta_pre=theta_post-21.0*mechanical_omega*1e-6
     current=[x/1000 for x in data[2:5]]
-    calculated=KT*sum(i*math.sin(theta+o)
+    calculated=KT*sum(i*math.sin(theta_pre+o)
                       for i,o in zip(current,OFFSETS))
-    # Quantization of 3 currents (0.5mA), angle (0.5mrad),
-    # reported torque (0.5uNm). NOT a P1 pass threshold.
+    # Input quantization (3 x 0.5mA, angle 0.5mrad, RPM 0.5mRPM),
+    # QEMU 1us pre-step approximation, last torque 0.5uNm.
+    # Physical angular acceleration contribution at the simulated
+    # 1us period is second order; account explicitly for bounded
+    # observed torque/J and 21 pole-pairs (J=1.3e-4 kg.m^2).
     max_current=sum(abs(i) for i in current)
-    allowance=KT*(0.0015+0.0005*max_current)+0.000002
+    accel_error=21.0*abs(data[5]/1e6)/0.00013*0.5e-12
+    allowance=KT*(0.0015+(0.0005+accel_error)*max_current)+0.000002
     return calculated,data[5]/1e6,allowance
 
 def pair_geometry(event):
@@ -149,6 +160,8 @@ def source_signature(events):
             "checked_rotor_samples":checked,"mismatch_count":len(mis),
             "mismatch_examples":mis[:4],
             "max_abs_residual_nm":round(worst,9),
+            "angle_alignment":"PRE_1US_STEP_ESTIMATED_FROM_POSTSTEP_RPM",
+            "last_torque_precedes_reported_rotor_angle":True,
             "rounding_aware_tolerance_only_not_p1_waiver":True,
         },
         "pre_first_timg12":{
@@ -225,6 +238,10 @@ def analyze_records(records):
             "pre_timg12_power_pairs":pf.get("full_power_pairs"),
             "torque_reconstruction_mismatches":result.get(
                 "source_torque_reconstruction",{}).get("mismatch_count"),
+            "torque_reconstruction_max_residual_nm":result.get(
+                "source_torque_reconstruction",{}).get("max_abs_residual_nm"),
+            "torque_reconstruction_mismatch_examples":result.get(
+                "source_torque_reconstruction",{}).get("mismatch_examples"),
         },sort_keys=True),flush=True)
     return {"status":"COMPLETE_SOURCE_ONLY_GEOMETRY" if not issues else
             "FAIL_CLOSED_SOURCE_GEOMETRY_INCOMPLETE",
