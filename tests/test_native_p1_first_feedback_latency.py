@@ -94,7 +94,7 @@ class FirstFeedbackTest(unittest.TestCase):
         records.extend([
             ev(13,6_000_000,"ROTOR",180000,2330,0,-25000,25000,-2000000),
             ev(14,6_500_000,"CMP_FILTER",0,0,2048,2048,0,0),
-            ev(15,7_000_000,"ROTOR",-70000,2440,0,-34000,34000,-3000000),
+            ev(15,6_900_000,"ROTOR",-70000,2440,0,-34000,34000,-3000000),
         ])
         records.sort(key=lambda x:x["vns"])
         for i,e in enumerate(records,1):
