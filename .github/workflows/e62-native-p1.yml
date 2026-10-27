@@ -1,0 +1,90 @@
+name: E62 P1 Native Throttle / Frontend / Performance (strict SIM_ONLY)
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'machine/**'
+      - 'tests/e62_autonomous_native_motor_probe.py'
+      - 'tools/native_p1_qualification.py'
+      - 'tools/native_dshot_scenario.py'
+      - 'tools/native_p0_strict.py'
+      - 'scenarios/e62-native-p0-*.json'
+      - 'tests/test_native_p1_qualification.py'
+      - '.github/workflows/e62-native-p1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-p1-scenario-suite:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned QEMU source build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            libglib2.0-dev libpixman-1-dev libfdt-dev pkg-config \
+            meson ninja-build binutils-arm-none-eabi
+      - name: Validate source contracts, pinned original Guest and native QEMU
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tests/test_native_p1_qualification.py
+          python3 tests/test_e62_native_dshot_scenario.py
+          git submodule update --init --depth 1 qemu
+          echo '05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0  baseline/e62-g13b3/firmware/AM13E-rev17.3.elf' | sha256sum -c -
+          ./build.sh
+      - name: Provision unchanged original Guest SIM_ONLY ECX87 config
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          python3 tools/sim_motor_cfg.py --sim-only-opt-in \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --motor-profile ecx87-kv147 \
+            --output artifacts/e62-g13b3-native-autonomous-cfg-flash.bin
+      - name: P1 independently clocked three JSON throttle scenarios and strict observations
+        shell: bash
+        run: |
+          set -uo pipefail
+          failures=0
+          for kind in smoke gentle steps; do
+            scenario="scenarios/e62-native-p0-${kind}.json"
+            root="artifacts/e62-native-p1-${kind}"
+            echo "::group::Native P1 scenario ${kind}"
+            python3 tests/e62_autonomous_native_motor_probe.py \
+              --qemu .build/qemu-src/build/qemu-system-arm \
+              --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+              --cfg-flash artifacts/e62-g13b3-native-autonomous-cfg-flash.bin \
+              --scenario "$scenario" \
+              --wall-timeout-s 300 \
+              --artifact "${root}.json" > "${root}.probe.log" 2>&1
+            rc=$?
+            tail -n 3 "${root}.probe.log"
+            if [ "$rc" -ne 0 ]; then failures=$((failures+1)); fi
+            python3 tools/native_p1_qualification.py \
+              --scenario "$scenario" \
+              --evidence "${root}.json" \
+              --events "${root}.p0.events.log" \
+              --output "${root}.p1.json" > "${root}.p1.log" 2>&1
+            rc=$?
+            tail -n 2 "${root}.p1.log"
+            if [ "$rc" -ne 0 ]; then failures=$((failures+1)); fi
+            echo "::endgroup::"
+          done
+          echo "P1_CASE_FAILURE_COUNT=${failures}"
+          test "$failures" -eq 0
+      - name: Preserve scenarios, source events and negative results without discarding FAIL
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-native-p1-scenario-suite
+          path: |
+            artifacts/e62-native-p1-*
+          retention-days: 21
+          if-no-files-found: warn
