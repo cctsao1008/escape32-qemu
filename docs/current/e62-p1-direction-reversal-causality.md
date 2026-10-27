@@ -25,6 +25,10 @@ From P1 workflow [40551707627](https://github.com/cctsao1008/escape32-qemu/actio
 
 The `steps` first 50ms has **no energized drive** in this earlier trace, whereas its first >=50rpm is ~501.21ms after the first positive 10% command, near the **20%** transition. Accordingly the new ledger captures both first-positive and first-20%-command epochs. Do not interpret `steps` 50ms after 10% as a healthy startup.
 
+A newer independent P1 workflow [40552428592](https://github.com/cctsao1008/escape32-qemu/actions/runs/40552428592) **does not reproduce the earlier steps inactivity**: with the same original step JSON and source model it measured 30.353 A peak phase current, -2.318 Nm torque and <=-50 RPM already **8.967ms after the initial 10% command**, before TIMG12 at 16.004ms. Its source P1 result was **328** significant direction changes. The prior run reported **223** direction changes with first 50RPM only after the later 20% stage. This is an actual run-to-run discrepancy, not an acceptance tolerance; timestamp/boot-state and startup-stage attribution must be audited. Thus the ledger preserves both the first-positive 10% anchor and the subsequent 20% anchor (it must never drop the early 10% events).
+
+The same newer CI included physically clocked PA26 20% ramps: 100ms ramp **FAIL** with 238 significant reversals, whereas 500ms ramp **PASS** with 0. This implicates sensitivity to command slew rate / open-loop startup dynamics, but does **not** isolate whether original Guest startup and the uncalibrated plant disagree or establish firmware qualification.
+
 The `direct20` rotor became <= -50 RPM at 7.209ms after the first positive 20% command, **before** its first observed TIMG12 at 13.743ms. Thus at least part of the negative-torque mechanical response occurs **before TIMG12-based commutation scheduling has been observed**. This points investigation toward direct-step starting-sector/rotor-angle/current transient or uncalibrated plant assumptions; subsequent CAP1/TIMG12 feedback can still amplify or sustain the oscillation. A strict before/after relationship is **not proof** of guest-firmware or plant fault.
 
 ## How to capture the next evidence, script-first
@@ -48,7 +52,7 @@ The P1 GitHub Actions workflow runs the read-only ledger with `if: always()` and
 - Source timestamps and deltas for first positive DShot, first command >=20%, first +/-50 RPM, first significant **sign change**, first <=-0.1 Nm torque marker and >=10 A phase-current marker.
 - First post-anchor CMPSS filtered transition, CAP1, Guest CAP1 W1C, TIMG12, Guest TIMG12 W1C and PWM_PAIR. Their *times* and same-ns ordered source records, not invented functional causality.
 - PWM_PAIR includes original decoded physical power pair, raw six-pad mask, raw AQ/DB gate-word and original PWM zero-event count. Invalid Hi/Lo overlap or source pair-ID disagreement is visible; no fabricated sector angle is used.
-- First 50ms rotor samples: signed RPM, **unwrapped electrical rotor angle**, three signed currents and electrical torque.
+- First 50ms after **first positive** throttle and, separately, first 50ms after **first >=20%** throttle: signed RPM, **unwrapped electrical rotor angle**, three signed currents and torque. Every anomalous sample also links to the preceding actual source DShot stage/value.
 - Around the first significant torque/speed anomaly, each event kind's nearest source neighbors reveal whether the original Guest had already entered a sensorless feedback cycle.
 - `SWITCH` source events are explicitly bounded to **120ms after the first powered physical edge** by QEMU P0 instrumentation. Absence of later carrier-edge events does **not** demonstrate that later AQ/DB outputs stopped.
 
