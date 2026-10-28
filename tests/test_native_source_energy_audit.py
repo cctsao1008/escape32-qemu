@@ -83,6 +83,29 @@ class Tests(unittest.TestCase):
         rows[5]["data"][3]=10001
         with self.assertRaisesRegex(EnergyAuditError,"invariant exceeded"):
             audit(rows)
+    def test_focus_events_correlate_without_becoming_strict_switch(self):
+        rows=fixture()
+        rows.append({"seq":0,"vns":1_001_500_000,
+                     "kind":"SWITCH_FOCUS","data":[24,1,15,1200,500,1]})
+        rows.sort(key=lambda x:x["vns"])
+        for i,row in enumerate(rows):
+            row["seq"]=i+1
+        result=audit(rows)
+        self.assertEqual(result["source_events_in_window"]["SWITCH_FOCUS"],1)
+        self.assertEqual(result["late_full_switch_events"],0)
+        self.assertEqual(result["focused_switching_source_events"][0]["six_pad_mask"],24)
+        self.assertEqual(result["focused_switching_source_events"][0]["gate_word"],15)
+        self.assertTrue(result["focused_switch_observation_complete"])
+        self.assertFalse(result["motor_p1_stability_qualified"])
+    def test_focused_switch_budget_overflow_fails_closed(self):
+        rows=fixture()
+        rows.append({"seq":0,"vns":1_001_500_000,
+                     "kind":"SWITCH_FOCUS_LIMIT","data":[12000,12000,0,0,0,0]})
+        rows.sort(key=lambda x:x["vns"])
+        for i,row in enumerate(rows):
+            row["seq"]=i+1
+        with self.assertRaisesRegex(EnergyAuditError,"budget exceeded"):
+            audit(rows)
 
 if __name__=="__main__":
     unittest.main(verbosity=2)
