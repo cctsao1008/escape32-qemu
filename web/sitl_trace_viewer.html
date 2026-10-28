@@ -62,9 +62,10 @@ NOT carrier duty or a reconstructed switching waveform. Missing/stale PWM is lef
 <div class="stat">Motor strict P1 Gate<b class="muted">NOT EXECUTED</b></div>
 </div></div>
 <div class="charts">
-<div class="panel"><h2>External FC DShot Command (raw command, source-owned)</h2><canvas id="source-dshot" width="1200" height="205"></canvas></div>
+<div class="panel"><h2>External FC DShot Command (raw code, blank after 2ms silence)</h2><canvas id="source-dshot" width="1200" height="205"></canvas></div>
 <div class="panel"><h2>SIM_ONLY Mechanical Rotor RPM</h2><canvas id="source-rpm" width="1200" height="205"></canvas></div>
-<div class="panel"><h2>Model Phase Currents (A) and Torque (Nm)</h2><canvas id="source-current" width="1200" height="205"></canvas></div>
+<div class="panel"><h2>Model Phase Currents (A)</h2><canvas id="source-current" width="1200" height="205"></canvas></div>
+<div class="panel"><h2>Model Electromagnetic Torque (Nm)</h2><canvas id="source-torque" width="1200" height="205"></canvas></div>
 <div class="panel"><h2>Source BEMF Frontend ADC Codes (12-bit, NOT volts)</h2><canvas id="source-bemf" width="1200" height="205"></canvas></div>
 <div class="panel"><h2>Last observed six-pad MCPWM mask (sparse, NOT PWM waveform)</h2><canvas id="source-pwm" width="1200" height="205"></canvas></div>
 <div class="panel"><h2>Actual CAP1 / TIMG12 / DShot / PWM Pair events</h2><canvas id="source-events" width="1200" height="125"></canvas></div>
@@ -643,13 +644,15 @@ function sourceRedraw(){
   $("source-timer").textContent=String(last.timg12_count);
   const [from,to]=sourceWindow();
   $("source-window").textContent=ms(from)+" – "+ms(to)+" ms virtual";
-  sourcePlot("source-dshot",[{name:"Raw FC DShot",color:"#8ec4ff",
-    get:s=>s.last_dshot_raw}]);
+  sourcePlot("source-dshot",[{name:"Recent FC DShot",color:"#8ec4ff",
+    get:s=>(s.last_dshot_ns!==null &&
+      s.t_ns-s.last_dshot_ns<=2_000_000)?s.last_dshot_raw:null}]);
   sourcePlot("source-rpm",[{name:"Rotor RPM",color:"#8ec4ff",get:s=>s.motor_rpm}]);
-  sourcePlot("source-current",[
-    ...[0,1,2].map((i)=>({name:["I_U","I_V","I_W"][i],
-      color:COLORS[i*2],get:s=>s.phase_currents_a[i]})),
-    {name:"Torque",color:"#f38b90",get:s=>s.torque_nm}
+  sourcePlot("source-current",
+    [0,1,2].map((i)=>({name:["I_U","I_V","I_W"][i],
+      color:COLORS[i*2],get:s=>s.phase_currents_a[i]})));
+  sourcePlot("source-torque",[
+    {name:"Torque Nm",color:"#f38b90",get:s=>s.torque_nm}
   ]);
   sourcePlot("source-bemf",[0,1,2].map(i=>({
     name:["ADC-U","ADC-V","ADC-W"][i],
