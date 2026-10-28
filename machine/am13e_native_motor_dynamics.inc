@@ -23,7 +23,7 @@ static bool am13e_native_motor_current_step(AM13ENativeMotor *m, double dt)
             freephase[nfree++] = p;
         }
         basis[p] = sin(m->theta + offs[p]);
-        e[p] = AM13E_NATIVE_KT*m->omega*basis[p];
+        e[p] = AM13E_NATIVE_K_PHASE*m->omega*basis[p];
         old[p] = m->currents[p];
     }
     int combinations = 1;
@@ -147,7 +147,7 @@ static bool am13e_native_motor_current_step(AM13ENativeMotor *m, double dt)
     for (int p = 0; p < 3; p++) {
         torque += currents[p]*basis[p];
     }
-    torque *= AM13E_NATIVE_KT;
+    torque *= AM13E_NATIVE_K_PHASE;
     double previous = m->omega;
     double omega = (previous+dt*torque/AM13E_NATIVE_J)/
                    (1.0+dt*AM13E_NATIVE_FRICTION/AM13E_NATIVE_J);
