@@ -26,5 +26,5 @@ jobs:
           set -euo pipefail
           python3 tests/test_native_porting_mmio_chain.py
           python3 tests/test_native_p1_first_feedback_latency.py
-          python3 tests/test_native_p0_strict.py
+          python3 tests/test_e62_native_p0_strict.py
           echo "PASS_FW_PORTING_MMIO_CONTRACT_UNIT_ONLY"
