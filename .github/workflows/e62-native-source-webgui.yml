@@ -5,9 +5,12 @@ on:
     paths:
       - 'web/sitl_trace_viewer.html'
       - 'tools/native_source_trace.py'
+      - 'tools/native_source_neutral_diagnostics.py'
       - 'tools/native_source_live_runner.py'
       - 'tools/sitl_live.py'
       - 'tests/test_native_source_trace.py'
+      - 'tests/test_native_source_neutral_diagnostics.py'
+      - 'tests/test_native_source_observation_browser.js'
       - 'tests/test_native_source_live_runner.py'
       - 'tests/test_native_source_browser_runtime.js'
       - 'tests/test_throttle_profile_browser.js'
@@ -32,14 +35,17 @@ jobs:
         run: |
           set -euo pipefail
           python3 tests/test_native_source_trace.py
+          python3 tests/test_native_source_neutral_diagnostics.py
           python3 tests/test_native_source_live_runner.py
           python3 tests/test_sitl_live.py
           python3 tests/test_sitl_viewer.py
           node tests/test_native_source_browser_runtime.js
+          node tests/test_native_source_observation_browser.js
           node tests/test_throttle_profile_browser.js
           python3 tests/test_native_porting_mmio_p0.py
           python3 tests/test_native_porting_mmio_chain.py
           python3 -m py_compile \
             tools/native_source_trace.py \
-            tools/native_source_live_runner.py
+            tools/native_source_live_runner.py \
+            tools/native_source_neutral_diagnostics.py
           echo E62_NATIVE_SOURCE_GUI_HOST_ONLY_CONTRACT_PASS_NO_GUEST_SIGNOFF
