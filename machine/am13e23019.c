@@ -372,6 +372,12 @@ typedef struct AM13ENativeMotor {
     int64_t p0_first_switch_ns;
     uint32_t p0_last_logged_mask;
     bool p0_last_logged_gate;
+    /* Opt-in bounded full six-pad SWITCH source observer ONLY.
+     * Machine property survives reset; never controls motor physics.
+     * Default zero means source focus disabled. */
+    int64_t source_focus_begin_ns, source_focus_end_ns;
+    uint32_t source_focus_record_count, source_focus_last_logged_mask;
+    bool source_focus_last_logged_gate, source_focus_budget_hit;
     /* First actual hardware OST3 activation, read-only forensic latch.
      * No CPU/IRQ/PWM register changes or synthetic comparator writes. */
     bool first_ost3_seen;
@@ -4324,6 +4330,40 @@ static void am13e_set_native_motor(Object *obj, bool on, Error **errp)
     AM13E_MACHINE(obj)->native_motor.enabled = on;
 }
 
+static char *am13e_get_switch_focus_window(Object *obj, Error **errp)
+{
+    AM13ENativeMotor *m = &AM13E_MACHINE(obj)->native_motor;
+    if (m->source_focus_end_ns <= m->source_focus_begin_ns) {
+        return g_strdup("off");
+    }
+    return g_strdup_printf("%lld:%lld",
+        (long long)(m->source_focus_begin_ns / INT64_C(1000000)),
+        (long long)(m->source_focus_end_ns / INT64_C(1000000)));
+}
+static void am13e_set_switch_focus_window(Object *obj,
+                                          const char *window, Error **errp)
+{
+    AM13ENativeMotor *m = &AM13E_MACHINE(obj)->native_motor;
+    unsigned long long begin_ms, end_ms;
+    char extra;
+    if (window && strcmp(window, "off") == 0) {
+        m->source_focus_begin_ns = m->source_focus_end_ns = 0;
+        return;
+    }
+    /* Reject unbounded or malformed windows rather than silently trace
+     * the entire 16kHz carrier or accepting a Guest-visible control. */
+    if (!window || sscanf(window, "%llu:%llu%c",
+                          &begin_ms, &end_ms, &extra) != 2 ||
+        begin_ms < 1ULL || end_ms <= begin_ms ||
+        end_ms - begin_ms > 50ULL || end_ms > 180000ULL) {
+        error_setg(errp, "esc-sim-switch-focus-window-ms must be off or "
+                   "START:END in integer ms, 1..180000, 1..50ms span");
+        return;
+    }
+    m->source_focus_begin_ns = (int64_t)begin_ms * INT64_C(1000000);
+    m->source_focus_end_ns = (int64_t)end_ms * INT64_C(1000000);
+}
+
 static bool am13e_get_wwdt_bootrst(Object *obj, Error **errp)
 {
     return AM13E_MACHINE(obj)->esc_sim_wwdt_bootrst;
@@ -4371,6 +4411,14 @@ static void am13e_class_init(ObjectClass *oc, void *data)
     object_class_property_set_description(oc, "esc-sim-native-motor",
         "SIM_ONLY uncalibrated ECX87-KV147 virtual-time PWM-to-rotor-to-BEMF "
         "engine. Independent of Guest WFI and GDB; not physical qualified.");
+    object_class_property_add_str(oc, "esc-sim-switch-focus-window-ms",
+                                  am13e_get_switch_focus_window,
+                                  am13e_set_switch_focus_window);
+    object_class_property_set_description(oc,
+        "esc-sim-switch-focus-window-ms",
+        "Opt-in source-only 1..50ms six-pad AQ/DB switching focus, "
+        "START:END integer QEMU virtual ms; default off. "
+        "Does not drive the Guest, alter motor physics or waive P1.");
     object_class_property_add_bool(oc, "esc-sim-wwdt-bootrst",
                                    am13e_get_wwdt_bootrst,
                                    am13e_set_wwdt_bootrst);
