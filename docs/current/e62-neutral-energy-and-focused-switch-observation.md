@@ -196,6 +196,48 @@ A/B equality can support source-only observation neutrality **within
 that exact synchronized diagnostic replay**. Neither result qualifies
 motor P1 stability, ESC hardware, thrust or thermal/current performance.
 
+### Diagnostic preboot FC scheduling — deterministic-input experiment
+
+A dedicated **default-off** QEMU machine property now prearms the exact
+pinned `scenarios/e62-native-p0-smoke.json` 3000-frame input profile:
+
+```
+-M am13e23019,esc-sim=on,esc-sim-native-motor=on,esc-sim-differential-fc-smoke=on
+```
+
+This fixture runs during QEMU's initial machine reset, before the
+original Guest executes. The independent PA26 DShot source is scheduled
+on `QEMU_CLOCK_VIRTUAL` at reset epoch +100 ns, with the established
+1 ms absolute frame deadlines. The machine-level diagnostic is rejected
+unless `esc-sim` and `esc-sim-native-motor` are enabled and WWDT
+BOOTRST is off. The four exact stage tuples are
+`(1500,0,0,1), (1000,0,200,5), (300,200,200,1),
+(200,0,0,1)`, meaning `(duration_ms, from_permille,
+to_permille, update_ms)`.
+
+`tools/native_preboot_fc_source.py` validates the input JSON against
+those **exact** tuples and the original ELF SHA256, starts QEMU without
+a QTest or QMP socket, and passively reads the complete chronological
+QEMU stderr source. It checks every real `DSHOT` frame index
+0..2999, leaves virtual time entirely to QEMU, and stops observing
+only after the last frame. Comparison is restricted to original source
+events **through 2990 ms**, safely before host teardown. The unchanged
+`tools/native_source_energy_audit.py` runs against original traces
+before the fail-closed OFF/OFF and subsequent OFF/ON source checks.
+
+**Experiment separation:** This diagnostic does *not* use the
+experimental `--differential-sync-start` / QMP `-S` or `icount`
+record/replay path that previously blocked QTest. It eliminates
+one known host scheduling variable, but deterministic startup inputs
+alone do not establish whole-VM bit-exact execution. If OFF/OFF still
+differs, preserve the precise first event and classification
+`FAIL_BASELINE_NONREPRODUCIBLE`; do not shift virtual timestamps,
+round numeric results, permit tolerance, or infer Observer side effects.
+The input source is the *same physical PA26 waveform fixture* and the
+Motor Plant, original ELF, native P0/P1 acceptance tests and safety
+gates remain unchanged. Even an eventual A/B PASS is source-only
+evidence for this specific replay, **not a Motor P1 PASS**.
+
 ## 4. Causal limits
 
 Even with the focused switching available, combining DShot,
