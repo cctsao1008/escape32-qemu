@@ -20,13 +20,14 @@ from tools.native_closed_loop_audit import ORIGINAL_REL17_ROUTE
 # Independent published terminal Kt -> one-phase sinusoidal flux scale.
 # Must match the native QEMU winding model, not old historical traces.
 KT=0.0649/math.sqrt(3.0)
+KT_HISTORICAL_TERMINAL_AS_PHASE=0.0649  # ONLY archived pre-fix trace
 OFFSETS=(0.0,-2*math.pi/3,2*math.pi/3)
 FIVE_EVENTS=("CMP_FILTER","CAP1","CAP1_ACK","TIMG12","TIMG12_ACK")
 CASES=("smoke","gentle","direct20","steps")
 ROTOR_MINIMUM_SAMPLES=3
 PINNED_ELF="05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0"
 
-def torque_from_trace(data):
+def torque_from_trace(data, *, phase_kt=KT):
     """Rounding-aware independent check of model's continuous-current torque.
     Source: current in mA, unwrapped angle in mrad, torque in uNm."""
     theta_post=data[1]/1000
@@ -38,7 +39,7 @@ def torque_from_trace(data):
     mechanical_omega=data[0]/1000*(2*math.pi/60)
     theta_pre=theta_post-21.0*mechanical_omega*1e-6
     current=[x/1000 for x in data[2:5]]
-    calculated=KT*sum(i*math.sin(theta_pre+o)
+    calculated=phase_kt*sum(i*math.sin(theta_pre+o)
                       for i,o in zip(current,OFFSETS))
     # Input quantization (3 x 0.5mA, angle 0.5mrad, RPM 0.5mRPM),
     # QEMU 1us pre-step approximation, last torque 0.5uNm.
@@ -47,7 +48,7 @@ def torque_from_trace(data):
     # observed torque/J and 21 pole-pairs (J=1.3e-4 kg.m^2).
     max_current=sum(abs(i) for i in current)
     accel_error=21.0*abs(data[5]/1e6)/0.00013*0.5e-12
-    allowance=KT*(0.0015+(0.0005+accel_error)*max_current)+0.000002
+    allowance=phase_kt*(0.0015+(0.0005+accel_error)*max_current)+0.000002
     return calculated,data[5]/1e6,allowance
 
 def pair_geometry(event):
@@ -76,7 +77,7 @@ def pair_geometry(event):
         "not_a_measured_current_direction":True,
     }
 
-def source_signature(events):
+def source_signature(events, *, phase_kt=KT):
     """Early source DShot, original six-pad sector and CAP1/TIMG12 timing."""
     dshot=[e for e in events if e["kind"]=="DSHOT" and e["data"][2]>0]
     if not dshot:
@@ -110,7 +111,7 @@ def source_signature(events):
     worst=0.0
     samples=[]
     for e in rotor:
-        predicted,measured,allowance=torque_from_trace(e["data"])
+        predicted,measured,allowance=torque_from_trace(e["data"],phase_kt=phase_kt)
         delta=abs(predicted-measured)
         worst=max(worst,delta)
         checked+=1
@@ -159,6 +160,8 @@ def source_signature(events):
         "negative_speed_before_first_timg12":(
             before(reverse) if reverse else None),
         "source_torque_reconstruction":{
+            "phase_kt_nm_per_a":phase_kt,
+            "legacy_terminal_as_phase":phase_kt==KT_HISTORICAL_TERMINAL_AS_PHASE,
             "checked_rotor_samples":checked,"mismatch_count":len(mis),
             "mismatch_examples":mis[:4],
             "max_abs_residual_nm":round(worst,9),
@@ -194,7 +197,7 @@ def source_signature(events):
         "do_not_attribute_cause_from_event_order_alone":True,
     }
 
-def analyze_records(records):
+def analyze_records(records, *, phase_kt=KT):
     cases=[]
     issues=[]
     for name,trace,verdict in records:
@@ -206,7 +209,7 @@ def analyze_records(records):
                   "PASS_P1_SIM_ONLY_OBSERVABILITY",
                   "FAIL_P1_SIM_ONLY_OBSERVABILITY"):
                 raise ValueError("Missing valid source P1 verdict")
-            result=source_signature(events)
+            result=source_signature(events,phase_kt=phase_kt)
             result["name"]=name
             result["p1_source_status"]=source["status"]
             result["p1_source_failures"]=source.get(
@@ -260,12 +263,20 @@ def main():
                     default=ROOT/"artifacts/e62-p1-scripted")
     ap.add_argument("--output",type=Path,
                     default=ROOT/"artifacts/e62-p1-scripted/e62-p1-early-geometry.json")
+    ap.add_argument("--historical-terminal-kt-as-phase",action="store_true",
+                    help="ONLY pinned 2026-10 pre-fix source archives; not current QEMU")
     args=ap.parse_args()
+    if args.historical_terminal_kt_as_phase:
+        # Historical evidence provenance is explicit, never guessed
+        # from a failed torque fit or used to waive a new trace mismatch.
+        phase_kt=KT_HISTORICAL_TERMINAL_AS_PHASE
+    else:
+        phase_kt=KT
     records=[(name,
               args.input_root/f"e62-p1-script-{name}.p0.events.log",
               args.input_root/f"e62-p1-script-{name}.p1.json")
              for name in CASES]
-    report=analyze_records(records)
+    report=analyze_records(records,phase_kt=phase_kt)
     args.output.parent.mkdir(parents=True,exist_ok=True)
     args.output.write_text(json.dumps(report,sort_keys=True,
                            indent=2)+"\n")
