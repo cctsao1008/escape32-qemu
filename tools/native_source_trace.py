@@ -23,6 +23,7 @@ EVENT_KINDS={
     "DSHOT","PWM_PAIR","CAP1","CAP1_ACK","ECAP1_CAP1_READ",
     "T12_LOAD","T12_START","T12_STOP","TIMG12","TIMG12_ACK",
     "CMP_FILTER","NFAULT_EDGE","WWDT_FEED","THROT_SET",
+    "SWITCH_FOCUS",
 }
 MAX_SAMPLES=200000
 MAX_EVENTS=100000
@@ -65,6 +66,7 @@ class NativeSourceReducer:
         self.rotor_time=None
         self.mask=None
         self.mask_time=None
+        self.mask_source=None
         self.gate=None
         self.pair=None
         self.last_dshot=None
@@ -112,9 +114,10 @@ class NativeSourceReducer:
                 "torque_nm":d[5]/1e6,
             }
             self.rotor_time=vns
-        elif kind=="SWITCH":
+        elif kind in ("SWITCH","SWITCH_FOCUS"):
             self.mask=d[0]&0x3f
             self.mask_time=vns
+            self.mask_source=kind
             self.gate=bool(d[1])
         elif kind=="PWM_PAIR":
             self.pair=d[0]
@@ -164,6 +167,7 @@ class NativeSourceReducer:
             "bemf_dac_code":d[4],
             "cmp_filtered":bool(d[5]),
             "pwm_six_pad_mask":self.mask if mask_is_fresh else None,
+            "pwm_mask_source_kind":self.mask_source if mask_is_fresh else None,
             "pwm_gate":self.gate if mask_is_fresh else None,
             "pwm_pair":self.pair,
             "last_dshot_raw":self.last_dshot,
