@@ -13,9 +13,11 @@ FILES={
     "crc":"e62-dshot-crc-native-verdict.json",
     "neutral_fault":"e62-safety-qualification.json",
     "inflight_fault":"e62-native-p1-nfault.verdict.json",
+    "input_loss":"e62-native-p1-input-loss.verdict.json",
 }
 RUNS={"p0":40632866806,"p1":40633019199,"crc":40631864430,
-      "neutral_fault":40631864426,"inflight_fault":40631864583}
+      "neutral_fault":40631864426,"inflight_fault":40631864583,
+      "input_loss":40639394403}
 
 class EvidenceError(ValueError):
     pass
@@ -110,6 +112,28 @@ def audit(sources):
          and inflight.get("electrical_hardware_qualified") is False,
          "in-flight no-WFI nFAULT safe-off incomplete or overclaimed")
 
+    loss=sources["input_loss"]
+    must(loss.get("status")==
+         "PASS_P1_NATIVE_GUEST_INPUT_LOSS_WWDT_BOOTRST_SIM_ONLY"
+         and loss.get("issues")==[] and
+         loss.get("scope")=="ORIGINAL_GUEST_NO_WFI_HARD_PA26_SIGNAL_LOSS"
+         and loss.get("no_host_guest_writes") is True and
+         loss.get("original_elf_sha256")==ELF and
+         loss.get("source_clock")=="QEMU_CLOCK_VIRTUAL" and
+         loss.get("external_dshot_frames")==2800 and
+         loss.get("original_guest_wwdt_feed_writes",0)>0 and
+         loss.get("model_wwdt_nominal_period_ns")==1000000000 and
+         type(loss.get("model_wwdt_deadline_error_ns")) in (int,float)
+         and abs(loss["model_wwdt_deadline_error_ns"])<=100 and
+         loss.get("physical_power_stage_qualified") is False and
+         loss.get("real_lfclk_qualified") is False and
+         loss.get("input_loss_silicon_qualified") is False and
+         loss.get("automatic_motor_restart_qualified") is False and
+         loss.get("motor_p1_startup_reversal_qualified") is False and
+         loss.get("original_fw_policy_changed") is False and
+         loss.get("motor_plant_changed") is False,
+         "Original Guest no-WFI DShot dropout/WWDT source contract absent or overclaimed")
+
     matrix=[
        {"id":"A01-A09","status":"VERIFIED_TESTED_SIM_ONLY_PORTING_CHAIN",
         "evidence":"original Guest P0 CAP1/MMIO/TIMG12, P1 MMIO source"},
@@ -124,7 +148,8 @@ def audit(sources):
         "cases":{"smoke":"PASS","gentle":"PASS","direct20":"FAIL","steps":"FAIL"}},
        {"id":"A11-A12","status":"PHYSICAL_ADC_ANALOG_POWER_AND_PROP_HW_REQUIRED"},
        {"id":"archive","status":"HISTORICAL_BINARY_SOURCE_FINGERPRINT_DRIFT_OPEN"},
-       {"id":"input_loss","status":"WATCHDOG_INPUT_LOSS_AND_RECOVERY_NOT_QUALIFIED"}
+       {"id":"input_loss","status":"VERIFIED_SIM_ONLY_NO_WFI_GUEST_WWDT_BOOTRST",
+        "evidence":"2800 PA26 frames; 2189 real Guest WWDT MMIO feeds; virtual 1s source expiry; no HW signoff"}
     ]
     return {
        "schema":"e62-sitl-porting-readiness.v1",
@@ -140,6 +165,13 @@ def audit(sources):
        "p0_mmio":{"cap1_guest_read_chains":matched_cap,
                   "guest_timg12_zero_chains":matched_timer,
                   "max_virtual_timer_error_ns":err},
+       "p1_input_loss":{"external_dshot_frames":loss["external_dshot_frames"],
+           "original_guest_wwdt_feed_writes":
+               loss["original_guest_wwdt_feed_writes"],
+           "model_wwdt_deadline_error_ns":
+               loss["model_wwdt_deadline_error_ns"],
+           "result":loss["status"],
+           "silicon_qualified":False},
        "p1_mmio":{"cases":{n:{
                      "status":by[n]["status"],
                      "motor_p1_qualified":by[n]["p1_unchanged_qualified"],
@@ -152,7 +184,7 @@ def audit(sources):
        "explicit_open":["P1 direct20/steps motor reverse",
           "ECX87 210KV 47V and APC 24x12E motor+prop load calibration",
           "Silicon CMPSS analog noise, ADC mapping and physical power stage",
-          "Input-loss reset, watchdog, recovery and automatic rearm",
+          "Input-loss WWDT/BOOTRST only verified in QEMU; actual LFCLK, silicon reset and automatic rearm require HW",
           "Historical G13B3 source fingerprint drift",
           "Hardware bring-up and complete product FW signoff"],
        "sources":{k:{"run_id":RUNS[k],"file":FILES[k]} for k in FILES}

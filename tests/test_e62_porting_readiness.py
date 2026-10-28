@@ -43,6 +43,24 @@ def fixture():
                 "nfault","oc-u","oc-v","oc-w"],
             "scope":"MODEL_ONLY_NATIVE_NEUTRAL_NOT_MOTOR_RUNNING",
             "real_power_stage":"NOT_QUALIFIED"},
+        "input_loss":{
+            "status":"PASS_P1_NATIVE_GUEST_INPUT_LOSS_WWDT_BOOTRST_SIM_ONLY",
+            "issues":[],
+            "scope":"ORIGINAL_GUEST_NO_WFI_HARD_PA26_SIGNAL_LOSS",
+            "no_host_guest_writes":True,
+            "original_elf_sha256":ELF,
+            "source_clock":"QEMU_CLOCK_VIRTUAL",
+            "external_dshot_frames":2800,
+            "original_guest_wwdt_feed_writes":2189,
+            "model_wwdt_nominal_period_ns":1000000000,
+            "model_wwdt_deadline_error_ns":0,
+            "physical_power_stage_qualified":False,
+            "real_lfclk_qualified":False,
+            "input_loss_silicon_qualified":False,
+            "automatic_motor_restart_qualified":False,
+            "motor_p1_startup_reversal_qualified":False,
+            "original_fw_policy_changed":False,
+            "motor_plant_changed":False},
         "inflight_fault":{
             "status":"PASS_P1_NATIVE_IN_FLIGHT_NFAULT_SAFE_OFF",
             "qualified":True,"failures":[],"source_fault_edges":2,
@@ -112,6 +130,19 @@ class TestReadiness(unittest.TestCase):
         data=fixture()
         data["inflight_fault"]["automatic_rearm_and_flight_recovery_qualified"]=True
         with self.assertRaisesRegex(EvidenceError,"in-flight no-WFI"):
+            audit(data)
+    def test_p1_signal_loss_guest_wwdt_must_be_real(self):
+        data=fixture()
+        data["input_loss"]["status"]="PASS_DEVICE_MODEL_ONLY"
+        with self.assertRaisesRegex(EvidenceError,"no-WFI DShot dropout"):
+            audit(data)
+        data=fixture()
+        data["input_loss"]["original_guest_wwdt_feed_writes"]=0
+        with self.assertRaisesRegex(EvidenceError,"no-WFI DShot dropout"):
+            audit(data)
+        data=fixture()
+        data["input_loss"]["automatic_motor_restart_qualified"]=True
+        with self.assertRaisesRegex(EvidenceError,"no-WFI DShot dropout"):
             audit(data)
     def test_no_guest_synthetic_or_intervention(self):
         data=fixture();data["p0"]["no_guest_intervention"]=False
