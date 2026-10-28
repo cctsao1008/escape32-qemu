@@ -1,0 +1,84 @@
+name: E62 P1 Original Guest No-WFI DShot Loss WWDT BOOTRST
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'machine/am13e23019.c'
+      - 'tests/e62_autonomous_native_motor_probe.py'
+      - 'tests/test_native_p1_input_loss.py'
+      - 'tools/native_p1_input_loss_audit.py'
+      - 'tools/native_p0_strict.py'
+      - 'scenarios/e62-native-p1-input-loss.json'
+      - '.github/workflows/e62-native-p1-input-loss.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  original-elf-real-pa26-hard-loss-wwdt-bootrst:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fail-closed source-identity, no-Guest-writes and timeout negative unit contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tests/test_native_p1_input_loss.py
+          python3 tests/test_e62_native_dshot_scenario.py
+          python3 tests/test_wwdt_bootrst_contract.py
+      - name: Pinned original ESCape32 ELF and native QEMU source build
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            libglib2.0-dev libpixman-1-dev libfdt-dev pkg-config meson ninja-build \
+            binutils-arm-none-eabi
+          git submodule update --init --depth 1 qemu
+          echo '05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0  baseline/e62-g13b3/firmware/AM13E-rev17.3.elf' | sha256sum -c -
+          ./build.sh
+      - name: Prepare independent motor CFG without touching original ELF
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          python3 tools/sim_motor_cfg.py --sim-only-opt-in \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --motor-profile ecx87-kv147 \
+            --output artifacts/e62-p1-input-loss-cfg.bin
+      - name: Genuine Original Guest valid DShot then abrupt external FC silence (no WFI)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tests/e62_autonomous_native_motor_probe.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --cfg-flash artifacts/e62-p1-input-loss-cfg.bin \
+            --scenario scenarios/e62-native-p1-input-loss.json \
+            --link-loss-last-frame 2800 \
+            --link-loss-wall-timeout-s 150 \
+            --wall-timeout-s 210 \
+            --artifact artifacts/e62-native-p1-input-loss.json \
+            2>&1 | tee artifacts/e62-native-p1-input-loss.probe.log
+      - name: Strict source-owned guest feed -> WWDT deadline -> BOOTRST safe-off
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/native_p1_input_loss_audit.py \
+            --events artifacts/e62-native-p1-input-loss.p0.events.log \
+            --evidence artifacts/e62-native-p1-input-loss.json \
+            --qemu-log artifacts/e62-native-p1-input-loss.qemu.log \
+            --scenario scenarios/e62-native-p1-input-loss.json \
+            --output artifacts/e62-native-p1-input-loss.verdict.json \
+            2>&1 | tee artifacts/e62-native-p1-input-loss.verdict.log
+      - name: Preserve actual negative result and source timebase, even on red
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-original-guest-no-wfi-input-loss-wwdt
+          path: artifacts/e62-native-p1-input-loss*
+          retention-days: 21
+          if-no-files-found: warn
