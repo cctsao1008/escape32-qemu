@@ -28,7 +28,23 @@ def sha256(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def readonly_qmp_cpu_snapshot(path):
+def readonly_qmp_cpu_snapshot(path, elf):
+    # Parse linked ELF local static symbols rather than hardcoding SRAM
+    # offsets: recompiles can shift these addresses.
+    names={"audio_owner","fault_latched","safety_initialized"}
+    found={}
+    nm=subprocess.run(["arm-none-eabi-nm","-an",str(elf)],check=True,
+                      capture_output=True,text=True,timeout=12).stdout
+    for line in nm.splitlines():
+        parts=line.split()
+        if len(parts)==3 and parts[2] in names:
+            addr=int(parts[0],16)
+            if not (0x20000000<=addr<=0x2001fffc):
+                raise ValueError("Invalid Guest SRAM symbol "+parts[2])
+            found[parts[2]]=addr
+    if set(found)!=names:
+        raise ValueError("Missing original Guest safety symbols "+str(found))
+
     """QMP register query only: no Guest writes or CPU control."""
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
         client.settimeout(8)
@@ -49,12 +65,19 @@ def readonly_qmp_cpu_snapshot(path):
                 if "error" in x:
                     raise ValueError(name+": "+str(x["error"]))
         request("qmp_capabilities")
+        safety_symbols={}
+        for name,addr in sorted(found.items()):
+            # Read-only physical SRAM, no QTest, IRQ stepping or Guest write.
+            safety_symbols[name]=dict(address=hex(addr),
+                qmp_raw=request("human-monitor-command",
+                    {"command-line":f"xp /1wx 0x{addr:08x}"}))
         registers=request("human-monitor-command",
                           {"command-line":"info registers"})
         result={
             "query_status":request("query-status"),
             "query_cpus_fast":request("query-cpus-fast"),
             "info_registers":registers,
+            "guest_safety_flags_read_only":safety_symbols,
             "query_only_no_guest_control":True,
         }
         # ARM fault-reset loop is nonreturning; R13 still points to the
@@ -139,7 +162,7 @@ def run(a):
                 if last == EXPECTED_FRAMES-1:
                     try:
                         report["passive_qmp_after_all_frames"] = (
-                            readonly_qmp_cpu_snapshot(qmp_path))
+                            readonly_qmp_cpu_snapshot(qmp_path,a.elf))
                     except (OSError, ValueError, TypeError) as exc:
                         report["passive_qmp_error"] = str(exc)
             finally:
