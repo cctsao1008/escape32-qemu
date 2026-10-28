@@ -48,6 +48,9 @@ def validate_meta(meta, focused):
     assert meta["host_virtual_time_steps"] == 0
     assert meta["passive_dshot_frames"] == 3000
     assert meta["motor_p1_stability_qualified"] is False
+    assert meta["differential_rr_mode"] in ("record", "replay")
+    assert meta["differential_rr_file_bytes"] >= 32
+    assert len(meta["differential_rr_file_sha256"]) == 64
     assert meta["source_focus_window_ms"] == ("2795:2840" if focused else None)
 
 def evaluate(off1, off2, on, e1, e2, en, phase):
@@ -62,6 +65,12 @@ def evaluate(off1, off2, on, e1, e2, en, phase):
         for meta, events in (off1, off2):
             validate_meta(meta, False)
             assert not any(x["kind"] in FOCUS for x in events), "OFF emitted focus"
+        assert off1[0]["differential_rr_mode"] == "record"
+        assert off2[0]["differential_rr_mode"] == "replay"
+        assert (off1[0]["differential_rr_file_sha256"] ==
+                off2[0]["differential_rr_file_sha256"]), "QEMU RR recording mutated"
+        assert (off1[0]["scenario_sha256"] ==
+                off2[0]["scenario_sha256"]), "Scenario mismatch"
         baseline = compare(off1[1], off2[1])
         energy_same = e1["energy_delta_j"] == e2["energy_delta_j"]
         result["off_off"] = baseline
@@ -76,6 +85,10 @@ def evaluate(off1, off2, on, e1, e2, en, phase):
             return result
         assert phase == "differential" and on is not None and en is not None
         validate_meta(on[0], True)
+        assert on[0]["differential_rr_mode"] == "replay"
+        assert (on[0]["differential_rr_file_sha256"] ==
+                off1[0]["differential_rr_file_sha256"]), "ON used another QEMU recording"
+        assert on[0]["scenario_sha256"] == off1[0]["scenario_sha256"]
         focus = [x for x in on[1] if x["kind"] == "SWITCH_FOCUS"]
         assert len(focus) > 10, "No source-backed focused transitions"
         assert not any(x["kind"] == "SWITCH_FOCUS_LIMIT" for x in on[1]), "Focus budget overflow"
