@@ -7,6 +7,7 @@ on:
       - 'machine/am13e23019.c'
       - 'machine/am13e_autonomous_sitl.inc'
       - 'tools/experimental_e62_bemf_ab.py'
+      - 'tests/fixtures/e62_sim_only_motor_board_profile.cmake'
       - '.github/workflows/e62-experiment-early-bemf-direct20.yml'
   workflow_dispatch:
 
@@ -54,17 +55,26 @@ jobs:
         run: |
           set -euo pipefail
           fw="$PWD/.build/experimental-escape32"
+          board="$PWD/tests/fixtures/e62_sim_only_motor_board_profile.cmake"
+          test -s "$board"
+          # The unconfigured Reference firmware leaves all motor pads OFF.
+          # ONLY this separate SIM_ONLY experiment supplies a complete
+          # electrical compile fixture. BOTH control and candidate use it.
+          # This is NOT an approved HW board profile, NEVER FLASH.
           cmake -S "$fw" -B .build/exp-fw-default -G "Unix Makefiles" \
-            -DESCAPE32_BUILD_AM13E=ON -DAM13E_SDK_ROOT=/tmp/am13e-ti-sdk
+            -DESCAPE32_BUILD_AM13E=ON -DAM13E_SDK_ROOT=/tmp/am13e-ti-sdk \
+            -DAM13E_BOARD_BOARD_PROFILE_FILE="$board"
           cmake --build .build/exp-fw-default --target AM13E-rev17.3.elf -j 2
           cmake -S "$fw" -B .build/exp-fw-early -G "Unix Makefiles" \
             -DESCAPE32_BUILD_AM13E=ON -DAM13E_SDK_ROOT=/tmp/am13e-ti-sdk \
+            -DAM13E_BOARD_BOARD_PROFILE_FILE="$board" \
             -DCMAKE_C_FLAGS="-DAM13E_SIM_ONLY_EXPERIMENTAL_EARLY_BEMF=1"
           cmake --build .build/exp-fw-early --target AM13E-rev17.3.elf -j 2
           cp .build/exp-fw-default/AM13E-rev17.3.elf artifacts/e62-exp-control.elf
           cp .build/exp-fw-early/AM13E-rev17.3.elf artifacts/e62-exp-candidate.elf
           sha256sum artifacts/e62-exp-control.elf artifacts/e62-exp-candidate.elf \
             > artifacts/e62-exp-elf-pair.sha256
+          cp "$board" artifacts/e62-exp-SIM-ONLY-NOT-A-PHYSICAL-BOARD.cmake
           test "$(sha256sum artifacts/e62-exp-control.elf | cut -c1-64)" != \
                "$(sha256sum artifacts/e62-exp-candidate.elf | cut -c1-64)"
           echo "PASS_TWO_DISTINCT_NONORIGINAL_GUEST_BUILDS"
