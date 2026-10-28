@@ -121,3 +121,74 @@ Acceptance terms: *model dimensional consistency*,
 *energy-reciprocal math*, *native physical source-causal pass*,
 *P1 rotor stability* and *hardware motor validity* are separate
 claims. **Do not promote one PASS into another.**
+
+
+## 2026-10-28 post-fix strict CI: model consistency PASS, rotor P1 FAIL
+
+The first compiled QEMU after normalization was verified at
+[Native P1 #40713772648](https://github.com/cctsao1008/escape32-qemu/actions/runs/40713772648);
+[Host CI #40713772643](https://github.com/cctsao1008/escape32-qemu/actions/runs/40713772643)
+PASS. The **new 0.0649/sqrt(3) physical scale did not solve reversal**:
+
+| Input | Current-model strict source result | Significant reversal events |
+|---|---|---:|
+| smoke | FAIL insufficient Guest closed-loop | 0 |
+| gentle | FAIL insufficient Guest closed-loop | 0 |
+| direct20 | FAIL direction reversal | 262 |
+| steps | FAIL direction reversal | 174 |
+| 100ms ramp | FAIL direction reversal | 186 |
+| 500ms ramp | FAIL reversal and insufficient closed-loop | 5 |
+
+Within Direct20, after the first **physical** W+/V- PWM pair
+(+0.284ms relative to first positive DShot), a genuine first
+CMPSS0/ECAP1 CAP1 occurs at +3.064644ms; but the first Guest
+TIMG12 is only at +16.805796ms. The early rotor trace first records
+negative torque at +6.209404ms and a reverse speed below -50rpm
+at +9.209404ms. All times are QEMU virtual time relative to the
+positive command. These are source-observed events, not approximated
+host-injected commutations.
+
+Independent ORIGINAL firmware source at pinned
+ESCape32 commit `b0204670515d2de0b2480b52273038f1ee13d30a`
+explains the delay. `src/main.c` directly initializes
+`ival=10000 << MOTOR_TIME_SHIFT` on startup and the AM13E
+port uses `MOTOR_TIME_SHIFT=0`; the unchanged Rel17 acceptance
+condition `capture_ticks < (ival >> 1)` rejects early CAP1
+crossings before 5000us. `motor_bemf.c` explicitly retains
+ECAP1 arming after a rejected capture and only advances the
+accepted-crossing epoch when the original callback accepts an edge.
+
+The first CAP1 is 2.780800ms after the first powered PWM pair;
+the next CAP1 is 13.779800ms after it. The second-to-first-TIMG12
+delay is 2.742152ms. These timestamps are consistent with the
+original 5000us startup rejection threshold and the later accepted
+Rel17 programmed-commutation delay. **Direct CAP1 capture origin
+and callback status are not independently present on each trace
+event**, so do not claim a formally exact capture_us/accepted flag
+based on event ordering alone.
+
+### Isolated control-policy experiment (NOT Original Rel17)
+
+An opt-in, separately compiled branch in
+[cctsao1008/ESCape32](https://github.com/cctsao1008/ESCape32/tree/e62-sim-early-bemf-startup-20261028)
+sets the **initial**, not timeout/desync, Rel17 `ival` to 4000us
+under `AM13E_SIM_ONLY_EXPERIMENTAL_EARLY_BEMF` (default OFF).
+This changes the early rejection threshold to 2000us.
+[Separate firmware-build CI #40719585017](https://github.com/cctsao1008/ESCape32/actions/runs/40719585017)
+**PASS** for both default and experimental ELF, confirmed different.
+It does **not** establish a rotor PASS.
+
+A separate
+[QEMU controlled Direct20 A/B experiment](https://github.com/cctsao1008/escape32-qemu/tree/experiment/e62-early-bemf-direct20)
+uses the same corrected motor physics and identical 3300-frame
+virtual-clock Direct20 external FC source against separately compiled
+default and experimental Guests. This is isolated from the
+Original-Guest pinned ELF and strict P0/P1 Gate. Its outcome
+is provisional until run evidence is reviewed.
+
+Current conclusion: **phase-coefficient dimensional error corrected,
+but the remaining first-step overshoot arises before the first
+commutation and is consistent with the original startup BEMF acceptance
+window being too long for a high-acceleration unloaded test case**.
+Neither this experiment nor a future source-timing improvement is a
+hardware safety or motor-stability qualification.
