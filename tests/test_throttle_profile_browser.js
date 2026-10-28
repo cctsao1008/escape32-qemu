@@ -155,7 +155,7 @@ function compiler(doc,expected){
   assert.deepEqual(exported,custom);
   compiler(exported,true);
   assert.match(elements.get("profile-result").textContent,/EXPORTED/);
-  assert.equal(elements.get("source-rpm").width,1200);
+  assert.equal(document.getElementById("source-rpm").width,1200);
   console.log("PASS_E62_PROFILE_EDITOR_SOURCE_PRESETS_EDIT_IMPORT_EXPORT_COMPILER"+
     " valid="+validChecks+" invalid="+invalidChecks);
  }finally{
