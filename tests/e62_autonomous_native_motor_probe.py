@@ -75,6 +75,27 @@ class TimedAutonomousQTest(QTest):
             self.inflight_command = None
 
 
+def _quit_differential_rr_vm(qmp_path):
+    """Ask QEMU to close the RR event file; do not alter running Guest MMIO."""
+    import json as _json
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
+        conn.settimeout(10)
+        conn.connect(str(qmp_path))
+        stream=conn.makefile("rb")
+        if "QMP" not in _json.loads(stream.readline()):
+            raise RuntimeError("QMP greeting absent on RR teardown")
+        conn.sendall((_json.dumps({"execute":"qmp_capabilities"})+chr(10)).encode())
+        while True:
+            response=_json.loads(stream.readline())
+            if "error" in response:
+                raise RuntimeError("QMP capabilities failed on RR teardown")
+            if "return" in response:
+                break
+        conn.sendall((_json.dumps({"execute":"quit"})+chr(10)).encode())
+        # "quit" may close the stream before its reply; process exit is
+        # independently checked by the existing bounded communicate().
+
+
 def _resume_prearmed_differential_vm(qmp_path):
     """Release QEMU's initial -S pause only after external FC has armed.
 
@@ -473,6 +494,12 @@ def run(args):
             listener.bind(str(sockpath))
             listener.listen(1)
             listener.settimeout(20)
+            rr_mode=getattr(args,"differential_rr_mode",None)
+            icount_option="shift=2,sleep=off,align=off"
+            if rr_mode:
+                icount_option+=(
+                    ",rr="+rr_mode+",rrfile="+
+                    str(args.differential_rr_file.resolve()))
             cmd = [
                 str(args.qemu.resolve()), "-M",
                 "am13e23019,esc-sim=on,esc-sim-native-motor=on,"
@@ -487,7 +514,7 @@ def run(args):
                 "-kernel", str(args.elf.resolve()),
                 "-display", "none", "-serial", "none", "-monitor", "none",
                 "-qtest", f"unix:path={sockpath}",
-                "-icount", "shift=2,sleep=off,align=off",
+                "-icount", icount_option,
                 "-device", "loader,file="+str(args.cfg_flash.resolve())+
                            ",addr=0x4000,force-raw=on",
             ]
@@ -517,6 +544,7 @@ def run(args):
                     args,"switch_focus_window_ms",None),
                 "source_focus_guest_or_motor_control":False,
                 "differential_sync_start":bool(args.differential_sync_start),
+                "differential_rr_mode":rr_mode,
                 "initial_vm_paused_before_first_guest_instruction":bool(
                     args.differential_sync_start),
                 "synthetic_timed_bemf_enabled": False,
@@ -750,13 +778,30 @@ def run(args):
             finally:
                 evidence["qemu_run_wall_elapsed_s"] = round(
                     time.monotonic()-run_wall_started,6)
-                if proc.poll() is None:
+                if proc.poll() is None and rr_mode:
+                    try:
+                        _quit_differential_rr_vm(qmp_sockpath)
+                        evidence["differential_rr_qmp_quit_requested"]=True
+                    except Exception as rr_exc:
+                        evidence["differential_rr_qmp_quit_error"]=(
+                            type(rr_exc).__name__+": "+str(rr_exc))
+                if proc.poll() is None and not rr_mode:
                     proc.terminate()
                 try:
-                    proc.communicate(timeout=5)
+                    proc.communicate(timeout=12 if rr_mode else 5)
                 except subprocess.TimeoutExpired:
                     proc.kill()
                     proc.communicate()
+                    if rr_mode:
+                        evidence["differential_rr_graceful_shutdown"]=False
+                else:
+                    if rr_mode:
+                        evidence["differential_rr_graceful_shutdown"]=(
+                            proc.returncode == 0)
+                if rr_mode:
+                    evidence["differential_rr_file_bytes"]=(
+                        args.differential_rr_file.stat().st_size
+                        if args.differential_rr_file.exists() else 0)
                 qemu_log_handle.flush()
                 qemu_log_handle.close()
                 # QTest may already have timed out, so retrieve asynchronous
@@ -836,6 +881,12 @@ def main():
                              "cont once, then passively follow source logs "
                              "without MMIO polling through final DShot. "
                              "Never used by P0/P1 acceptance.")
+    parser.add_argument("--differential-rr-mode",
+                        choices=("record","replay"),default=None,
+                        help="Diagnostic-only QEMU icount nondeterministic "
+                             "event record/replay; requires sync start")
+    parser.add_argument("--differential-rr-file",type=Path,default=None,
+                        help="Persistent QEMU RR file shared by the 3 CI runs")
     parser.add_argument("--wall-timeout-s",type=int,default=180)
     parser.add_argument("--qtest-response-timeout-s",type=int,default=20,
                         help="Individual QTest readl deadline, not a CPU halt")
@@ -864,6 +915,16 @@ def main():
         begin,end=map(int,match.groups())
         if end<=begin or end-begin>50 or end>180000:
             parser.error("Bounded switch observer requires 1..50ms span")
+    if args.differential_rr_mode:
+        if not args.differential_sync_start or args.differential_rr_file is None:
+            parser.error("Diagnostic RR requires sync start and RR file")
+        if args.differential_rr_mode=="replay" and not args.differential_rr_file.is_file():
+            parser.error("QEMU RR replay file absent")
+        if args.differential_rr_mode=="record" and args.differential_rr_file.exists():
+            parser.error("Refusing to overwrite existing QEMU RR recording")
+        args.differential_rr_file.parent.mkdir(parents=True,exist_ok=True)
+    elif args.differential_rr_file is not None:
+        parser.error("RR file requires explicit record/replay mode")
     if args.differential_sync_start and (args.link_loss_last_frame or
                                          args.fault_scenario):
         parser.error("Synchronized source replay is diagnostics-only, not P1")
