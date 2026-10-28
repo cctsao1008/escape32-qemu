@@ -1,0 +1,45 @@
+name: E62 Historical G13B3 Source Drift — Diagnostic Only
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/e62_pinned_source_drift_report.py'
+      - 'tests/test_e62_pinned_source_drift_report.py'
+      - '.github/workflows/e62-pinned-source-drift-diagnostic.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  report-old-source-fingerprint-without-republishing:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Confirm read-only source fingerprint error isolation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tests/test_e62_pinned_source_drift_report.py
+          python3 tools/e62_pinned_source_drift_report.py \
+            --output artifacts/e62-g13b3-historical-source-drift.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          x=json.loads(Path("artifacts/e62-g13b3-historical-source-drift.json").read_text())
+          assert x["archived_manifest_sha256"] and x["archive_manifest_modified"] is False
+          assert x["archived_binary_pair_republished"] is False
+          assert x["status"] in ("HISTORICAL_SOURCE_DRIFT_CONFIRMED_NOT_WAIVED",
+                                 "PINNED_SOURCE_IDENTITY_MATCHES")
+          assert x["strict_original_verifier_passing"] == (x["drift_count"]==0)
+          print("E62_PINNED_SOURCE_DRIFT_DIAGNOSTIC_ONLY_PASS")
+          PY
+      - name: Preserve exact old/new file SHA256 ledger without rewriting baseline
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-historical-g13b3-readonly-source-drift
+          path: artifacts/e62-g13b3-historical-source-drift.json
+          retention-days: 21
+          if-no-files-found: warn
