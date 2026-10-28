@@ -95,7 +95,7 @@ class Tests(unittest.TestCase):
         self.assertEqual(result["late_full_switch_events"],0)
         self.assertEqual(result["focused_switching_source_events"][0]["six_pad_mask"],24)
         self.assertEqual(result["focused_switching_source_events"][0]["gate_word"],15)
-        self.assertTrue(result["focused_switch_observation_complete"])
+        self.assertTrue(result["focused_switch_source_records_present_without_budget_overrun"])
         self.assertFalse(result["motor_p1_stability_qualified"])
     def test_focused_switch_budget_overflow_fails_closed(self):
         rows=fixture()
