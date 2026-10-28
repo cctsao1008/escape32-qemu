@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """EXPERIMENT ONLY: independent preboot Direct20 FC and Guest startup A/B.
 
-No QTest, QMP, guest writes, or source replay substitution. The unchanged
+No QTest, Guest writes, or source replay substitution. Optional QMP
+reads CPU register state ONLY after all external FC frames to identify a
+stalled experimental Guest; never QMP cont/stop/step or memory writes. The unchanged
 strict Original Rel17 P0/P1 qualification is NEVER called a PASS here.
 Only compare byte-identical physical QEMU source and two separately
 compiled original-policy and opt-in startup-policy firmware variants.
@@ -10,7 +12,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
+import socket
 import subprocess
 import time
 from pathlib import Path
@@ -24,6 +28,36 @@ def sha256(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def readonly_qmp_cpu_snapshot(path):
+    """QMP register query only: no Guest writes or CPU control."""
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+        client.settimeout(8)
+        client.connect(str(path))
+        src = client.makefile("rb")
+        greeting = json.loads(src.readline())
+        if "QMP" not in greeting:
+            raise ValueError("No QMP greeting")
+        def request(name, args=None):
+            q = {"execute":name}
+            if args is not None:
+                q["arguments"]=args
+            client.sendall((json.dumps(q)+"\n").encode())
+            while True:
+                x=json.loads(src.readline())
+                if "return" in x:
+                    return x["return"]
+                if "error" in x:
+                    raise ValueError(name+": "+str(x["error"]))
+        request("qmp_capabilities")
+        return {
+            "query_status":request("query-status"),
+            "query_cpus_fast":request("query-cpus-fast"),
+            "info_registers":request("human-monitor-command",
+                                    {"command-line":"info registers"}),
+            "query_only_no_guest_control":True,
+        }
+
+
 def run(a):
     for p in (a.qemu, a.elf, a.cfg_flash):
         if not p.is_file():
@@ -32,12 +66,15 @@ def run(a):
         raise ValueError("Expected only two unqualified A/B cases")
     a.artifact.parent.mkdir(parents=True, exist_ok=True)
     log = a.artifact.with_suffix(".qemu.log")
+    qmp_path = Path("/tmp") / f"e62-exp-qmp-{os.getpid()}-{a.label}.sock"
+    qmp_path.unlink(missing_ok=True)
     command = [
         str(a.qemu.resolve()), "-machine",
         "am13e23019,esc-sim=on,esc-sim-native-motor=on,"
         "esc-sim-nfault-asserted=off,esc-sim-experimental-fc-direct20=on",
         "-kernel", str(a.elf.resolve()),
         "-display", "none", "-serial", "none", "-monitor", "none",
+        "-qmp", f"unix:{qmp_path},server=on,wait=off",
         "-icount", "shift=2,sleep=off,align=off",
         "-device", "loader,file=" + str(a.cfg_flash.resolve()) +
                    ",addr=0x4000,force-raw=on",
@@ -50,7 +87,9 @@ def run(a):
         "motor_p1_qualified": False,
         "hardware_qualified": False,
         "host_guest_register_writes": False,
-        "no_qtest_or_qmp": True,
+        "no_qtest_or_qmp": False,
+        "qtest_used": False,
+        "qmp_readonly_register_diagnostic_only": True,
         "source_is_real_qemu_virtual_clock": True,
         "motor_model_modified_by_this_runner": False,
         "elf_sha256": sha256(a.elf),
@@ -83,6 +122,12 @@ def run(a):
                             time.sleep(.05)
                     else:
                         raise TimeoutError("QEMU Direct20 source incomplete: " + str(last))
+                if last == EXPECTED_FRAMES-1:
+                    try:
+                        report["passive_qmp_after_all_frames"] = (
+                            readonly_qmp_cpu_snapshot(qmp_path))
+                    except (OSError, ValueError, TypeError) as exc:
+                        report["passive_qmp_error"] = str(exc)
             finally:
                 if proc.poll() is None:
                     proc.terminate()
@@ -113,6 +158,13 @@ def run(a):
         first_reverse = next((t for t,d in rotor if d[0]<=-50000),None)
         first_neg_torque = next((t for t,d in rotor if d[5]<-100000),None)
         pairs = [(t,d[0],d[1]) for t,k,d in after if k=="PWM_PAIR" and t<cutoff]
+        report["read_only_source_counts"] = {
+            k: sum(1 for t,event_kind,d in rows if event_kind==k)
+            for k in ("DSHOT","WWDT_FEED","PWM_PAIR","ROTOR","CAP1",
+                      "TIMG12","SWITCH","OC_FRONTEND")}
+        report["source_last_wwdt_feed_ms"] = (
+            round(max((t for t,k,d in rows if k=="WWDT_FEED"),default=0)/1e6,6))
+        report["positive_dshot_ms"] = round(onset/1e6,6)
         if len(rotor)<20 or first_cap is None or first_pair is None:
             raise ValueError("Missing early rotor/CAP1/physical PWM source")
         def ms(t): return round((t-onset)/1e6,6) if t is not None else None
@@ -136,6 +188,7 @@ def run(a):
         )
         return report
     finally:
+        qmp_path.unlink(missing_ok=True)
         a.artifact.write_text(json.dumps(report,indent=2,sort_keys=True)+"\n")
 
 
