@@ -180,16 +180,14 @@ It preserves exact virtual timestamps, sequence/order, all six source
 fields and signed source ENERGY deltas; no event dropping except isolated
 focus instrumentation, no alignment and no tolerance.
 
-The experimental runner separately supports QMP `-S` synchronized
-startup and QEMU `icount record/replay`, but CI
-[#40694606626](https://github.com/cctsao1008/escape32-qemu/actions/runs/40694606626)
-showed that combining paused startup with recording blocked the first
-QTest `readl 0x5ffeb000` for 20 seconds and produced a zero-byte
-recording. This experimental path is **not yet validated** and is not
-enabled in the current fail-closed Differential CI. The current workflow
-uses the legacy free-running Original Guest for OFF/OFF controls, then
-attempts ON only after the strict baseline passes. The experimental
-runner's opt-in flags do not change production-like P0/P1 gate criteria.
+The earlier QMP `-S` plus QTest pre-arming path was invalid:
+CI [#40694606626](https://github.com/cctsao1008/escape32-qemu/actions/runs/40694606626)
+blocked on first `readl 0x5ffeb000` and wrote a zero-byte RR file.
+That **old paused-QTest path is not used** in the current workflow.
+The current diagnostic uses a preboot QEMU machine FC timer, **no
+QTest/QMP/GDB**, an independent `icount rr=record` seed, then three
+`icount rr=replay` runs. Production-like P0/P1 acceptance remains
+unchanged and independent.
 
 **Acceptance boundary:** A/A replay equality is a prerequisite;
 A/B equality can support source-only observation neutrality **within
@@ -276,6 +274,55 @@ An eventual PASS only means *source-only replay observational
 equivalence under that exact seed and QEMU version*. It cannot prove
 zero host overhead, absence of all code-level observer effects, motor
 stability, hardware energy recovery or intentional firmware braking.
+
+### Validated independent Replay-only CI — 2026-10-28
+
+[CI #40700986752, Attempt 1 and Attempt 2](https://github.com/cctsao1008/escape32-qemu/actions/runs/40700986752)
+both completed the full **record-seed → replay-OFF-A →
+replay-OFF-B → replay-ON** workflow successfully.
+
+| Strict source criterion | Attempt 1 | Attempt 2 |
+|---|---|---|
+| Distinct RR seed SHA256 (prefix) | `03640956b1cfdaa6` | `645dc742eb58bdee` |
+| Both OFF runs from same seed | PASS | PASS |
+| OFF/OFF original events through 2990ms | 28,879 exact | 28,879 exact |
+| OFF/OFF ENERGY deltas | exact | exact |
+| OFF/ON original events through 2990ms | 28,879 exact | 28,879 exact |
+| OFF/ON ENERGY deltas | exact | exact |
+| Focus observer original-source transitions | 1,512 | 1,512 |
+| Original first DShot | 100ns | 100ns |
+| Motor P1 strict stability | OPEN | OPEN |
+
+**Validated result classification:**
+`PASS_STRICT_SOURCE_FOCUS_DIFFERENTIAL` with
+`observer_non_intrusiveness=SUPPORTED_FOR_THIS_REPLAY_ONLY`.
+The two seeds are independent; each seed is replayed three times,
+and the original firmware SHA256 remains
+`05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0`.
+The source comparison does **not** normalize timestamps, suppress
+original callbacks or relax ENERGY tolerance.
+
+The runner observes all 3,000 actual external FC DShot frames, but
+the strict differential scope ends at **2990ms**. Its process teardown
+starts only after the last DShot (2999ms). The full raw files can have
+different *trailing* event counts after the comparison cutoff because
+the host's termination signal races with later QEMU event emission;
+full-file SHA256 inequality outside the defined scope is therefore
+**not** silently called bit-exact. All full artifacts, including the
+QEMU RR seed, are retained by CI (subject to GitHub retention).
+
+Focus source audit: 1,512 actual `SWITCH_FOCUS` transitions in
+the opt-in 2795–2840ms window (and no overflow). Only a subset
+of these transitions lies inside the separate post-neutral ENERGY
+integral window; do not equate those two counts.
+
+**Claim boundary:** This establishes source-observation equivalence
+for **two verified QEMU RR seeds and this defined observation window**.
+It does *not* prove generic unsynchronized determinism, a universally
+non-intrusive code path, the intentionality of active braking, real
+hardware energy behavior, or Motor P1 stability. The Original ESCape32
+ELF, native Motor Plant and P0/P1 acceptance logic were not changed
+to obtain this result.
 
 ## 4. Causal limits
 
