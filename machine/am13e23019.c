@@ -610,6 +610,7 @@ struct AM13EMachineState {
     bool esc_sim_wwdt_bootrst; /* opt-in full reset semantics */
     bool esc_sim_differential_fc_smoke; /* opt-in preboot FC ONLY */
     bool esc_sim_experimental_fc_direct20; /* separate experiment */
+    char *esc_sim_experimental_fc_profile; /* explicit scenario enum string */
     bool wwdt_reset_pending; /* survives until machine reset callback */
     MemoryRegion factory_rom;
     char *factory_pll_file;
@@ -3936,6 +3937,10 @@ static void am13e_handoff_reset(void *opaque)
     if (s->esc_sim_experimental_fc_direct20) {
         am13e_auto_arm_experimental_direct20(&s->auto_sitl);
     }
+    if (s->esc_sim_experimental_fc_profile) {
+        am13e_auto_arm_experimental_profile(
+            &s->auto_sitl,s->esc_sim_experimental_fc_profile);
+    }
 }
 
 static void am13e_init(MachineState *machine)
@@ -3954,9 +3959,12 @@ static void am13e_init(MachineState *machine)
         error_report("esc-sim-reset-cause requires esc-sim=on");
         exit(EXIT_FAILURE);
     }
-    if (s->esc_sim_experimental_fc_direct20 &&
+    if ((s->esc_sim_experimental_fc_direct20 ||
+         s->esc_sim_experimental_fc_profile) &&
         (s->esc_sim_differential_fc_smoke || !s->esc_sim ||
-         !s->native_motor.enabled || s->esc_sim_wwdt_bootrst)) {
+         !s->native_motor.enabled || s->esc_sim_wwdt_bootrst ||
+         (s->esc_sim_experimental_fc_direct20 &&
+          s->esc_sim_experimental_fc_profile))) {
         error_report("E62 experimental Direct20 requires native motor, "
                      "esc-sim and no competing FC or BOOTRST");
         exit(EXIT_FAILURE);
@@ -4388,6 +4396,31 @@ static void am13e_set_switch_focus_window(Object *obj,
     m->source_focus_end_ns = (int64_t)end_ms * INT64_C(1000000);
 }
 
+static char *am13e_get_experimental_fc_profile(Object *obj, Error **errp)
+{
+    const char *p=AM13E_MACHINE(obj)->esc_sim_experimental_fc_profile;
+    return g_strdup(p?p:"off");
+}
+static void am13e_set_experimental_fc_profile(Object *obj,
+                                             const char *value, Error **errp)
+{
+    AM13EMachineState *s=AM13E_MACHINE(obj);
+    if (!value || !strcmp(value,"off")) {
+        g_free(s->esc_sim_experimental_fc_profile);
+        s->esc_sim_experimental_fc_profile=NULL;
+        return;
+    }
+    if (strcmp(value,"smoke") && strcmp(value,"gentle") &&
+        strcmp(value,"steps") && strcmp(value,"ramp100") &&
+        strcmp(value,"ramp500")) {
+        error_setg(errp,"Experimental FC profile must be "
+                   "off|smoke|gentle|steps|ramp100|ramp500");
+        return;
+    }
+    g_free(s->esc_sim_experimental_fc_profile);
+    s->esc_sim_experimental_fc_profile=g_strdup(value);
+}
+
 static bool am13e_get_experimental_fc_direct20(Object *obj, Error **errp)
 {
     return AM13E_MACHINE(obj)->esc_sim_experimental_fc_direct20;
@@ -4470,6 +4503,14 @@ static void am13e_class_init(ObjectClass *oc, void *data)
         "Diagnostic ONLY: prearm exact 1500/1000/300/200ms independent "
         "flight-controller PA26 DShot scenario at virtual time +100ns "
         "before Guest starts. Default off; no P0/P1 waiver.");
+    object_class_property_add_str(oc, "esc-sim-experimental-fc-profile",
+                                  am13e_get_experimental_fc_profile,
+                                  am13e_set_experimental_fc_profile);
+    object_class_property_set_description(oc,
+        "esc-sim-experimental-fc-profile",
+        "EXPERIMENT ONLY: off|smoke|gentle|steps|ramp100|ramp500. "
+        "Preboot 1kHz PA26 FC source; Original JSON-equivalent stage "
+        "durations; cannot combine with another preboot FC; not P1.");
     object_class_property_add_bool(oc, "esc-sim-experimental-fc-direct20",
                                    am13e_get_experimental_fc_direct20,
                                    am13e_set_experimental_fc_direct20);
