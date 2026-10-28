@@ -42,7 +42,11 @@ jobs:
             --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
             --motor-profile ecx87-kv147 \
             --output artifacts/e62-g13b3-focus-cfg.bin
-      - name: Original Guest source observer OFF
+      # Free-running QEMU/QTest is intentionally NOT called deterministic.
+      # Prove OFF/OFF first; no timestamp alignment or tolerance allowed.
+      # Experimental QMP -S / icount RR flags remain opt-in in runner, not
+      # in this workflow until QTest startup protocol is independently proven.
+      - name: Original Guest source observer OFF (control A)
         shell: bash
         run: |
           set -euo pipefail
@@ -52,12 +56,9 @@ jobs:
             --cfg-flash artifacts/e62-g13b3-focus-cfg.bin \
             --scenario scenarios/e62-native-p0-smoke.json \
             --artifact artifacts/e62-focus-off.json \
-            --differential-sync-start \
-            --differential-rr-mode record \
-            --differential-rr-file artifacts/e62-focus-icount-recording.rr.bin \
             --wall-timeout-s 210 \
             > artifacts/e62-focus-off-runner.log
-      - name: Original Guest source observer OFF repeat (A/A)
+      - name: Original Guest source observer OFF (independent control A-repeat)
         shell: bash
         run: |
           set -euo pipefail
@@ -67,12 +68,9 @@ jobs:
             --cfg-flash artifacts/e62-g13b3-focus-cfg.bin \
             --scenario scenarios/e62-native-p0-smoke.json \
             --artifact artifacts/e62-focus-off-repeat.json \
-            --differential-sync-start \
-            --differential-rr-mode replay \
-            --differential-rr-file artifacts/e62-focus-icount-recording.rr.bin \
             --wall-timeout-s 210 \
             > artifacts/e62-focus-off-repeat-runner.log
-      - name: Strict OFF/OFF reproducibility gate before Observer attribution
+      - name: Validate two OFF source ledgers
         shell: bash
         run: |
           set -euo pipefail
@@ -82,73 +80,7 @@ jobs:
               --output artifacts/e62-focus-$mode.energy.json \
               > artifacts/e62-focus-$mode.energy.log
           done
-          python3 - <<'PY'
-          import json
-          from pathlib import Path
-          from tools.native_source_energy_audit import parse_source
-          base=Path("artifacts")
-          def read(name):
-              with (base/name).open() as f:
-                  return parse_source(f)
-          a=read("e62-focus-off.p0.events.log")
-          b=read("e62-focus-off-repeat.p0.events.log")
-          off=json.loads((base/"e62-focus-off.json").read_text())
-          repeat=json.loads((base/"e62-focus-off-repeat.json").read_text())
-          e1=json.loads((base/"e62-focus-off.energy.json").read_text())
-          e2=json.loads((base/"e62-focus-off-repeat.energy.json").read_text())
-          kinds={"SWITCH_FOCUS","SWITCH_FOCUS_LIMIT"}
-          assert not any(x["kind"] in kinds for x in a+b), "OFF unexpectedly emitted focus"
-          limit=2_990_000_000
-          def original(events):
-              return [(x["vns"],x["kind"],tuple(x["data"])) for x in events
-                      if x["vns"]<=limit]
-          left,right=original(a),original(b)
-          first_diff=next(((i,x,y) for i,(x,y) in
-                           enumerate(zip(left,right)) if x!=y),None)
-          if first_diff is None and len(left)!=len(right):
-              i=min(len(left),len(right))
-              first_diff=(i,left[i] if i<len(left) else None,
-                             right[i] if i<len(right) else None)
-          controls_equal=(
-              off["original_elf_sha256"]==repeat["original_elf_sha256"] and
-              off["host_guest_register_writes"] is False and
-              repeat["host_guest_register_writes"] is False and
-              off["used_guest_wfi_or_gdb"] is False and
-              repeat["used_guest_wfi_or_gdb"] is False and
-              off["source_focus_window_ms"] is None and
-              repeat["source_focus_window_ms"] is None and
-              off["differential_sync_start"] is True and
-              off["differential_rr_mode"]=="record" and
-              repeat["differential_rr_mode"]=="replay" and
-              repeat["differential_sync_start"] is True and
-              off["initial_vm_paused_before_first_guest_instruction"] is True and
-              repeat["initial_vm_paused_before_first_guest_instruction"] is True and
-              off["configured_dshot_frames"]==repeat["configured_dshot_frames"] and
-              off["motor_mode"]==repeat["motor_mode"])
-          energy_equal=e1["energy_delta_j"]==e2["energy_delta_j"]
-          reproducible=controls_equal and left==right and energy_equal
-          report={
-              "schema":"e62.native.source-focus-repeatability.v1",
-              "classification":("PASS_OFF_OFF_REPRODUCIBLE" if reproducible else
-                                "FAIL_OFF_OFF_BASELINE_NONREPRODUCIBLE"),
-              "observer_non_intrusiveness":"NOT_EVALUATED",
-              "motor_p1_stability_qualified":False,
-              "hardware_qualified":False,
-              "controls_equal":controls_equal,
-              "energy_delta_equal":energy_equal,
-              "off_event_count":len(left),"off_repeat_event_count":len(right),
-              "first_difference":first_diff,
-              "off_first_dshot_ns":next((x["vns"] for x in a if x["kind"]=="DSHOT"),None),
-              "off_repeat_first_dshot_ns":next((x["vns"] for x in b if x["kind"]=="DSHOT"),None),
-              "no_timestamp_alignment_or_tolerance":True}
-          (base/"e62-focus-off-repeatability.json").write_text(
-              json.dumps(report,indent=2,sort_keys=True)+chr(10))
-          print("E62_OFF_OFF_REPRODUCIBILITY "+json.dumps(report,sort_keys=True))
-          assert reproducible, (
-              "BASELINE_NONREPRODUCIBLE: cannot attribute OFF/ON differences "
-              "to Observer before identical OFF/OFF source replay")
-          PY
-      - name: Confirm OFF/OFF source repeatability before observer attribution
+      - name: OFF/OFF reproducibility gate (fail closed)
         shell: bash
         run: |
           set -euo pipefail
@@ -166,12 +98,9 @@ jobs:
             --scenario scenarios/e62-native-p0-smoke.json \
             --artifact artifacts/e62-focus-on.json \
             --switch-focus-window-ms 2795:2840 \
-            --differential-sync-start \
-            --differential-rr-mode replay \
-            --differential-rr-file artifacts/e62-focus-icount-recording.rr.bin \
             --wall-timeout-s 210 \
             > artifacts/e62-focus-on-runner.log
-      - name: Strict original source ledger on ON observation
+      - name: Validate ON source energy ledger
         shell: bash
         run: |
           set -euo pipefail
@@ -179,7 +108,7 @@ jobs:
             --events artifacts/e62-focus-on.p0.events.log \
             --output artifacts/e62-focus-on.energy.json \
             > artifacts/e62-focus-on.energy.log
-      - name: FAIL CLOSED if focused observer changes original source or energy
+      - name: Strict differential (only after baseline reproducibility)
         shell: bash
         run: |
           set -euo pipefail
