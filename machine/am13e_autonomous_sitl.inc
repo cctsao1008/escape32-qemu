@@ -151,6 +151,30 @@ static bool am13e_auto_validate(AM13EAutoSITL *a)
  * no guest readiness trigger, and no change to the physical PA26 source
  * callback, 1kHz timeline, native motor, or original firmware.
  * These stage words exactly match e62-native-p0-smoke.json. */
+/* EXPERIMENT branch only: exact DShot600 original Direct20 scenario,
+ * no Host pacing, Guest register modifications, or synthetic commutation.
+ * A clean 1ms source per frame, from the QEMU virtual reset epoch.
+ */
+static void am13e_auto_arm_experimental_direct20(AM13EAutoSITL *a)
+{
+    static const AM13EAutoStage stages[] = {
+        {1500U, 0U, 0U, 1U},
+        {1000U, 200U, 200U, 1U},
+        {200U, 0U, 0U, 1U},
+    };
+    g_assert(a->dshot_timer && a->machine->native_motor.enabled);
+    g_assert(!a->running && !a->done && !a->error_code);
+    memcpy(a->stages, stages, sizeof(stages));
+    a->stage_count = G_N_ELEMENTS(stages);
+    if (!am13e_auto_validate(a) || a->target_frames != 2700U) {
+        error_report("E62 experimental Direct20 FC stage contract invalid");
+        exit(EXIT_FAILURE);
+    }
+    a->start_ns = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + 100U;
+    a->running = true;
+    timer_mod(a->dshot_timer, a->start_ns);
+}
+
 static void am13e_auto_arm_differential_smoke(AM13EAutoSITL *a)
 {
     static const AM13EAutoStage stages[] = {
