@@ -134,8 +134,13 @@ def run(args):
                 log.flush()
         if rr_mode:
             report["differential_rr_file_bytes"] = args.rr_file.stat().st_size if args.rr_file.exists() else 0
-            if rr_mode == "record" and report["differential_rr_file_bytes"] < 32:
-                raise ValueError("QEMU icount RR file not finalized by graceful signal shutdown")
+            if report["differential_rr_file_bytes"] < 32:
+                raise ValueError("QEMU icount RR file missing or not finalized")
+            digest = hashlib.sha256()
+            with args.rr_file.open("rb") as rr:
+                for block in iter(lambda: rr.read(1024*1024), b""):
+                    digest.update(block)
+            report["differential_rr_file_sha256"] = digest.hexdigest()
         if qemu_log.stat().st_size > MAX_LOG_BYTES:
             raise ValueError("Full QEMU source trace exceeded 64 MiB")
         with qemu_log.open(encoding="utf-8", errors="replace") as src, (
