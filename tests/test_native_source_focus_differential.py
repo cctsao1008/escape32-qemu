@@ -14,7 +14,10 @@ def meta(focus=None):
     return {"original_elf_sha256": ELF, "host_guest_register_writes": False,
             "used_guest_wfi_or_gdb": False, "source_focus_guest_or_motor_control": False,
             "motor_mode": "QEMU_VIRTUAL_CLOCK_NATIVE_ECX87_KV147_SIM_ONLY",
-            "configured_dshot_frames": 3000, "source_focus_window_ms": focus}
+            "configured_dshot_frames": 3000, "source_focus_window_ms": focus,
+            "differential_preboot_fc_source": True, "qtest_or_qmp_used": False,
+            "host_virtual_time_steps": 0, "passive_dshot_frames": 3000,
+            "motor_p1_stability_qualified": False}
 
 def energy(delta=1, focus=False):
     return {"energy_delta_j": {"bus":delta}, "focused_switching_source_events":
