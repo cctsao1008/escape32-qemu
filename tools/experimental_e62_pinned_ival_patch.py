@@ -1,14 +1,19 @@
 #!/usr/bin/env python3
-"""E62 EXPERIMENT ONLY: two-instruction 3000us clone of pinned Original Rel17.3 ELF.
+"""E62 EXPERIMENT ONLY: three instruction clone of pinned Original Rel17.3 ELF.
 
-Byte-exact Control is the published original Guest. Candidate changes
-ONLY two Thumb-2 MOVW startup initializations 10000us -> 3000us.
+Byte-exact Control is Original Guest. Candidate changes ONLY two
+startup MOVW initializers 10000us -> 3000us AND one early BEMF
+capture check, half-interval -> quarter-interval (not board hardware).
 The timeout/reset MOVW #10000 at PC 0x6488 remains byte identical.
 This is an experimental *clone*, never called Original Rel17.3, and is
 NOT firmware signing, flash safety or physical ESC qualification.
 
 All VAs and opcodes are anchored to verified Original ELF disassembly,
-source lines src/main.c:1027 and :1146. Fails closed on any drift.
+source lines src/main.c:1027 and :1146, plus the independent early
+zero-cross rejection instruction at src/main.c:487 / PC 0x64ae.
+Changing this early rejection filter is a DIAGNOSTIC ONLY: more
+susceptible to noisy/switching-induced CAP1. Not a safe motor firmware
+release, nor motor/propeller/hardware qualification. Fails on drift.
 """
 import argparse
 import hashlib
@@ -24,6 +29,11 @@ SITES = (
      "src/main.c:1027 ival after sine exit"),
     (0x6A6A, bytes.fromhex("42f21074"), bytes.fromhex("40f6b834"),
      "src/main.c:1146 ival on six-step first start"),
+    # Exact Thumb-2: cmp.w r4, r2, asr #1 -> asr #2.
+    # This changes capture_us < (ival >> 1) to capture_us < (ival >> 2).
+    # The independent Rel17 noise blanking and motor gate/OC remain intact.
+    (0x64AE, bytes.fromhex("b4eb620f"), bytes.fromhex("b4eba20f"),
+     "src/main.c:486 early BEMF acceptance quarter interval"),
 )
 PRESERVED_RESET = (0x6488, bytes.fromhex("42f21073"))
 
@@ -91,6 +101,10 @@ def patch_ival(original):
         changed_instructions=len(SITES),
         startup_filter_before_us=10000,
         startup_filter_after_us=3000,
+        early_capture_ratio_before="ival/2",
+        early_capture_ratio_after="ival/4",
+        independent_cmp_filter_and_oc_not_bypassed=True,
+        ival_zero_cross_hard_fault_guard_unchanged=True,
         unchanged_timeout_reset=True,
         unchanged_p0_p1_acceptance=True,
         no_board_gate_oc_or_guest_memory_modification=True,
@@ -116,7 +130,7 @@ def main():
     if file_sha(args.output_elf.read_bytes())!=proof["candidate_sha256"]:
         raise IOError("Candidate ELF write integrity failed")
     args.proof_json.write_text(json.dumps(proof,sort_keys=True,indent=2)+"\n")
-    print("E62_EXPERIMENTAL_PINNED_ELF_TWO_MOVW_PATCH "+
+    print("E62_EXPERIMENTAL_PINNED_ELF_3INSTRUCTION_PATCH "+
           json.dumps(proof,sort_keys=True))
 
 
