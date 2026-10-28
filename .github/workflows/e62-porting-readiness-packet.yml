@@ -1,0 +1,89 @@
+name: E62 FW Porting Readiness Evidence Packet (bounded SIM_ONLY)
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/e62_porting_readiness.py'
+      - 'tests/test_e62_porting_readiness.py'
+      - '.github/workflows/e62-porting-readiness-packet.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  original-guest-porting-readiness-not-hardware-signoff:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Explicit false-PASS controls and immutable Guest scope
+        run: |
+          set -euo pipefail
+          python3 tests/test_e62_porting_readiness.py
+          python3 tests/test_native_porting_mmio_p0.py
+          python3 tests/test_native_porting_mmio_chain.py
+      - name: Real original Guest P0 MMIO source verdict
+        uses: actions/download-artifact@v4
+        with:
+          name: e62-porting-p0-guest-mmio-source-verification
+          run-id: 40632866806
+          github-token: ${{ github.token }}
+          path: artifacts
+      - name: Real original Guest P1 MMIO source verdict preserving P1 RED
+        uses: actions/download-artifact@v4
+        with:
+          name: e62-porting-p1-original-guest-mmio-readonly-replay
+          run-id: 40633019199
+          github-token: ${{ github.token }}
+          path: artifacts
+      - name: Original Guest physical PA26 valid/bad CRC
+        uses: actions/download-artifact@v4
+        with:
+          name: e62-original-guest-dshot-crc-positive-negative
+          run-id: 40631864430
+          github-token: ${{ github.token }}
+          path: artifacts
+      - name: Original Guest neutral modeled nFAULT and OC-U/V/W IRQ
+        uses: actions/download-artifact@v4
+        with:
+          name: e62-negative-physical-safety
+          run-id: 40631864426
+          github-token: ${{ github.token }}
+          path: artifacts
+      - name: Original Guest no-WFI running PA22 fault safe-off
+        uses: actions/download-artifact@v4
+        with:
+          name: e62-native-p1-no-wfi-physical-nfault
+          run-id: 40631864583
+          github-token: ${{ github.token }}
+          path: artifacts
+      - name: Assemble five evidence verdicts, remain open for hardware and P1 dynamics
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in \
+            e62-porting-p0-mmio-verification.json \
+            e62-porting-p1-mmio-replay.json \
+            e62-dshot-crc-native-verdict.json \
+            e62-safety-qualification.json \
+            e62-native-p1-nfault.verdict.json; do
+            test -s "artifacts/$file"
+          done
+          python3 tools/e62_porting_readiness.py \
+            --input-dir artifacts \
+            --output-json artifacts/e62-porting-readiness-packet.json \
+            --output-md artifacts/e62-porting-readiness-packet.md
+          grep -F 'UNWAIVED' artifacts/e62-porting-readiness-packet.md
+          grep -F 'HW_REQUIRED' artifacts/e62-porting-readiness-packet.md
+      - name: Preserve evidence packet even if a later gate fails
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-fw-porting-readiness-frozen-original-guest-packet
+          path: |
+            artifacts/e62-porting-readiness-packet.json
+            artifacts/e62-porting-readiness-packet.md
+          if-no-files-found: warn
+          retention-days: 21
