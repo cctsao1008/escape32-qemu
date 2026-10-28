@@ -202,7 +202,17 @@ def main():
     result["source_log_sha256"]=hashlib.sha256(args.events.read_bytes()).hexdigest()
     args.output.parent.mkdir(parents=True,exist_ok=True)
     args.output.write_text(json.dumps(result,indent=2,sort_keys=True)+"\n")
-    print("E62_NEUTRAL_ENERGY_AUDIT "+json.dumps(result,sort_keys=True))
+    print("E62_NEUTRAL_ENERGY_AUDIT "+json.dumps({
+        "classification":result["classification"],
+        "source_log_sha256":result["source_log_sha256"],
+        "trigger":result["trigger"],
+        "energy_delta_j":result["energy_delta_j"],
+        "source_events_in_window":result["source_events_in_window"],
+        "focused_switch_event_count":len(
+            result["focused_switching_source_events"]),
+        "motor_p1_stability_qualified":False,
+        "output":str(args.output),
+    },sort_keys=True))
     return 0
 
 if __name__=="__main__":
