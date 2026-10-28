@@ -21,7 +21,8 @@ from pathlib import Path
 
 EVENT = re.compile(r"vns=(\d+) kind=(\w+) a=(-?\d+) b=(-?\d+) c=(-?\d+) d=(-?\d+) e=(-?\d+) f=(-?\d+)")
 DSHOT = re.compile(r"\bkind=DSHOT a=(\d+)\b")
-EXPECTED_FRAMES = 3300
+PROFILE_FRAMES={"direct20":3300,"smoke":3000,"gentle":5000,
+                "steps":3300,"ramp100":2800,"ramp500":3200}
 
 
 def sha256(path):
@@ -64,6 +65,7 @@ def run(a):
             raise ValueError("Missing experimental source/ELF/config: " + str(p))
     if a.label not in ("control", "candidate"):
         raise ValueError("Expected only two unqualified A/B cases")
+    expected_frames=PROFILE_FRAMES[a.profile]
     a.artifact.parent.mkdir(parents=True, exist_ok=True)
     log = a.artifact.with_suffix(".qemu.log")
     qmp_path = Path("/tmp") / f"e62-exp-qmp-{os.getpid()}-{a.label}.sock"
@@ -71,7 +73,9 @@ def run(a):
     command = [
         str(a.qemu.resolve()), "-machine",
         "am13e23019,esc-sim=on,esc-sim-native-motor=on,"
-        "esc-sim-nfault-asserted=off,esc-sim-experimental-fc-direct20=on",
+        ("esc-sim-nfault-asserted=off,esc-sim-experimental-fc-direct20=on"
+         if a.profile=="direct20" else
+         "esc-sim-nfault-asserted=off,esc-sim-experimental-fc-profile="+a.profile),
         "-kernel", str(a.elf.resolve()),
         "-display", "none", "-serial", "none", "-monitor", "none",
         "-qmp", f"unix:{qmp_path},server=on,wait=off",
@@ -82,6 +86,8 @@ def run(a):
     report = {
         "schema": "e62.exp.bemf-first-cross.v1",
         "label": a.label,
+        "profile":a.profile,
+        "expected_source_frames":expected_frames,
         "result": "INCOMPLETE_EXPERIMENT",
         "original_guest_qualification": False,
         "motor_p1_qualified": False,
@@ -114,7 +120,7 @@ def run(a):
                                 if idx != last + 1:
                                     raise ValueError("Missing/order-changed FC frame")
                                 last = idx
-                                if last == EXPECTED_FRAMES-1:
+                                if last == expected_frames-1:
                                     break
                         elif proc.poll() is not None:
                             raise RuntimeError("QEMU died before 3300 frames")
@@ -122,7 +128,7 @@ def run(a):
                             time.sleep(.05)
                     else:
                         raise TimeoutError("QEMU Direct20 source incomplete: " + str(last))
-                if last == EXPECTED_FRAMES-1:
+                if last == expected_frames-1:
                     try:
                         report["passive_qmp_after_all_frames"] = (
                             readonly_qmp_cpu_snapshot(qmp_path))
@@ -136,7 +142,7 @@ def run(a):
                 except subprocess.TimeoutExpired:
                     proc.kill()
                     proc.wait(timeout=5)
-        if last != EXPECTED_FRAMES-1:
+        if last != expected_frames-1:
             raise ValueError("Incomplete Direct20 frames")
         rows = []
         for line in log.open(encoding="utf-8", errors="replace"):
@@ -148,6 +154,10 @@ def run(a):
         if onset is None:
             raise ValueError("No positive external PA26 source")
         cutoff = onset + 50_000_000
+        active_source=[(t,d) for t,k,d in rows if
+                       k=="DSHOT" and d[2]>0]
+        active_end=active_source[-1][0]+1_000_000
+        active_duration_ms=(active_end-onset)/1e6
         after = [(t,k,d) for t,k,d in rows if t>=onset]
         def first(kind):
             return next((t for t,k,d in after if k==kind),None)
@@ -159,9 +169,9 @@ def run(a):
         # 50ms can hide later reversal and misclassify an unstable motor.
         # Original P1 strict logic is NOT altered by this experiment.
         full_positive = [(t,d) for t,k,d in after
-                         if k=="ROTOR" and t<onset+1_500_000_000]
-        if len(full_positive)<1490:
-            raise ValueError("Missing full 1500ms rotor source")
+                         if k=="ROTOR" and t<active_end]
+        if len(full_positive)<int(active_duration_ms)-5:
+            raise ValueError("Missing full powered-window rotor source")
         full_reverse = [(t,d) for t,d in full_positive if d[0]<=-50000]
         first_reverse = next((t for t,d in rotor if d[0]<=-50000),None)
         first_neg_torque = next((t for t,d in rotor if d[5]<-100000),None)
@@ -179,6 +189,7 @@ def run(a):
         report.update(
             result="EXPERIMENT_SOURCE_CAPTURED_NOT_P1",
             source_frames=last+1,
+            observed_positive_frame_count=len(active_source),
             first_positive_dshot_ns=onset,
             first_cap1_ms=ms(first_cap),
             second_cap1_ms=ms(next((t for t,k,d in after if k=="CAP1" and t>first_cap),None)),
@@ -187,7 +198,7 @@ def run(a):
             first_change_pair_ms=ms(pairs[1][0]) if len(pairs)>1 else None,
             first_reverse_50rpm_ms=ms(first_reverse),
             first_negative_torque_ms=ms(first_neg_torque),
-            full_positive_window_ms=1500,
+            full_positive_window_ms=active_duration_ms,
             full_positive_rotor_samples=len(full_positive),
             full_positive_min_rpm=min(d[0] for t,d in full_positive)/1000,
             full_positive_max_rpm=max(d[0] for t,d in full_positive)/1000,
@@ -223,9 +234,12 @@ def compare(a):
         if control["qemu_sha256"] != candidate["qemu_sha256"] or (
                 control["cfg_sha256"] != candidate["cfg_sha256"]):
             raise ValueError("QEMU/Guest cfg changed between A/B")
+        if control["profile"] != candidate["profile"]:
+            raise ValueError("Different external FC profile in candidate")
         if control["elf_sha256"]==candidate["elf_sha256"]:
             raise ValueError("Experimental flag did not change Guest ELF")
-        if any(x["source_frames"]!=EXPECTED_FRAMES for x in (control,candidate)):
+        if any(x["source_frames"]!=PROFILE_FRAMES[x["profile"]]
+               for x in (control,candidate)):
             raise ValueError("Missing FC sources")
         baseline = control["first_timg12_ms"]
         trial = candidate["first_timg12_ms"]
@@ -266,6 +280,8 @@ def main():
     r.add_argument("--elf",type=Path,required=True)
     r.add_argument("--cfg-flash",type=Path,required=True)
     r.add_argument("--label",choices=("control","candidate"),required=True)
+    r.add_argument("--profile",choices=tuple(PROFILE_FRAMES),
+                   default="direct20",help="Exact immutable P1 FC scenario")
     r.add_argument("--artifact",type=Path,required=True)
     r.add_argument("--wall-timeout-s",type=int,default=250)
     c=sp.add_parser("compare")
