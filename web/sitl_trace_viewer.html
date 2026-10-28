@@ -883,8 +883,9 @@ function profileValidate(doc){
   });
   if(total>180000)issues.push("Total scenario exceeds 180000 ms");
   const first=doc.stages[0],last=doc.stages[doc.stages.length-1];
-  if(!first||first.kind!=="hold"||first.permille!==0||
-     !last||last.kind!=="hold"||last.permille!==0)
+  const neutral=s=>s&&(s.kind==="hold"?s.permille===0:
+    s.kind==="ramp"&&s.from_permille===0&&s.to_permille===0);
+  if(!neutral(first)||!neutral(last))
     issues.push("First and final stages must send neutral DShot=0");
   return issues;
 }
