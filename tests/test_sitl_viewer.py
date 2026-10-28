@@ -74,6 +74,8 @@ class TestOfflineViewer(unittest.TestCase):
         self.assertIn('source-cap',html)
         self.assertIn('source-timer',html)
         self.assertIn('source-gap',html)
+        self.assertIn('s.t_ns-s.last_dshot_ns<=2_000_000',html)
+        self.assertIn('source-torque',html)
         self.assertIn('strict Motor P1 Gate NOT EXECUTED',html)
         self.assertIn('sourceTrace.samples.splice(0,sourceTrace.samples.length-2048)',html)
         self.assertNotIn('new WebSocket(',html)
