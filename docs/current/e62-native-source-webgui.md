@@ -193,6 +193,50 @@ reversal stability. The report states
   [#40669622679](https://github.com/cctsao1008/escape32-qemu/actions/runs/40669622679)
   (**PASS**).
 
+
+## 2026-10-28 source-observability and neutral return
+
+The existing single-file WebGUI distinguishes No-WFI from WFI
+semantics, sets SSE connected/finished/error state on native
+Snapshot/Complete, and separates live ring history eviction from
+true SSE stream packet gaps. The No-WFI BEMF plot offers centered
+about ADC 2048, autoscaled visible code range or full 0–4095 ADC
+codes. Switching mask coverage states explicitly when the initial
+120 ms after-first-switch source logging window cannot support
+a late carrier-edge observation.
+
+The **Inspect DShot → 0 (+35 ms)** button locates the most recent
+source-owned DShot command transition from nonzero to neutral and
+zooms all plots to the following 35 ms QEMU virtual time. This is
+not an inferred Guest control branch, active brake event or
+Motor P1 strict signoff.
+
+Independently generate a bounded, read-only source observation:
+
+    python3 tools/native_source_neutral_diagnostics.py \
+      --trace artifacts/e62-native-20261028-193626.source-trace.json \
+      --window-ms 35 \
+      --output artifacts/e62-neutral-observation.json
+
+The uploaded local Smoke trace (2026-10-28) contains the real
+DShot nonzero-to-zero source event at **2800.025708 ms**, sequence
+**26994**. The next 35 ms include **35 model samples, 36 DShot,
+2 CAP1, 3 TIMG12 and 2 PWM_PAIR source events**. The model RPM
+changes **473.706 → 5.564**; the minimum torque is **-2.89441 Nm**
+and peak sampled phase |I| is **25.756 A**, both at
+**2802.237408 ms**. There are **zero fresh SWITCH mask samples**
+in this late window because the trace has only the initial bounded
+SWITCH source period; this does not imply the PWM hardware stopped.
+
+These are source-trace observations, not physical current readings
+or proof of a brake/coast mechanism. The causal explanation remains
+OPEN, as does the separate P1 motor-dynamics strict gate. The
+GUI never changes the original ELF, QEMU native Motor Plant,
+Source Event timings, P0/P1 validation rules or hardware qualification.
+
+The browser runtime tests and the source-only neutral diagnostic
+unit tests are separately included in the WebGUI contract CI.
+
 ## Verification
 
 Read-only host tests:
