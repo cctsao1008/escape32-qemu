@@ -76,6 +76,18 @@ class NativeSourceTest(unittest.TestCase):
         rows=fixture();rows[6]["seq"]=80
         with self.assertRaisesRegex(SourceTraceError,"Gap/time reversal"):
             convert([line(x) for x in rows])
+    def test_opt_in_focus_is_real_source_and_sample_provenance(self):
+        rows=fixture()
+        # Insert actual source callback into a single-clock ROTOR/BEMF period.
+        rows.insert(9,event(0,2_999_000,"SWITCH_FOCUS",24,1,15,10,50,3))
+        for i,e in enumerate(rows):
+            e["seq"]=i+1
+        data=convert([line(x) for x in rows])
+        self.assertIn("SWITCH_FOCUS",[e["kind"] for e in data["events"]])
+        self.assertEqual(data["samples"][-1]["pwm_six_pad_mask"],24)
+        self.assertEqual(data["samples"][-1]["pwm_mask_source_kind"],"SWITCH_FOCUS")
+        self.assertEqual(data["samples"][-1]["pwm_gate"],True)
+        self.assertFalse(data["summary"]["motor_p1_stability_qualified"])
     def test_source_time_reverse_rejected(self):
         rows=fixture();rows[6]["vns"]=0
         with self.assertRaisesRegex(SourceTraceError,"Gap/time reversal"):
