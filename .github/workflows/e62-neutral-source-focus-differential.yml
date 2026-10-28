@@ -148,29 +148,7 @@ jobs:
               "BASELINE_NONREPRODUCIBLE: cannot attribute OFF/ON differences "
               "to Observer before identical OFF/OFF source replay")
           PY
-      - name: Independent second Original Guest source observer OFF (A/A control)
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 tests/e62_autonomous_native_motor_probe.py \
-            --qemu .build/qemu-src/build/qemu-system-arm \
-            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
-            --cfg-flash artifacts/e62-g13b3-focus-cfg.bin \
-            --scenario scenarios/e62-native-p0-smoke.json \
-            --artifact artifacts/e62-focus-off-repeat.json \
-            --wall-timeout-s 210 \
-            > artifacts/e62-focus-off-repeat-runner.log
-      - name: Audit both OFF energy ledgers independently
-        shell: bash
-        run: |
-          set -euo pipefail
-          for mode in off off-repeat; do
-            python3 tools/native_source_energy_audit.py \
-              --events artifacts/e62-focus-$mode.p0.events.log \
-              --output artifacts/e62-focus-$mode.energy.json \
-              > artifacts/e62-focus-$mode.energy.log
-          done
-      - name: FAIL CLOSED if OFF/OFF is not reproducible (no observer attribution)
+      - name: Confirm OFF/OFF source repeatability before observer attribution
         shell: bash
         run: |
           set -euo pipefail
@@ -188,6 +166,9 @@ jobs:
             --scenario scenarios/e62-native-p0-smoke.json \
             --artifact artifacts/e62-focus-on.json \
             --switch-focus-window-ms 2795:2840 \
+            --differential-sync-start \
+            --differential-rr-mode replay \
+            --differential-rr-file artifacts/e62-focus-icount-recording.rr.bin \
             --wall-timeout-s 210 \
             > artifacts/e62-focus-on-runner.log
       - name: Strict original source ledger on ON observation
