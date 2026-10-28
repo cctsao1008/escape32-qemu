@@ -83,8 +83,15 @@ function compiler(doc,expected){
     evaluate("profileSetPreset("+JSON.stringify(name)+")");
     assert.equal(elements.get("profile-stages").children.length,doc.stages.length);
     assert.equal(elements.get("profile-export").disabled,false);
-    assert.equal(clone(evaluate("profilePoints(profileDraft)")).total,
-      doc.stages.reduce((n,s)=>n+s.duration_ms,0));
+    const plot=clone(evaluate("profilePoints(profileDraft)"));
+    assert.equal(plot.total,doc.stages.reduce((n,s)=>n+s.duration_ms,0));
+    if(name==="gentle"){
+      // The first real 20ms integer-permille update at t=1520ms is
+      // represented by a vertical step, not an invented analog slope.
+      const boundary=plot.points.filter(p=>p[0]===1520);
+      assert.deepEqual(boundary,[[1520,0],[1520,1]]);
+      assert.ok(plot.points.length<900,"bounded dense ramp preview");
+    }
   }
   const base=clone(evaluate("THROTTLE_PRESETS.smoke"));
   const bad=[];
@@ -144,8 +151,19 @@ function compiler(doc,expected){
     JSON.stringify(JSON.stringify(bad[0]))+"})"));
   assert.deepEqual(clone(evaluate("profileDraft")),before);
   const custom=clone(base);custom.name="Custom Field Test";
-  await evaluate("profileImportFile({size:3000,text:async()=>"+
-    JSON.stringify(JSON.stringify(custom))+"})");
+  // Exercise real file input change handler, including its value reset.
+  const input=elements.get("profile-file");
+  const importFile={size:3000,text:async()=>JSON.stringify(custom)};
+  await input.listeners.get("change")({
+    target:{files:[importFile],value:"custom.json"}
+  });
+  assert.equal(evaluate("profileDraft.name"),"Custom Field Test");
+  assert.equal(elements.get("profile-export").disabled,false);
+  const negative={size:3000,text:async()=>JSON.stringify(bad[0])};
+  const negativeEvent={target:{files:[negative],value:"invalid.json"}};
+  await input.listeners.get("change")(negativeEvent);
+  assert.equal(negativeEvent.target.value,"");
+  assert.match(elements.get("profile-result").textContent,/IMPORT REJECTED/);
   assert.equal(evaluate("profileDraft.name"),"Custom Field Test");
   elements.get("profile-export").listeners.get("click")();
   assert.equal(downloads.length,1);
