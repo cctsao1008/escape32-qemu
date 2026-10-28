@@ -80,6 +80,46 @@ Open **http://127.0.0.1:8765/** on the same computer.
 
 When selecting an offline file in a live page, the browser **disconnects SSE** to prevent mixing two sources. Reload the page to reconnect. Gaps/truncated history remain explicitly marked.
 
+
+## No-WFI source observability and neutral-return focus
+
+No-WFI Live now shows a real SSE state: connected, probe finished or
+disconnected. The separate WFI-duty instructions only appear for WFI.
+
+The No-WFI **BEMF Y-axis** selector offers centered about code 2048
+(default), autoscale to visible source samples, or full 0–4095 ADC
+codes. These are **ADC codes, not voltage measurements**.
+
+The six-pad **SWITCH mask coverage** shows the first/last fresh source
+samples and explains when the initial **120 ms after first-switching**
+logging budget is exhausted. Blank later source masks do not prove
+PWM OFF or that a particular PWM carrier edge was absent.
+
+**LIVE RING HISTORY LIMIT** means older samples were evicted from
+the browser-side 2048-frame view; it does not mean QEMU Source Events
+were lost. **SSE STREAM GAP** means packets unavailable to that
+browser connection; neither is interpolated.
+
+**Inspect DShot → 0 (+35 ms)** derives the neutral return from an actual
+external-FC DShot Source Event; it focuses all source plots on the next
+35 ms QEMU virtual-time interval, showing observed RPM, torque,
+sampled current peak and CAP1/TIMG12 events. A separate
+**Full available trace** button resets the viewport. This does NOT
+establish that the motor was actively braked or coasted.
+
+On your WSL, inspect an already saved Smoke Source Trace without
+rerunning QEMU:
+
+    cd ~/github/escape32-qemu
+    python3 tools/native_source_neutral_diagnostics.py \
+      --trace artifacts/e62-native-20261028-193626.source-trace.json \
+      --window-ms 35 \
+      --output artifacts/e62-neutral-20261028-193626-observation.json
+
+This CLI is source-only and does not send commands to the Guest,
+QEMU or the Motor Plant.
+
+
 ## What the viewer does *not* prove
 
 - Source-event BEMF is an **ADC comparator input code**, not volts.
