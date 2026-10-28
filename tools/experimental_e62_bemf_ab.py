@@ -31,7 +31,9 @@ def sha256(path):
 def readonly_qmp_cpu_snapshot(path, elf):
     # Parse linked ELF local static symbols rather than hardcoding SRAM
     # offsets: recompiles can shift these addresses.
-    names={"audio_owner","fault_latched","safety_initialized"}
+    names={"audio_owner","fault_latched","safety_initialized",
+           "e62_sim_runtime_fault_caller_pc",
+           "e62_sim_runtime_fault_prestate"}
     found={}
     nm=subprocess.run(["arm-none-eabi-nm","-an",str(elf)],check=True,
                       capture_output=True,text=True,timeout=12).stdout
