@@ -52,6 +52,8 @@ jobs:
             --scenario scenarios/e62-native-p0-smoke.json \
             --artifact artifacts/e62-focus-off.json \
             --differential-sync-start \
+            --differential-rr-mode record \
+            --differential-rr-file artifacts/e62-focus-icount-recording.rr.bin \
             --wall-timeout-s 210 \
             > artifacts/e62-focus-off-runner.log
       - name: Original Guest source observer OFF repeat (A/A)
@@ -65,6 +67,8 @@ jobs:
             --scenario scenarios/e62-native-p0-smoke.json \
             --artifact artifacts/e62-focus-off-repeat.json \
             --differential-sync-start \
+            --differential-rr-mode replay \
+            --differential-rr-file artifacts/e62-focus-icount-recording.rr.bin \
             --wall-timeout-s 210 \
             > artifacts/e62-focus-off-repeat-runner.log
       - name: Strict OFF/OFF reproducibility gate before Observer attribution
@@ -113,6 +117,8 @@ jobs:
               off["source_focus_window_ms"] is None and
               repeat["source_focus_window_ms"] is None and
               off["differential_sync_start"] is True and
+              off["differential_rr_mode"]=="record" and
+              repeat["differential_rr_mode"]=="replay" and
               repeat["differential_sync_start"] is True and
               off["initial_vm_paused_before_first_guest_instruction"] is True and
               repeat["initial_vm_paused_before_first_guest_instruction"] is True and
@@ -153,6 +159,8 @@ jobs:
             --artifact artifacts/e62-focus-on.json \
             --switch-focus-window-ms 2795:2840 \
             --differential-sync-start \
+            --differential-rr-mode replay \
+            --differential-rr-file artifacts/e62-focus-icount-recording.rr.bin \
             --wall-timeout-s 210 \
             > artifacts/e62-focus-on-runner.log
       - name: Strict original source ledger on both observations
@@ -180,6 +188,8 @@ jobs:
           assert off["host_guest_register_writes"] is False
           assert on["host_guest_register_writes"] is False
           assert off["differential_sync_start"] is True
+          assert off["differential_rr_mode"]=="record"
+          assert on["differential_rr_mode"]=="replay"
           assert on["differential_sync_start"] is True
           assert off["used_guest_wfi_or_gdb"] is False
           assert on["used_guest_wfi_or_gdb"] is False
