@@ -44,9 +44,18 @@ class MotorProfileTests(unittest.TestCase):
                 self.assertEqual(p.inertia_kg_m2, .00013)
                 self.assertAlmostEqual(p.phase_resistance_ohm, r)
                 self.assertAlmostEqual(p.phase_inductance_h, l)
-                self.assertAlmostEqual(p.torque_constant_nm_per_a, kt)
-                self.assertAlmostEqual(p.bemf_constant_v_per_rad_s*21, kt)
+                self.assertAlmostEqual(p.torque_constant_nm_per_a,
+                                       kt/math.sqrt(3.0))
+                self.assertAlmostEqual(p.bemf_constant_v_per_rad_s*21,
+                                       kt/math.sqrt(3.0))
+                self.assertAlmostEqual(
+                    math.sqrt(3.0)*p.torque_constant_nm_per_a, kt)
                 self.assertEqual(meta["published_kv_rpm_per_v"], kv)
+                self.assertAlmostEqual(
+                    meta["phase_peak_flux_constant_v_s_per_rad"],
+                    kt/math.sqrt(3.0))
+                self.assertLess(
+                    abs(kt*2*math.pi*kv/60.0-1.0), 0.01)
                 self.assertEqual(meta["motor_poles_for_escape32_telem_poles"],42)
                 self.assertFalse(meta["propeller_inertia_and_load_modeled"])
                 self.assertFalse(meta["physical_motor_calibrated"])
