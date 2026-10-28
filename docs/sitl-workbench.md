@@ -1,5 +1,27 @@
 # E62 SITL Workbench — Phase 1 Offline Native Trace + Phase 2 Live Telemetry
 
+## Current No-WFI native source live mode (2026-10-28)
+
+The same \`web/sitl_trace_viewer.html\` now accepts the additional
+\`e62.sitl.native-source.v1\` format: live DShot/PWM_PAIR/CAP1/TIMG12,
+1ms native rotor, simulated phase currents, and comparator frontend
+**ADC codes (not physical volts)**. This source mode runs against the
+original **No-WFI** guest without stepping the Guest or reading extra
+MMIO for GUI updates. It is intentionally separate from the WFI-sampled
+duty display documented below. **No-WFI PWM is a sparse actual
+six-pad mask, not a reconstructed carrier waveform.**
+
+Use the isolated \`tools/native_source_live_runner.py\` wrapper with
+the pinned Original Guest, an existing source-built QEMU and the
+normal \`sim_motor_cfg.py\` flash. It prints a localhost URL and writes
+a \`*.source-trace.json\` offline file automatically. For exact commands,
+data provenance, loss/overrun behavior and CI, see
+[No-WFI Source WebGUI](current/e62-native-source-webgui.md).
+
+The following Phase 2 instructions remain valid **only for the prior
+native WFI sustained-loop path**, not the new No-WFI source mode.
+
+
 The offline trace viewer and the new opt-in **localhost-only live
 telemetry** share one read-only WebGUI. Neither path controls QEMU, reads
 extra Guest state, alters native PWM, or qualifies real hardware.
