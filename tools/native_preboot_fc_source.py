@@ -66,11 +66,26 @@ def run(args):
     if hashlib.sha256(args.elf.read_bytes()).hexdigest() != ELF:
         raise ValueError("Original ESCape32 Rel17.3 ELF SHA256 mismatch")
     focus = args.switch_focus_window_ms
+    rr_mode = args.rr_mode
+    if rr_mode:
+        if args.rr_file is None:
+            raise ValueError("QEMU RR mode requires explicit recording file")
+        if rr_mode == "record" and args.rr_file.exists():
+            raise ValueError("Refusing overwrite of existing QEMU RR recording")
+        if rr_mode == "replay" and (not args.rr_file.is_file() or
+                                    args.rr_file.stat().st_size < 32):
+            raise ValueError("QEMU RR replay requires nonempty original record")
+        args.rr_file.parent.mkdir(parents=True, exist_ok=True)
+    elif args.rr_file is not None:
+        raise ValueError("QEMU RR file requires explicit record/replay")
     if focus is not None and focus != "2795:2840":
         raise ValueError("Diagnostic comparator requires exact 2795:2840 focus")
     args.artifact.parent.mkdir(parents=True, exist_ok=True)
     qemu_log = args.artifact.with_suffix(".qemu.log")
     source_log = args.artifact.with_suffix(".p0.events.log")
+    icount = "shift=2,sleep=off,align=off"
+    if rr_mode:
+        icount += ",rr=" + rr_mode + ",rrfile=" + str(args.rr_file.resolve())
     command = [
         str(args.qemu.resolve()), "-machine",
         "am13e23019,esc-sim=on,esc-sim-native-motor=on,"
@@ -78,7 +93,7 @@ def run(args):
         (",esc-sim-switch-focus-window-ms=" + focus if focus else ""),
         "-kernel", str(args.elf.resolve()),
         "-display", "none", "-serial", "none", "-monitor", "none",
-        "-icount", "shift=2,sleep=off,align=off",
+        "-icount", icount,
         "-device", "loader,file=" + str(args.cfg_flash.resolve()) +
                    ",addr=0x4000,force-raw=on",
     ]
@@ -96,6 +111,8 @@ def run(args):
         "differential_preboot_fc_source": True,
         "qtest_or_qmp_used": False,
         "host_virtual_time_steps": 0,
+        "differential_rr_mode": rr_mode,
+        "differential_rr_file": str(args.rr_file) if rr_mode else None,
         "hardware_qualified": False,
         "motor_p1_stability_qualified": False,
     }
@@ -115,6 +132,10 @@ def run(args):
                     proc.kill()
                     proc.wait(timeout=5)
                 log.flush()
+        if rr_mode:
+            report["differential_rr_file_bytes"] = args.rr_file.stat().st_size if args.rr_file.exists() else 0
+            if rr_mode == "record" and report["differential_rr_file_bytes"] < 32:
+                raise ValueError("QEMU icount RR file not finalized by graceful signal shutdown")
         if qemu_log.stat().st_size > MAX_LOG_BYTES:
             raise ValueError("Full QEMU source trace exceeded 64 MiB")
         with qemu_log.open(encoding="utf-8", errors="replace") as src, (
@@ -161,6 +182,10 @@ def main():
     parser.add_argument("--scenario", required=True, type=Path)
     parser.add_argument("--artifact", required=True, type=Path)
     parser.add_argument("--switch-focus-window-ms", default=None)
+    parser.add_argument("--rr-mode", choices=("record","replay"), default=None,
+                        help="Diagnostic-only QEMU icount record/replay. No QTest.")
+    parser.add_argument("--rr-file", type=Path, default=None,
+                        help="Shared QEMU icount event log for exact replay")
     parser.add_argument("--wall-timeout-s", type=int, default=210)
     args = parser.parse_args()
     if not 30 <= args.wall_timeout_s <= 600:
