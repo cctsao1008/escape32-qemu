@@ -40,6 +40,7 @@ class Element {
     this.height=name.endsWith("events")?125:205;
     this.ctx=new FakeContext();
   }
+  setAttribute(key,value){if(!this.attrs)this.attrs={};this.attrs[key]=String(value);}
   getContext(type){assert.equal(type,"2d");return this.ctx;}
   addEventListener(type,handler){
     if(!this.handlers)this.handlers=new Map();
