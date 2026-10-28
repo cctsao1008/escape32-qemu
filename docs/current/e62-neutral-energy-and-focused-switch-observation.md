@@ -123,20 +123,53 @@ For a valid observer result there must be actual
 \`SWITCH_FOCUS_LIMIT\`, and the Guest and motor original-source
 sequence must remain unchanged apart from the new isolated records.
 
-## 3. Differential no-intervention validation
+## 3. Differential reproducibility, then source-only observer check
 
-CI: \`.github/workflows/e62-neutral-source-focus-differential.yml\`.
-Using **the same pinned Guest and same Smoke scenario**, build QEMU
-once and run **focus OFF** and **focus ON**. Ignore only the
-\`SWITCH_FOCUS\` instrumentation records when comparing original
-native sources up to virtual 2990ms. Compare all original timestamp,
-event kind and six integer fields. Fail if any discrepancy, missing
-focused switching, budget overflow or changed energy deltas.
+CI: `.github/workflows/e62-neutral-source-focus-differential.yml`.
 
-The P0 audit recognizes the new source event *kind* but does NOT
-count it as a normal \`SWITCH\` record or waive any original strict
-gate. Focus observer diagnostics and P1 motor stability are
-distinct tasks.
+**2026-10-28 unsynchronized baseline finding:** The old OFF/ON CI
+[#40689114983](https://github.com/cctsao1008/escape32-qemu/actions/runs/40689114983)
+was not a valid attribution test: its first source DShot occurred at
+656272ns OFF versus 68692ns ON, before the focus window. An independent
+OFF/OFF CI
+[#40691834765](https://github.com/cctsao1008/escape32-qemu/actions/runs/40691834765)
+proved that the **observer-disabled baseline itself is not bit-exact**:
+first DShot 260660ns and 56596ns, 28335/28336 original events through
+2990ms, and unequal source ENERGY deltas. The default native runner
+initially boots its Guest while the host performs QTest diagnostics
+and then arms the independent FC timer at the **current QEMU virtual
+time +100ns**. Host startup timing is therefore an uncontrolled input.
+This finding does NOT prove an observer side effect or observer neutrality.
+
+**Updated fail-closed order:**
+
+1. Build QEMU and verify the *unchanged* pinned Original ELF and SIM_ONLY
+   configuration.
+2. Run **OFF-A** and **OFF-B** with the same smoke scenario. Require
+   bit-exact original virtual timestamps, source order/payload and
+   ENERGY delta through 2990ms; emit `e62-focus-off-repeatability.json`.
+3. Only if OFF/OFF passes, run **ON** and require genuine bounded
+   `SWITCH_FOCUS` transitions without budget overrun. Ignore only the
+   new focus records when comparing original source events/energy,
+   with no time shift, rounding, normalization tolerance or waived P0/P1.
+4. Retain original logs and reports via CI artifact on all failures.
+
+The differential workflow now opts into
+`--differential-sync-start` **only for this diagnostic replay**.
+QEMU begins in `-S` state **before the Guest has executed its first
+instruction**. The host prearms the existing non-silicon external-FC
+DShot calendar over QTest, then issues a single QMP `cont`. The
+observer follows the actual QEMU source log passively through the final
+DShot frame, with no periodic QTest/MMIO polling during that interval.
+No Guest WFI/GDB, register write, motor model modification or
+mid-execution CPU halt is introduced. This changes the test-harness
+startup synchronization and must **not** be represented as the
+original production-like unsynchronized P0/P1 acceptance run.
+
+**Acceptance boundary:** A/A replay equality is a prerequisite;
+A/B equality can support source-only observation neutrality **within
+that exact synchronized diagnostic replay**. Neither result qualifies
+motor P1 stability, ESC hardware, thrust or thermal/current performance.
 
 ## 4. Causal limits
 
