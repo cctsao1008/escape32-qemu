@@ -168,7 +168,7 @@ def audit(events, *, window_ns=WINDOW_NS):
              "pwm_event_counter_before":e["data"][5]}
             for e in focus
         ],
-        "focused_switch_observation_complete":bool(focus) and not focus_limited,
+        "focused_switch_source_records_present_without_budget_overrun":bool(focus) and not focus_limited,
         "inference_limits":[
             "NEGATIVE_BEMF_ENERGY_IS_SOURCE_MODEL_MECHANICAL_TO_ELECTRICAL_TRANSFER",
             "NEGATIVE_DC_BUS_ENERGY_CHANGE_IS_MODEL_INTEGRAL_NOT_PHYSICAL_BATTERY_CHARGE",
