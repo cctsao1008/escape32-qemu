@@ -17,7 +17,9 @@ sys.path.insert(0,str(ROOT))
 from tools.native_p0_strict import parse_events
 from tools.native_closed_loop_audit import ORIGINAL_REL17_ROUTE
 
-KT=0.0649
+# Independent published terminal Kt -> one-phase sinusoidal flux scale.
+# Must match the native QEMU winding model, not old historical traces.
+KT=0.0649/math.sqrt(3.0)
 OFFSETS=(0.0,-2*math.pi/3,2*math.pi/3)
 FIVE_EVENTS=("CMP_FILTER","CAP1","CAP1_ACK","TIMG12","TIMG12_ACK")
 CASES=("smoke","gentle","direct20","steps")
