@@ -110,6 +110,10 @@ def audit(events, *, window_ns=WINDOW_NS):
         e for e in pwm if (e["data"][2]&0xF)==0xF
     ]
     switches=[e for e in source_window if e["kind"]=="SWITCH"]
+    focus=[e for e in source_window if e["kind"]=="SWITCH_FOCUS"]
+    focus_limited=[e for e in events if e["kind"]=="SWITCH_FOCUS_LIMIT"]
+    if focus_limited:
+        raise EnergyAuditError("Focused source SWITCH event budget exceeded")
     negative_bus_segments=sum(
         b["data"][0]<a["data"][0] for a,b in zip(post,post[1:])
     )
@@ -145,7 +149,8 @@ def audit(events, *, window_ns=WINDOW_NS):
         "invariant_last_source":invariant[-1]["data"],
         "source_events_in_window":{
             key:count[key] for key in
-            ("DSHOT","PWM_PAIR","SWITCH","CAP1","TIMG12","ENERGY","INVARIANT")
+            ("DSHOT","PWM_PAIR","SWITCH","SWITCH_FOCUS",
+             "CAP1","TIMG12","ENERGY","INVARIANT")
         },
         "powered_pwm_pairs_after_neutral":[
             {"seq":e["seq"],"t_ns":e["vns"],
@@ -154,12 +159,22 @@ def audit(events, *, window_ns=WINDOW_NS):
             for e in enabled_pwm
         ],
         "late_full_switch_events":len(switches),
+        "focused_switching_source_events":[
+            {"seq":e["seq"],"t_ns":e["vns"],
+             "six_pad_mask":e["data"][0],"gate_valid":bool(e["data"][1]),
+             "gate_word":e["data"][2],
+             "native_motor_integrated_steps":e["data"][3],
+             "pwm_zero_callbacks":e["data"][4],
+             "pwm_event_counter_before":e["data"][5]}
+            for e in focus
+        ],
+        "focused_switch_observation_complete":bool(focus) and not focus_limited,
         "inference_limits":[
             "NEGATIVE_BEMF_ENERGY_IS_SOURCE_MODEL_MECHANICAL_TO_ELECTRICAL_TRANSFER",
             "NEGATIVE_DC_BUS_ENERGY_CHANGE_IS_MODEL_INTEGRAL_NOT_PHYSICAL_BATTERY_CHARGE",
             "PWM_PAIR_PROVES_OBSERVED_POWER_PAIR_CHANGE_NOT_COMPLETE_CARRIER",
             "NO_ACTIVE_BRAKE_OR_COAST_CAUSAL_CLASSIFICATION",
-            "UNWAVIED_MOTOR_P1_STABILITY_GATE",
+            "UNWAIVED_MOTOR_P1_STABILITY_GATE",
         ],
     }
     return result
