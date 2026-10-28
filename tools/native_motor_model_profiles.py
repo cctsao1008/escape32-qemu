@@ -4,11 +4,14 @@
 'legacy' and 'reciprocal' remain unchanged historical host A/B fixtures.
 ECX87 values come from maxon EC 87 flat UAV April 2025 datasheet, p.1.
 Phase R/L = half the listed line-to-line value (balanced star assumption).
-Published torque constants are provisionally interpreted as the model's
-sinusoidal phase-basis Kt; Ke is chosen for INTERNAL energy reciprocity.
-This is an assumption, NOT a measured phase BEMF or motor calibration.
+Published terminal-equivalent Kt matches 60/(2*pi*Kv). For the explicit
+balanced-sine star model use K_phase=Kt_terminal/sqrt(3), and both
+phase-peak BEMF and torque share K_phase for power reciprocity.
+The actual phase waveform, driver and propeller are NOT calibrated.
 No propeller inertia, propeller torque curve or silicon analog frontend.
 """
+import math
+
 from .virtual_bldc import MotorParameters
 
 PROFILES = ("legacy", "reciprocal", "ecx87-kv147", "ecx87-kv210")
@@ -39,13 +42,19 @@ def native_motor_parameters(profile="legacy"):
     if profile in DATASHEET_PROFILES:
         m = _ECX87[profile]
         pole_pairs = ECX87_POLE_PAIRS
-        kt = m["kt_nm_per_a"]
+        kt_terminal = m["kt_nm_per_a"]
+        # Maxon terminal Kt=60/(2*pi*Kv); the largest sinusoidal
+        # line-to-line BEMF is sqrt(3)*K_phase*omega_mech.
+        # Never apply terminal Kt directly as a phase-peak sine factor.
+        kt_phase = kt_terminal / math.sqrt(3.0)
+        if abs(kt_terminal / (60.0 / (2.0*math.pi*m["kv_rpm_per_v"])) - 1.0) > 0.01:
+            raise ValueError("ECX87 terminal Kt and Kv datasheet mismatch")
         return MotorParameters(
             vbus_v=24.0,
             phase_resistance_ohm=m["line_resistance_ohm"] / 2.0,
             phase_inductance_h=m["line_inductance_h"] / 2.0,
-            bemf_constant_v_per_rad_s=kt / pole_pairs,
-            torque_constant_nm_per_a=kt,
+            bemf_constant_v_per_rad_s=kt_phase / pole_pairs,
+            torque_constant_nm_per_a=kt_phase,
             inertia_kg_m2=ECX87_ROTOR_INERTIA_KG_M2,
             # Uncalibrated simulator assumptions, NOT maxon datasheet.
             viscous_friction_nm_per_rad_s=0.0001,
@@ -102,11 +111,16 @@ def native_motor_model_metadata(profile):
             datasheet_part_number=m["part_number"],
             published_kv_rpm_per_v=m["kv_rpm_per_v"],
             published_kt_nm_per_a=m["kt_nm_per_a"],
+            phase_peak_flux_constant_v_s_per_rad=p.torque_constant_nm_per_a,
+            sine_basis_to_terminal_ll_peak=math.sqrt(3.0),
+            predicted_no_load_terminal_bemf_v_at_3500rpm=(
+                math.sqrt(3.0)*p.torque_constant_nm_per_a*
+                3500.0*2.0*math.pi/60.0),
             published_line_to_line_resistance_ohm=m["line_resistance_ohm"],
             published_line_to_line_inductance_h=m["line_inductance_h"],
             winding_assumption="BALANCED_STAR_PHASE_R_AND_L_ARE_HALF_LINE_TO_LINE",
             ke_convention_assumption=(
-                "MODEL_PHASE_SINE_KT_ASSUMED_FROM_PUBLISHED_KT_KE_KT_OVER_POLE_PAIRS"),
+                "BALANCED_STAR_SINE_PHASE_PEAK_EQUALS_PUBLISHED_TERMINAL_KT_OVER_SQRT3_ASSUMED"),
             frontend_model="UNCHANGED_SIM_ONLY_1P65V_BIAS_0P02_GAIN",
             caveat="MOTOR_ONLY_UNCALIBRATED_NOT_PROPELLER_OR_HARDWARE",
         )
