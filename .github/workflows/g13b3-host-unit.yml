@@ -40,6 +40,8 @@ on:
       - 'tests/test_g13b3_native_arming_zero_wire.py'
       - 'tests/test_g13b3_native_wfi_roles.py'
       - 'tests/test_native_motor_reciprocity.py'
+      - 'tests/test_sim_motor_profiles.py'
+      - 'tests/test_e62_ecx87_phase_normalization.py'
       - 'tests/test_native_model_energy_balance.py'
       - 'tests/test_native_precapture_dynamics_audit.py'
       - 'tests/e62_autonomous_native_motor_probe.py'
@@ -143,6 +145,8 @@ jobs:
           python3 tests/test_g13b3_native_arming_zero_wire.py
           python3 tests/test_g13b3_native_wfi_roles.py
           python3 tests/test_native_motor_reciprocity.py
+          python3 tests/test_sim_motor_profiles.py
+          python3 tests/test_e62_ecx87_phase_normalization.py
           python3 tests/test_native_model_energy_balance.py
           python3 tests/test_native_precapture_dynamics_audit.py
           python3 tests/test_e62_native_motor_guest_symbols.py
