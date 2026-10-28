@@ -79,7 +79,7 @@ class NativeSourceTest(unittest.TestCase):
     def test_opt_in_focus_is_real_source_and_sample_provenance(self):
         rows=fixture()
         # Insert actual source callback into a single-clock ROTOR/BEMF period.
-        rows.insert(9,event(0,2_999_000,"SWITCH_FOCUS",24,1,15,10,50,3))
+        rows.insert(8,event(0,2_999_000,"SWITCH_FOCUS",24,1,15,10,50,3))
         for i,e in enumerate(rows):
             e["seq"]=i+1
         data=convert([line(x) for x in rows])
