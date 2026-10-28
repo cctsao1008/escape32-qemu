@@ -27,7 +27,7 @@ def fixture(*, corrupt=False):
     ]
     if corrupt:
         raw[10]=(raw[10][0],raw[10][1],
-                 [1000,110,309,180,100,300])
+                 [1000,110,300,180,100,300])
     return [{"seq":i+1,"vns":ns,"kind":kind,"data":data}
             for i,(ns,kind,data) in enumerate(raw)]
 
