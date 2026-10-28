@@ -60,7 +60,7 @@ def readonly_qmp_cpu_snapshot(path):
         # ARM fault-reset loop is nonreturning; R13 still points to the
         # callee's pushed (r3, LR), so [SP+4] is the ORIGINAL caller's LR.
         # Read only 32 bytes of ordinary SRAM, never MMIO or Guest writes.
-        match=re.search(r"\\bR13=([0-9A-Fa-f]{8})\\b",registers)
+        match=re.search(r"\bR13=([0-9A-Fa-f]{8})\b",registers)
         if match:
             sp=int(match.group(1),16)
             result["stack_pointer_hex"]=hex(sp)
