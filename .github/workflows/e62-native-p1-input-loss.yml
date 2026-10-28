@@ -47,7 +47,7 @@ jobs:
           python3 tools/sim_motor_cfg.py --sim-only-opt-in \
             --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
             --motor-profile ecx87-kv147 \
-            --output artifacts/e62-p1-input-loss-cfg.bin
+            --output artifacts/e62-g13b3-native-autonomous-cfg-flash.bin
       - name: Genuine Original Guest valid DShot then abrupt external FC silence (no WFI)
         shell: bash
         run: |
@@ -55,7 +55,7 @@ jobs:
           python3 tests/e62_autonomous_native_motor_probe.py \
             --qemu .build/qemu-src/build/qemu-system-arm \
             --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
-            --cfg-flash artifacts/e62-p1-input-loss-cfg.bin \
+            --cfg-flash artifacts/e62-g13b3-native-autonomous-cfg-flash.bin \
             --scenario scenarios/e62-native-p1-input-loss.json \
             --link-loss-last-frame 2800 \
             --link-loss-wall-timeout-s 150 \
