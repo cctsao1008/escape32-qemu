@@ -41,7 +41,10 @@ class Element {
     this.ctx=new FakeContext();
   }
   getContext(type){assert.equal(type,"2d");return this.ctx;}
-  addEventListener(){}
+  addEventListener(type,handler){
+    if(!this.handlers)this.handlers=new Map();
+    this.handlers.set(type,handler);
+  }
   appendChild(node){this.children.push(node);return node;}
   replaceChildren(...nodes){this.children=nodes;return undefined;}
   getBoundingClientRect(){return {left:0,width:1200};}
@@ -154,4 +157,74 @@ assert.equal(nodes.get("dashboard").hidden,false);
 assert.equal(nodes.get("source-dashboard").hidden,true);
 assert.match(nodes.get("scope").textContent,/NATIVE WFI/);
 assert.equal(nodes.get("sample-count").textContent,1);
-console.log("PASS_E62_BROWSER_JS_RUNTIME_OFFLINE_LIVE_GAP_DSHOT_STALE_PWM_WFI_COMPAT");
+/* Host localhost mode must not mix manual Offline file with live SSE.
+ * Verify the actual file-input handler and rejection cleanup, not strings.
+ */
+(async()=>{
+  const httpNodes=new Map();
+  const httpDocument={
+    getElementById(id){
+      if(!httpNodes.has(id))httpNodes.set(id,new Element(id));
+      return httpNodes.get(id);
+    },
+    createElement:tag=>new Element(tag),
+    createDocumentFragment:()=>new Element("fragment")
+  };
+  class FakeEventSource {
+    constructor(url){
+      this.url=url;this.closed=false;this.listeners=new Map();
+      FakeEventSource.last=this;
+    }
+    addEventListener(kind,handler){this.listeners.set(kind,handler);}
+    close(){this.closed=true;}
+  }
+  const httpBrowser=vm.createContext({
+    document:httpDocument,
+    location:{protocol:"http:",hostname:"127.0.0.1"},
+    requestAnimationFrame:cb=>cb(),
+    EventSource:FakeEventSource,
+    console
+  });
+  vm.runInContext(scripts[0][1],httpBrowser,
+                  {filename:"sitl_trace_viewer.html",timeout:2500});
+  assert.equal(FakeEventSource.last.url,"/events");
+  assert.equal(FakeEventSource.last.closed,false);
+  const onChange=httpNodes.get("file").handlers.get("change");
+  assert.equal(typeof onChange,"function");
+  await onChange({
+    target:{files:[{size:3000,text:async()=>JSON.stringify(offline)}]}
+  });
+  assert.equal(FakeEventSource.last.closed,true,
+    "Manual source file load must disconnect any live EventSource");
+  assert.equal(httpNodes.get("source-dashboard").hidden,false);
+  assert.equal(httpNodes.get("dashboard").hidden,true);
+  assert.match(httpNodes.get("live-status").textContent,/LIVE DETACHED/);
+  assert.equal(httpNodes.get("source-count").textContent,"2");
+
+  // Subsequent WFI offline playback must not inherit live metadata.
+  await onChange({
+    target:{files:[{size:3000,text:async()=>JSON.stringify(wfi)}]}
+  });
+  assert.equal(httpNodes.get("source-dashboard").hidden,true);
+  assert.equal(httpNodes.get("dashboard").hidden,false);
+  assert.match(httpNodes.get("scope").textContent,/ACTUAL NATIVE WFI/);
+  assert.equal(httpNodes.get("direction").textContent,"NOT YET QUALIFIED");
+
+  // Malformed later offline file must hide stale source and WFI panels.
+  await onChange({
+    target:{files:[{size:3,text:async()=>"{bad-json"}]}
+  });
+  assert.equal(httpNodes.get("source-dashboard").hidden,true);
+  assert.equal(httpNodes.get("dashboard").hidden,true);
+  assert.equal(httpNodes.get("scope").textContent,"TRACE REJECTED");
+  assert.match(httpNodes.get("status").textContent,/JSON/);
+
+  // Reconnect disabled after explicit offline mode switch until reload.
+  const previous=FakeEventSource.last;
+  vm.runInContext("connectLive()",httpBrowser,{timeout:1000});
+  assert.equal(FakeEventSource.last,previous);
+  console.log("PASS_E62_BROWSER_JS_RUNTIME_OFFLINE_LIVE_GAP_DSHOT_STALE_PWM_WFI_COMPAT_AND_FILE_ISOLATION");
+})().catch(error=>{
+  console.error(error);
+  process.exitCode=1;
+});
