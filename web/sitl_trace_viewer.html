@@ -50,7 +50,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visi
 <span id="loss-warning" class="danger"></span>
 <span id="status" class="sub">Load a verified WFI or No-WFI native trace, or connect to localhost-only read-only SSE.</span>
 </div>
-<p class="sub" id="wfi-semantics" hidden>WFI mode only: six PWM traces are carrier-average duty <b>sampled at WFI checkpoints</b>, not individual pin transitions. Rotor, phase currents and BEMF volts are uncalibrated SIM_ONLY model outputs; Guest events are WFI observations.</p>
+<p class="sub" id="wfi-semantics" hidden>WFI mode only: six PWM traces show measured carrier-average duty at WFI checkpoints, not individual pin transitions. Rotor, phase currents and BEMF volts are uncalibrated SIM_ONLY model outputs; Guest events are WFI observations.</p>
 <p class="sub" id="native-semantics" hidden>No-WFI mode only: source-owned DShot commands, signed modeled RPM/current/torque, <b>BEMF 12-bit ADC codes (NOT volts)</b> and sparse six-pad SWITCH mask. No WFI checkpoints, complete PWM carrier recording or motor stability qualification.</p></div>
 
 <details id="throttle-editor" class="panel">
