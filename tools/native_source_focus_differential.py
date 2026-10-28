@@ -43,6 +43,11 @@ def validate_meta(meta, focused):
     assert meta["source_focus_guest_or_motor_control"] is False
     assert meta["motor_mode"] == "QEMU_VIRTUAL_CLOCK_NATIVE_ECX87_KV147_SIM_ONLY"
     assert meta["configured_dshot_frames"] == 3000
+    assert meta["differential_preboot_fc_source"] is True
+    assert meta["qtest_or_qmp_used"] is False
+    assert meta["host_virtual_time_steps"] == 0
+    assert meta["passive_dshot_frames"] == 3000
+    assert meta["motor_p1_stability_qualified"] is False
     assert meta["source_focus_window_ms"] == ("2795:2840" if focused else None)
 
 def evaluate(off1, off2, on, e1, e2, en, phase):
