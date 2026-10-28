@@ -24,6 +24,42 @@ codes, NOT volts; the old WFI model-volts chart remains unchanged.
 Samples are source-owned QEMU virtual timestamps, not wall time or
 hardware measurements.
 
+## Offline throttle profile editor (2026-10-28)
+
+The *same* single-file `web/sitl_trace_viewer.html` now has a
+collapsible **Throttle Profile Editor** for the original
+`e62.native.dshot.v1` external FC scenario format. It does **not**
+replace or reconfigure the read-only live/offline telemetry interface
+and exposes no POST, Guest write, or QEMU Run button.
+
+- Four exact built-in scenario copies: Smoke, Gentle, Direct20 and Steps.
+  CI checks each embedded document against the source
+  `scenarios/e62-native-p0-*.json`.
+- Import a valid local Scenario JSON without depending on
+  `fetch()` or `/scenarios` HTTP routes. The existing localhost server
+  still serves only the static viewer and read-only `/events`.
+- Edit Hold and Ramp stages (0..1000 integer permille, duration and
+  discrete ramp update interval) and preview command versus virtual
+  time. Sparse representation shows actual discrete hold and jump
+  boundaries; very dense preview updates are visibly decimated and
+  do not imply analog/interpolated input or motor response.
+- Download the exact native scenario as a local JSON file.
+  **It must still be explicitly passed to the Runner via
+  `--scenario <path>` in a separate invocation.**
+- Export is disabled on any schema or semantic error, including
+  unrepresentable ramp increments, wrong Original ELF pin, non-neutral
+  start/end, unknown fields and >180s total duration.
+- `tests/test_throttle_profile_browser.js` executes the exact
+  inline browser code, tests user edit, JSON import/download and
+  bad-input rejection, and invokes the real Python
+  `tools/native_dshot_scenario.py` compiler on good and bad cases.
+
+Browser-Editor [CI #40677157913](https://github.com/cctsao1008/escape32-qemu/actions/runs/40677157913)
+**PASS**. This is a host-only artifact/contract test; it does not
+qualify actual motor dynamics, hardware, or live Guest stability.
+
+See [web/README.md](../../web/README.md) for user-facing steps.
+
 ## Live example from existing source-built Guest QEMU
 
 Run from repo root on Linux or WSL; the baseline is the pinned original
