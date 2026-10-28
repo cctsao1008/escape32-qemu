@@ -4476,7 +4476,7 @@ static void am13e_class_init(ObjectClass *oc, void *data)
     object_class_property_set_description(oc,
         "esc-sim-experimental-fc-direct20",
         "EXPERIMENT ONLY, NOT P0/P1: virtual-clock 1500ms neutral, "
-        "1000ms step to 20pct, 200ms neutral source, before Guest; "
+        "1500ms step to 20pct, 300ms neutral source, before Guest; "
         "default off. Intended for paired Guest startup tests.");
     object_class_property_add_bool(oc, "esc-sim-wwdt-bootrst",
                                    am13e_get_wwdt_bootrst,
