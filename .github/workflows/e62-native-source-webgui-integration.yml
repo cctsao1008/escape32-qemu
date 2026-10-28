@@ -1,0 +1,82 @@
+name: E62 No-WFI Source WebGUI Native Guest Integration Smoke
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/native_source_trace.py'
+      - 'tools/native_source_live_runner.py'
+      - 'web/sitl_trace_viewer.html'
+      - '.github/workflows/e62-native-source-webgui-integration.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-original-elf-native-source-webgui:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 24
+    steps:
+      - uses: actions/checkout@v4
+      - name: Source-built AM13E QEMU, pinned Original Guest
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            libglib2.0-dev libpixman-1-dev libfdt-dev pkg-config \
+            meson ninja-build binutils-arm-none-eabi
+          git submodule update --init --depth 1 qemu
+          echo '05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0  baseline/e62-g13b3/firmware/AM13E-rev17.3.elf' | sha256sum -c -
+          ./build.sh
+      - name: Real No-WFI original Guest source QEMU + localhost SSE monitor
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          python3 tools/sim_motor_cfg.py --sim-only-opt-in \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --motor-profile ecx87-kv147 \
+            --output artifacts/e62-g13b3-native-webgui-cfg.bin
+          python3 tools/native_source_live_runner.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --cfg-flash artifacts/e62-g13b3-native-webgui-cfg.bin \
+            --scenario scenarios/e62-native-p0-smoke.json \
+            --artifact artifacts/e62-source-gui-smoke.json \
+            --port 0 \
+            --wall-timeout-s 210 \
+            2>&1 | tee artifacts/e62-source-gui-smoke-runner.log
+      - name: Verify source-backed output, no fake Guest or motor pass
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          p=Path("artifacts/e62-source-gui-smoke.source-trace.json")
+          assert p.is_file(), "Missing real source-backed offline GUI trace"
+          trace=json.loads(p.read_text())
+          assert trace["format"]=="e62.sitl.native-source.v1"
+          assert trace["metadata"]["timebase"]=="QEMU_CLOCK_VIRTUAL"
+          assert trace["metadata"]["no_guest_memory_writes"] is True
+          assert len(trace["samples"])>=300, "Native QEMU did not produce sustained source events"
+          assert trace["summary"]["last_seq"]>len(trace["samples"])
+          assert any(x["cap1_count"]>0 for x in trace["samples"])
+          assert any(x["timg12_count"]>0 for x in trace["samples"])
+          assert all(x["pwm_six_pad_mask"] is None or
+                     0<=x["pwm_six_pad_mask"]<=63 for x in trace["samples"])
+          assert all("pwm_duties" not in x and
+                     "bemf_phase_v" not in x for x in trace["samples"])
+          assert trace["native_result"]["not_a_strict_p1_motor_pass"] is True
+          print("E62_REAL_GUEST_NO_WFI_WEBGUI_SOURCE_SMOKE_PASS",len(trace["samples"]))
+          PY
+          grep -F 'E62_NATIVE_SOURCE_DASHBOARD_READ_ONLY_PASS' artifacts/e62-source-gui-smoke-runner.log
+      - name: Preserve source evidence for offline interactive WebGUI (even on FAIL)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-native-no-wfi-source-webgui
+          path: artifacts/e62-source-gui-smoke*
+          if-no-files-found: warn
+          retention-days: 21
