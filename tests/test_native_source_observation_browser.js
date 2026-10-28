@@ -71,7 +71,8 @@ const events=[
  {seq:2,t_ns:110000000,kind:"DSHOT",data:[0,0,0,0,0,0]},
  {seq:3,t_ns:111000000,kind:"CAP1",data:[0,0,0,0,0,0]},
  {seq:4,t_ns:112000000,kind:"TIMG12",data:[0,0,0,0,0,0]},
- {seq:5,t_ns:113000000,kind:"PWM_PAIR",data:[0,0,0,0,0,0]}
+ {seq:5,t_ns:113000000,kind:"PWM_PAIR",data:[0,0,0,0,0,0]},
+ {seq:6,t_ns:114000000,kind:"SWITCH_FOCUS",data:[24,1,15,3000,100,75]}
 ];
 const source={format:meta.format,scope:"SIM_ONLY_NATIVE_NO_WFI_SOURCE_ONLY",
  metadata:meta,samples,events,capture_state:"SOURCE_LOG_COMPLETE"};
@@ -88,6 +89,8 @@ assert.equal($("live-status").textContent,"SSE CONNECTED · LIVE SOURCE");
 assert.match($("source-gap").textContent,/933 older sample packets not retained/);
 assert.doesNotMatch($("source-gap").textContent,/QEMU source-event loss$/);
 assert.equal($("source-focus-neutral").disabled,false);
+assert.match($("source-focused-switch-count").textContent,/1 actual mask\/gate changes/);
+assert.equal($("source-focused-switch").width,1200);
 assert.match($("source-pwm-coverage").textContent,/NO FRESH SWITCH MASK/);
 $("source-bemf-scale").value="center";js("sourceRedraw()");
 assert.match($("source-bemf-range").textContent,/center · NOT volts/);
