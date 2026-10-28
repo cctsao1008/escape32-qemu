@@ -7,6 +7,44 @@ The single-file [SITL Workbench](sitl_trace_viewer.html) supports two **distinct
 | Original WFI Trace | `e62.sitl.native-wfi.v1` | WFI-sampled six PWM carrier **duties**, RPM, model-volts BEMF, phase currents and Guest sector events |
 | Original No-WFI Native Source | `e62.sitl.native-source.v1` | Source-owned DShot, sparse actual six-pad PWM **mask**, simulated signed RPM, currents, torque, BEMF **ADC codes**, CAP1/TIMG12 |
 
+## Throttle Profile Editor (offline native DShot600 scenario JSON)
+
+Expand **Throttle Profile Editor** near the top of the existing single-file
+`sitl_trace_viewer.html`. This works under `file://` without a Python
+web server, without running QEMU, and while the read-only trace viewer
+remains independent.
+
+1. Select a built-in `Smoke`, `Gentle`, `Direct20`, or `Steps`
+   preset; these are exact copies of `scenarios/e62-native-p0-*.json`.
+   Alternatively, use **Import native Scenario JSON** for a file you
+   already have, including other valid `e62.native.dshot.v1` tests.
+2. Edit scenario name or any `Hold`/`Ramp` stage, remove stages, or
+   add a stage before the terminal neutral stage.
+3. Review the **commanded throttle (%) versus virtual time (s)** preview.
+   The display shows bounded discrete command steps, **not actual motor
+   speed or physical DShot pin edges**. For very dense ramps the preview
+   decimates samples for drawing; the exported JSON retains the exact
+   original timing and update interval.
+4. **Export Scenario JSON** becomes enabled only when the current draft
+   passes the native scenario schema contract. Save the downloaded JSON
+   and pass its path to the existing native runner, e.g.
+   `--scenario scenarios/my-throttle-profile.json`. Exporting does not
+   start QEMU or alter an existing Guest.
+
+**Validation constraints:** Original Rel17.3 ELF SHA256 pinned;
+`protocol=DSHOT600`; 1,000,000 ns between transmitted frames;
+`guest_ready_gating=false`; 2–16 stages, each lasting 10–120,000 ms;
+0–1,000 integer permille (100=10%); first/last stages neutral;
+exactly divisible ramp update and integer-permille increments; ramp
+start must equal previous stage end; max total 180,000 ms. Invalid
+fields disable export. Scenario JSON imports are limited to 256 KiB.
+
+These checks mirror `tools/native_dshot_scenario.py`; CI checks each
+built-in against the repository and validates exported JSON with the
+real Python compiler. **Throttle Profiles are files, not interactive
+ESC commands.** This editor does not alter the existing No-WFI
+QEMU, firmware, motor plant, or P0/P1 acceptance criteria.
+
 ## Open an existing offline trace
 
 1. Obtain a real `*.source-trace.json` artifact (for example from [No-WFI QEMU source CI](https://github.com/cctsao1008/escape32-qemu/actions/runs/40669622679)).
