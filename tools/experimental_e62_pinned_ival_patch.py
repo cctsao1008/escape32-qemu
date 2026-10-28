@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""E62 EXPERIMENT ONLY: two-instruction clone of pinned Original Rel17.3 ELF.
+"""E62 EXPERIMENT ONLY: two-instruction 3000us clone of pinned Original Rel17.3 ELF.
 
 Byte-exact Control is the published original Guest. Candidate changes
-ONLY two Thumb-2 MOVW startup initializations 10000us -> 4000us.
+ONLY two Thumb-2 MOVW startup initializations 10000us -> 3000us.
 The timeout/reset MOVW #10000 at PC 0x6488 remains byte identical.
 This is an experimental *clone*, never called Original Rel17.3, and is
 NOT firmware signing, flash safety or physical ESC qualification.
@@ -20,9 +20,9 @@ PINNED_SHA = "05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0"
 # Thumb-2 MOVW: verified independently using clang arm-none-eabi
 # with cortex-m33 assembly; GNU objdump source map in CI #40726733552.
 SITES = (
-    (0x69E4, bytes.fromhex("42f21076"), bytes.fromhex("40f6a076"),
+    (0x69E4, bytes.fromhex("42f21076"), bytes.fromhex("40f6b836"),
      "src/main.c:1027 ival after sine exit"),
-    (0x6A6A, bytes.fromhex("42f21074"), bytes.fromhex("40f6a074"),
+    (0x6A6A, bytes.fromhex("42f21074"), bytes.fromhex("40f6b834"),
      "src/main.c:1146 ival on six-step first start"),
 )
 PRESERVED_RESET = (0x6488, bytes.fromhex("42f21073"))
@@ -90,7 +90,7 @@ def patch_ival(original):
         changed_offsets=sorted(observed),
         changed_instructions=len(SITES),
         startup_filter_before_us=10000,
-        startup_filter_after_us=4000,
+        startup_filter_after_us=3000,
         unchanged_timeout_reset=True,
         unchanged_p0_p1_acceptance=True,
         no_board_gate_oc_or_guest_memory_modification=True,
