@@ -988,19 +988,29 @@ function profilePoints(doc){
     const a=s.kind==="hold"?s.permille:s.from_permille;
     const b=s.kind==="hold"?a:s.to_permille;
     max=Math.max(max,a,b);
+    // At a new stage boundary, a duplicate virtual time indicates
+    // an abrupt FC command step, not analog/interpolated throttle.
     points.push([t,a]);
     if(s.kind==="ramp"){
       const updates=s.duration_ms/s.update_ms;
       const stride=Math.max(1,Math.ceil(updates/350));
+      let previous=a;
       for(let k=stride;k<updates;k+=stride){
         const offset=k*s.update_ms;
-        const v=a+(b-a)*offset/s.duration_ms;
-        // Exactly representable integer values already checked.
-        points.push([t+offset,v]);
+        const value=a+(b-a)*offset/s.duration_ms;
+        // Horizontal hold until the actual discrete update boundary,
+        // then a vertical command step. For >350 updates/stage this is
+        // a bounded DECIMATED drawing, not proof of each 1kHz frame.
+        points.push([t+offset,previous]);
+        points.push([t+offset,value]);
+        previous=value;
       }
+      points.push([t+s.duration_ms,previous]);
+      points.push([t+s.duration_ms,b]);
+    }else{
+      points.push([t+s.duration_ms,a]);
     }
     t+=s.duration_ms;
-    points.push([t,b]);
   }
   return {points,total:t,max};
 }
