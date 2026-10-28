@@ -65,8 +65,9 @@ def evaluate(off1, off2, on, e1, e2, en, phase):
         for meta, events in (off1, off2):
             validate_meta(meta, False)
             assert not any(x["kind"] in FOCUS for x in events), "OFF emitted focus"
-        assert off1[0]["differential_rr_mode"] == "record"
+        assert off1[0]["differential_rr_mode"] == "replay"
         assert off2[0]["differential_rr_mode"] == "replay"
+        result["rr_controls_both_replay"] = True
         assert (off1[0]["differential_rr_file_sha256"] ==
                 off2[0]["differential_rr_file_sha256"]), "QEMU RR recording mutated"
         assert (off1[0]["scenario_sha256"] ==
@@ -134,11 +135,25 @@ def main():
             return meta, events
         def energy(label):
             return json.loads((base / f"e62-focus-{label}.energy.json").read_text())
-        result = evaluate(bundle("off"), bundle("off-repeat"),
-                          bundle("on") if a.phase == "differential" else None,
+        seed = json.loads((base / "e62-focus-seed.json").read_text())
+        validate_meta(seed, False)
+        if seed["differential_rr_mode"] != "record":
+            raise ValueError("Expected independent source recording seed")
+        off_a = bundle("off")
+        off_b = bundle("off-repeat")
+        on = bundle("on") if a.phase == "differential" else None
+        for meta, _ in (off_a, off_b, on) if on is not None else (off_a, off_b):
+            if (meta["differential_rr_file_sha256"] !=
+                    seed["differential_rr_file_sha256"]):
+                raise ValueError("Replay source SHA differs from recording seed")
+            if meta["scenario_sha256"] != seed["scenario_sha256"]:
+                raise ValueError("Replay scenario differs from recording seed")
+        result = evaluate(off_a, off_b, on,
                           energy("off"), energy("off-repeat"),
                           energy("on") if a.phase == "differential" else None,
                           a.phase)
+        result["rr_seed_record_sha256"] = seed["differential_rr_file_sha256"]
+        result["seed_is_comparison_control"] = False
     except (ValueError, KeyError, OSError, TypeError) as exc:
         result["reason"] = type(exc).__name__ + ": " + str(exc)
     a.output.parent.mkdir(parents=True, exist_ok=True)

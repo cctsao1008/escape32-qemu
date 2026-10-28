@@ -10,7 +10,7 @@ def event(seq, ns, kind="DSHOT", data=None):
     return {"seq": seq, "vns": ns, "kind": kind,
             "data": list(data if data is not None else (seq-1,0,0,0,0,0))}
 
-def meta(focus=None, rr="record"):
+def meta(focus=None, rr="replay"):
     return {"original_elf_sha256": ELF, "host_guest_register_writes": False,
             "used_guest_wfi_or_gdb": False, "source_focus_guest_or_motor_control": False,
             "motor_mode": "QEMU_VIRTUAL_CLOCK_NATIVE_ECX87_KV147_SIM_ONLY",
@@ -69,6 +69,14 @@ class SourceFocusDifferentialTests(unittest.TestCase):
                         energy(),energy(),energy(focus=True),"differential")
         self.assertEqual(result["classification"],"PASS_STRICT_SOURCE_FOCUS_DIFFERENTIAL")
         self.assertFalse(result["motor_p1_stability_qualified"])
+    def test_replay_sha_mismatch_is_invalid(self):
+        other=meta()
+        other["differential_rr_file_sha256"]="c"*64
+        result=evaluate((meta(),BASE),(other,BASE),None,
+                        energy(),energy(),None,"baseline")
+        self.assertEqual(result["classification"],"FAIL_INVALID_DIFFERENTIAL_EVIDENCE")
+        self.assertEqual(result["observer_non_intrusiveness"],"NOT_ESTABLISHED")
+
     def test_ab_rejects_focus_limit(self):
         focus=[event(i+4,2_795_000_000+i*1000,"SWITCH_FOCUS",
                      [4,1,15,1,1,1]) for i in range(12)]
