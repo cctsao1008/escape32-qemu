@@ -48,10 +48,10 @@ button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visi
 <span id="live-status" class="badge">OFFLINE FILE</span>
 <label id="live-follow" hidden><input id="follow-live" type="checkbox" checked> Follow live</label>
 <span id="loss-warning" class="danger"></span>
-<span id="status" class="sub">Choose an actual native trace exported by --sitl-trace-output.</span>
-</div><p class="sub">Six PWM traces show <b>measured carrier-average duty at WFI checkpoints</b>, not individual PWM pin transitions.
-Motor RPM, phase current and BEMF are <b>uncalibrated host-model predictions</b>.
-Event timestamps are source-owned ECAP/TIMG12 captures from native sector evidence.</p></div>
+<span id="status" class="sub">Load a verified WFI or No-WFI native trace, or connect to localhost-only read-only SSE.</span>
+</div>
+<p class="sub" id="wfi-semantics" hidden>WFI mode only: six PWM traces are carrier-average duty <b>sampled at WFI checkpoints</b>, not individual pin transitions. Rotor, phase currents and BEMF volts are uncalibrated SIM_ONLY model outputs; Guest events are WFI observations.</p>
+<p class="sub" id="native-semantics" hidden>No-WFI mode only: source-owned DShot commands, signed modeled RPM/current/torque, <b>BEMF 12-bit ADC codes (NOT volts)</b> and sparse six-pad SWITCH mask. No WFI checkpoints, complete PWM carrier recording or motor stability qualification.</p></div>
 
 <details id="throttle-editor" class="panel">
 <summary class="profile-summary">Throttle Profile Editor <span class="sub">DSHOT600 · existing native Scenario JSON · Offline only</span></summary>
@@ -86,6 +86,8 @@ Event timestamps are source-owned ECAP/TIMG12 captures from native sector eviden
 <strong>No-WFI Native Source Events</strong>
 <span class="badge" id="source-state">OFFLINE SOURCE</span>
 <span class="sub" id="source-gap"></span>
+<button id="source-focus-neutral" type="button" disabled>Inspect DShot → 0 (+35 ms)</button>
+<button id="source-full-run" type="button">Full available trace</button>
 <label>Zoom <input type="range" id="source-zoom" min="1" max="30" value="1"></label>
 <label>Pan <input type="range" id="source-pan" min="0" max="1000" value="0"></label>
 <label id="source-follow-label" hidden><input type="checkbox" id="source-follow" checked> Follow live</label>
@@ -107,9 +109,17 @@ NOT carrier duty or a reconstructed switching waveform. Missing/stale PWM is lef
 <div class="panel"><h2>SIM_ONLY Mechanical Rotor RPM</h2><canvas id="source-rpm" width="1200" height="205"></canvas></div>
 <div class="panel"><h2>Model Phase Currents (A)</h2><canvas id="source-current" width="1200" height="205"></canvas></div>
 <div class="panel"><h2>Model Electromagnetic Torque (Nm)</h2><canvas id="source-torque" width="1200" height="205"></canvas></div>
-<div class="panel"><h2>Source BEMF Frontend ADC Codes (12-bit, NOT volts)</h2><canvas id="source-bemf" width="1200" height="205"></canvas></div>
-<div class="panel"><h2>Last observed six-pad MCPWM mask (sparse, NOT PWM waveform)</h2><canvas id="source-pwm" width="1200" height="205"></canvas></div>
+<div class="panel"><div class="top"><h2>Source BEMF Frontend ADC Codes (12-bit, NOT volts)</h2>
+<label>Y-axis <select id="source-bemf-scale"><option value="center">Centered around 2048 (default)</option><option value="auto">Auto-scale visible samples</option><option value="full">Full 0–4095 ADC range</option></select></label>
+<span class="sub" id="source-bemf-range"></span></div>
+<canvas id="source-bemf" width="1200" height="205"></canvas></div>
+<div class="panel"><h2>Last observed six-pad MCPWM mask (sparse, NOT PWM waveform)</h2>
+<p class="sub" id="source-pwm-coverage">SWITCH source provenance not yet loaded</p>
+<canvas id="source-pwm" width="1200" height="205"></canvas></div>
 <div class="panel"><h2>Actual CAP1 / TIMG12 / DShot / PWM Pair events</h2><canvas id="source-events" width="1200" height="125"></canvas></div>
+</div>
+<div class="panel"><h2>Observed Dynamics Within Selected Virtual Window</h2>
+<p class="sub" id="source-focus-evidence">Source evidence pending. Neutral return does not establish active braking or Coast behavior.</p>
 </div>
 <div class="panel"><h2>Native Source Cursor</h2><div class="sub" id="source-detail">No source samples yet</div></div>
 <div class="panel"><h2>Original QEMU Event Journal (last 200 entries; source sequence preserved)</h2>
@@ -160,6 +170,7 @@ const SCOPE="SIM_ONLY_UNCALIBRATED_OPEN_STAR_MODEL";
 const FORMAT="e62.sitl.native-wfi.v1";
 const SOURCE_FORMAT="e62.sitl.native-source.v1";
 let sourceTrace=null, sourceMode=false, sourceCursor=null, sourceLiveLost=0, sourceRendering=false;
+let sourceSseDropped=0, sourceFocusRange=null;
 const isLocalLive=location.protocol==="http:" &&
   ["127.0.0.1","localhost"].includes(location.hostname);
 let liveMeta=null, liveLost=0, renderPending=false, liveFinished=false;
@@ -350,8 +361,11 @@ function eventsList(){
 }
 function load(d){
   if(d?.format===SOURCE_FORMAT)return sourceLoad(d);
-  sourceMode=false;sourceTrace=null;$("source-dashboard").hidden=true;
   validate(d);
+  sourceMode=false;sourceTrace=null;sourceFocusRange=null;
+  $("source-dashboard").hidden=true;
+  $("wfi-semantics").hidden=false;
+  $("native-semantics").hidden=true;
   trace=d;cursor=null;
   $("scope").textContent=(isLocalLive&&!offlineFileSelected?"LIVE ":"ACTUAL ")+
     "NATIVE WFI · SIM_ONLY";
@@ -391,9 +405,11 @@ $("file").addEventListener("change",async event=>{
     if(file.size>50*1024*1024)throw Error("Trace exceeds 50 MiB safety limit");
     load(JSON.parse(await file.text()));
   }catch(err){
-    trace=null;sourceTrace=null;sourceMode=false;
+    trace=null;sourceTrace=null;sourceMode=false;sourceFocusRange=null;
     $("dashboard").hidden=true;
     $("source-dashboard").hidden=true;
+    $("wfi-semantics").hidden=true;
+    $("native-semantics").hidden=true;
     $("scope").textContent="TRACE REJECTED";
     $("status").textContent=String(err.message||err);
   }
@@ -525,8 +541,8 @@ function connectLive(){
   channel.addEventListener("gap",event=>{
     const missing=JSON.parse(event.data).missing_packets;
     if(sourceMode){
-      sourceLiveLost+=missing;
-      $("source-gap").textContent="SSE DATA GAP: "+sourceLiveLost+" frames missing, NOT interpolated";
+      sourceSseDropped+=missing;
+      sourceShowRetention();
       $("source-state").textContent="DATA GAP";
       return;
     }
@@ -584,6 +600,7 @@ function validateSource(doc){
   }
 }
 function sourceWindow(){
+  if(sourceFocusRange)return sourceFocusRange;
   const a=sourceTrace.samples,first=a[0].t_ns,last=a[a.length-1].t_ns;
   const duration=Math.max(1,last-first);
   const span=Math.max(1,duration/Number($("source-zoom").value));
@@ -689,6 +706,92 @@ function sourceEventsList(){
   }
   body.replaceChildren(fragment);
 }
+function sourceNeutralReturn(){
+  if(!sourceTrace)return null;
+  let prior=null,neutral=null;
+  for(const e of sourceTrace.events){
+    if(e.kind!=="DSHOT")continue;
+    const raw=e.data[2];
+    if(prior!==null&&prior>0&&raw===0)neutral=e.t_ns;
+    prior=raw;
+  }
+  if(neutral===null)return null;
+  const ss=sourceTrace.samples;
+  return ss[0].t_ns<=neutral && ss[ss.length-1].t_ns>=neutral+10_000_000?
+    neutral:null;
+}
+function sourceShowRetention(){
+  const messages=[];
+  if(sourceLiveLost>0)messages.push(
+    "LIVE RING HISTORY LIMIT: "+sourceLiveLost+
+    " older sample packets not retained (not QEMU source-event loss)");
+  if(sourceSseDropped>0)messages.push(
+    "SSE STREAM GAP: "+sourceSseDropped+
+    " packets unavailable to browser (not interpolated)");
+  $("source-gap").textContent=messages.join(" · ");
+}
+function sourceVisibleAdcRange(){
+  const mode=$("source-bemf-scale").value;
+  if(mode==="full")return [0,4095];
+  const [from,to]=sourceWindow();
+  let lo=Infinity,hi=-Infinity;
+  for(const s of sourceTrace.samples){
+    if(s.t_ns<from||s.t_ns>to)continue;
+    for(const v of s.bemf_codes){lo=Math.min(lo,v);hi=Math.max(hi,v);}
+  }
+  if(lo===Infinity)return [0,4095];
+  const pad=Math.max(4,Math.ceil((hi-lo)*0.1));
+  if(mode==="center"){
+    const half=Math.max(8,Math.ceil(Math.max(Math.abs(lo-2048),Math.abs(hi-2048))*1.1));
+    return [Math.max(0,2048-half),Math.min(4095,2048+half)];
+  }
+  return [Math.max(0,lo-pad),Math.min(4095,hi+pad)];
+}
+function sourceWindowEvidence(){
+  const [from,to]=sourceWindow();
+  const observations=sourceTrace.samples.filter(s=>s.t_ns>=from&&s.t_ns<=to);
+  if(!observations.length){
+    $("source-focus-evidence").textContent=
+      "No source ROTOR/BEMF observations in selected window; cannot infer motor behavior.";
+    return;
+  }
+  let minTorque=Infinity,maxCurrent=0,minRpm=Infinity,maxRpm=-Infinity;
+  let freshMask=0;
+  for(const s of observations){
+    minTorque=Math.min(minTorque,s.torque_nm);
+    maxCurrent=Math.max(maxCurrent,...s.phase_currents_a.map(Math.abs));
+    minRpm=Math.min(minRpm,s.motor_rpm);
+    maxRpm=Math.max(maxRpm,s.motor_rpm);
+    if(s.pwm_six_pad_mask!==null)freshMask++;
+  }
+  const events=sourceTrace.events.filter(e=>e.t_ns>=from&&e.t_ns<=to);
+  const count=kind=>events.filter(e=>e.kind===kind).length;
+  const first=observations[0],last=observations[observations.length-1];
+  $("source-focus-evidence").textContent=
+    "SOURCE OBSERVATIONS ONLY · "+observations.length+" samples · "+
+    "RPM first→last "+first.motor_rpm.toFixed(2)+"→"+last.motor_rpm.toFixed(2)+
+    " (range "+minRpm.toFixed(2)+".."+maxRpm.toFixed(2)+") · "+
+    "minimum torque "+minTorque.toFixed(4)+" Nm · "+
+    "max sampled |phase I| "+maxCurrent.toFixed(3)+" A · "+
+    "DSHOT "+count("DSHOT")+", CAP1 "+count("CAP1")+
+    ", TIMG12 "+count("TIMG12")+", PWM_PAIR "+count("PWM_PAIR")+
+    " · fresh SWITCH mask samples "+freshMask+"/"+observations.length+
+    ". No complete carrier edges in this window: braking/coast mechanism NOT DETERMINED.";
+}
+function sourcePwmCoverage(){
+  const ss=sourceTrace.samples;
+  const valid=ss.filter(s=>s.pwm_six_pad_mask!==null);
+  const [from,to]=sourceWindow();
+  const inView=valid.filter(s=>s.t_ns>=from&&s.t_ns<=to);
+  $("source-pwm-coverage").textContent=valid.length?
+    "SOURCE MASK COVERAGE: "+valid.length+"/"+ss.length+" sampled snapshots, "+
+    ms(valid[0].t_ns)+"–"+ms(valid[valid.length-1].t_ns)+
+    " ms virtual; "+inView.length+" fresh snapshots in selected view. "+
+    (inView.length?"Dots are sparse masks, never carrier edges.":
+      "NO FRESH SWITCH MASK IN VIEW — QEMU SWITCH edge logging is bounded to the initial 120 ms after first switching; no inference of PWM OFF.") :
+    "NO FRESH SWITCH MASK IN AVAILABLE BUFFER — initial bounded 120 ms SWITCH source window may lie before retained live history. "+
+    "PWM_PAIR events alone are NOT carrier edges or proof of PWM OFF.";
+}
 function sourceRedraw(){
   if(!sourceTrace?.samples.length)return;
   const ss=sourceTrace.samples,last=ss[ss.length-1];
@@ -697,7 +800,11 @@ function sourceRedraw(){
   $("source-cap").textContent=String(last.cap1_count);
   $("source-timer").textContent=String(last.timg12_count);
   const [from,to]=sourceWindow();
-  $("source-window").textContent=ms(from)+" – "+ms(to)+" ms virtual";
+  $("source-window").textContent=ms(from)+" – "+ms(to)+" ms virtual"+
+    (sourceFocusRange?" · observed DShot neutral-return focus":"");
+  $("source-focus-neutral").disabled=sourceNeutralReturn()===null;
+  sourceWindowEvidence();
+  sourcePwmCoverage();
   sourcePlot("source-dshot",[{name:"Recent FC DShot",color:"#8ec4ff",
     get:s=>(s.last_dshot_ns!==null &&
       s.t_ns-s.last_dshot_ns<=2_000_000)?s.last_dshot_raw:null}]);
@@ -708,10 +815,13 @@ function sourceRedraw(){
   sourcePlot("source-torque",[
     {name:"Torque Nm",color:"#f38b90",get:s=>s.torque_nm}
   ]);
+  const adcRange=sourceVisibleAdcRange();
+  $("source-bemf-range").textContent="ADC codes "+adcRange[0]+"–"+adcRange[1]+
+    " · "+$("source-bemf-scale").value+" · NOT volts";
   sourcePlot("source-bemf",[0,1,2].map(i=>({
     name:["ADC-U","ADC-V","ADC-W"][i],
     color:COLORS[i*2],get:s=>s.bemf_codes[i]
-  })),[0,4095]);
+  })),adcRange);
   sourcePlot("source-pwm",[0,1,2,3,4,5].map(i=>({
     name:["UH","UL","VH","VL","WH","WL"][i],color:COLORS[i],
     get:s=>s.pwm_six_pad_mask===null?null:
@@ -735,28 +845,34 @@ function sourceSchedule(){
 }
 function sourceLoad(doc){
   validateSource(doc);
-  sourceMode=true;sourceTrace=doc;trace=null;sourceCursor=null;
+  sourceMode=true;sourceTrace=doc;trace=null;sourceCursor=null;sourceFocusRange=null;
   $("dashboard").hidden=true;$("source-dashboard").hidden=false;
+  $("wfi-semantics").hidden=true;$("native-semantics").hidden=false;
   $("source-sha").textContent=doc.metadata.elf_sha256;
-  $("scope").textContent="NATIVE NO-WFI · SIM_ONLY";
+  const sourceIsLive=isLocalLive&&!offlineFileSelected;
+  $("scope").textContent=(sourceIsLive?"LIVE ":"OFFLINE ")+"NATIVE NO-WFI · SIM_ONLY";
   $("status").textContent="QEMU source events; no WFI checkpoints or hardware measurements";
+  setLiveStatus(sourceIsLive?"SSE CONNECTED · LIVE SOURCE":"OFFLINE SOURCE TRACE");
   $("source-zoom").value="1";$("source-pan").value="0";
   $("source-state").textContent=doc.capture_state??"SOURCE TRACE";
   sourceRedraw();
 }
 function sourceSnapshot(message){
-  sourceMode=true;sourceLiveLost=message.truncated?
-    Math.max(0,message.oldest_seq-1):0;
+  sourceMode=true;sourceFocusRange=null;
+  sourceLiveLost=message.truncated?Math.max(0,message.oldest_seq-1):0;
+  sourceSseDropped=0;
   liveMeta=message.metadata;
   $("dashboard").hidden=true;
   $("source-dashboard").hidden=false;
   $("source-follow-label").hidden=false;
   $("scope").textContent="LIVE NATIVE NO-WFI · SIM_ONLY";
+  $("wfi-semantics").hidden=true;$("native-semantics").hidden=false;
   $("source-sha").textContent=liveMeta.elf_sha256;
-  $("source-gap").textContent=sourceLiveLost?
-    "RING TRUNCATED: "+sourceLiveLost+" packets missing; open full offline JSON":"";
+  sourceShowRetention();
+  setLiveStatus("SSE CONNECTED · WAITING FOR SOURCE");
   if(!message.packets.length){
     sourceTrace=null;
+    $("wfi-semantics").hidden=true;$("native-semantics").hidden=false;
     $("source-state").textContent="WAITING FOR SOURCE EVENTS";
     $("status").textContent="No native ROTOR/BEMF_FRONTEND samples yet";
   }else{
@@ -767,6 +883,7 @@ function sourceSnapshot(message){
       capture_state:"LIVE_NATIVE_SOURCE_RUNNING"
     });
     $("source-state").textContent="LIVE SOURCE";
+    setLiveStatus("SSE CONNECTED · LIVE SOURCE");
   }
   if(message.complete)sourceComplete(message.complete);
 }
@@ -795,18 +912,19 @@ function sourcePacket(packet){
     if(sourceTrace.samples.length>2048){
       sourceTrace.samples.splice(0,sourceTrace.samples.length-2048);
       sourceLiveLost++;
-      $("source-gap").textContent=
-        "LIVE RING BOUNDED: older source samples unavailable; use offline JSON";
+      sourceShowRetention();
     }
     if(sourceTrace.events.length>5000){
       sourceTrace.events.splice(0,sourceTrace.events.length-5000);
     }
     $("source-state").textContent="LIVE SOURCE";
   }
+  setLiveStatus("SSE CONNECTED · LIVE SOURCE");
   sourceSchedule();
 }
 function sourceComplete(complete){
   liveFinished=true;
+  setLiveStatus(complete.error_type?"NATIVE SOURCE ERROR":"NATIVE PROBE FINISHED");
   $("source-state").textContent=complete.error_type?
     "SOURCE PROBE / ADAPTER ERROR":"NATIVE SOURCE PROBE ENDED";
   $("status").textContent=
@@ -814,8 +932,27 @@ function sourceComplete(complete){
     (complete.error_type?" · "+complete.error_type:"");
 }
 for(const name of ["source-zoom","source-pan"]){
-  $(name).addEventListener("input",()=>{if(sourceTrace)sourceRedraw()});
+  $(name).addEventListener("input",()=>{
+    sourceFocusRange=null;
+    if(sourceTrace)sourceRedraw();
+  });
 }
+$("source-bemf-scale").addEventListener("change",()=>{if(sourceTrace)sourceRedraw()});
+$("source-focus-neutral").addEventListener("click",()=>{
+  if(!sourceTrace)return;
+  const t=sourceNeutralReturn();
+  if(t===null)return;
+  sourceFocusRange=[t,t+35_000_000];
+  $("source-follow").checked=false;
+  sourceCursor=t;
+  sourceRedraw();
+});
+$("source-full-run").addEventListener("click",()=>{
+  sourceFocusRange=null;
+  $("source-zoom").value="1";$("source-pan").value="0";
+  $("source-follow").checked=false;
+  if(sourceTrace)sourceRedraw();
+});
 
 
 /* Native External FC Throttle Profile editor — wholly offline.
