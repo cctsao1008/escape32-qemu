@@ -8,6 +8,8 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from tools.native_source_energy_audit import parse_source
 from tools.native_source_trace import ELF
 
