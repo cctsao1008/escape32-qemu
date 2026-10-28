@@ -11,6 +11,7 @@ on:
       - 'tools/native_source_focus_differential.py'
       - 'tests/test_native_source_focus_differential.py'
       - 'tools/native_preboot_fc_source.py'
+      - 'tests/test_native_preboot_fc_source.py'
       - 'machine/am13e_autonomous_sitl.inc'
       - 'tools/native_p0_strict.py'
       - '.github/workflows/e62-neutral-source-focus-differential.yml'
@@ -30,6 +31,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 tests/test_native_source_focus_differential.py
+          python3 tests/test_native_preboot_fc_source.py
       - name: Source build pinned native QEMU AM13E machine
         shell: bash
         run: |
