@@ -1,0 +1,89 @@
+name: E62 EXPERIMENT Pinned Original vs 2-MOVW 4ms Startup BEMF (NOT P1)
+
+on:
+  push:
+    branches: [experiment/e62-early-bemf-direct20]
+    paths:
+      - 'tools/experimental_e62_pinned_ival_patch.py'
+      - 'tools/experimental_e62_bemf_ab.py'
+      - '.github/workflows/e62-experiment-pinned-ival-ab.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  direct20-original-versus-two-movw-clone:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify immutable Original Rel17.3, standalone script syntax and physical source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          echo '05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0  baseline/e62-g13b3/firmware/AM13E-rev17.3.elf' | sha256sum -c -
+          python3 -m py_compile tools/experimental_e62_pinned_ival_patch.py tools/experimental_e62_bemf_ab.py
+          git submodule update --init --depth 1 qemu
+      - name: Pin source build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            libglib2.0-dev libpixman-1-dev libfdt-dev pkg-config meson ninja-build
+          ./build.sh
+      - name: Create candidate ONLY by two anchored Thumb MOVW substitutions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/experimental_e62_pinned_ival_patch.py \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --output-elf artifacts/e62-exp-two-movw-candidate-NOT-ORIGINAL.elf \
+            --proof-json artifacts/e62-exp-two-movw-patch-proof.json
+          # Positive control is EXACT original, not a separate compilation.
+          cp baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+             artifacts/e62-exp-unchanged-original-control.elf
+          echo '05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0  artifacts/e62-exp-unchanged-original-control.elf' | sha256sum -c -
+          python3 tools/sim_motor_cfg.py --sim-only-opt-in \
+            --motor-profile ecx87-kv147 \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --output artifacts/e62-g13b3-pinned-ival-cfg.bin
+      - name: Control, byte-exact Original Rel17.3 Guest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/experimental_e62_bemf_ab.py run \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf artifacts/e62-exp-unchanged-original-control.elf \
+            --cfg-flash artifacts/e62-g13b3-pinned-ival-cfg.bin \
+            --label control \
+            --artifact artifacts/e62-exp-control.json --wall-timeout-s 250
+      - name: Candidate, only two MOVW startup initializations differ
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/experimental_e62_bemf_ab.py run \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf artifacts/e62-exp-two-movw-candidate-NOT-ORIGINAL.elf \
+            --cfg-flash artifacts/e62-g13b3-pinned-ival-cfg.bin \
+            --label candidate \
+            --artifact artifacts/e62-exp-candidate.json --wall-timeout-s 250
+      - name: Compare first CAP1/TIMG12 and 50ms rotor source (fail closed)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/experimental_e62_bemf_ab.py compare \
+            --control artifacts/e62-exp-control.json \
+            --candidate artifacts/e62-exp-candidate.json \
+            --output artifacts/e62-exp-pinned-ival-AB-result.json
+          echo "EXPERIMENT_ONLY_NOT_REL17_ORIGINAL_GUEST_P1_PASS"
+      - name: Preserve immutable baseline/candidate diff and ALL source on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-direct20-original-vs-exact-two-movw-candidate-NOT-P1
+          path: artifacts/e62-exp-*
+          retention-days: 14
+          if-no-files-found: warn
