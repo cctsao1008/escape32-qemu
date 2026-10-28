@@ -45,12 +45,12 @@ jobs:
         run: |
           set -euo pipefail
           git clone --quiet https://github.com/cctsao1008/ESCape32.git .build/experimental-escape32
-          git -C .build/experimental-escape32 checkout --quiet --detach c72de116723721b0cd90f40158e56129aa9005ce
-          test "$(git -C .build/experimental-escape32 rev-parse HEAD)" = "c72de116723721b0cd90f40158e56129aa9005ce"
+          git -C .build/experimental-escape32 checkout --quiet --detach ebcdc80e31e7675ee857e2b986622612599d891c
+          test "$(git -C .build/experimental-escape32 rev-parse HEAD)" = "ebcdc80e31e7675ee857e2b986622612599d891c"
           git clone --quiet --depth 1 https://github.com/TexasInstruments/am13e2x_sdk.git /tmp/am13e-ti-sdk
           git -C /tmp/am13e-ti-sdk fetch --quiet --depth 1 origin b872469ceef18de5e39a1d3acb0821ec158b44c7
           git -C /tmp/am13e-ti-sdk checkout --quiet --detach b872469ceef18de5e39a1d3acb0821ec158b44c7
-          echo "EXPERIMENT_SOURCE_SHA=c72de116723721b0cd90f40158e56129aa9005ce"
+          echo "EXPERIMENT_SOURCE_SHA=ebcdc80e31e7675ee857e2b986622612599d891c"
       - name: Compile matched default and explicit early CAP1 firmware variants
         shell: bash
         run: |
