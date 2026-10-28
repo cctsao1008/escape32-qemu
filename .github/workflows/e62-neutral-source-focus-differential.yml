@@ -8,6 +8,7 @@ on:
       - 'machine/am13e_native_pwm_coupling.inc'
       - 'tests/e62_autonomous_native_motor_probe.py'
       - 'tools/native_source_energy_audit.py'
+      - 'tools/native_source_focus_differential.py'
       - 'tools/native_p0_strict.py'
       - '.github/workflows/e62-neutral-source-focus-differential.yml'
   workflow_dispatch:
@@ -147,6 +148,35 @@ jobs:
               "BASELINE_NONREPRODUCIBLE: cannot attribute OFF/ON differences "
               "to Observer before identical OFF/OFF source replay")
           PY
+      - name: Independent second Original Guest source observer OFF (A/A control)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tests/e62_autonomous_native_motor_probe.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --cfg-flash artifacts/e62-g13b3-focus-cfg.bin \
+            --scenario scenarios/e62-native-p0-smoke.json \
+            --artifact artifacts/e62-focus-off-repeat.json \
+            --wall-timeout-s 210 \
+            > artifacts/e62-focus-off-repeat-runner.log
+      - name: Audit both OFF energy ledgers independently
+        shell: bash
+        run: |
+          set -euo pipefail
+          for mode in off off-repeat; do
+            python3 tools/native_source_energy_audit.py \
+              --events artifacts/e62-focus-$mode.p0.events.log \
+              --output artifacts/e62-focus-$mode.energy.json \
+              > artifacts/e62-focus-$mode.energy.log
+          done
+      - name: FAIL CLOSED if OFF/OFF is not reproducible (no observer attribution)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/native_source_focus_differential.py \
+            --phase baseline \
+            --output artifacts/e62-focus-repeatability.json
       - name: Same Original Guest, source observer 2795–2840ms ON
         shell: bash
         run: |
@@ -158,79 +188,23 @@ jobs:
             --scenario scenarios/e62-native-p0-smoke.json \
             --artifact artifacts/e62-focus-on.json \
             --switch-focus-window-ms 2795:2840 \
-            --differential-sync-start \
-            --differential-rr-mode replay \
-            --differential-rr-file artifacts/e62-focus-icount-recording.rr.bin \
             --wall-timeout-s 210 \
             > artifacts/e62-focus-on-runner.log
-      - name: Strict original source ledger on both observations
+      - name: Strict original source ledger on ON observation
         shell: bash
         run: |
           set -euo pipefail
-          for mode in off on; do
-            python3 tools/native_source_energy_audit.py \
-              --events artifacts/e62-focus-$mode.p0.events.log \
-              --output artifacts/e62-focus-$mode.energy.json \
-              > artifacts/e62-focus-$mode.energy.log
-          done
-      - name: Fail closed if opt-in source logging changes Guest or motor dynamics
+          python3 tools/native_source_energy_audit.py \
+            --events artifacts/e62-focus-on.p0.events.log \
+            --output artifacts/e62-focus-on.energy.json \
+            > artifacts/e62-focus-on.energy.log
+      - name: FAIL CLOSED if focused observer changes original source or energy
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          import json
-          from pathlib import Path
-          from tools.native_source_energy_audit import parse_source
-          base=Path("artifacts")
-          off=json.loads((base/"e62-focus-off.json").read_text())
-          on=json.loads((base/"e62-focus-on.json").read_text())
-          assert off["original_elf_sha256"]==on["original_elf_sha256"]
-          assert off["host_guest_register_writes"] is False
-          assert on["host_guest_register_writes"] is False
-          assert off["differential_sync_start"] is True
-          assert off["differential_rr_mode"]=="record"
-          assert on["differential_rr_mode"]=="replay"
-          assert on["differential_sync_start"] is True
-          assert off["used_guest_wfi_or_gdb"] is False
-          assert on["used_guest_wfi_or_gdb"] is False
-          for field in ("configured_dshot_frames","motor_mode"):
-              assert off[field]==on[field],field
-          assert on["source_focus_window_ms"]=="2795:2840"
-          assert off["source_focus_window_ms"] is None
-          def read(name):
-              with (base/name).open() as f:
-                  return parse_source(f)
-          a=read("e62-focus-off.p0.events.log")
-          b=read("e62-focus-on.p0.events.log")
-          kinds={"SWITCH_FOCUS","SWITCH_FOCUS_LIMIT"}
-          assert not any(x["kind"] in kinds for x in a), "Opt-out emitted focus"
-          focus=[x for x in b if x["kind"]=="SWITCH_FOCUS"]
-          assert len(focus)>10, "No actual post-neutral focused switching source"
-          assert not any(x["kind"]=="SWITCH_FOCUS_LIMIT" for x in b), "Observer budget exhausted"
-          assert all(2_795_000_000<=x["vns"]<=2_840_000_000 for x in focus)
-          assert all(0<=x["data"][0]<=63 and x["data"][1] in (0,1) for x in focus)
-          # Compare before independent host teardown; never compare wall time.
-          limit=2_990_000_000
-          def normalized(events):
-              return [(x["vns"],x["kind"],tuple(x["data"])) for x in events
-                      if x["vns"]<=limit and x["kind"] not in kinds]
-          left,right=normalized(a),normalized(b)
-          first_diff=next(((i,x,y) for i,(x,y) in
-                           enumerate(zip(left,right)) if x!=y),None)
-          assert left==right, (
-              "FOCUS_OBSERVER_CHANGED_ORIGINAL_SOURCE_OR_VIRTUAL_TIME "
-              f"off={len(left)} on={len(right)} first_difference={first_diff}")
-          eo=json.loads((base/"e62-focus-off.energy.json").read_text())
-          en=json.loads((base/"e62-focus-on.energy.json").read_text())
-          assert eo["energy_delta_j"]==en["energy_delta_j"]
-          assert len(eo["focused_switching_source_events"])==0
-          assert len(en["focused_switching_source_events"])>10
-          assert not en["motor_p1_stability_qualified"]
-          assert en["late_full_switch_events"]==0, "P0 SWITCH gate was altered"
-          print("PASS_E62_SOURCE_FOCUS_NO_GUEST_MOTOR_ORIGINAL_EVENT_DIFFERENCE",
-                "focused_switch_records",len(focus),
-                "unmodified_original_source_events",len(left))
-          PY
+          python3 tools/native_source_focus_differential.py \
+            --phase differential \
+            --output artifacts/e62-focus-differential.json
       - name: Preserve complete off/on source logs and energy audit on failure
         if: always()
         uses: actions/upload-artifact@v4
