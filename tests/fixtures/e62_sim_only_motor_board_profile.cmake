@@ -1,6 +1,6 @@
 # E62 EXPERIMENT ONLY. DO NOT FLASH OR SHIP. NOT a reviewed ESC board.
-# The AM13E Reference board rightly compiles MOTOR_OUTPUT_CONFIGURED=0
-# unless a complete board electrical definition is EXPLICITLY supplied.
+# This E62 motor experiment REQUIRES AM13E_MOTOR_OUTPUT_CONFIGURED=1.
+# Motor-output-disabled builds fail rather than masquerading as a motor test.
 # This profile supplies values only for the QEMU SIM_ONLY gate/pad model.
 # OST3 comparator DAC thresholds are UNCALIBRATED raw code 2048; any
 # trace depending on this comparator outcome is NOT physical qualified.
@@ -10,6 +10,7 @@
 # Same exact definitions MUST be used for BOTH Guest A/B variants.
 # Never inject motor events or bypass the production Gate / Trip policy.
 set(AM13E_BOARD_BOARD_DEFINITIONS
+    AM13E_E62_REQUIRE_MOTOR_OUTPUT=1
     AM13E_MOTOR_GATE_ACTIVE_LEVEL=1
     AM13E_MOTOR_PAD_INVERT_MASK=0
     AM13E_MOTOR_OUTPUT_RED_TICKS=92
