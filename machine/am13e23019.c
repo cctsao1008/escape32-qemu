@@ -608,6 +608,7 @@ struct AM13EMachineState {
     bool esc_sim;
     bool esc_sim_nfault_asserted;
     bool esc_sim_wwdt_bootrst; /* opt-in full reset semantics */
+    bool esc_sim_differential_fc_smoke; /* opt-in preboot FC ONLY */
     bool wwdt_reset_pending; /* survives until machine reset callback */
     MemoryRegion factory_rom;
     char *factory_pll_file;
@@ -3926,6 +3927,11 @@ static void am13e_handoff_reset(void *opaque)
     }
     memset(s->pincm, 0, sizeof(s->pincm));
     s->iomux_unmodeled_reported = false;
+    /* Preboot external-FC source is diagnostic-only, not a P0/P1 waiver.
+     * Set its QEMU-clock epoch before any Guest instruction or QTest. */
+    if (s->esc_sim_differential_fc_smoke) {
+        am13e_auto_arm_differential_smoke(&s->auto_sitl);
+    }
 }
 
 static void am13e_init(MachineState *machine)
@@ -3942,6 +3948,13 @@ static void am13e_init(MachineState *machine)
     }
     if (!s->esc_sim && s->sim_rstcause_seed != 0U) {
         error_report("esc-sim-reset-cause requires esc-sim=on");
+        exit(EXIT_FAILURE);
+    }
+    if (s->esc_sim_differential_fc_smoke &&
+        (!s->esc_sim || !s->native_motor.enabled ||
+         s->esc_sim_wwdt_bootrst)) {
+        error_report("esc-sim-differential-fc-smoke requires esc-sim=on, "
+                     "esc-sim-native-motor=on and no WWDT BOOTRST");
         exit(EXIT_FAILURE);
     }
     memory_region_init_rom(&s->flash, NULL, "am13e-main-flash",
@@ -4364,6 +4377,16 @@ static void am13e_set_switch_focus_window(Object *obj,
     m->source_focus_end_ns = (int64_t)end_ms * INT64_C(1000000);
 }
 
+static bool am13e_get_differential_fc_smoke(Object *obj, Error **errp)
+{
+    return AM13E_MACHINE(obj)->esc_sim_differential_fc_smoke;
+}
+static void am13e_set_differential_fc_smoke(Object *obj,
+                                             bool enabled, Error **errp)
+{
+    AM13E_MACHINE(obj)->esc_sim_differential_fc_smoke = enabled;
+}
+
 static bool am13e_get_wwdt_bootrst(Object *obj, Error **errp)
 {
     return AM13E_MACHINE(obj)->esc_sim_wwdt_bootrst;
@@ -4419,6 +4442,13 @@ static void am13e_class_init(ObjectClass *oc, void *data)
         "Opt-in source-only 1..50ms six-pad AQ/DB switching focus, "
         "START:END integer QEMU virtual ms; default off. "
         "Does not drive the Guest, alter motor physics or waive P1.");
+    object_class_property_add_bool(oc, "esc-sim-differential-fc-smoke",
+                                   am13e_get_differential_fc_smoke,
+                                   am13e_set_differential_fc_smoke);
+    object_class_property_set_description(oc, "esc-sim-differential-fc-smoke",
+        "Diagnostic ONLY: prearm exact 1500/1000/300/200ms independent "
+        "flight-controller PA26 DShot scenario at virtual time +100ns "
+        "before Guest starts. Default off; no P0/P1 waiver.");
     object_class_property_add_bool(oc, "esc-sim-wwdt-bootrst",
                                    am13e_get_wwdt_bootrst,
                                    am13e_set_wwdt_bootrst);
