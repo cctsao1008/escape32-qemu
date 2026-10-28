@@ -26,15 +26,25 @@ and steps remain RED; do not waive or substitute slow ramp tests.
 | A03 | Clock/SysTick / NVIC and IRQ dispatch | No-WFI probe and source P0 tests #40557926125 | **PARTIAL**; not cycle-accurate silicon latency |
 | A04 | MCPWM source AQ/DB / six-pad chronological carrier outputs | First source PWM_PAIR and physical switch events from P0 strict #40557926125 | **VERIFIED_SIM_ONLY** for modelled events; not MOSFET switching or dead-time scope |
 | A05 | CMPSS0 rising/falling filter -> ECAP1 actual CAP1 and NVIC | Source CMP_FILTER/CAP1/CAP1_ACK in archived P1 #40557926101 | **VERIFIED_SIM_ONLY** for enabled route; actual analog frontend **HW_REQUIRED** |
-| A06 | Guest reads CAP1 timestamp, original ISR acknowledges | New `ECAP1_CAP1_READ` and existing `CAP1_ACK` source events; current real-trace evidence awaits rerun | **PENDING_RUNTIME_VERIFICATION**; ACK alone is not policy acceptance |
-| A07 | Guest writes TIMG12 PERIOD/START/STOP after CAP1 and exact virtual timer zero | New `T12_LOAD`, `T12_START`, `T12_STOP`; tool `native_porting_mmio_chain.py` | **PENDING_RUNTIME_VERIFICATION** until source-built fresh trace with new MMIO events |
-| A08 | TIMG12 ZERO -> Guest ACK -> next actual PWM pair | Existing source TIMG12/TIMG12_ACK/PWM_PAIR in P0 #40557926125; new timer arm provenance pending | **PARTIAL**: source order verified; direct arm-to-zero comparison pending |
+| A06 | Guest reads CAP1 timestamp, original ISR acknowledges | Source-built P0 #40631864428 + strict archived MMIO replay #40632866806 matched **824/824** real CAP1→Guest ACK→Guest CAP1 MMIO reads | **VERIFIED_SIM_ONLY_P0**; ACK/read do not establish Guest algorithm acceptance |
+| A07 | Guest writes TIMG12 PERIOD/START/STOP after CAP1 and exact virtual timer zero | Source-built P0 strict replay #40632866806 matched **824** Guest TIMG12 START→actual virtual ZERO, max absolute deadline error **2ns** | **VERIFIED_SIM_ONLY_P0** virtual register/timer contract; not silicon jitter |
+| A08 | TIMG12 ZERO -> Guest ACK -> next actual PWM pair | New P0 source #40631864428 and all-timer replay #40632866806; 824 TIMER ZERO and Guest ACK; existing strict P0 source causal chain gate PASS | **VERIFIED_SIM_ONLY_P0** for guest-programmed timer and causal order; not every P1 startup profile |
 | A09 | Source closed-loop, no host Guest writes/WFI/GDB/synthetic BEMF | P0 strict #40557926125 and independent motor run #40557926065 | **VERIFIED_SIM_ONLY** for P0, not all throttle profiles |
 | A10 | Safety: real nFAULT / OC / shoot-through / gate disable | Dedicated CI and source models are available, but no fresh integrated safety verdict here | **PARTIAL / HW_REQUIRED** |
 | A11 | ADC physical current/VBUS/NTC calibration and analog mapping | `docs/current/esc-functional-bemf-pwm-review.md` explicitly lists ADC SOC U/V/W mapping unverified | **NOT_VERIFIED / HW_REQUIRED** |
 | A12 | Physical MOSFET, ECX87 210KV, 47V, APC 24x12E load/propeller dynamics | Current SIM_ONLY plant is ECX87 147KV, 24V, no propeller | **HW_REQUIRED**, not an E62 porting acceptance gate |
 | A13 | Guest early BEMF acceptance policy | Pinned Original Rel17.3 `ival=10000`; `capture < ival/2` early rejection | **SOURCE_CODE_VERIFIED; RUN_DECISION_INFERRED** until direct Guest-internal acceptance evidence |
 | A14 | P1 accelerated startup stability | P1 #40557926101 smoke/gentle PASS, direct20/steps FAIL (337/223 reversals) | **TRACK_B_SIM_ONLY_FAIL_UNWAIVED** |
+
+
+## Verified original-Guest P0 register-timing ledger (2026-10-28)
+
+- Frozen P0 source run [#40631864428](https://github.com/cctsao1008/escape32-qemu/actions/runs/40631864428): **PASS_NATIVE_P0_STRICT** and archived original QEMU source-event file. Original unmodified ELF is pinned; QEMU built from this same machine source. No WFI/GDB host Guest-register writes or synthetic BEMF.
+- Read-only archived P0 full replay [#40632866806](https://github.com/cctsao1008/escape32-qemu/actions/runs/40632866806): **PASS_SOURCE_MMIO_P0_SIM_ONLY**, zero reported contract issues; **824/824** matched physical CAP1 + Guest IRQ ACK + actual CAP1 register read; **824/824** matched Guest TIMG12 START→actual QEMU-clock virtual TIMER ZERO; maximum absolute timer deadline residual **2ns**.
+- Source events include **825** `T12_LOAD` and `T12_START` but **824** TIMER ZERO within finite trace; the replay validates every *observed* ZERO, and does not treat an unfinished recording tail as a physical timeout. This is not evidence of an application-level accepted/rejected BEMF decision.
+- Every deadline uses actual Guest MMIO period, clock and epoch counter, rather than a host computed motor speed or inferred commutation delay. The 2ns bound is **virtual-time consistency only**, not real AM13E timer tolerance.
+- New pinned-trace replay lives at `tools/native_porting_mmio_p0.py`, guarded by `tests/test_native_porting_mmio_p0.py` and `.github/workflows/e62-porting-p0-mmio-source-replay.yml`. The source artifact remains available independently of each future source-only regression.
+- The high-speed P1 direct20/steps first-CAP1 acceptance question is **not** established by P0. P1 analysis `native_porting_mmio_chain.py` still needs its original failing-case trace and must retain the existing red P1 verdict.
 
 ## Exact provenance added without changing firmware/physics
 
@@ -57,8 +67,8 @@ acceptance; P1 startup reversals remain genuine SIM_ONLY FAIL.
 
 ## Execution and follow-through
 
-1. Run `.github/workflows/e62-porting-mmio-contract.yml` lightweight
-   source-contract tests on main.
+1. `.github/workflows/e62-porting-mmio-contract.yml` lightweight source
+   contract PASS [#40631902642](https://github.com/cctsao1008/escape32-qemu/actions/runs/40631902642).
 2. Source-built P0/P1 workflows rebuild QEMU from source after `machine/**`
    changes. `.github/workflows/e62-native-p1.yml` retains unchanged
    strict four-case suite and exports
@@ -67,5 +77,5 @@ acceptance; P1 startup reversals remain genuine SIM_ONLY FAIL.
 3. Inspect per-case CAP1 → ACK → Guest CAP1 read → timer load → start →
    actual zero → Guest ACK → physical PWM pair; compare actual MMIO
    timing with pinned Guest source code.
-4. Only upgrade A06–A08 from PENDING once actual fresh source-built
-   trace passes this contract. Any HW dependent claim remains open.
+4. A06–A08 are now **VERIFIED_SIM_ONLY_P0** on the 824-event real Guest
+   replay, not verified for P1/hardware. Any HW-dependent claim stays open.
