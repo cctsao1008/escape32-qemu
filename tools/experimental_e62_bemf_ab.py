@@ -155,6 +155,14 @@ def run(a):
         first_cap = first("CAP1")
         first_timg = first("TIMG12")
         rotor = [(t,d) for t,k,d in after if k=="ROTOR" and t<cutoff]
+        # The positive Direct20 stage is 1500ms; measuring only first
+        # 50ms can hide later reversal and misclassify an unstable motor.
+        # Original P1 strict logic is NOT altered by this experiment.
+        full_positive = [(t,d) for t,k,d in after
+                         if k=="ROTOR" and t<onset+1_500_000_000]
+        if len(full_positive)<1490:
+            raise ValueError("Missing full 1500ms rotor source")
+        full_reverse = [(t,d) for t,d in full_positive if d[0]<=-50000]
         first_reverse = next((t for t,d in rotor if d[0]<=-50000),None)
         first_neg_torque = next((t for t,d in rotor if d[5]<-100000),None)
         pairs = [(t,d[0],d[1]) for t,k,d in after if k=="PWM_PAIR" and t<cutoff]
@@ -179,6 +187,12 @@ def run(a):
             first_change_pair_ms=ms(pairs[1][0]) if len(pairs)>1 else None,
             first_reverse_50rpm_ms=ms(first_reverse),
             first_negative_torque_ms=ms(first_neg_torque),
+            full_positive_window_ms=1500,
+            full_positive_rotor_samples=len(full_positive),
+            full_positive_min_rpm=min(d[0] for t,d in full_positive)/1000,
+            full_positive_max_rpm=max(d[0] for t,d in full_positive)/1000,
+            full_positive_reverse_50rpm_samples=len(full_reverse),
+            full_positive_first_reverse_ms=ms(full_reverse[0][0]) if full_reverse else None,
             first_50ms_pwm_pairs=len(pairs),
             first_50ms_rotor_samples=len(rotor),
             first_50ms_min_rpm=min(d[0] for t,d in rotor)/1000,
@@ -226,10 +240,15 @@ def compare(a):
             candidate_early_timg12=(trial is not None and
                                    baseline is not None and trial<baseline),
             candidate_no_early_reverse=candidate["first_reverse_50rpm_ms"] is None,
+            candidate_full_positive_reverse_samples=candidate["full_positive_reverse_50rpm_samples"],
+            candidate_no_full_positive_reverse=(
+                candidate["full_positive_reverse_50rpm_samples"]==0),
+            control_full_positive_reverse_samples=control["full_positive_reverse_50rpm_samples"],
         )
         result["classification"]=("EARLY_SOURCE_IMPROVED_NOT_P1"
               if result["candidate_early_timg12"] and
-                 result["candidate_no_early_reverse"]
+                 result["candidate_no_early_reverse"] and
+                 result["candidate_no_full_positive_reverse"]
               else "FAIL_EXPERIMENT_NOT_FIXED")
     except (KeyError,TypeError,ValueError) as e:
         result.update(classification="FAIL_EXPERIMENT_INVALID_EVIDENCE",
