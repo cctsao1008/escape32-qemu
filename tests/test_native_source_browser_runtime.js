@@ -35,6 +35,7 @@ class Element {
     this.dataset={};
     this.children=[];
     this.value=/zoom/.test(name)?"1":/pan/.test(name)?"0":"";
+    this.checked=(name==="source-follow"); // actual HTML default checked
     this.width=1200;
     this.height=name.endsWith("events")?125:205;
     this.ctx=new FakeContext();
