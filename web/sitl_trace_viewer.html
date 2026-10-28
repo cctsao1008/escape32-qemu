@@ -852,7 +852,8 @@ function sourceLoad(doc){
   const sourceIsLive=isLocalLive&&!offlineFileSelected;
   $("scope").textContent=(sourceIsLive?"LIVE ":"OFFLINE ")+"NATIVE NO-WFI · SIM_ONLY";
   $("status").textContent="QEMU source events; no WFI checkpoints or hardware measurements";
-  setLiveStatus(sourceIsLive?"SSE CONNECTED · LIVE SOURCE":"OFFLINE SOURCE TRACE");
+  setLiveStatus(sourceIsLive?"SSE CONNECTED · LIVE SOURCE":
+    offlineFileSelected?"OFFLINE FILE · LIVE DETACHED":"OFFLINE SOURCE TRACE");
   $("source-zoom").value="1";$("source-pan").value="0";
   $("source-state").textContent=doc.capture_state??"SOURCE TRACE";
   sourceRedraw();
