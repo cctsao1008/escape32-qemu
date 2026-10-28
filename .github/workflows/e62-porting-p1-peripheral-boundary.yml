@@ -1,0 +1,69 @@
+name: E62 P1 FW Porting Peripheral Boundary Regression (SIM_ONLY)
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/e62-porting-p1-peripheral-boundary.yml'
+      - 'machine/**'
+      - 'tests/g6_timers.py'
+      - 'tests/g7_dma.py'
+      - 'tests/g10_feedback.py'
+      - 'tests/g13b2_trip_safety.py'
+      - 'tests/g5_wwdt.py'
+      - 'tests/g5_wwdt_bootrst.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  exact-guest-elf-qemu-peripheral-negative:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+      - name: Exact original ELF and source-built QEMU
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            libglib2.0-dev libpixman-1-dev libfdt-dev pkg-config \
+            meson ninja-build binutils-arm-none-eabi
+          git submodule update --init --depth 1 qemu
+          echo '05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0  baseline/e62-g13b3/firmware/AM13E-rev17.3.elf' | sha256sum -c -
+          ./build.sh
+      - name: Strict QEMU peripheral reset, timer, DMA, capture and fault negative contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          qemu=.build/qemu-src/build/qemu-system-arm
+          elf=baseline/e62-g13b3/firmware/AM13E-rev17.3.elf
+          python3 tests/g6_timers.py --qemu "$qemu" --elf "$elf" \
+            2>&1 | tee artifacts/e62-p1-g6-timers.log
+          python3 tests/g7_dma.py --qemu "$qemu" --elf "$elf" \
+            2>&1 | tee artifacts/e62-p1-g7-dma.log
+          python3 tests/g10_feedback.py --qemu "$qemu" --elf "$elf" \
+            2>&1 | tee artifacts/e62-p1-g10-ecap-cmpss.log
+          python3 tests/g13b2_trip_safety.py --qemu "$qemu" --elf "$elf" \
+            2>&1 | tee artifacts/e62-p1-trip-safety.log
+          python3 tests/g5_wwdt.py --qemu "$qemu" --elf "$elf" \
+            2>&1 | tee artifacts/e62-p1-g5-wwdt.log
+          python3 tests/g5_wwdt_bootrst.py --qemu "$qemu" --elf "$elf" \
+            2>&1 | tee artifacts/e62-p1-g5-bootrst.log
+          grep -F 'PASS_G6_GPTIMER_VIRTUAL_TIME_COUNTER_AND_IRQ' artifacts/e62-p1-g6-timers.log
+          grep -F 'PASS_G7_DMA0_CH2_FAULT_AND_NO_FAKE_CAPTURE' artifacts/e62-p1-g7-dma.log
+          grep -F 'PASS_G10_STRICT_MODE_NO_FEEDBACK_SHIM' artifacts/e62-p1-g10-ecap-cmpss.log
+          grep -F 'PASS_G13B2B_QTEST_SIM_ONLY_PHYSICAL_TRIP_MODEL_NOT_NATIVE_ARMING' artifacts/e62-p1-trip-safety.log
+          grep -F 'PASS_G5_EXPIRED_EVENT_NOT_HARDWARE_BOOTRST' artifacts/e62-p1-g5-wwdt.log
+          grep -F 'PASS_G14_WWDT_BOOTRST_0x0E_GATE_SAFE_OFF_AND_PWM_FREEZE' artifacts/e62-p1-g5-bootrst.log
+          echo PASS_E62_P1_PERIPHERAL_BOUNDARY_MODEL_ONLY_NO_MOTOR_CLAIM
+      - name: Preserve unedited individual negative test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-p1-peripheral-boundary-native-qtest
+          path: artifacts/e62-p1-*.log
+          retention-days: 21
+          if-no-files-found: warn
