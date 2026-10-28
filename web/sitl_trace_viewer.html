@@ -540,9 +540,12 @@ function sourcePlot(id,channels,range=null){
   ctx.clearRect(0,0,W,H);
   const [t0,t1]=sourceWindow(),l=66,r=15,t=17,b=28,cw=W-l-r,ch=H-t-b;
   const sample=sourceTrace.samples.filter(s=>s.t_ns>=t0&&s.t_ns<=t1);
-  const values=sample.flatMap(s=>channels.map(c=>c.get(s))).filter(finite);
-  let lo=range?range[0]:(values.length?Math.min(...values):0);
-  let hi=range?range[1]:(values.length?Math.max(...values):1);
+  let lo=range?range[0]:Infinity,hi=range?range[1]:-Infinity;
+  if(!range)for(const s of sample)for(const c of channels){
+    const v=c.get(s);
+    if(finite(v)){lo=Math.min(lo,v);hi=Math.max(hi,v);}
+  }
+  if(lo===Infinity){lo=0;hi=1;}
   if(hi-lo<1e-6){lo-=1;hi+=1}
   const X=ns=>l+(ns-t0)/(t1-t0)*cw,Y=v=>t+(hi-v)/(hi-lo)*ch;
   ctx.font="12px system-ui";ctx.lineWidth=1;
