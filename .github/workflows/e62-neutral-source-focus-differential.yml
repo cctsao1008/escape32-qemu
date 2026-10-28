@@ -129,7 +129,7 @@ jobs:
               "off_repeat_first_dshot_ns":next((x["vns"] for x in b if x["kind"]=="DSHOT"),None),
               "no_timestamp_alignment_or_tolerance":True}
           (base/"e62-focus-off-repeatability.json").write_text(
-              json.dumps(report,indent=2,sort_keys=True)+"\\n")
+              json.dumps(report,indent=2,sort_keys=True)+chr(10))
           print("E62_OFF_OFF_REPRODUCIBILITY "+json.dumps(report,sort_keys=True))
           assert reproducible, (
               "BASELINE_NONREPRODUCIBLE: cannot attribute OFF/ON differences "
