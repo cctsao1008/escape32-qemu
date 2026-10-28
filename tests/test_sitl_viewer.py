@@ -56,6 +56,28 @@ class TestOfflineViewer(unittest.TestCase):
         self.assertIn('plot("counters"', html)
         self.assertIn("measured WFI points, NEVER synthetic PWM edges", html)
 
+    def test_no_wfi_mode_is_separate_and_never_fakes_wfi_duty(self):
+        html=VIEWER.read_text(encoding="utf-8")
+        p=ScriptParser();p.feed(html)
+        self.assertEqual(len(p.inline),1)
+        self.assertIn('const SOURCE_FORMAT="e62.sitl.native-source.v1"',html)
+        self.assertIn('function validateSource(doc)',html)
+        self.assertIn('function sourceSnapshot(message)',html)
+        self.assertIn('function sourcePacket(packet)',html)
+        self.assertIn('function sourceComplete(complete)',html)
+        self.assertIn('function sourceLoad(doc)',html)
+        self.assertIn('if(d?.format===SOURCE_FORMAT)return sourceLoad(d)',html)
+        self.assertIn('if(sourceMode){sourcePacket(packet);return;}',html)
+        self.assertIn('BEMF is <strong>12-bit comparator frontend ADC code, NOT voltage</strong>',html)
+        self.assertIn('NOT carrier duty or a reconstructed switching waveform',html)
+        self.assertIn('source-pwm',html)
+        self.assertIn('source-cap',html)
+        self.assertIn('source-timer',html)
+        self.assertIn('source-gap',html)
+        self.assertIn('strict Motor P1 Gate NOT EXECUTED',html)
+        self.assertIn('sourceTrace.samples.splice(0,sourceTrace.samples.length-2048)',html)
+        self.assertNotIn('new WebSocket(',html)
+
     @unittest.skipUnless(shutil.which("node"), "Node syntax checker unavailable")
     def test_inline_browser_javascript_is_syntactically_valid(self):
         parser = ScriptParser()
