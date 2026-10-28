@@ -33,8 +33,8 @@ and steps remain RED; do not waive or substitute slow ramp tests.
 | A10 | Safety: real nFAULT / OC / shoot-through / gate disable | Dedicated CI and source models are available, but no fresh integrated safety verdict here | **PARTIAL / HW_REQUIRED** |
 | A11 | ADC physical current/VBUS/NTC calibration and analog mapping | `docs/current/esc-functional-bemf-pwm-review.md` explicitly lists ADC SOC U/V/W mapping unverified | **NOT_VERIFIED / HW_REQUIRED** |
 | A12 | Physical MOSFET, ECX87 210KV, 47V, APC 24x12E load/propeller dynamics | Current SIM_ONLY plant is ECX87 147KV, 24V, no propeller | **HW_REQUIRED**, not an E62 porting acceptance gate |
-| A13 | Guest early BEMF acceptance policy | Pinned Original Rel17.3 `ival=10000`; `capture < ival/2` early rejection | **SOURCE_CODE_VERIFIED; RUN_DECISION_INFERRED** until direct Guest-internal acceptance evidence |
-| A14 | P1 accelerated startup stability | P1 #40557926101 smoke/gentle PASS, direct20/steps FAIL (337/223 reversals) | **TRACK_B_SIM_ONLY_FAIL_UNWAIVED** |
+| A13 | Guest early BEMF acceptance policy | Original Rel17.3 `ival=10000`; `capture < ival/2`. New P1 MMIO trace #40631864594: first CAP1 ACK+READ has **no timer rearm** in direct20/steps; second CAP1 ACK+READ **does** rearm TIMG12 | **SOURCE_CODE_VERIFIED; MMIO_DECISION_CONSEQUENCE_OBSERVED**; internal return/branch not directly observed |
+| A14 | P1 accelerated startup stability | New source-built P1 #40631864594: smoke/gentle PASS (0/0), direct20/steps FAIL (337/223 reversals), with valid MMIO timing and unchanged `STARTUP_SIGNIFICANT_DIRECTION_REVERSAL` | **TRACK_B_SIM_ONLY_FAIL_UNWAIVED** |
 
 
 ## Verified original-Guest P0 register-timing ledger (2026-10-28)
@@ -45,6 +45,24 @@ and steps remain RED; do not waive or substitute slow ramp tests.
 - Every deadline uses actual Guest MMIO period, clock and epoch counter, rather than a host computed motor speed or inferred commutation delay. The 2ns bound is **virtual-time consistency only**, not real AM13E timer tolerance.
 - New pinned-trace replay lives at `tools/native_porting_mmio_p0.py`, guarded by `tests/test_native_porting_mmio_p0.py` and `.github/workflows/e62-porting-p0-mmio-source-replay.yml`. The source artifact remains available independently of each future source-only regression.
 - The high-speed P1 direct20/steps first-CAP1 acceptance question is **not** established by P0. P1 analysis `native_porting_mmio_chain.py` still needs its original failing-case trace and must retain the existing red P1 verdict.
+
+
+## Verified Original Guest P1 MMIO evidence (2026-10-28)
+
+Fresh source-built [strict P1 #40631864594](https://github.com/cctsao1008/escape32-qemu/actions/runs/40631864594) retains its **unchanged** four-case motor verdict: smoke PASS, gentle PASS, direct20 FAIL, steps FAIL. The **separate porting MMIO diagnostic** analyzed all four actual original Guest traces and returned `PASS_MMIO_SOURCE_CONTRACT` for each, with **0ns** difference between first real TIMG12 one-shot Guest START virtual deadline and QEMU TIMER ZERO.
+
+| P1 scenario | Guest CAP1 ACK + READ | TIMER re-armed after first CAP1? | Second CAP1 action | MMIO Contract | P1 Motor Dynamics |
+|---|---|---|---|---|---|
+| smoke | Yes | Yes | n/a | **PASS** | **PASS**, 0 reversals |
+| gentle | Yes | Yes | n/a | **PASS** | **PASS**, 0 reversals |
+| direct20 | Yes | **No** | Second ACK + READ followed by TIMER START | **PASS** | **FAIL**, 337 reversals |
+| steps | Yes | **No** | Second ACK + READ followed by TIMER START | **PASS** | **FAIL**, 223 reversals |
+
+The first direct20 CAP1 occurred **2.3488ms** after first powered PWM pair, second at **10.8968ms**, and first actual TIMG12 ZERO at **13.4590ms**. The steps first CAP1 occurred **2.39184ms** after first physical powered pair; second **10.94084ms**. These are read-only source timestamps in one QEMU virtual clock.
+
+This demonstrates that the first fast CAP1 was *physically captured, IRQ-acknowledged and read by the Original Guest*, but did **not** cause a Guest TIMG12 timer re-arm before the next capture; the second did. This is consistent with the Original Rel17 `ival/2` minimum capture interval. The MMIO trace does **not** directly expose Guest-local `capture_us`, `ival`, or `bemf_zero_cross_delay()` return value; do not label an internal reject branch as directly observed.
+
+[Read-only P1 MMIO source replay #40633019199](https://github.com/cctsao1008/escape32-qemu/actions/runs/40633019199) **PASS**. The workflow explicitly requires the unchanged P1 motor **FAIL** for direct20 and steps while validating separate Peripheral Porting MMIO **PASS**. The archived red P1 result remains red.
 
 ## Exact provenance added without changing firmware/physics
 
@@ -77,5 +95,7 @@ acceptance; P1 startup reversals remain genuine SIM_ONLY FAIL.
 3. Inspect per-case CAP1 → ACK → Guest CAP1 read → timer load → start →
    actual zero → Guest ACK → physical PWM pair; compare actual MMIO
    timing with pinned Guest source code.
-4. A06–A08 are now **VERIFIED_SIM_ONLY_P0** on the 824-event real Guest
-   replay, not verified for P1/hardware. Any HW-dependent claim stays open.
+4. A06–A08 are **VERIFIED_SIM_ONLY_P0** by 824 matched MMIO read/timer
+   events; strict read-only four-case **P1 MMIO** replay also PASS, but its
+   separate motor-dynamics acceptance **remains RED** on direct20/steps.
+   All HW-dependent claims remain open.
