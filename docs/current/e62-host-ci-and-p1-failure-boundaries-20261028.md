@@ -87,6 +87,19 @@ Existing read-only source analyzers emitted:
 | ramp20_100ms | FAIL | 238 | Significant direction reversal |
 | ramp20_500ms | PASS | 0 | Smooth-ramp comparator; not a product acceptance waiver |
 
+**Independent artifact cross-check:** In the original CI
+`e62-native-p1-scenario-suite` artifact, the full
+`e62-p1-script-direct20.p1.json` records exactly **3300/3300**
+DShot source frames, `dshot_first_mismatch=null`, 0 invalid BEMF
+samples and 0 invalid overcurrent samples *under this SIM_ONLY
+sampling contract*. It also records 169 original Guest closed-loop
+PWM pairs, 253 CAP1 W1C acknowledgments, and 168 TIMG12 W1C
+acknowledgments. Thus the failed directional startup was **not
+classified by those audits as missing DShot frames or a missing
+CAP1/TIMG12 source path**. None of these counters validates electrical
+analog accuracy, independent QEMU determinism or physical motor
+stability.
+
 **Time origin:** The `direct20` times are relative to first
 power-pair/rotor source observations reported by
 `tools/native_p1_pre_feedback_geometry.py`, not an absolute QEMU
