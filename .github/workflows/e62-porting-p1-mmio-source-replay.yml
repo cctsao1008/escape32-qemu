@@ -1,0 +1,66 @@
+name: E62 FW Porting Original Guest P1 MMIO Evidence Replay (P1 FAIL stays FAIL)
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/native_porting_mmio_chain.py'
+      - 'tests/test_native_porting_mmio_chain.py'
+      - '.github/workflows/e62-porting-p1-mmio-source-replay.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  source-p1-four-case-mmio-observer-replay:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download unchanged Original Guest P1 source artifact including RED outcomes
+        uses: actions/download-artifact@v4
+        with:
+          name: e62-native-p1-scenario-suite
+          run-id: 40631864594
+          github-token: ${{ github.token }}
+          path: artifacts
+      - name: Strict source-porting diagnostic only, cannot waive frozen P1 FAIL
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tests/test_native_porting_mmio_chain.py
+          for c in smoke gentle direct20 steps; do
+            test -s "artifacts/e62-p1-scripted/e62-p1-script-$c.p0.events.log"
+            test -s "artifacts/e62-p1-scripted/e62-p1-script-$c.p1.json"
+          done
+          python3 tools/native_porting_mmio_chain.py \
+            --input-root artifacts/e62-p1-scripted \
+            --output artifacts/e62-porting-p1-mmio-replay.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path("artifacts/e62-porting-p1-mmio-replay.json").read_text())
+          assert r["status"]=="PASS_MMIO_DIAGNOSTIC_NOT_P1_ACCEPTANCE"
+          by={x["case"]:x for x in r["cases"]}
+          assert set(by)=={"smoke","gentle","direct20","steps"}
+          for case in ("smoke","gentle"):
+              assert by[case]["p1_unchanged_qualified"] is True
+              assert by[case]["first_cap1_did_not_observably_arm_timer"] is False
+          for case in ("direct20","steps"):
+              assert by[case]["p1_unchanged_qualified"] is False
+              assert by[case]["first_cap1_did_not_observably_arm_timer"] is True
+              assert by[case]["first_then_second_capture_arm_pattern_observed"] is True
+          assert all(x["timg12_virtual_deadline_error_ns"] is not None
+                     and abs(x["timg12_virtual_deadline_error_ns"])<=20
+                     for x in by.values())
+          print("E62_FW_PORTING_MMIO_REPLAY_PASS_WITH_UNWAIVED_P1_RED")
+          PY
+      - name: Publish independent real Original Guest P1 MMIO evidence on both outcomes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-porting-p1-original-guest-mmio-readonly-replay
+          path: artifacts/e62-porting-p1-mmio-replay.json
+          if-no-files-found: warn
+          retention-days: 21
