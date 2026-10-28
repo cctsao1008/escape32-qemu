@@ -9,6 +9,7 @@ on:
       - 'tests/e62_autonomous_native_motor_probe.py'
       - 'tools/native_source_energy_audit.py'
       - 'tools/native_source_focus_differential.py'
+      - 'tests/test_native_source_focus_differential.py'
       - 'tools/native_p0_strict.py'
       - '.github/workflows/e62-neutral-source-focus-differential.yml'
   workflow_dispatch:
@@ -22,6 +23,11 @@ jobs:
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
+      - name: Run fail-closed comparator unit tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tests/test_native_source_focus_differential.py
       - name: Source build pinned native QEMU AM13E machine
         shell: bash
         run: |
