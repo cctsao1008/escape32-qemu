@@ -204,6 +204,12 @@ def run(a):
             full_positive_max_rpm=max(d[0] for t,d in full_positive)/1000,
             full_positive_reverse_50rpm_samples=len(full_reverse),
             full_positive_first_reverse_ms=ms(full_reverse[0][0]) if full_reverse else None,
+            full_positive_pwm_pairs=sum(1 for t,k,d in after if k=="PWM_PAIR"
+                                        and t<active_end),
+            full_positive_cap1_acks=sum(1 for t,k,d in after if k=="CAP1_ACK"
+                                       and t<active_end),
+            full_positive_timg12_acks=sum(1 for t,k,d in after if k=="TIMG12_ACK"
+                                         and t<active_end),
             first_50ms_pwm_pairs=len(pairs),
             first_50ms_rotor_samples=len(rotor),
             first_50ms_min_rpm=min(d[0] for t,d in rotor)/1000,
@@ -258,11 +264,19 @@ def compare(a):
             candidate_no_full_positive_reverse=(
                 candidate["full_positive_reverse_50rpm_samples"]==0),
             control_full_positive_reverse_samples=control["full_positive_reverse_50rpm_samples"],
+            candidate_real_closed_loop_source=all(
+                candidate[f]>=12 for f in (
+                    "full_positive_pwm_pairs","full_positive_cap1_acks",
+                    "full_positive_timg12_acks")),
+            candidate_sustained_physical_motion=(
+                candidate["full_positive_max_rpm"]>=50),
         )
         result["classification"]=("EARLY_SOURCE_IMPROVED_NOT_P1"
               if result["candidate_early_timg12"] and
                  result["candidate_no_early_reverse"] and
-                 result["candidate_no_full_positive_reverse"]
+                 result["candidate_no_full_positive_reverse"] and
+                 result["candidate_real_closed_loop_source"] and
+                 result["candidate_sustained_physical_motion"]
               else "FAIL_EXPERIMENT_NOT_FIXED")
     except (KeyError,TypeError,ValueError) as e:
         result.update(classification="FAIL_EXPERIMENT_INVALID_EVIDENCE",
