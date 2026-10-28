@@ -53,7 +53,8 @@ jobs:
             --motor-profile ecx87-kv147 \
             --output artifacts/e62-g13b3-focus-cfg.bin
       # Diagnostic-only preboot machine FC clock schedule.
-      # NO QTest, QMP, -S, RR, host-paced input, or original Guest writes.
+      # NO QTest/QMP/-S/host-paced input. QEMU icount RR records only
+      # nondeterministic scheduling; never Guest memory or physics state.
       # No claim about P0/P1: only the two source artifacts qualify this
       # replay's reproducibility before the observer ON comparison.
       - name: Diagnostic preboot original Guest / FC OFF-A
@@ -66,6 +67,8 @@ jobs:
             --cfg-flash artifacts/e62-g13b3-focus-cfg.bin \
             --scenario scenarios/e62-native-p0-smoke.json \
             --artifact artifacts/e62-focus-off.json \
+            --rr-mode record \
+            --rr-file artifacts/e62-focus-icount.rr.bin \
             --wall-timeout-s 210 \
             > artifacts/e62-focus-off-runner.log
       - name: Diagnostic preboot original Guest / FC OFF-B (A/A)
@@ -78,6 +81,8 @@ jobs:
             --cfg-flash artifacts/e62-g13b3-focus-cfg.bin \
             --scenario scenarios/e62-native-p0-smoke.json \
             --artifact artifacts/e62-focus-off-repeat.json \
+            --rr-mode replay \
+            --rr-file artifacts/e62-focus-icount.rr.bin \
             --wall-timeout-s 210 \
             > artifacts/e62-focus-off-repeat-runner.log
       - name: Strict original source energy on OFF-A and OFF-B
@@ -107,6 +112,8 @@ jobs:
             --cfg-flash artifacts/e62-g13b3-focus-cfg.bin \
             --scenario scenarios/e62-native-p0-smoke.json \
             --artifact artifacts/e62-focus-on.json \
+            --rr-mode replay \
+            --rr-file artifacts/e62-focus-icount.rr.bin \
             --switch-focus-window-ms 2795:2840 \
             --wall-timeout-s 210 \
             > artifacts/e62-focus-on-runner.log
