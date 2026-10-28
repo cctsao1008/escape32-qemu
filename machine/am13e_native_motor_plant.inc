@@ -60,6 +60,12 @@ static void am13e_native_motor_reset(AM13ENativeMotor *m)
     m->p0_first_switch_ns = -1;
     m->p0_last_logged_mask = UINT32_MAX;
     m->p0_last_logged_gate = false;
+    /* Reset source log counters, not the explicitly configured machine
+     * observation window; never touch physical state/solver/Guest. */
+    m->source_focus_record_count = 0U;
+    m->source_focus_last_logged_mask = UINT32_MAX;
+    m->source_focus_last_logged_gate = false;
+    m->source_focus_budget_hit = false;
 }
 static void am13e_native_motor_fault(AM13ENativeMotor *m, uint32_t code)
 {
