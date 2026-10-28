@@ -1,0 +1,47 @@
+name: E62 FW Porting Archived Original Guest P0 MMIO Source Replay
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/native_porting_mmio_p0.py'
+      - 'tools/native_porting_mmio_chain.py'
+      - 'tests/test_native_porting_mmio_p0.py'
+      - '.github/workflows/e62-porting-p0-mmio-source-replay.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  archived-original-guest-p0-mmio-provenance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download source-build original Guest P0 evidence, not a synthetic motor fixture
+        uses: actions/download-artifact@v4
+        with:
+          name: e62-p0-source-physics-strict
+          run-id: 40631864428
+          github-token: ${{ github.token }}
+          path: artifacts
+      - name: Pinned Guest CAP1 read/ack and every exact virtual TIMG12 one-shot replay
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tests/test_native_porting_mmio_p0.py
+          test -s artifacts/e62-native-autonomous-smoke.p0.events.log
+          test -s artifacts/e62-native-autonomous-smoke.json
+          python3 tools/native_porting_mmio_p0.py \
+            --events artifacts/e62-native-autonomous-smoke.p0.events.log \
+            --evidence artifacts/e62-native-autonomous-smoke.json \
+            --output artifacts/e62-porting-p0-mmio-verification.json
+      - name: Preserve forensic verdict on success or failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-porting-p0-guest-mmio-source-verification
+          path: artifacts/e62-porting-p0-mmio-verification.json
+          retention-days: 21
+          if-no-files-found: warn
