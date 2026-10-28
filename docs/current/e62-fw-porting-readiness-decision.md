@@ -9,7 +9,7 @@ to pass every rotor-acceleration scenario before evaluating the verified
 MCU peripheral implementation. Also do **not** declare an application
 functional PASS based on source-MMIO consistency alone.
 
-The independently produced [five-source readiness evidence packet](https://github.com/cctsao1008/escape32-qemu/actions/runs/40633589369)
+The independently produced [six-source readiness evidence packet](https://github.com/cctsao1008/escape32-qemu/actions/runs/40640025195)
 was generated **successfully** from actual archived, source-built Guest
 runs and is available as the GitHub Actions artifact
 e62-fw-porting-readiness-frozen-original-guest-packet
@@ -33,7 +33,9 @@ Explicit fields remain:
 | A: Original Guest no-WFI and P0 | [P0 #40631864428](https://github.com/cctsao1008/escape32-qemu/actions/runs/40631864428); [P0 MMIO replay #40632866806](https://github.com/cctsao1008/escape32-qemu/actions/runs/40632866806) | PASS for source QEMU timing and original Guest control of modeled peripheral |
 | A: Original CAP1/ECAP/TIMG12 | 824 original CAP1 + Guest ACK + read; 824 Guest TIMG12 START→ZERO, max error 2ns QEMU virtual | PASS for hardware-model MMIO contract, **not** AM13E silicon clock jitter |
 | A: Actual P1 event-chain behavior | [P1 MMIO #40633019199](https://github.com/cctsao1008/escape32-qemu/actions/runs/40633019199) from [original P1 #40631864594](https://github.com/cctsao1008/escape32-qemu/actions/runs/40631864594) | Four MMIO source checks PASS. Fast first CAP1 read causes no observed rearm, second CAP1 causes rearm. Private return value unseen |
-| A: DShot physical wire CRC | [valid/bad CRC #40631864430](https://github.com/cctsao1008/escape32-qemu/actions/runs/40631864430) | PASS original callback/WWDT valid feed and bad CRC rejection. Separate WFI checkpoint fixture: **not** the autonomous no-WFI case; no input-loss reset claim |
+| A: DShot physical wire CRC | [valid/bad CRC #40631864430](https://github.com/cctsao1008/escape32-qemu/actions/runs/40631864430) | PASS original callback/WWDT valid feed and bad CRC rejection. **CRC alone** does not verify command loss; this fixture uses WFI |
+| A: No-WFI DShot active hard loss | [source #40639394403](https://github.com/cctsao1008/escape32-qemu/actions/runs/40639394403) | PASS: FC stops at 2,800 frames; 2,189 actual Guest WWDT feeds; source-owned WWDT→BOOTRST at 1s, 0ns virtual mismatch, model PB13 LOW/PWM safe-off; real LFCLK/reset recovery unqualified |
+| A: Peripheral boundary regression | [QEMU source-built #40639899206](https://github.com/cctsao1008/escape32-qemu/actions/runs/40639899206) | PASS G6/G7/G10/G13B2/G5/G14 timer/DMA/CMPSS/ECAP/Trip/WWDT negative contracts, **model-only QTest** not running Guest |
 | A: Neutral fault routing | [OC U/V/W and nFAULT #40631864426](https://github.com/cctsao1008/escape32-qemu/actions/runs/40631864426) | PASS modeled Trip latch, original MCPWM4 IRQ, shutdown. **Neutral motor state**, not running loaded prop |
 | A: In-flight physical nFAULT | [No-WFI PA22 fault #40631864583](https://github.com/cctsao1008/escape32-qemu/actions/runs/40631864583) | PASS modeled OST2 latch and six-pad gate safe-off. No automatic re-arm or recovery certified |
 | B: Startup physical dynamics | [strict P1 #40631864594](https://github.com/cctsao1008/escape32-qemu/actions/runs/40631864594) | smoke/gentle PASS; direct20/steps **FAIL** (337/223 reversals). Never waived |
@@ -85,8 +87,10 @@ by this diagnosis alone.
   and overcurrent trip and temperature rise.
 - Real motor/propeller inertia and load; verify customer motor profile,
   47V condition, startup, acceleration, controlled shutdown.
-- DShot physical signal integrity, loss-of-command supervision,
-  watchdog reset, post-fault recovery, field protection policy.
+- Physical DShot electrical signal integrity, real LFCLK/WWDT period,
+  hardware reset cause, post-fault recovery/re-arm and field protection
+  remain open. No-WFI SIM_ONLY Original Guest loss-of-command BOOTRST
+  is **verified**, separately from real board qualification.
 - Original Guest release provenance, board-qualified release and
   production programming/debug flow.
 
@@ -94,7 +98,8 @@ by this diagnosis alone.
 
 - Read-only aggregation: tools/e62_porting_readiness.py.
 - Negative test contract: tests/test_e62_porting_readiness.py.
-- Five-source workflow: .github/workflows/e62-porting-readiness-packet.yml.
+- Six-source workflow: .github/workflows/e62-porting-readiness-packet.yml.
+- P1 closure and negative scope: docs/current/e62-p1-porting-sitl-closure.md.
 - Original full source verification matrix:
   docs/current/e62-fw-porting-verification-matrix.md.
 - Exact archive diagnostic:
@@ -105,5 +110,5 @@ Artifacts have a **21-day retention period**. Replaying the frozen
 snapshot after the artifacts expire must fail closed, not silently
 fall back to untracked sources or a new behavior model. For a later
 release candidate, record a new self-consistent source-built run and
-re-pin the five source artifact run IDs together; never mix guest,
+re-pin the six source artifact run IDs together; never mix guest,
 hardware model, thresholds or QEMU source without disclosing it.
