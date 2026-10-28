@@ -116,6 +116,9 @@ NOT carrier duty or a reconstructed switching waveform. Missing/stale PWM is lef
 <div class="panel"><h2>Last observed six-pad MCPWM mask (sparse, NOT PWM waveform)</h2>
 <p class="sub" id="source-pwm-coverage">SWITCH source provenance not yet loaded</p>
 <canvas id="source-pwm" width="1200" height="205"></canvas></div>
+<div class="panel"><h2>Opt-in 6-pad AQ/DB SWITCH_FOCUS events (actual source transitions only)</h2>
+<p class="sub" id="source-focused-switch-count">No opt-in bounded source transition records in this trace.</p>
+<canvas id="source-focused-switch" width="1200" height="185"></canvas></div>
 <div class="panel"><h2>Actual CAP1 / TIMG12 / DShot / PWM Pair events</h2><canvas id="source-events" width="1200" height="125"></canvas></div>
 </div>
 <div class="panel"><h2>Observed Dynamics Within Selected Virtual Window</h2>
@@ -780,17 +783,45 @@ function sourceWindowEvidence(){
 }
 function sourcePwmCoverage(){
   const ss=sourceTrace.samples;
+  const focusCount=sourceTrace.events.filter(e=>e.kind==="SWITCH_FOCUS").length;
   const valid=ss.filter(s=>s.pwm_six_pad_mask!==null);
   const [from,to]=sourceWindow();
   const inView=valid.filter(s=>s.t_ns>=from&&s.t_ns<=to);
   $("source-pwm-coverage").textContent=valid.length?
-    "SOURCE MASK COVERAGE: "+valid.length+"/"+ss.length+" sampled snapshots, "+
+    "SOURCE MASK COVERAGE: "+valid.length+"/"+ss.length+" sampled snapshots (early and/or opt-in focus; NOT continuous carrier), "+
     ms(valid[0].t_ns)+"–"+ms(valid[valid.length-1].t_ns)+
     " ms virtual; "+inView.length+" fresh snapshots in selected view. "+
-    (inView.length?"Dots are sparse masks, never carrier edges.":
-      "NO FRESH SWITCH MASK IN VIEW — QEMU SWITCH edge logging is bounded to the initial 120 ms after first switching; no inference of PWM OFF.") :
+    (inView.length?"Dots are source sample masks, NOT all carrier edges.":
+      "NO FRESH SWITCH MASK IN VIEW — default SWITCH logs only the initial 120 ms; optional focused source may be elsewhere; no inference of PWM OFF.") :
     "NO FRESH SWITCH MASK IN AVAILABLE BUFFER — initial bounded 120 ms SWITCH source window may lie before retained live history. "+
     "PWM_PAIR events alone are NOT carrier edges or proof of PWM OFF.";
+  $("source-focused-switch-count").textContent=focusCount?
+    "FOCUSED AQ/DB SOURCE: "+focusCount+" actual mask/gate changes preserved (NOT reconstructed carrier; up to 50 ms opt-in).":
+    "NO FOCUSED AQ/DB SOURCE: switch-focus observer was off or no transitions were recorded. No inference of PWM OFF.";
+}
+function sourceFocusEventPlot(){
+  const canvas=$("source-focused-switch"),ctx=canvas.getContext("2d");
+  const W=canvas.width,H=canvas.height,l=66,r=15,top=14;
+  const [from,to]=sourceWindow();
+  ctx.clearRect(0,0,W,H);
+  ctx.font="12px system-ui";ctx.lineWidth=1;
+  const labels=["U_H","U_L","V_H","V_L","W_H","W_L"];
+  for(let i=0;i<6;i++){
+    const y=top+i*26;
+    ctx.fillStyle="#aebbd0";ctx.fillText(labels[i],5,y+4);
+    ctx.strokeStyle="#334457";ctx.beginPath();ctx.moveTo(l,y);
+    ctx.lineTo(W-r,y);ctx.stroke();
+  }
+  for(const event of sourceTrace.events){
+    if(event.kind!=="SWITCH_FOCUS"||
+       event.t_ns<from||event.t_ns>to)continue;
+    const x=l+(event.t_ns-from)/(to-from)*(W-l-r);
+    for(let i=0;i<6;i++){
+      const y=top+i*26;
+      ctx.fillStyle=(event.data[0]&(1<<i))?COLORS[i]:"#637083";
+      ctx.fillRect(x-1,y-3,2,6);
+    }
+  }
 }
 function sourceRedraw(){
   if(!sourceTrace?.samples.length)return;
@@ -828,6 +859,7 @@ function sourceRedraw(){
       i+((s.pwm_six_pad_mask>>i)&1)*0.75
   })),[0,7]);
   sourceEventPlot();
+  sourceFocusEventPlot();
   sourceSelect(sourceCursor??last.t_ns);
   sourceEventsList();
 }
