@@ -155,6 +155,65 @@ static bool am13e_auto_validate(AM13EAutoSITL *a)
  * no Host pacing, Guest register modifications, or synthetic commutation.
  * A clean 1ms source per frame, from the QEMU virtual reset epoch.
  */
+/* SIM_ONLY preboot FC scenario matrix; deliberately uses the EXACT
+ * immutable original JSON stage words, but a patched experimental ELF.
+ * No QTest/Host writes into Guest motor state; real PA26 DShot, CMPSS,
+ * ECAP1 and TIMG12 path remains guest-owned.
+ */
+static void am13e_auto_arm_experimental_profile(AM13EAutoSITL *a,
+                                                 const char *profile)
+{
+    static const AM13EAutoStage smoke[] = {
+        {1500U,0U,0U,1U},{1000U,0U,200U,5U},
+        {300U,200U,200U,1U},{200U,0U,0U,1U},
+    };
+    static const AM13EAutoStage gentle[] = {
+        {1500U,0U,0U,1U},{2000U,0U,100U,20U},
+        {1000U,100U,100U,1U},{500U,0U,0U,1U},
+    };
+    static const AM13EAutoStage steps[] = {
+        {1500U,0U,0U,1U},{500U,100U,100U,1U},
+        {500U,200U,200U,1U},{500U,300U,300U,1U},
+        {300U,0U,0U,1U},
+    };
+    static const AM13EAutoStage ramp100[] = {
+        {1500U,0U,0U,1U},{100U,0U,200U,5U},
+        {1000U,200U,200U,1U},{200U,0U,0U,1U},
+    };
+    static const AM13EAutoStage ramp500[] = {
+        {1500U,0U,0U,1U},{500U,0U,200U,5U},
+        {1000U,200U,200U,1U},{200U,0U,0U,1U},
+    };
+    const AM13EAutoStage *stages = NULL;
+    unsigned count = 0;
+    if (!strcmp(profile, "smoke")) {
+        stages=smoke;count=G_N_ELEMENTS(smoke);
+    } else if (!strcmp(profile, "gentle")) {
+        stages=gentle;count=G_N_ELEMENTS(gentle);
+    } else if (!strcmp(profile, "steps")) {
+        stages=steps;count=G_N_ELEMENTS(steps);
+    } else if (!strcmp(profile, "ramp100")) {
+        stages=ramp100;count=G_N_ELEMENTS(ramp100);
+    } else if (!strcmp(profile, "ramp500")) {
+        stages=ramp500;count=G_N_ELEMENTS(ramp500);
+    } else {
+        error_report("E62 invalid experimental physical-FC profile");
+        exit(EXIT_FAILURE);
+    }
+    g_assert(a->dshot_timer && a->machine->native_motor.enabled);
+    g_assert(!a->running && !a->done && !a->error_code);
+    memcpy(a->stages, stages, count * sizeof(*stages));
+    a->stage_count = count;
+    if (!am13e_auto_validate(a) ||
+        a->target_frames != a->total_frames) {
+        error_report("E62 experimental FC scenario contract invalid");
+        exit(EXIT_FAILURE);
+    }
+    a->start_ns = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + 100U;
+    a->running = true;
+    timer_mod(a->dshot_timer,a->start_ns);
+}
+
 static void am13e_auto_arm_experimental_direct20(AM13EAutoSITL *a)
 {
     static const AM13EAutoStage stages[] = {
