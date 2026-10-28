@@ -1,0 +1,39 @@
+name: E62 No-WFI Native Source WebGUI Read-only Contract
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'web/sitl_trace_viewer.html'
+      - 'tools/native_source_trace.py'
+      - 'tools/native_source_live_runner.py'
+      - 'tools/sitl_live.py'
+      - 'tests/test_native_source_trace.py'
+      - 'tests/test_native_source_live_runner.py'
+      - 'tests/test_sitl_live.py'
+      - 'tests/test_sitl_viewer.py'
+      - '.github/workflows/e62-native-source-webgui.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  no-wfi-source-webgui-format-and-sse:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: No-WFI source data, time order, stale PWM, local SSE and legacy WFI format
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tests/test_native_source_trace.py
+          python3 tests/test_native_source_live_runner.py
+          python3 tests/test_sitl_live.py
+          python3 tests/test_sitl_viewer.py
+          python3 tests/test_native_porting_mmio_p0.py
+          python3 tests/test_native_porting_mmio_chain.py
+          python3 -m py_compile \
+            tools/native_source_trace.py \
+            tools/native_source_live_runner.py
+          echo E62_NATIVE_SOURCE_GUI_HOST_ONLY_CONTRACT_PASS_NO_GUEST_SIGNOFF
