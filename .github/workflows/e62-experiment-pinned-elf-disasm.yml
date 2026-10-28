@@ -1,0 +1,44 @@
+name: E62 EXPERIMENT Original Pinned ELF Startup Literal Forensics (READ ONLY)
+
+on:
+  push:
+    branches: [experiment/e62-early-bemf-direct20]
+    paths: ['.github/workflows/e62-experiment-pinned-elf-disasm.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  disassemble-unmodified-original:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Complete ARM GNU Binutils
+        uses: carlosperate/arm-none-eabi-gcc-action@v1
+      - name: Read-only literal and source-location provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          original=baseline/e62-g13b3/firmware/AM13E-rev17.3.elf
+          echo '05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0  baseline/e62-g13b3/firmware/AM13E-rev17.3.elf' | sha256sum -c -
+          arm-none-eabi-nm -n "$original" > artifacts/e62-exp-original-elf-symbols.txt
+          arm-none-eabi-objdump -d -S -l "$original" > artifacts/e62-exp-original-elf-disassembly.txt
+          arm-none-eabi-objdump -h "$original" > artifacts/e62-exp-original-elf-sections.txt
+          # Diagnostic only: do not rewrite this original ELF.
+          grep -n -E 'ival = 10000|ival = 5000|bemf_zero_cross_delay|am13e_app_motor_on_bemf_event|(#10000|#0x2710|#5000|#0x1388)' \
+            artifacts/e62-exp-original-elf-disassembly.txt \
+            > artifacts/e62-exp-ival-disassembly-matches.txt || :
+          wc -l artifacts/e62-exp-original-elf-disassembly.txt
+          head -n 120 artifacts/e62-exp-ival-disassembly-matches.txt
+          echo "PASS_READONLY_ORIGINAL_ELF_DISASSEMBLY_NO_PATCH_NO_P1_WAIVER"
+      - name: Preserve source-grounded original ELF analysis
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-original-elf-startup-disassembly-diagnostic-only
+          path: artifacts/e62-exp-*
+          retention-days: 14
+          if-no-files-found: warn
