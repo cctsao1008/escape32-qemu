@@ -26,6 +26,18 @@ th,td{text-align:left;padding:8px;border-bottom:1px solid #344053}
 tr[data-time]{cursor:pointer}tr[data-time]:hover{background:#2d3b4f}
 #detail{font-variant-numeric:tabular-nums;min-height:36px}
 .t{color:#69e0d2}.v{color:#fac477}.w{color:#ba9cff}
+.profile-summary{cursor:pointer;font-weight:600;font-size:15px}
+.profile-summary .sub{font-weight:400;margin-left:10px}
+.profile-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:15px 0}
+.profile-fields label{display:grid;gap:6px}
+.profile-fields input,.profile-fields select,.profile-table input,.profile-table select{min-width:0;width:100%;background:#101a29;color:#dce5f1;border:1px solid #3a4a60;border-radius:6px;padding:7px}
+.profile-table input{min-width:85px}
+.profile-table select{min-width:90px}
+.profile-table td{padding:5px}
+.profile-preview{margin-top:14px}
+button{cursor:pointer;background:#29394d;color:#e5eaf4;border:1px solid #485c75;border-radius:6px;padding:7px 10px}
+button:disabled{cursor:not-allowed;opacity:.45}
+button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid #8ec4ff;outline-offset:2px}
 @media(max-width:650px){body{padding:10px}canvas{height:165px}}
 </style></head><body>
 <header><div><h1>E62 SITL Workbench</h1>
@@ -40,6 +52,35 @@ tr[data-time]{cursor:pointer}tr[data-time]:hover{background:#2d3b4f}
 </div><p class="sub">Six PWM traces show <b>measured carrier-average duty at WFI checkpoints</b>, not individual PWM pin transitions.
 Motor RPM, phase current and BEMF are <b>uncalibrated host-model predictions</b>.
 Event timestamps are source-owned ECAP/TIMG12 captures from native sector evidence.</p></div>
+
+<details id="throttle-editor" class="panel">
+<summary class="profile-summary">Throttle Profile Editor <span class="sub">DSHOT600 · existing native Scenario JSON · Offline only</span></summary>
+<div class="profile-fields">
+<label>Built-in template
+<select id="profile-preset">
+<option value="smoke">Smoke · 0 → 20% gradual → 0</option>
+<option value="gentle">Gentle · 0 → 10% gradual → 0</option>
+<option value="direct20">Direct20 · 0 → 20% step → 0</option>
+<option value="steps">Steps · 0 → 10 → 20 → 30 → 0%</option>
+</select></label>
+<label>Import native Scenario JSON
+<input id="profile-file" type="file" accept=".json,application/json"></label>
+<label>Scenario name <input id="profile-name" type="text" maxlength="160" autocomplete="off"></label>
+</div>
+<p class="sub">The preset is an editable local copy. Changing a stage never controls QEMU or the running Guest. Export the JSON and pass it to the existing runner via <code>--scenario</code>. Validation follows tools/native_dshot_scenario.py; the original ELF SHA-256, DShot600 and the external 1 kHz schedule are pinned.</p>
+<div class="top">
+<button id="profile-add-hold" type="button">+ Hold stage</button>
+<button id="profile-add-ramp" type="button">+ Ramp stage</button>
+<button id="profile-reset" type="button">Reset preset</button>
+<button id="profile-export" type="button" disabled>Export Scenario JSON</button>
+<span id="profile-result" class="sub" role="status" aria-live="polite"></span>
+</div>
+<div class="table-scroll"><table class="profile-table"><thead><tr><th>Stage</th><th>Kind</th><th>Duration (ms)</th><th>Throttle / From (‰)</th><th>To (‰)</th><th>Update (ms)</th><th>Action</th></tr></thead><tbody id="profile-stages"></tbody></table></div>
+<div class="top"><span id="profile-summary" class="sub"></span><span id="profile-errors" class="danger" role="alert"></span></div>
+<div class="panel profile-preview"><h2>Commanded Throttle Preview (%) · Virtual Time (s)</h2>
+<canvas id="profile-plot" width="1200" height="250"></canvas>
+<p class="sub">Profile preview only; integer-permille hold / discrete ramp update scheduling. Dense steps may be visually decimated. These are <b>commanded inputs</b>, not measured RPM, PWM duty, motor torque, or DShot waveform edges. Import/Export has no QEMU control API.</p></div>
+</details>
 <section id="source-dashboard" hidden>
 <div class="panel"><div class="top">
 <strong>No-WFI Native Source Events</strong>
@@ -775,6 +816,291 @@ function sourceComplete(complete){
 for(const name of ["source-zoom","source-pan"]){
   $(name).addEventListener("input",()=>{if(sourceTrace)sourceRedraw()});
 }
+
+
+/* Native External FC Throttle Profile editor — wholly offline.
+ * Built-in presets are source-mirrored from scenarios/e62-native-p0-*.json;
+ * CI rejects drift. Scenario may only be submitted via existing --scenario
+ * CLI later; no simulator-control API, POST or Guest writes here.
+ */
+const THROTTLE_PRESETS={"smoke":{"schema":"e62.native.dshot.v1","name":"P0 native 3s neutral slow ramp hold coast","target_elf_sha256":"05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0","protocol":"DSHOT600","frame_period_ns":1000000,"guest_ready_gating":false,"stages":[{"kind":"hold","duration_ms":1500,"permille":0},{"kind":"ramp","duration_ms":1000,"from_permille":0,"to_permille":200,"update_ms":5},{"kind":"hold","duration_ms":300,"permille":200},{"kind":"hold","duration_ms":200,"permille":0}]},"gentle":{"schema":"e62.native.dshot.v1","name":"P0 gradual 10-percent throttle response","target_elf_sha256":"05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0","protocol":"DSHOT600","frame_period_ns":1000000,"guest_ready_gating":false,"stages":[{"kind":"hold","duration_ms":1500,"permille":0},{"kind":"ramp","duration_ms":2000,"from_permille":0,"to_permille":100,"update_ms":20},{"kind":"hold","duration_ms":1000,"permille":100},{"kind":"hold","duration_ms":500,"permille":0}]},"direct20":{"schema":"e62.native.dshot.v1","name":"P1 post-arm immediate 20 percent step to isolate stalled prior 10 percent stage","target_elf_sha256":"05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0","protocol":"DSHOT600","frame_period_ns":1000000,"guest_ready_gating":false,"stages":[{"kind":"hold","duration_ms":1500,"permille":0},{"kind":"hold","duration_ms":1500,"permille":200},{"kind":"hold","duration_ms":300,"permille":0}]},"steps":{"schema":"e62.native.dshot.v1","name":"P0 0-10-20-30-0 discrete throttle commands","target_elf_sha256":"05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0","protocol":"DSHOT600","frame_period_ns":1000000,"guest_ready_gating":false,"stages":[{"kind":"hold","duration_ms":1500,"permille":0},{"kind":"hold","duration_ms":500,"permille":100},{"kind":"hold","duration_ms":500,"permille":200},{"kind":"hold","duration_ms":500,"permille":300},{"kind":"hold","duration_ms":300,"permille":0}]}};
+const PROFILE_ELF_SHA="05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0";
+const PROFILE_SCHEMA="e62.native.dshot.v1";
+let profilePreset="smoke";
+let profileDraft=null;
+function profileClone(x){return JSON.parse(JSON.stringify(x))}
+function profileKeysExact(object,expected){
+  return object!==null&&typeof object==="object"&&!Array.isArray(object)&&
+    Object.keys(object).length===expected.length&&
+    expected.every(key=>Object.prototype.hasOwnProperty.call(object,key));
+}
+function profileValidate(doc){
+  const issues=[];
+  if(!profileKeysExact(doc,["schema","name","target_elf_sha256",
+    "protocol","frame_period_ns","guest_ready_gating","stages"]))
+    return ["Unsupported or missing top-level keys"];
+  if(doc.schema!==PROFILE_SCHEMA||doc.protocol!=="DSHOT600"||
+     doc.target_elf_sha256!==PROFILE_ELF_SHA||
+     doc.frame_period_ns!==1000000||doc.guest_ready_gating!==false)
+    issues.push("Pinned Original Rel17.3 ELF, DShot600, 1kHz and no Guest-ready gating required");
+  if(typeof doc.name!=="string"||!doc.name.trim())
+    issues.push("Scenario name is required");
+  if(!Array.isArray(doc.stages)||doc.stages.length<2||doc.stages.length>16)
+    return [...issues,"Require 2–16 stages"];
+  let total=0,prev=null;
+  doc.stages.forEach((stage,i)=>{
+    const idx=i+1;
+    if(!stage||!["hold","ramp"].includes(stage.kind)){
+      issues.push("Stage "+idx+": unsupported kind");return;
+    }
+    const fields=stage.kind==="hold"?
+      ["kind","duration_ms","permille"]:
+      ["kind","duration_ms","from_permille","to_permille","update_ms"];
+    if(!profileKeysExact(stage,fields))
+      issues.push("Stage "+idx+": unsupported or missing fields");
+    const validInt=(n,lo,hi)=>Number.isInteger(n)&&n>=lo&&n<=hi;
+    const duration=stage.duration_ms;
+    if(!validInt(duration,10,120000))
+      issues.push("Stage "+idx+": duration must be 10–120000 ms integer");
+    else total+=duration;
+    if(stage.kind==="hold"){
+      if(!validInt(stage.permille,0,1000))
+        issues.push("Stage "+idx+": throttle must be 0–1000 permille");
+      prev=stage.permille;
+    }else{
+      if(!validInt(stage.from_permille,0,1000)||
+         !validInt(stage.to_permille,0,1000))
+        issues.push("Stage "+idx+": from/to must be 0–1000 permille");
+      if(!validInt(stage.update_ms,1,duration||0)||
+         !validInt(duration,10,120000)||
+         duration%stage.update_ms!==0||
+         ((stage.to_permille-stage.from_permille)*stage.update_ms)%duration!==0)
+        issues.push("Stage "+idx+": ramp must have exactly representable integer-permille updates");
+      if(i>0&&prev!==stage.from_permille)
+        issues.push("Stage "+idx+": ramp from must equal previous stage output");
+      prev=stage.to_permille;
+    }
+  });
+  if(total>180000)issues.push("Total scenario exceeds 180000 ms");
+  const first=doc.stages[0],last=doc.stages[doc.stages.length-1];
+  if(!first||first.kind!=="hold"||first.permille!==0||
+     !last||last.kind!=="hold"||last.permille!==0)
+    issues.push("First and final stages must send neutral DShot=0");
+  return issues;
+}
+function profileSetPreset(key){
+  if(!Object.prototype.hasOwnProperty.call(THROTTLE_PRESETS,key))
+    throw Error("Unknown built-in scenario");
+  profilePreset=key;
+  profileDraft=profileClone(THROTTLE_PRESETS[key]);
+  $("profile-preset").value=key;
+  $("profile-file").value="";
+  profileRender();
+}
+function profileField(label,value,min,max,handler){
+  const input=document.createElement("input");
+  input.type="number";input.step="1";input.min=String(min);
+  input.max=String(max);input.value=String(value);
+  input.setAttribute("aria-label",label);
+  input.addEventListener("change",()=>{
+    const raw=input.value.trim();
+    handler(raw===""?NaN:Number(raw));
+  });
+  return input;
+}
+function profileRender(){
+  $("profile-name").value=profileDraft.name;
+  const body=$("profile-stages");
+  const fragment=document.createDocumentFragment();
+  profileDraft.stages.forEach((stage,index)=>{
+    const row=document.createElement("tr"),cell=(content)=>{
+      const td=document.createElement("td");
+      if(typeof content==="string")td.textContent=content;
+      else if(content)td.appendChild(content);
+      row.appendChild(td);
+    };
+    cell(String(index+1));
+    const kind=document.createElement("select");
+    for(const k of ["hold","ramp"]){
+      const opt=document.createElement("option");
+      opt.value=k;opt.textContent=k;
+      kind.appendChild(opt);
+    }
+    kind.value=stage.kind;
+    kind.setAttribute("aria-label","Stage "+(index+1)+" kind");
+    kind.addEventListener("change",()=>{
+      const previous=stage.kind==="hold"?stage.permille:stage.to_permille;
+      const duration=stage.duration_ms;
+      profileDraft.stages[index]=kind.value==="hold"?
+        {kind:"hold",duration_ms:duration,permille:previous}:
+        {kind:"ramp",duration_ms:duration,
+         from_permille:previous,to_permille:previous,update_ms:1};
+      profileRender();
+    });
+    cell(kind);
+    cell(profileField("Stage "+(index+1)+" duration ms",
+      stage.duration_ms,10,120000,n=>{
+        stage.duration_ms=n;profileRenderStatus();}));
+    if(stage.kind==="hold"){
+      cell(profileField("Stage "+(index+1)+" throttle permille",
+        stage.permille,0,1000,n=>{stage.permille=n;profileRenderStatus();}));
+      cell("—");cell("—");
+    }else{
+      cell(profileField("Stage "+(index+1)+" from permille",
+        stage.from_permille,0,1000,n=>{
+          stage.from_permille=n;profileRenderStatus();}));
+      cell(profileField("Stage "+(index+1)+" to permille",
+        stage.to_permille,0,1000,n=>{
+          stage.to_permille=n;profileRenderStatus();}));
+      cell(profileField("Stage "+(index+1)+" update ms",
+        stage.update_ms,1,120000,n=>{
+          stage.update_ms=n;profileRenderStatus();}));
+    }
+    const remove=document.createElement("button");
+    remove.type="button";remove.textContent="Remove";
+    remove.disabled=profileDraft.stages.length<=2;
+    remove.setAttribute("aria-label","Remove stage "+(index+1));
+    remove.addEventListener("click",()=>{
+      if(profileDraft.stages.length>2){
+        profileDraft.stages.splice(index,1);profileRender();
+      }
+    });
+    cell(remove);fragment.appendChild(row);
+  });
+  body.replaceChildren(fragment);
+  profileRenderStatus();
+}
+function profileAdd(kind){
+  if(profileDraft.stages.length>=16)return;
+  const idx=profileDraft.stages.length-1;
+  const last=profileDraft.stages[idx-1];
+  const previous=last.kind==="hold"?last.permille:last.to_permille;
+  profileDraft.stages.splice(idx,0,kind==="hold"?
+    {kind:"hold",duration_ms:100,permille:previous}:
+    {kind:"ramp",duration_ms:100,from_permille:previous,
+     to_permille:previous,update_ms:10});
+  profileRender();
+}
+function profilePoints(doc){
+  const points=[];let t=0;let max=0;
+  for(const s of doc.stages){
+    const a=s.kind==="hold"?s.permille:s.from_permille;
+    const b=s.kind==="hold"?a:s.to_permille;
+    max=Math.max(max,a,b);
+    points.push([t,a]);
+    if(s.kind==="ramp"){
+      const updates=s.duration_ms/s.update_ms;
+      const stride=Math.max(1,Math.ceil(updates/350));
+      for(let k=stride;k<updates;k+=stride){
+        const offset=k*s.update_ms;
+        const v=a+(b-a)*offset/s.duration_ms;
+        // Exactly representable integer values already checked.
+        points.push([t+offset,v]);
+      }
+    }
+    t+=s.duration_ms;
+    points.push([t,b]);
+  }
+  return {points,total:t,max};
+}
+function profileDraw(){
+  const canvas=$("profile-plot"),ctx=canvas.getContext("2d");
+  const W=canvas.width,H=canvas.height,left=62,right=15,top=20,bottom=33;
+  ctx.clearRect(0,0,W,H);
+  const issues=profileValidate(profileDraft);
+  if(issues.length)return;
+  const {points,total,max}=profilePoints(profileDraft);
+  const ceiling=Math.max(100,Math.ceil(max/100)*100+100);
+  const X=t=>left+t/total*(W-left-right);
+  const Y=p=>top+(ceiling-p)/ceiling*(H-top-bottom);
+  ctx.font="12px system-ui";ctx.lineWidth=1;
+  ctx.fillStyle="#afbdcf";ctx.strokeStyle="#34465e";
+  for(let i=0;i<=4;i++){
+    const y=top+i*(H-top-bottom)/4;
+    ctx.beginPath();ctx.moveTo(left,y);ctx.lineTo(W-right,y);ctx.stroke();
+    ctx.fillText(((ceiling*(1-i/4))/10).toFixed(1)+"%",4,y+4);
+  }
+  for(let i=0;i<=5;i++){
+    const x=left+(W-left-right)*i/5;
+    ctx.beginPath();ctx.moveTo(x,top);ctx.lineTo(x,H-bottom);ctx.stroke();
+    ctx.fillText((total*i/5000).toFixed(1)+" s",x-15,H-8);
+  }
+  ctx.strokeStyle="#72d8c8";ctx.lineWidth=2.3;ctx.beginPath();
+  points.forEach(([t,p],i)=>{
+    if(i===0)ctx.moveTo(X(t),Y(p));else ctx.lineTo(X(t),Y(p));
+  });
+  ctx.stroke();
+}
+function profileRenderStatus(){
+  const issues=profileValidate(profileDraft);
+  const total=Array.isArray(profileDraft.stages)?
+    profileDraft.stages.reduce((n,s)=>n+(Number.isInteger(s.duration_ms)?
+      s.duration_ms:0),0):0;
+  $("profile-export").disabled=issues.length>0;
+  $("profile-add-hold").disabled=profileDraft.stages.length>=16;
+  $("profile-add-ramp").disabled=profileDraft.stages.length>=16;
+  $("profile-result").textContent=issues.length?"INVALID · Export blocked":
+    "VALID · Local scenario only";
+  $("profile-result").className=issues.length?"danger":"ok";
+  $("profile-errors").textContent=issues.join("; ");
+  $("profile-summary").textContent="Stages: "+profileDraft.stages.length+
+    " · Duration: "+total+" ms · "+total+" DShot600 frames at 1 kHz (virtual)";
+  profileDraw();
+}
+async function profileImportFile(file){
+  if(!file)return;
+  if(file.size>256*1024)throw Error("Scenario JSON exceeds 256 KiB");
+  const doc=JSON.parse(await file.text());
+  const issues=profileValidate(doc);
+  if(issues.length)throw Error(issues.join("; "));
+  profileDraft=profileClone(doc);
+  $("profile-preset").value="";
+  profileRender();
+}
+function profileExport(){
+  const issues=profileValidate(profileDraft);
+  if(issues.length)throw Error("Export blocked: "+issues.join("; "));
+  const filename="e62-native-"+profileDraft.name.toLowerCase()
+    .replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,60)+".json";
+  const contents=JSON.stringify(profileDraft,null,2)+"\n";
+  const url=URL.createObjectURL(new Blob([contents],{type:"application/json"}));
+  const link=document.createElement("a");
+  link.href=url;link.download=filename;link.style.display="none";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+  $("profile-result").textContent="EXPORTED · "+filename+" · No QEMU command sent";
+  return contents;
+}
+$("profile-preset").addEventListener("change",e=>{
+  if(e.target.value)profileSetPreset(e.target.value);
+});
+$("profile-reset").addEventListener("click",()=>profileSetPreset(profilePreset));
+$("profile-add-hold").addEventListener("click",()=>profileAdd("hold"));
+$("profile-add-ramp").addEventListener("click",()=>profileAdd("ramp"));
+$("profile-name").addEventListener("change",e=>{
+  profileDraft.name=e.target.value;profileRenderStatus();
+});
+$("profile-file").addEventListener("change",async e=>{
+  const file=e.target.files?.[0];if(!file)return;
+  try{
+    await profileImportFile(file);
+  }catch(error){
+    $("profile-result").textContent="IMPORT REJECTED · "+String(error.message||error);
+    $("profile-result").className="danger";
+  }finally{
+    e.target.value="";
+  }
+});
+$("profile-export").addEventListener("click",()=>{
+  try{profileExport();}
+  catch(error){
+    $("profile-result").textContent=String(error.message||error);
+    $("profile-result").className="danger";
+  }
+});
+profileSetPreset("smoke");
 
 if(isLocalLive)connectLive();
 for(const id of ["zoom","pan"])$(id).addEventListener("input",redraw);
