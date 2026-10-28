@@ -49,13 +49,27 @@ def readonly_qmp_cpu_snapshot(path):
                 if "error" in x:
                     raise ValueError(name+": "+str(x["error"]))
         request("qmp_capabilities")
-        return {
+        registers=request("human-monitor-command",
+                          {"command-line":"info registers"})
+        result={
             "query_status":request("query-status"),
             "query_cpus_fast":request("query-cpus-fast"),
-            "info_registers":request("human-monitor-command",
-                                    {"command-line":"info registers"}),
+            "info_registers":registers,
             "query_only_no_guest_control":True,
         }
+        # ARM fault-reset loop is nonreturning; R13 still points to the
+        # callee's pushed (r3, LR), so [SP+4] is the ORIGINAL caller's LR.
+        # Read only 32 bytes of ordinary SRAM, never MMIO or Guest writes.
+        match=re.search(r"\\bR13=([0-9A-Fa-f]{8})\\b",registers)
+        if match:
+            sp=int(match.group(1),16)
+            result["stack_pointer_hex"]=hex(sp)
+            if 0x20000000<=sp<=0x2001ffe0 and sp%4==0:
+                result["read_only_stack_32bytes"]=request(
+                    "human-monitor-command",
+                    {"command-line":f"xp /8wx 0x{sp:08x}"})
+                result["lr_saved_by_fault_reset_expected_address"]=hex(sp+4)
+        return result
 
 
 def run(a):
