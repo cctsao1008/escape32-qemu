@@ -147,6 +147,35 @@ static bool am13e_auto_validate(AM13EAutoSITL *a)
     return a->target_frames > 0U && a->target_frames <= a->total_frames;
 }
 
+/* Opt-in deterministic FC diagnostic. No Host/QTest start command,
+ * no guest readiness trigger, and no change to the physical PA26 source
+ * callback, 1kHz timeline, native motor, or original firmware.
+ * These stage words exactly match e62-native-p0-smoke.json. */
+static void am13e_auto_arm_differential_smoke(AM13EAutoSITL *a)
+{
+    static const AM13EAutoStage stages[] = {
+        {1500U, 0U, 0U, 1U},
+        {1000U, 0U, 200U, 5U},
+        {300U, 200U, 200U, 1U},
+        {200U, 0U, 0U, 1U},
+    };
+    g_assert(a->dshot_timer && a->machine->native_motor.enabled);
+    g_assert(!a->running && !a->done && !a->error_code);
+    memcpy(a->stages, stages, sizeof(stages));
+    a->stage_count = G_N_ELEMENTS(stages);
+    if (!am13e_auto_validate(a) || a->target_frames != 3000U) {
+        error_report("E62 deterministic FC smoke stage contract invalid");
+        exit(EXIT_FAILURE);
+    }
+    /* At machine reset, virtual time is at its initial epoch. We never
+     * inspect host wall time or use Guest SRAM/IRQ to decide when to start.
+     * First expiry may be serviced on the next QEMU icount boundary;
+     * the original observed nanosecond timestamp must still be audited. */
+    a->start_ns = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + 100U;
+    a->running = true;
+    timer_mod(a->dshot_timer, a->start_ns);
+}
+
 static uint32_t am13e_auto_dshot_value(uint32_t p)
 {
     if (!p) return 0U;
