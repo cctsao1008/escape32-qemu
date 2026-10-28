@@ -40,6 +40,39 @@ tr[data-time]{cursor:pointer}tr[data-time]:hover{background:#2d3b4f}
 </div><p class="sub">Six PWM traces show <b>measured carrier-average duty at WFI checkpoints</b>, not individual PWM pin transitions.
 Motor RPM, phase current and BEMF are <b>uncalibrated host-model predictions</b>.
 Event timestamps are source-owned ECAP/TIMG12 captures from native sector evidence.</p></div>
+<section id="source-dashboard" hidden>
+<div class="panel"><div class="top">
+<strong>No-WFI Native Source Events</strong>
+<span class="badge" id="source-state">OFFLINE SOURCE</span>
+<span class="sub" id="source-gap"></span>
+<label>Zoom <input type="range" id="source-zoom" min="1" max="30" value="1"></label>
+<label>Pan <input type="range" id="source-pan" min="0" max="1000" value="0"></label>
+<label id="source-follow-label" hidden><input type="checkbox" id="source-follow" checked> Follow live</label>
+<span class="sub" id="source-window"></span>
+</div>
+<p class="sub">QEMU virtual timestamps · SIM_ONLY uncalibrated motor. Native samples originate in ROTOR/BEMF_FRONTEND callbacks (not WFI).
+BEMF is <strong>12-bit comparator frontend ADC code, NOT voltage</strong>. Six-pad PWM is the last source-observed instantaneous mask,
+NOT carrier duty or a reconstructed switching waveform. Missing/stale PWM is left blank. Graphs never certify motor stability.</p></div>
+<div class="panel"><div class="stats">
+<div class="stat">Pinned Original Guest ELF<b id="source-sha" style="font-size:12px;overflow-wrap:anywhere"></b></div>
+<div class="stat">Native periodic source samples<b id="source-count">0</b></div>
+<div class="stat">QEMU virtual duration<b id="source-duration">—</b></div>
+<div class="stat">CAP1 events observed<b id="source-cap">—</b></div>
+<div class="stat">TIMG12 ZERO observed<b id="source-timer">—</b></div>
+<div class="stat">Motor strict P1 Gate<b class="muted">NOT EXECUTED</b></div>
+</div></div>
+<div class="charts">
+<div class="panel"><h2>External FC DShot Command (raw command, source-owned)</h2><canvas id="source-dshot" width="1200" height="205"></canvas></div>
+<div class="panel"><h2>SIM_ONLY Mechanical Rotor RPM</h2><canvas id="source-rpm" width="1200" height="205"></canvas></div>
+<div class="panel"><h2>Model Phase Currents (A) and Torque (Nm)</h2><canvas id="source-current" width="1200" height="205"></canvas></div>
+<div class="panel"><h2>Source BEMF Frontend ADC Codes (12-bit, NOT volts)</h2><canvas id="source-bemf" width="1200" height="205"></canvas></div>
+<div class="panel"><h2>Last observed six-pad MCPWM mask (sparse, NOT PWM waveform)</h2><canvas id="source-pwm" width="1200" height="205"></canvas></div>
+<div class="panel"><h2>Actual CAP1 / TIMG12 / DShot / PWM Pair events</h2><canvas id="source-events" width="1200" height="125"></canvas></div>
+</div>
+<div class="panel"><h2>Native Source Cursor</h2><div class="sub" id="source-detail">No source samples yet</div></div>
+<div class="panel"><h2>Original QEMU Event Journal (last 200 entries; source sequence preserved)</h2>
+<div class="table-scroll"><table><thead><tr><th>Virtual ms</th><th>Sequence</th><th>Kind</th><th>Original a–f values</th></tr></thead><tbody id="source-event-list"></tbody></table></div></div>
+</section>
 <div id="dashboard" hidden>
 <div class="panel"><div class="stats">
 <div class="stat">ELF SHA256<b id="sha" style="font-size:12px;overflow-wrap:anywhere"></b></div>
@@ -83,6 +116,8 @@ const $ = id => document.getElementById(id);
 const COLORS=["#72d8c8","#2c8b83","#ffc778","#b48c41","#cba4ff","#7e68b0"];
 const SCOPE="SIM_ONLY_UNCALIBRATED_OPEN_STAR_MODEL";
 const FORMAT="e62.sitl.native-wfi.v1";
+const SOURCE_FORMAT="e62.sitl.native-source.v1";
+let sourceTrace=null, sourceMode=false, sourceCursor=null, sourceLiveLost=0, sourceRendering=false;
 const isLocalLive=location.protocol==="http:" &&
   ["127.0.0.1","localhost"].includes(location.hostname);
 let liveMeta=null, liveLost=0, renderPending=false, liveFinished=false;
@@ -271,6 +306,8 @@ function eventsList(){
   $("event-list").appendChild(fragment);
 }
 function load(d){
+  if(d?.format===SOURCE_FORMAT)return sourceLoad(d);
+  sourceMode=false;sourceTrace=null;$("source-dashboard").hidden=true;
   validate(d);
   trace=d;cursor=null;
   $("scope").textContent=(isLocalLive?"LIVE ":"ACTUAL ")+
@@ -340,6 +377,7 @@ function scheduleLiveRender(){
   requestAnimationFrame(renderLive); // browser never backpressures native Guest
 }
 function applyLiveSnapshot(message){
+  if(message.metadata?.format===SOURCE_FORMAT){sourceSnapshot(message);return;}
   liveMeta=message.metadata;
   liveLost=message.truncated?Math.max(0,message.oldest_seq-1):0;
   $("loss-warning").textContent=liveLost?
@@ -363,6 +401,7 @@ function applyLiveSnapshot(message){
   else setLiveStatus("LIVE STREAM");
 }
 function applyLivePacket(packet){
+  if(sourceMode){sourcePacket(packet);return;}
   if(!liveMeta||!packet||!packet.sample||!Array.isArray(packet.events))return;
   validate(liveDocument([packet],null)); // reject malformed live samples early
   if(!trace){
@@ -389,6 +428,7 @@ function applyLivePacket(packet){
   scheduleLiveRender();
 }
 function applyLiveComplete(complete){
+  if(sourceMode){sourceComplete(complete);return;}
   liveFinished=true;
   setLiveStatus(complete.error_type?"NATIVE ERROR":"NATIVE PROBE FINISHED");
   $("status").textContent="Native probe ended"+
@@ -420,7 +460,7 @@ function connectLive(){
   });
   channel.addEventListener("begin",event=>{
     const msg=JSON.parse(event.data);liveMeta=msg.metadata;
-    setLiveStatus("CONNECTED · WAITING FOR WFI");
+    setLiveStatus(sourceMode?"CONNECTED · WAITING FOR SOURCE":"CONNECTED · WAITING FOR WFI");
   });
   channel.addEventListener("frame",event=>{
     try{applyLivePacket(JSON.parse(event.data))}
@@ -429,6 +469,12 @@ function connectLive(){
   });
   channel.addEventListener("gap",event=>{
     const missing=JSON.parse(event.data).missing_packets;
+    if(sourceMode){
+      sourceLiveLost+=missing;
+      $("source-gap").textContent="SSE DATA GAP: "+sourceLiveLost+" frames missing, NOT interpolated";
+      $("source-state").textContent="DATA GAP";
+      return;
+    }
     liveLost+=missing;
     $("loss-warning").textContent="DROPPED "+liveLost+
       " native WFI frames; trace incomplete (no interpolation)";
@@ -442,6 +488,275 @@ function connectLive(){
     }
   };
 }
+
+/* Native No-WFI source viewer, deliberately separate from the WFI contract.
+ * No WebGUI outbound writes, no inference of Guest accept/reject branch.
+ */
+function validateSource(doc){
+  if(!doc||doc.format!==SOURCE_FORMAT ||
+     doc.scope!=="SIM_ONLY_NATIVE_NO_WFI_SOURCE_ONLY" ||
+     !doc.metadata||doc.metadata.format!==SOURCE_FORMAT||
+     doc.metadata.timebase!=="QEMU_CLOCK_VIRTUAL"||
+     doc.metadata.no_guest_memory_writes!==true||
+     !Array.isArray(doc.samples)||!doc.samples.length||doc.samples.length>200000||
+     !Array.isArray(doc.events)||doc.events.length>100000)
+    throw Error("Unsupported No-WFI source trace/provenance");
+  let last=-1,seq=-1;
+  for(const s of doc.samples){
+    if(!Number.isSafeInteger(s.t_ns)||s.t_ns<=last||
+       !Number.isInteger(s.source_seq)||s.source_seq<=seq||
+       !finite(s.motor_rpm)||!finite(s.torque_nm)||
+       !Array.isArray(s.phase_currents_a)||s.phase_currents_a.length!==3||
+       !s.phase_currents_a.every(finite)||
+       !Array.isArray(s.bemf_codes)||s.bemf_codes.length!==3||
+       !s.bemf_codes.every(v=>Number.isInteger(v)&&v>=0&&v<=4095)||
+       !(s.pwm_six_pad_mask===null||
+         (Number.isInteger(s.pwm_six_pad_mask)&&s.pwm_six_pad_mask>=0&&
+          s.pwm_six_pad_mask<=63))||
+       !Number.isInteger(s.cap1_count)||!Number.isInteger(s.timg12_count))
+      throw Error("Malformed No-WFI source sample");
+    last=s.t_ns;seq=s.source_seq;
+  }
+  let lastEventSeq=0;
+  for(const e of doc.events){
+    if(!Number.isSafeInteger(e.t_ns)||e.t_ns<0||
+       !Number.isInteger(e.seq)||e.seq<=lastEventSeq||
+       !/^[A-Z_0-9]+$/.test(e.kind)||
+       !Array.isArray(e.data)||e.data.length!==6||
+       !e.data.every(v=>Number.isSafeInteger(v)))
+       throw Error("Malformed No-WFI original QEMU event");
+    lastEventSeq=e.seq;
+  }
+}
+function sourceWindow(){
+  const a=sourceTrace.samples,first=a[0].t_ns,last=a[a.length-1].t_ns;
+  const duration=Math.max(1,last-first);
+  const span=Math.max(1,duration/Number($("source-zoom").value));
+  const from=first+(duration-span)*Number($("source-pan").value)/1000;
+  return [from,from+span];
+}
+function sourcePlot(id,channels,range=null){
+  const canvas=$(id),ctx=canvas.getContext("2d"),W=canvas.width,H=canvas.height;
+  ctx.clearRect(0,0,W,H);
+  const [t0,t1]=sourceWindow(),l=66,r=15,t=17,b=28,cw=W-l-r,ch=H-t-b;
+  const sample=sourceTrace.samples.filter(s=>s.t_ns>=t0&&s.t_ns<=t1);
+  const values=sample.flatMap(s=>channels.map(c=>c.get(s))).filter(finite);
+  let lo=range?range[0]:(values.length?Math.min(...values):0);
+  let hi=range?range[1]:(values.length?Math.max(...values):1);
+  if(hi-lo<1e-6){lo-=1;hi+=1}
+  const X=ns=>l+(ns-t0)/(t1-t0)*cw,Y=v=>t+(hi-v)/(hi-lo)*ch;
+  ctx.font="12px system-ui";ctx.lineWidth=1;
+  ctx.fillStyle="#aebbd0";ctx.strokeStyle="#334457";
+  for(let k=0;k<=4;k++){
+    const y=t+k*ch/4;ctx.beginPath();ctx.moveTo(l,y);ctx.lineTo(W-r,y);
+    ctx.stroke();ctx.fillText((hi-k*(hi-lo)/4).toFixed(1),4,y+4);
+  }
+  for(let k=0;k<=5;k++){
+    const x=l+k*cw/5;ctx.beginPath();ctx.moveTo(x,t);ctx.lineTo(x,H-b);ctx.stroke();
+    ctx.fillText(ms(t0+k*(t1-t0)/5),Math.max(0,x-14),H-7);
+  }
+  channels.forEach((chdef,i)=>{
+    ctx.fillStyle=chdef.color||COLORS[i%COLORS.length];
+    for(const s of sample){
+      const v=chdef.get(s);if(!finite(v))continue;
+      const x=X(s.t_ns),y=Y(v);
+      ctx.fillRect(x-1.2,y-1.2,2.4,2.4); // samples only, no inferred carrier edges
+    }
+    ctx.fillText(chdef.name,l+8+i*102,t+12);
+  });
+  if(sourceCursor!==null){
+    const x=X(sourceCursor);
+    if(x>=l&&x<=W-r){ctx.strokeStyle="#eee";ctx.setLineDash([3,4]);
+      ctx.beginPath();ctx.moveTo(x,t);ctx.lineTo(x,H-b);ctx.stroke();
+      ctx.setLineDash([]);}
+  }
+}
+function sourceEventPlot(){
+  const c=$("source-events"),ctx=c.getContext("2d"),W=c.width,H=c.height;
+  ctx.clearRect(0,0,W,H);
+  const[t0,t1]=sourceWindow(),l=66,r=15;
+  const lanes=[
+    {name:"DSHOT",match:e=>e.kind==="DSHOT",color:"#8ec4ff"},
+    {name:"PWM",match:e=>e.kind==="PWM_PAIR",color:"#cba4ff"},
+    {name:"CAP1",match:e=>e.kind==="CAP1",color:"#72d8c8"},
+    {name:"TIMG12",match:e=>e.kind==="TIMG12",color:"#ffc778"}
+  ];
+  ctx.font="12px system-ui";
+  lanes.forEach((lane,i)=>{
+    const y=19+i*29;ctx.fillStyle="#aebbd0";ctx.fillText(lane.name,5,y+4);
+    ctx.strokeStyle="#34465e";ctx.beginPath();ctx.moveTo(l,y);
+    ctx.lineTo(W-r,y);ctx.stroke();
+    for(const e of sourceTrace.events){
+      if(e.t_ns<t0||e.t_ns>t1||!lane.match(e))continue;
+      const x=l+(e.t_ns-t0)/(t1-t0)*(W-l-r);
+      ctx.fillStyle=lane.color;ctx.fillRect(x-1,y-3,2,6);
+    }
+  });
+}
+function sourceFindNearest(ns){
+  const ss=sourceTrace.samples;
+  let lo=0,hi=ss.length-1;
+  while(lo<hi){const mid=(lo+hi)>>1;if(ss[mid].t_ns<ns)lo=mid+1;else hi=mid}
+  if(lo>0&&Math.abs(ss[lo-1].t_ns-ns)<Math.abs(ss[lo].t_ns-ns))lo--;
+  return ss[lo];
+}
+function sourceSelect(ns){
+  const s=sourceFindNearest(ns);sourceCursor=s.t_ns;
+  $("source-detail").textContent=
+    "t="+ms(s.t_ns)+" ms · source seq="+s.source_seq+
+    " · RPM="+s.motor_rpm.toFixed(2)+" · Torque="+s.torque_nm.toFixed(4)+
+    " Nm · BEMF ADC codes="+s.bemf_codes.join("/")+
+    " · last six-pad mask="+(s.pwm_six_pad_mask===null?"NOT OBSERVED":s.pwm_six_pad_mask)+
+    " · CAP1="+s.cap1_count+" · TIMER ZERO="+s.timg12_count+
+    " · last FC DShot="+(s.last_dshot_raw??"UNKNOWN")+
+    " (historical command, not necessarily still present)";
+}
+function sourceEventsList(){
+  const body=$("source-event-list"),fragment=document.createDocumentFragment();
+  for(const e of sourceTrace.events.slice(-200)){
+    const row=document.createElement("tr");
+    row.dataset.time=String(e.t_ns);
+    for(const v of [ms(e.t_ns),e.seq,e.kind,e.data.join(", ")]) {
+      const td=document.createElement("td");td.textContent=String(v);row.appendChild(td);
+    }
+    row.onclick=()=>{
+      sourceSelect(e.t_ns);
+      const ss=sourceTrace.samples,duration=Math.max(1,ss[ss.length-1].t_ns-ss[0].t_ns);
+      const width=duration/Number($("source-zoom").value);
+      $("source-pan").value=String(Math.round(Math.max(0,Math.min(1000,
+        1000*(e.t_ns-ss[0].t_ns-width/2)/Math.max(1,duration-width)))));
+      sourceRedraw();
+    };
+    fragment.appendChild(row);
+  }
+  body.replaceChildren(fragment);
+}
+function sourceRedraw(){
+  if(!sourceTrace?.samples.length)return;
+  const ss=sourceTrace.samples,last=ss[ss.length-1];
+  $("source-count").textContent=String(ss.length);
+  $("source-duration").textContent=ms(last.t_ns-ss[0].t_ns)+" ms";
+  $("source-cap").textContent=String(last.cap1_count);
+  $("source-timer").textContent=String(last.timg12_count);
+  const [from,to]=sourceWindow();
+  $("source-window").textContent=ms(from)+" – "+ms(to)+" ms virtual";
+  sourcePlot("source-dshot",[{name:"Raw FC DShot",color:"#8ec4ff",
+    get:s=>s.last_dshot_raw}]);
+  sourcePlot("source-rpm",[{name:"Rotor RPM",color:"#8ec4ff",get:s=>s.motor_rpm}]);
+  sourcePlot("source-current",[
+    ...[0,1,2].map((i)=>({name:["I_U","I_V","I_W"][i],
+      color:COLORS[i*2],get:s=>s.phase_currents_a[i]})),
+    {name:"Torque",color:"#f38b90",get:s=>s.torque_nm}
+  ]);
+  sourcePlot("source-bemf",[0,1,2].map(i=>({
+    name:["ADC-U","ADC-V","ADC-W"][i],
+    color:COLORS[i*2],get:s=>s.bemf_codes[i]
+  })),[0,4095]);
+  sourcePlot("source-pwm",[0,1,2,3,4,5].map(i=>({
+    name:["UH","UL","VH","VL","WH","WL"][i],color:COLORS[i],
+    get:s=>s.pwm_six_pad_mask===null?null:
+      i+((s.pwm_six_pad_mask>>i)&1)*0.75
+  })),[0,7]);
+  sourceEventPlot();
+  sourceSelect(sourceCursor??last.t_ns);
+  sourceEventsList();
+}
+function sourceSchedule(){
+  if(sourceRendering)return;
+  sourceRendering=true;
+  requestAnimationFrame(()=>{
+    sourceRendering=false;
+    if(sourceTrace?.samples.length&&$("source-follow").checked){
+      $("source-pan").value="1000";
+      sourceCursor=sourceTrace.samples[sourceTrace.samples.length-1].t_ns;
+    }
+    sourceRedraw();
+  });
+}
+function sourceLoad(doc){
+  validateSource(doc);
+  sourceMode=true;sourceTrace=doc;trace=null;sourceCursor=null;
+  $("dashboard").hidden=true;$("source-dashboard").hidden=false;
+  $("source-sha").textContent=doc.metadata.elf_sha256;
+  $("scope").textContent="NATIVE NO-WFI · SIM_ONLY";
+  $("status").textContent="QEMU source events; no WFI checkpoints or hardware measurements";
+  $("source-zoom").value="1";$("source-pan").value="0";
+  $("source-state").textContent=doc.capture_state??"SOURCE TRACE";
+  sourceRedraw();
+}
+function sourceSnapshot(message){
+  sourceMode=true;sourceLiveLost=message.truncated?
+    Math.max(0,message.oldest_seq-1):0;
+  liveMeta=message.metadata;
+  $("dashboard").hidden=true;
+  $("source-dashboard").hidden=false;
+  $("source-follow-label").hidden=false;
+  $("scope").textContent="LIVE NATIVE NO-WFI · SIM_ONLY";
+  $("source-sha").textContent=liveMeta.elf_sha256;
+  $("source-gap").textContent=sourceLiveLost?
+    "RING TRUNCATED: "+sourceLiveLost+" packets missing; open full offline JSON":"";
+  if(!message.packets.length){
+    sourceTrace=null;
+    $("source-state").textContent="WAITING FOR SOURCE EVENTS";
+    $("status").textContent="No native ROTOR/BEMF_FRONTEND samples yet";
+  }else{
+    sourceLoad({
+      format:SOURCE_FORMAT,scope:"SIM_ONLY_NATIVE_NO_WFI_SOURCE_ONLY",
+      metadata:liveMeta,samples:message.packets.map(p=>p.sample),
+      events:message.packets.flatMap(p=>p.events),
+      capture_state:"LIVE_NATIVE_SOURCE_RUNNING"
+    });
+    $("source-state").textContent="LIVE SOURCE";
+  }
+  if(message.complete)sourceComplete(message.complete);
+}
+function sourcePacket(packet){
+  if(!liveMeta||!packet||!packet.sample||!Array.isArray(packet.events))return;
+  validateSource({
+    format:SOURCE_FORMAT,scope:"SIM_ONLY_NATIVE_NO_WFI_SOURCE_ONLY",
+    metadata:liveMeta,samples:[packet.sample],events:packet.events
+  });
+  if(!sourceTrace){
+    sourceLoad({
+      format:SOURCE_FORMAT,scope:"SIM_ONLY_NATIVE_NO_WFI_SOURCE_ONLY",
+      metadata:liveMeta,samples:[packet.sample],events:packet.events,
+      capture_state:"LIVE_NATIVE_SOURCE_RUNNING"
+    });
+  }else{
+    const prev=sourceTrace.samples[sourceTrace.samples.length-1];
+    if(packet.sample.t_ns<=prev.t_ns||
+       packet.sample.source_seq<=prev.source_seq){
+      $("source-state").textContent="SOURCE TIME/SEQ INVALID";
+      $("source-gap").textContent="Non-monotonic original QEMU source sequence";
+      return;
+    }
+    sourceTrace.samples.push(packet.sample);
+    sourceTrace.events.push(...packet.events);
+    if(sourceTrace.samples.length>2048){
+      sourceTrace.samples.splice(0,sourceTrace.samples.length-2048);
+      sourceLiveLost++;
+      $("source-gap").textContent=
+        "LIVE RING BOUNDED: older source samples unavailable; use offline JSON";
+    }
+    if(sourceTrace.events.length>5000){
+      sourceTrace.events.splice(0,sourceTrace.events.length-5000);
+    }
+    $("source-state").textContent="LIVE SOURCE";
+  }
+  sourceSchedule();
+}
+function sourceComplete(complete){
+  liveFinished=true;
+  $("source-state").textContent=complete.error_type?
+    "SOURCE PROBE / ADAPTER ERROR":"NATIVE SOURCE PROBE ENDED";
+  $("status").textContent=
+    "No-WFI source telemetry completed · strict Motor P1 Gate NOT EXECUTED "+
+    (complete.error_type?" · "+complete.error_type:"");
+}
+for(const name of ["source-zoom","source-pan"]){
+  $(name).addEventListener("input",()=>{if(sourceTrace)sourceRedraw()});
+}
+
 if(isLocalLive)connectLive();
 for(const id of ["zoom","pan"])$(id).addEventListener("input",redraw);
 $("reset").addEventListener("click",()=>{
