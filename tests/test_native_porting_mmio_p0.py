@@ -44,13 +44,12 @@ class TestPortingP0(unittest.TestCase):
         self.assertTrue(any("ZERO_DEADLINE_MISMATCH" in x for x in o["issues"]))
     def test_missing_guest_cap1_read_fails(self):
         ev=[x for x in trace() if x["kind"]!="ECAP1_CAP1_READ"]
-        o=audit(ev,evidence())
-        self.assertIn("FINAL_CAP1_MISSING_ACK_OR_READ",o["issues"])
+        with self.assertRaisesRegex(ValueError,"missing source event ECAP1_CAP1_READ"):
+            audit(ev,evidence())
     def test_guest_timer_without_start_fails(self):
         ev=[x for x in trace() if x["kind"]!="T12_START"]
-        o=audit(ev,evidence())
-        self.assertTrue(any("ZERO_WITHOUT_ORIGINAL_GUEST_TIMER_START" in x
-                            for x in o["issues"]))
+        with self.assertRaisesRegex(ValueError,"missing source event T12_START"):
+            audit(ev,evidence())
     def test_no_faked_guest_provenance(self):
         p=evidence();p["host_guest_register_writes"]=True
         with self.assertRaisesRegex(ValueError,"invalid source provenance"):
