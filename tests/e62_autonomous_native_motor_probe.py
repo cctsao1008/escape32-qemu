@@ -100,7 +100,7 @@ def _resume_prearmed_differential_vm(qmp_path):
             if "QMP" not in greeting:
                 raise RuntimeError("QMP greeting absent during synchronized start")
             for name in ("qmp_capabilities","cont"):
-                conn.sendall((_json.dumps({"execute":name})+"\\n").encode("ascii"))
+                conn.sendall((_json.dumps({"execute":name})+chr(10)).encode("ascii"))
                 while True:
                     line=stream.readline()
                     if not line:
@@ -118,10 +118,9 @@ def _passively_await_last_dshot_source(qemu_log_path, proc, *, target_frames,
                                         wall_timeout_s):
     """No QTest/MMIO traffic while original Guest and all QEMU timers run."""
     import re
-    end_frame=target_frames-1
     deadline=time.monotonic()+wall_timeout_s
     observed=0
-    pattern=re.compile(r"\\bkind=DSHOT a=(\\d+)\\b")
+    pattern=re.compile("kind=DSHOT a=([0-9]+) ")
     with qemu_log_path.open("r",errors="replace") as stream:
         while time.monotonic()<deadline:
             line=stream.readline()
