@@ -45,7 +45,10 @@ jobs:
           python3 tools/native_p1_causality_ledger.py \
             --input-root artifacts/e62-p1-scripted \
             --output artifacts/e62-p1-causality-replay.json
+          # This run ID predates the ECX87 phase normalization.
+          # Explicit archived-only interpretation; NEVER reused for new QEMU.
           python3 tools/native_p1_pre_feedback_geometry.py \
+            --historical-terminal-kt-as-phase \
             --input-root artifacts/e62-p1-scripted \
             --output artifacts/e62-p1-early-geometry.json
           echo "E62_P1_CAUSAL_REPLAY_SUCCESS_DIAGNOSTIC_ONLY"
