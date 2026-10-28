@@ -75,6 +75,70 @@ class TimedAutonomousQTest(QTest):
             self.inflight_command = None
 
 
+def _resume_prearmed_differential_vm(qmp_path):
+    """Release QEMU's initial -S pause only after external FC has armed.
+
+    Differential-only startup synchronization; no mid-run halt, GDB,
+    Guest memory/register write, or synthetic physical feedback injection.
+    """
+    import json as _json
+    conn=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
+    conn.settimeout(20)
+    try:
+        deadline=time.monotonic()+20
+        while True:
+            try:
+                conn.connect(str(qmp_path))
+                break
+            except (FileNotFoundError,ConnectionRefusedError):
+                if time.monotonic()>=deadline:
+                    raise TimeoutError("QMP initial-start socket unavailable")
+                time.sleep(.05)
+        with conn:
+            stream=conn.makefile("rb")
+            greeting=_json.loads(stream.readline())
+            if "QMP" not in greeting:
+                raise RuntimeError("QMP greeting absent during synchronized start")
+            for name in ("qmp_capabilities","cont"):
+                conn.sendall((_json.dumps({"execute":name})+"\\n").encode("ascii"))
+                while True:
+                    line=stream.readline()
+                    if not line:
+                        raise EOFError("QMP disconnected during "+name)
+                    answer=_json.loads(line)
+                    if "error" in answer:
+                        raise RuntimeError("QMP "+name+" failed: "+str(answer["error"]))
+                    if "return" in answer:
+                        break
+    finally:
+        conn.close()
+
+
+def _passively_await_last_dshot_source(qemu_log_path, proc, *, target_frames,
+                                        wall_timeout_s):
+    """No QTest/MMIO traffic while original Guest and all QEMU timers run."""
+    import re
+    end_frame=target_frames-1
+    deadline=time.monotonic()+wall_timeout_s
+    observed=0
+    pattern=re.compile(r"\\bkind=DSHOT a=(\\d+)\\b")
+    with qemu_log_path.open("r",errors="replace") as stream:
+        while time.monotonic()<deadline:
+            line=stream.readline()
+            if line:
+                m=pattern.search(line)
+                if m:
+                    observed=int(m.group(1))+1
+                    if observed==target_frames:
+                        return observed
+            else:
+                if proc.poll() is not None:
+                    raise RuntimeError("QEMU exited before final source DShot")
+                time.sleep(.05)
+    raise TimeoutError("Differential passive DShot source timed out: "
+                       f"observed={observed} expected={target_frames}")
+
+
 def _autonomous_liveness(read32):
     """Constant-cost asynchronous monitor, not a synchronized snapshot."""
     r = lambda k: read32(AUTO_BASE+REG[k])
@@ -405,6 +469,7 @@ def run(args):
     with tempfile.TemporaryDirectory(prefix="e62-native-no-wfi-") as td:
         tmp = Path(td)
         sockpath = tmp/"qtest.sock"
+        qmp_sockpath = tmp/"qmp.sock"
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener:
             listener.bind(str(sockpath))
             listener.listen(1)
@@ -418,6 +483,8 @@ def run(args):
                 (",esc-sim-switch-focus-window-ms="+
                  args.switch_focus_window_ms
                  if getattr(args,"switch_focus_window_ms",None) else ""),
+                *(["-S","-qmp",f"unix:{qmp_sockpath},server=on,wait=off"]
+                  if args.differential_sync_start else []),
                 "-kernel", str(args.elf.resolve()),
                 "-display", "none", "-serial", "none", "-monitor", "none",
                 "-qtest", f"unix:path={sockpath}",
@@ -425,7 +492,9 @@ def run(args):
                 "-device", "loader,file="+str(args.cfg_flash.resolve())+
                            ",addr=0x4000,force-raw=on",
             ]
-            # Deliberately NO -S, -gdb, RSP, CPU halt or WFI breakpoints.
+            # Default mode has NO -S, -gdb, RSP or WFI breakpoints.
+            # Differential-only sync uses -S before the first Guest instruction,
+            # then one QMP cont; never pauses or steps a running Guest.
             # A child whose stderr is never drained can block on a full
             # pipe, freezing its QTest responses independently of QEMU
             # virtual timer correctness. A regular file is non-blocking
@@ -448,6 +517,9 @@ def run(args):
                 "source_focus_window_ms":getattr(
                     args,"switch_focus_window_ms",None),
                 "source_focus_guest_or_motor_control":False,
+                "differential_sync_start":bool(args.differential_sync_start),
+                "initial_vm_paused_before_first_guest_instruction":bool(
+                    args.differential_sync_start),
                 "synthetic_timed_bemf_enabled": False,
                 "physical_motor_qualified": False,
                 "readable_original_guest_diagnostics": sorted(symbol_addrs),
@@ -493,6 +565,13 @@ def run(args):
                         scenario_stages=scenario_stages,
                         external_fault=external_fault,
                         max_frames=getattr(args,"link_loss_last_frame",0))
+                    if args.differential_sync_start:
+                        _resume_prearmed_differential_vm(qmp_sockpath)
+                        evidence["passive_source_dshot_completed"] = (
+                            _passively_await_last_dshot_source(
+                                qemu_log_path,proc,
+                                target_frames=evidence["configured_dshot_frames"],
+                                wall_timeout_s=args.wall_timeout_s))
                     deadline = time.monotonic() + args.wall_timeout_s
                     last_stage = None
                     previous_sent = -1
@@ -752,6 +831,12 @@ def main():
                              "trace; START:END integer QEMU virtual ms, "
                              "1..50ms span (e.g. 2795:2840). Default off; "
                              "does NOT affect Guest or motor dynamics.")
+    parser.add_argument("--differential-sync-start",action="store_true",
+                        help="DIAGNOSTIC ONLY: start QEMU paused before any "
+                             "Guest instruction, prearm FC over QTest, QMP "
+                             "cont once, then passively follow source logs "
+                             "without MMIO polling through final DShot. "
+                             "Never used by P0/P1 acceptance.")
     parser.add_argument("--wall-timeout-s",type=int,default=180)
     parser.add_argument("--qtest-response-timeout-s",type=int,default=20,
                         help="Individual QTest readl deadline, not a CPU halt")
@@ -780,6 +865,9 @@ def main():
         begin,end=map(int,match.groups())
         if end<=begin or end-begin>50 or end>180000:
             parser.error("Bounded switch observer requires 1..50ms span")
+    if args.differential_sync_start and (args.link_loss_last_frame or
+                                         args.fault_scenario):
+        parser.error("Synchronized source replay is diagnostics-only, not P1")
     if args.link_loss_last_frame and args.fault_scenario:
         parser.error("P1 input-loss and external PA22 fault tests must be separate")
     evidence=run(args)
