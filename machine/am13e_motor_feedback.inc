@@ -351,6 +351,16 @@ static MemTxResult am13e_g10_ecap_read(void *opaque, hwaddr off,
                 !am13e_g10_ecap_get16(f, off + 2U, &hi)) goto bad;
             *value = lo | ((uint32_t)hi << 16);
         } else goto bad;
+        if (off == 8U) {
+            /* Real Guest CAP1 register read; not a fabricated accepted
+             * crossing. Preserve the physical timestamp and current
+             * native counter in the read-only event record.
+             */
+            am13e_p0_event(f->machine, "ECAP1_CAP1_READ",
+                           (int64_t)f->cap[0],
+                           (int64_t)am13e_g10_count(f),
+                           f->ecflg,f->eceint,f->ecctl2,0);
+        }
         return MEMTX_OK;
     }
     if (size == 2U) {

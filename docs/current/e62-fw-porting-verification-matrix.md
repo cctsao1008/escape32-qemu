@@ -1,0 +1,71 @@
+# E62 — FW Porting SITL Verification Matrix
+
+**Scope:** AM13E23019, Original ESCape32 Rel17.3 firmware, pinned ELF
+SHA-256 `05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0`.
+**Purpose:** quantify porting integration evidence in absence of product hardware.
+Not a claim of semiconductor timing accuracy, motor/propeller qualification or
+full application functional compliance.
+
+## Verification lanes (keep separate)
+
+**Track A — FW Porting SITL:** Original Guest executes unmodified. Verify
+actual QEMU register behavior, Guest MMIO, NVIC, DMA, DShot, physical
+six-pad AQ/DB and derived timer event chronology. Real source events and
+strict fail-closed contracts are required; unsupported aspects remain open.
+
+**Track B — Motor Dynamics:** Uncalibrated current-continuous ECX87 147KV
+24V, zero propeller load, idealized analog. This evidence can demonstrate
+*source connectivity* but cannot certify propeller startup, physical
+analog thresholds or a customer 47V/210KV system. Frozen P1 direct20
+and steps remain RED; do not waive or substitute slow ramp tests.
+
+| ID | Porting requirement | Evidence and source | Status and limitation |
+|---|---|---|---|
+| A01 | Pinned original Guest ELF/Vector boot | SHA identity and source-built QEMU No-WFI Run #40557926065 | **VERIFIED_SIM_ONLY** for frozen image; not a physical boot |
+| A02 | PA26 externally sourced DShot, DMA, CRC, Guest receiver | Run #40557926065, 3000/3000 external frames, 2380 original valid-frame feeds | **VERIFIED_SIM_ONLY** for this scenario; not signal integrity |
+| A03 | Clock/SysTick / NVIC and IRQ dispatch | No-WFI probe and source P0 tests #40557926125 | **PARTIAL**; not cycle-accurate silicon latency |
+| A04 | MCPWM source AQ/DB / six-pad chronological carrier outputs | First source PWM_PAIR and physical switch events from P0 strict #40557926125 | **VERIFIED_SIM_ONLY** for modelled events; not MOSFET switching or dead-time scope |
+| A05 | CMPSS0 rising/falling filter -> ECAP1 actual CAP1 and NVIC | Source CMP_FILTER/CAP1/CAP1_ACK in archived P1 #40557926101 | **VERIFIED_SIM_ONLY** for enabled route; actual analog frontend **HW_REQUIRED** |
+| A06 | Guest reads CAP1 timestamp, original ISR acknowledges | New `ECAP1_CAP1_READ` and existing `CAP1_ACK` source events; current real-trace evidence awaits rerun | **PENDING_RUNTIME_VERIFICATION**; ACK alone is not policy acceptance |
+| A07 | Guest writes TIMG12 PERIOD/START/STOP after CAP1 and exact virtual timer zero | New `T12_LOAD`, `T12_START`, `T12_STOP`; tool `native_porting_mmio_chain.py` | **PENDING_RUNTIME_VERIFICATION** until source-built fresh trace with new MMIO events |
+| A08 | TIMG12 ZERO -> Guest ACK -> next actual PWM pair | Existing source TIMG12/TIMG12_ACK/PWM_PAIR in P0 #40557926125; new timer arm provenance pending | **PARTIAL**: source order verified; direct arm-to-zero comparison pending |
+| A09 | Source closed-loop, no host Guest writes/WFI/GDB/synthetic BEMF | P0 strict #40557926125 and independent motor run #40557926065 | **VERIFIED_SIM_ONLY** for P0, not all throttle profiles |
+| A10 | Safety: real nFAULT / OC / shoot-through / gate disable | Dedicated CI and source models are available, but no fresh integrated safety verdict here | **PARTIAL / HW_REQUIRED** |
+| A11 | ADC physical current/VBUS/NTC calibration and analog mapping | `docs/current/esc-functional-bemf-pwm-review.md` explicitly lists ADC SOC U/V/W mapping unverified | **NOT_VERIFIED / HW_REQUIRED** |
+| A12 | Physical MOSFET, ECX87 210KV, 47V, APC 24x12E load/propeller dynamics | Current SIM_ONLY plant is ECX87 147KV, 24V, no propeller | **HW_REQUIRED**, not an E62 porting acceptance gate |
+| A13 | Guest early BEMF acceptance policy | Pinned Original Rel17.3 `ival=10000`; `capture < ival/2` early rejection | **SOURCE_CODE_VERIFIED; RUN_DECISION_INFERRED** until direct Guest-internal acceptance evidence |
+| A14 | P1 accelerated startup stability | P1 #40557926101 smoke/gentle PASS, direct20/steps FAIL (337/223 reversals) | **TRACK_B_SIM_ONLY_FAIL_UNWAIVED** |
+
+## Exact provenance added without changing firmware/physics
+
+- `ECAP1_CAP1_READ`: real Guest 32-bit CAP1 register read (value, contemporaneous
+  ECAP counter, ECFLG/ECEINT/ECCTL2). Does **not** assert accepted crossing.
+- `T12_LOAD`: real Guest TIMG12 LOAD write (ticks, native Hz, current mode).
+- `T12_START`: real Guest one-shot timer START (load, Hz, epoch counter, mode, IRQ mask).
+- `T12_STOP`: real Guest stop/cancel of timer (last counter, old load/mode).
+- Existing `CAP1`, `CAP1_ACK`, `TIMG12`, `TIMG12_ACK`, `PWM_PAIR` continue unchanged.
+- Analysis computes expected true virtual ZERO = start_virtual_time +
+  ceil(remaining_ticks*1e9/native_hz). An actual ZERO without the correct
+  source-programmed deadline **fails** the MMIO source contract.
+- An ACK followed by CAP1 read with **no** TIMG12 START before another capture
+  means only **no re-arm observed**. The Guest's private accept/reject return
+  value is not exposed; do not label it confirmed reject.
+
+Strict P0/P1 logic and thresholds are unchanged. The new diagnostic's
+"PASS_MMIO_SOURCE_CONTRACT" is a **porting observer result only**, not P1
+acceptance; P1 startup reversals remain genuine SIM_ONLY FAIL.
+
+## Execution and follow-through
+
+1. Run `.github/workflows/e62-porting-mmio-contract.yml` lightweight
+   source-contract tests on main.
+2. Source-built P0/P1 workflows rebuild QEMU from source after `machine/**`
+   changes. `.github/workflows/e62-native-p1.yml` retains unchanged
+   strict four-case suite and exports
+   `artifacts/e62-p1-scripted/e62-porting-mmio-chain.json` even when
+   P1 fails.
+3. Inspect per-case CAP1 → ACK → Guest CAP1 read → timer load → start →
+   actual zero → Guest ACK → physical PWM pair; compare actual MMIO
+   timing with pinned Guest source code.
+4. Only upgrade A06–A08 from PENDING once actual fresh source-built
+   trace passes this contract. Any HW dependent claim remains open.

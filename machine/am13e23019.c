@@ -1210,6 +1210,12 @@ static MemTxResult am13e_timer_write(void *opaque, hwaddr off,
             t->epoch_count = am13e_timer_count(t);
             t->running = false;
             timer_del(t->zero_timer);
+            if (t->base == 0x40188000U) {
+                /* Read-only provenance of the actual Guest timer STOP. */
+                am13e_p0_event(t->machine, "T12_STOP",
+                               t->epoch_count,t->reg[0x808U/4U],
+                               prior,data,0,0);
+            }
         }
         t->reg[off / 4U] = data;
         if (!was_running && (data & 1U)) {
@@ -1225,6 +1231,12 @@ static MemTxResult am13e_timer_write(void *opaque, hwaddr off,
             t->epoch_ns = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
             t->running = true;
             am13e_timer_rearm(t);
+            if (t->base == 0x40188000U) {
+                /* Guest-owned START after the virtual timer is armed. */
+                am13e_p0_event(t->machine, "T12_START",
+                               t->reg[0x808U/4U],am13e_timer_hz(t),
+                               t->epoch_count,data,t->irq_mask[0],0);
+            }
         }
         return MEMTX_OK;
     } else if (off == 0x11cU) {
@@ -1235,6 +1247,12 @@ static MemTxResult am13e_timer_write(void *opaque, hwaddr off,
         return MEMTX_OK;
     } else {
         t->reg[off / 4U] = data;
+        if (t->base == 0x40188000U && off == 0x808U) {
+            /* Observe exact Guest-period MMIO, never program a timer. */
+            am13e_p0_event(t->machine, "T12_LOAD",
+                           data,am13e_timer_hz(t),
+                           t->reg[0x804U/4U],t->running,0,0);
+        }
     }
     return MEMTX_OK;
 }

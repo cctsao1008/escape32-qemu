@@ -11,6 +11,8 @@ on:
       - 'tools/native_p1_startup_transient.py'
       - 'tools/native_p1_causality_ledger.py'
       - 'tools/native_p1_pre_feedback_geometry.py'
+      - 'tools/native_porting_mmio_chain.py'
+      - 'tests/test_native_porting_mmio_chain.py'
       - 'tests/test_native_p1_pre_feedback_geometry.py'
       - 'tests/test_native_p1_causality_ledger.py'
       - 'tests/test_native_p1_startup_transient.py'
@@ -47,6 +49,7 @@ jobs:
           export PYTHONPATH="$PWD${PYTHONPATH:+:$PYTHONPATH}"
           python3 tests/test_native_p1_qualification.py
           python3 tests/test_native_p1_causality_ledger.py
+          python3 tests/test_native_porting_mmio_chain.py
           python3 tests/test_native_p1_pre_feedback_geometry.py
           python3 tests/test_native_p1_startup_transient.py
           python3 tests/test_e62_native_scripted_test.py
@@ -116,6 +119,14 @@ jobs:
           python3 tools/native_p1_pre_feedback_geometry.py \
             --input-root artifacts/e62-p1-scripted \
             --output artifacts/e62-p1-scripted/e62-p1-early-geometry.json
+      - name: Guest CAP1-read and TIMG12 period/arm/ZERO verification (read-only)
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/native_porting_mmio_chain.py \
+            --input-root artifacts/e62-p1-scripted \
+            --output artifacts/e62-p1-scripted/e62-porting-mmio-chain.json
       - name: Preserve scenarios, source events and negative results without discarding FAIL
         if: always()
         uses: actions/upload-artifact@v4

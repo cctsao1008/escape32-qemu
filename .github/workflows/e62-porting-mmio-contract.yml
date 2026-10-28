@@ -1,0 +1,30 @@
+name: E62 Porting MMIO Causality Unit Contract
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'machine/am13e23019.c'
+      - 'machine/am13e_motor_feedback.inc'
+      - 'tools/native_p0_strict.py'
+      - 'tools/native_porting_mmio_chain.py'
+      - 'tests/test_native_porting_mmio_chain.py'
+      - '.github/workflows/e62-porting-mmio-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  read-only-original-guest-mmio-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Strict source parser / exact virtual-timer / CAP1-read contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tests/test_native_porting_mmio_chain.py
+          python3 tests/test_native_p1_first_feedback_latency.py
+          python3 tests/test_native_p0_strict.py
+          echo "PASS_FW_PORTING_MMIO_CONTRACT_UNIT_ONLY"
