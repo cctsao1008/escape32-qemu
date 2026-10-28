@@ -22,7 +22,7 @@ and steps remain RED; do not waive or substitute slow ramp tests.
 | ID | Porting requirement | Evidence and source | Status and limitation |
 |---|---|---|---|
 | A01 | Pinned original Guest ELF/Vector boot | SHA identity and source-built QEMU No-WFI Run #40557926065 | **VERIFIED_SIM_ONLY** for frozen image; not a physical boot |
-| A02 | PA26 externally sourced DShot, DMA, CRC, Guest receiver | Run #40557926065, 3000/3000 external frames, 2380 original valid-frame feeds | **VERIFIED_SIM_ONLY** for this scenario; not signal integrity |
+| A02 | PA26 externally sourced DShot, DMA, CRC, Guest receiver | No-WFI #40631864467 and independent valid/bad physical-wire CRC #40631864430 (genuine Guest callback, WWDT feed only for valid CRC) | **VERIFIED_SIM_ONLY** in respective cases; CRC fixture uses WFI checkpoint, input-loss reset and board signal integrity remain open |
 | A03 | Clock/SysTick / NVIC and IRQ dispatch | No-WFI probe and source P0 tests #40557926125 | **PARTIAL**; not cycle-accurate silicon latency |
 | A04 | MCPWM source AQ/DB / six-pad chronological carrier outputs | First source PWM_PAIR and physical switch events from P0 strict #40557926125 | **VERIFIED_SIM_ONLY** for modelled events; not MOSFET switching or dead-time scope |
 | A05 | CMPSS0 rising/falling filter -> ECAP1 actual CAP1 and NVIC | Source CMP_FILTER/CAP1/CAP1_ACK in archived P1 #40557926101 | **VERIFIED_SIM_ONLY** for enabled route; actual analog frontend **HW_REQUIRED** |
@@ -30,7 +30,7 @@ and steps remain RED; do not waive or substitute slow ramp tests.
 | A07 | Guest writes TIMG12 PERIOD/START/STOP after CAP1 and exact virtual timer zero | Source-built P0 strict replay #40632866806 matched **824** Guest TIMG12 START→actual virtual ZERO, max absolute deadline error **2ns** | **VERIFIED_SIM_ONLY_P0** virtual register/timer contract; not silicon jitter |
 | A08 | TIMG12 ZERO -> Guest ACK -> next actual PWM pair | New P0 source #40631864428 and all-timer replay #40632866806; 824 TIMER ZERO and Guest ACK; existing strict P0 source causal chain gate PASS | **VERIFIED_SIM_ONLY_P0** for guest-programmed timer and causal order; not every P1 startup profile |
 | A09 | Source closed-loop, no host Guest writes/WFI/GDB/synthetic BEMF | P0 strict #40557926125 and independent motor run #40557926065 | **VERIFIED_SIM_ONLY** for P0, not all throttle profiles |
-| A10 | Safety: real nFAULT / OC / shoot-through / gate disable | Dedicated CI and source models are available, but no fresh integrated safety verdict here | **PARTIAL / HW_REQUIRED** |
+| A10 | Safety: nFAULT/OC/Trip/gate-off | Independent modeled neutral nfault/OC-U/V/W #40631864426, plus No-WFI running-rotor PA22 nFAULT #40631864583 (OST2 latched, gate off, DShot continues) | **VERIFIED_SIM_ONLY_NEGATIVE** for named cases; physical MOSFET, input loss and fault-release recovery **HW_REQUIRED/OPEN** |
 | A11 | ADC physical current/VBUS/NTC calibration and analog mapping | `docs/current/esc-functional-bemf-pwm-review.md` explicitly lists ADC SOC U/V/W mapping unverified | **NOT_VERIFIED / HW_REQUIRED** |
 | A12 | Physical MOSFET, ECX87 210KV, 47V, APC 24x12E load/propeller dynamics | Current SIM_ONLY plant is ECX87 147KV, 24V, no propeller | **HW_REQUIRED**, not an E62 porting acceptance gate |
 | A13 | Guest early BEMF acceptance policy | Original Rel17.3 `ival=10000`; `capture < ival/2`. New P1 MMIO trace #40631864594: first CAP1 ACK+READ has **no timer rearm** in direct20/steps; second CAP1 ACK+READ **does** rearm TIMG12 | **SOURCE_CODE_VERIFIED; MMIO_DECISION_CONSEQUENCE_OBSERVED**; internal return/branch not directly observed |
@@ -82,6 +82,14 @@ This demonstrates that the first fast CAP1 was *physically captured, IRQ-acknowl
 Strict P0/P1 logic and thresholds are unchanged. The new diagnostic's
 "PASS_MMIO_SOURCE_CONTRACT" is a **porting observer result only**, not P1
 acceptance; P1 startup reversals remain genuine SIM_ONLY FAIL.
+
+
+## Independent porting readiness and strict CI separation
+
+- [Readiness evidence packet CI #40633589369](https://github.com/cctsao1008/escape32-qemu/actions/runs/40633589369) **PASS** after ingesting *five real archived verdict JSON artifacts*: P0 MMIO, P1 MMIO, valid/bad DShot CRC, neutral OC/nFAULT and in-flight no-WFI nFAULT. It ran 11 + 6 + 8 regression tests; the output includes JSON/Markdown and input SHA256 identities. Its machine status is `PASS_BOUNDED_SITL_PORTING_EVIDENCE_WITH_OPEN_ITEMS`, and `porting_complete=false`, `hardware_qualified=false`, `motor_p1_all_cases_qualified=false`.
+- The [complete readiness decision](e62-fw-porting-readiness-decision.md) separates modelled peripheral contract proofs from real silicon and closed-loop stability requirements. The DShot CRC case uses a native WFI checkpoint; only P0/flight nFAULT cases are no-WFI.
+- [Historical G13B3 fingerprint diagnostic #40633710369](https://github.com/cctsao1008/escape32-qemu/actions/runs/40633710369) has **5 mismatches**: `build.sh`, `machine/am13e23019.c`, `machine/am13e_motor_feedback.inc`, `machine/am13e_pwm_history.inc`, `machine/am13e_trip_safety.inc`. The pinned historical binary/source **verifier remains FAIL**, and old manifest/binaries were not overwritten.
+- Current-source `esc-sim-regression` and G14 extended rotor gate can still fail on the independently unqualified motor trajectory. This must neither be hidden nor treated as a demonstrated ECAP/TIMG12 porting defect.
 
 ## Execution and follow-through
 
