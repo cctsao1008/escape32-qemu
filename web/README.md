@@ -120,6 +120,47 @@ This CLI is source-only and does not send commands to the Guest,
 QEMU or the Motor Plant.
 
 
+## Optional bounded late PWM switching focus (requires rebuild)
+
+New QEMU source-only observability emits \`SWITCH_FOCUS\` at real
+AQ/DB six-pad mask/gate transitions during a **1–50 ms** explicitly
+specified virtual-time window. Default is **OFF**. A separate
+**Opt-in 6-pad AQ/DB SWITCH_FOCUS events** WebGUI chart displays
+original source transition points, not a reconstructed carrier
+waveform. Source snapshots include \`pwm_mask_source_kind\` so
+early normal \`SWITCH\` and optional late \`SWITCH_FOCUS\` are
+not confused.
+
+After \`git pull --ff-only\`, run \`./build.sh\` to rebuild the
+new QEMU observer. Reuse your unchanged Original ELF and SIM_ONLY CFG:
+
+\`\`\`bash
+RUN_ID=$(date +%Y%m%d-%H%M%S)
+
+python3 tools/native_source_live_runner.py \
+  --qemu .build/qemu-src/build/qemu-system-arm \
+  --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+  --cfg-flash artifacts/e62-g13b3-native-webgui-cfg.bin \
+  --scenario scenarios/e62-native-p0-smoke.json \
+  --switch-focus-window-ms 2795:2840 \
+  --artifact artifacts/e62-focus-$RUN_ID.json \
+  --port 8765 --hold
+
+python3 tools/native_source_energy_audit.py \
+  --events artifacts/e62-focus-$RUN_ID.p0.events.log \
+  --window-ms 35 \
+  --output artifacts/e62-focus-$RUN_ID.energy.json
+\`\`\`
+
+This observer is **not** an ESC command or a new motor model. It
+records only real source callbacks; its 12,000-transition budget
+fails closed on overflow. Source data will not certify physical
+braking, analog current, or motor P1 acceptance. See
+[Energy Ledger and Bounded AQ/DB Focus](../docs/current/e62-neutral-energy-and-focused-switch-observation.md)
+for original Oct 28 model measurements, limits and the
+Off/On nonintervention regression.
+
+
 ## What the viewer does *not* prove
 
 - Source-event BEMF is an **ADC comparator input code**, not volts.
