@@ -17,7 +17,22 @@
 #define AM13E_NATIVE_MOTOR_STEP_NS INT64_C(1000)
 #define AM13E_NATIVE_MOTOR_MAGIC UINT32_C(0x4d323645) /* E62M */
 #define AM13E_NATIVE_PP 21.0
-#define AM13E_NATIVE_KT 0.0649
+/* maxon EC 87 flat UAV KV147 (April 2025), terminal Kt=64.9 mNm/A,
+ * Kn=147 rpm/V. These are terminal-equivalent constants, NOT the
+ * peak amplitude of one sinusoidal phase BEMF.
+ *
+ * Balanced sinusoidal star: max(e_hi-e_lo) / omega_mech =
+ * sqrt(3) * K_phase. Matching the published terminal Kt = Ke_ll_peak
+ * therefore requires K_phase=Kt_terminal/sqrt(3).
+ *
+ * e_phase=K_phase*omega_mech*sin(theta_e+offset) and
+ * T=K_phase*sum(I_phase*sin(theta_e+offset)). The SAME constant in
+ * both expressions enforces sum(e_phase*I_phase)=T*omega_mech.
+ * This convention is a datasheet-equivalent SIM_ONLY approximation:
+ * the actual motor's phase waveform/driver/load are not calibrated.
+ */
+#define AM13E_NATIVE_KT_TERMINAL 0.0649
+#define AM13E_NATIVE_K_PHASE (AM13E_NATIVE_KT_TERMINAL / 1.7320508075688772935)
 #define AM13E_NATIVE_J 0.00013
 #define AM13E_NATIVE_L 0.000024
 #define AM13E_NATIVE_R 0.053
