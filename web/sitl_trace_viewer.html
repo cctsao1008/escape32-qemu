@@ -122,6 +122,7 @@ let sourceTrace=null, sourceMode=false, sourceCursor=null, sourceLiveLost=0, sou
 const isLocalLive=location.protocol==="http:" &&
   ["127.0.0.1","localhost"].includes(location.hostname);
 let liveMeta=null, liveLost=0, renderPending=false, liveFinished=false;
+let liveChannel=null, offlineFileSelected=false;
 const finite = x => typeof x==="number" && Number.isFinite(x);
 function validate(d){
   if(!d || d.format!==FORMAT || d.scope!==SCOPE || !Array.isArray(d.samples)
@@ -311,7 +312,7 @@ function load(d){
   sourceMode=false;sourceTrace=null;$("source-dashboard").hidden=true;
   validate(d);
   trace=d;cursor=null;
-  $("scope").textContent=(isLocalLive?"LIVE ":"ACTUAL ")+
+  $("scope").textContent=(isLocalLive&&!offlineFileSelected?"LIVE ":"ACTUAL ")+
     "NATIVE WFI · SIM_ONLY";
   $("status").textContent=d.capture_state+
     " · sampled PWM, not pin-edge / board waveforms";
@@ -326,7 +327,7 @@ function load(d){
     "NOT YET QUALIFIED";
   $("direction").className=d.native_result?(dir?"ok":"danger"):"muted";
   $("strict").textContent="NOT EXECUTED";
-  if(isLocalLive && !d.native_result){
+  if(isLocalLive && !offlineFileSelected && !d.native_result){
     $("direction").textContent="PENDING · NO NATIVE VERDICT";
     $("direction").className="muted";
   }
@@ -337,11 +338,22 @@ function load(d){
 $("file").addEventListener("change",async event=>{
   const file=event.target.files?.[0];
   if(!file)return;
+  // Manual offline review is an explicit mode switch. Detach localhost SSE
+  // before loading source/WFI files so live packets cannot contaminate
+  // a different trace or make stale historical data appear current.
+  if(liveChannel){liveChannel.close();liveChannel=null;}
+  offlineFileSelected=true;
+  setLiveStatus("OFFLINE FILE · LIVE DETACHED");
+  $("live-follow").hidden=true;
+  $("source-follow-label").hidden=true;
   try{
     if(file.size>50*1024*1024)throw Error("Trace exceeds 50 MiB safety limit");
     load(JSON.parse(await file.text()));
   }catch(err){
-    trace=null;$("dashboard").hidden=true;$("scope").textContent="TRACE REJECTED";
+    trace=null;sourceTrace=null;sourceMode=false;
+    $("dashboard").hidden=true;
+    $("source-dashboard").hidden=true;
+    $("scope").textContent="TRACE REJECTED";
     $("status").textContent=String(err.message||err);
   }
 });
@@ -450,10 +462,11 @@ function applyLiveComplete(complete){
   }
 }
 function connectLive(){
-  if(!isLocalLive)return;
+  if(!isLocalLive || offlineFileSelected)return;
   setLiveStatus("CONNECTING");
   $("status").textContent="Waiting for original Guest native WFI...";
   const channel=new EventSource("/events");
+  liveChannel=channel;
   channel.addEventListener("snapshot",event=>{
     try{applyLiveSnapshot(JSON.parse(event.data))}
     catch(err){setLiveStatus("INVALID TELEMETRY");$("status").textContent=String(err);
