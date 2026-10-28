@@ -6,10 +6,12 @@ on:
       - 'web/sitl_trace_viewer.html'
       - 'tools/native_source_trace.py'
       - 'tools/native_source_neutral_diagnostics.py'
+      - 'tools/native_source_energy_audit.py'
       - 'tools/native_source_live_runner.py'
       - 'tools/sitl_live.py'
       - 'tests/test_native_source_trace.py'
       - 'tests/test_native_source_neutral_diagnostics.py'
+      - 'tests/test_native_source_energy_audit.py'
       - 'tests/test_native_source_observation_browser.js'
       - 'tests/test_native_source_live_runner.py'
       - 'tests/test_native_source_browser_runtime.js'
@@ -36,6 +38,7 @@ jobs:
           set -euo pipefail
           python3 tests/test_native_source_trace.py
           python3 tests/test_native_source_neutral_diagnostics.py
+          python3 tests/test_native_source_energy_audit.py
           python3 tests/test_native_source_live_runner.py
           python3 tests/test_sitl_live.py
           python3 tests/test_sitl_viewer.py
@@ -47,5 +50,6 @@ jobs:
           python3 -m py_compile \
             tools/native_source_trace.py \
             tools/native_source_live_runner.py \
-            tools/native_source_neutral_diagnostics.py
+            tools/native_source_neutral_diagnostics.py \
+            tools/native_source_energy_audit.py
           echo E62_NATIVE_SOURCE_GUI_HOST_ONLY_CONTRACT_PASS_NO_GUEST_SIGNOFF
