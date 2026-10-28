@@ -189,6 +189,28 @@ assert.equal(nodes.get("sample-count").textContent,1);
                   {filename:"sitl_trace_viewer.html",timeout:2500});
   assert.equal(FakeEventSource.last.url,"/events");
   assert.equal(FakeEventSource.last.closed,false);
+  // Drive the actual EventSource handlers rather than direct UI helpers.
+  const socket=FakeEventSource.last;
+  socket.listeners.get("snapshot")({
+    data:JSON.stringify({
+      metadata:meta,packets:[first],seq:1,oldest_seq:1,
+      truncated:false,complete:null
+    })
+  });
+  assert.equal(httpNodes.get("source-count").textContent,"1");
+  socket.listeners.get("gap")({
+    data:JSON.stringify({missing_packets:3,since_seq:1})
+  });
+  assert.match(httpNodes.get("source-gap").textContent,/3 frames missing/);
+  socket.listeners.get("frame")({data:JSON.stringify(next)});
+  assert.equal(httpNodes.get("source-count").textContent,"2");
+  assert.equal(httpNodes.get("source-timer").textContent,"2");
+  assert.match(httpNodes.get("source-gap").textContent,/3 frames missing/);
+  socket.listeners.get("complete")({
+    data:JSON.stringify({error_type:"NativeProbeFailed",native_result:{}})
+  });
+  assert.match(httpNodes.get("source-state").textContent,/ERROR/);
+
   const onChange=httpNodes.get("file").handlers.get("change");
   assert.equal(typeof onChange,"function");
   await onChange({
