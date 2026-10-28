@@ -33,6 +33,7 @@ def inspect_neutral_return(doc:dict, *, window_ns=WINDOW_NS)->dict:
     last_seq=0
     previous_dshot=None
     last_zero=None
+    last_previous_raw=None
     for e in events:
         if (not isinstance(e,dict) or not isinstance(e.get("seq"),int) or
             e["seq"]<=last_seq or not isinstance(e.get("t_ns"),int) or
@@ -45,6 +46,7 @@ def inspect_neutral_return(doc:dict, *, window_ns=WINDOW_NS)->dict:
                 raise ObservationError("Invalid original external FC DShot raw code")
             if previous_dshot is not None and previous_dshot>0 and raw==0:
                 last_zero=e
+                last_previous_raw=previous_dshot
             previous_dshot=raw
     if last_zero is None:
         raise ObservationError("No source-owned DShot nonzero->0 event observed")
@@ -76,7 +78,7 @@ def inspect_neutral_return(doc:dict, *, window_ns=WINDOW_NS)->dict:
         "timebase":"QEMU_CLOCK_VIRTUAL",
         "source":"E62_P0_EVENT_NO_WFI_READ_ONLY",
         "trigger":{"kind":"DSHOT","seq":last_zero["seq"],
-                   "t_ns":start,"previous_raw":"NONZERO",
+                   "t_ns":start,"previous_raw":last_previous_raw,
                    "new_raw":0},
         "window":{"from_ns":start,"to_ns":end,"duration_ms":window_ns/1e6,
                   "source_samples":len(timeline),
