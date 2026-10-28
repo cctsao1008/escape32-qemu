@@ -159,14 +159,14 @@ static void am13e_auto_arm_experimental_direct20(AM13EAutoSITL *a)
 {
     static const AM13EAutoStage stages[] = {
         {1500U, 0U, 0U, 1U},
-        {1000U, 200U, 200U, 1U},
-        {200U, 0U, 0U, 1U},
+        {1500U, 200U, 200U, 1U},
+        {300U, 0U, 0U, 1U},
     };
     g_assert(a->dshot_timer && a->machine->native_motor.enabled);
     g_assert(!a->running && !a->done && !a->error_code);
     memcpy(a->stages, stages, sizeof(stages));
     a->stage_count = G_N_ELEMENTS(stages);
-    if (!am13e_auto_validate(a) || a->target_frames != 2700U) {
+    if (!am13e_auto_validate(a) || a->target_frames != 3300U) {
         error_report("E62 experimental Direct20 FC stage contract invalid");
         exit(EXIT_FAILURE);
     }
