@@ -202,11 +202,11 @@ assert.equal(nodes.get("sample-count").textContent,1);
   socket.listeners.get("gap")({
     data:JSON.stringify({missing_packets:3,since_seq:1})
   });
-  assert.match(httpNodes.get("source-gap").textContent,/3 frames missing/);
+  assert.match(httpNodes.get("source-gap").textContent,/SSE STREAM GAP: 3 packets unavailable/);
   socket.listeners.get("frame")({data:JSON.stringify(next)});
   assert.equal(httpNodes.get("source-count").textContent,"2");
   assert.equal(httpNodes.get("source-timer").textContent,"2");
-  assert.match(httpNodes.get("source-gap").textContent,/3 frames missing/);
+  assert.match(httpNodes.get("source-gap").textContent,/SSE STREAM GAP: 3 packets unavailable/);
   socket.listeners.get("complete")({
     data:JSON.stringify({error_type:"NativeProbeFailed",native_result:{}})
   });
