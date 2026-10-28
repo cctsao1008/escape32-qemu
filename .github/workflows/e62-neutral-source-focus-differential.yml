@@ -10,6 +10,8 @@ on:
       - 'tools/native_source_energy_audit.py'
       - 'tools/native_source_focus_differential.py'
       - 'tests/test_native_source_focus_differential.py'
+      - 'tools/native_preboot_fc_source.py'
+      - 'machine/am13e_autonomous_sitl.inc'
       - 'tools/native_p0_strict.py'
       - '.github/workflows/e62-neutral-source-focus-differential.yml'
   workflow_dispatch:
@@ -48,15 +50,15 @@ jobs:
             --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
             --motor-profile ecx87-kv147 \
             --output artifacts/e62-g13b3-focus-cfg.bin
-      # Free-running QEMU/QTest is intentionally NOT called deterministic.
-      # Prove OFF/OFF first; no timestamp alignment or tolerance allowed.
-      # Experimental QMP -S / icount RR flags remain opt-in in runner, not
-      # in this workflow until QTest startup protocol is independently proven.
-      - name: Original Guest source observer OFF (control A)
+      # Diagnostic-only preboot machine FC clock schedule.
+      # NO QTest, QMP, -S, RR, host-paced input, or original Guest writes.
+      # No claim about P0/P1: only the two source artifacts qualify this
+      # replay's reproducibility before the observer ON comparison.
+      - name: Diagnostic preboot original Guest / FC OFF-A
         shell: bash
         run: |
           set -euo pipefail
-          python3 tests/e62_autonomous_native_motor_probe.py \
+          python3 tools/native_preboot_fc_source.py \
             --qemu .build/qemu-src/build/qemu-system-arm \
             --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
             --cfg-flash artifacts/e62-g13b3-focus-cfg.bin \
@@ -64,11 +66,11 @@ jobs:
             --artifact artifacts/e62-focus-off.json \
             --wall-timeout-s 210 \
             > artifacts/e62-focus-off-runner.log
-      - name: Original Guest source observer OFF (independent control A-repeat)
+      - name: Diagnostic preboot original Guest / FC OFF-B (A/A)
         shell: bash
         run: |
           set -euo pipefail
-          python3 tests/e62_autonomous_native_motor_probe.py \
+          python3 tools/native_preboot_fc_source.py \
             --qemu .build/qemu-src/build/qemu-system-arm \
             --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
             --cfg-flash artifacts/e62-g13b3-focus-cfg.bin \
@@ -76,7 +78,7 @@ jobs:
             --artifact artifacts/e62-focus-off-repeat.json \
             --wall-timeout-s 210 \
             > artifacts/e62-focus-off-repeat-runner.log
-      - name: Validate two OFF source ledgers
+      - name: Strict original source energy on OFF-A and OFF-B
         shell: bash
         run: |
           set -euo pipefail
@@ -86,18 +88,18 @@ jobs:
               --output artifacts/e62-focus-$mode.energy.json \
               > artifacts/e62-focus-$mode.energy.log
           done
-      - name: OFF/OFF reproducibility gate (fail closed)
+      - name: Fail closed unless independent OFF/OFF source and energy are identical
         shell: bash
         run: |
           set -euo pipefail
           python3 tools/native_source_focus_differential.py \
             --phase baseline \
             --output artifacts/e62-focus-repeatability.json
-      - name: Same Original Guest, source observer 2795–2840ms ON
+      - name: Diagnostic preboot original Guest / FC observer 2795–2840ms ON
         shell: bash
         run: |
           set -euo pipefail
-          python3 tests/e62_autonomous_native_motor_probe.py \
+          python3 tools/native_preboot_fc_source.py \
             --qemu .build/qemu-src/build/qemu-system-arm \
             --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
             --cfg-flash artifacts/e62-g13b3-focus-cfg.bin \
@@ -106,7 +108,7 @@ jobs:
             --switch-focus-window-ms 2795:2840 \
             --wall-timeout-s 210 \
             > artifacts/e62-focus-on-runner.log
-      - name: Validate ON source energy ledger
+      - name: Strict original ON source energy audit
         shell: bash
         run: |
           set -euo pipefail
@@ -114,7 +116,7 @@ jobs:
             --events artifacts/e62-focus-on.p0.events.log \
             --output artifacts/e62-focus-on.energy.json \
             > artifacts/e62-focus-on.energy.log
-      - name: Strict differential (only after baseline reproducibility)
+      - name: Fail closed on any changed original source/energy in OFF/ON
         shell: bash
         run: |
           set -euo pipefail
