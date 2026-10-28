@@ -8,6 +8,7 @@ on:
       - 'machine/am13e_autonomous_sitl.inc'
       - 'tools/experimental_e62_bemf_ab.py'
       - 'tests/fixtures/e62_sim_only_motor_board_profile.cmake'
+      - 'tests/fixtures/e62_sim_only_motor_board_profile_early.cmake'
       - '.github/workflows/e62-experiment-early-bemf-direct20.yml'
   workflow_dispatch:
 
@@ -57,7 +58,11 @@ jobs:
           fw="$PWD/.build/experimental-escape32"
           board="$PWD/tests/fixtures/e62_sim_only_motor_board_profile.cmake"
           test -s "$board"
-          grep -q '^    AM13E_E62_REQUIRE_MOTOR_OUTPUT=1
+          candidate_board="$PWD/tests/fixtures/e62_sim_only_motor_board_profile_early.cmake"
+          test -s "$candidate_board"
+          grep -Fxq '    AM13E_E62_REQUIRE_MOTOR_OUTPUT=1' "$board"
+          grep -Fq 'AM13E_SIM_ONLY_EXPERIMENTAL_EARLY_BEMF=1' "$candidate_board"
+          grep -Fq 'E62 motor test requires AM13E_MOTOR_OUTPUT_CONFIGURED=1' "$fw/mcu/AM13E/hal/motor_output_configuration.h"
           # The unconfigured Reference firmware leaves all motor pads OFF.
           # ONLY this separate SIM_ONLY experiment supplies a complete
           # electrical compile fixture. BOTH control and candidate use it.
@@ -68,8 +73,7 @@ jobs:
           cmake --build .build/exp-fw-default --target AM13E-rev17.3.elf -j 2
           cmake -S "$fw" -B .build/exp-fw-early -G "Unix Makefiles" \
             -DESCAPE32_BUILD_AM13E=ON -DAM13E_SDK_ROOT=/tmp/am13e-ti-sdk \
-            -DAM13E_BOARD_BOARD_PROFILE_FILE="$board" \
-            -DCMAKE_C_FLAGS="-DAM13E_SIM_ONLY_EXPERIMENTAL_EARLY_BEMF=1"
+            -DAM13E_BOARD_BOARD_PROFILE_FILE="$candidate_board"
           cmake --build .build/exp-fw-early --target AM13E-rev17.3.elf -j 2
           cp .build/exp-fw-default/AM13E-rev17.3.elf artifacts/e62-exp-control.elf
           cp .build/exp-fw-early/AM13E-rev17.3.elf artifacts/e62-exp-candidate.elf
