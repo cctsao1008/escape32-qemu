@@ -85,6 +85,9 @@ def run(args):
     ]
     if args.link_loss_last_frame:
         cmd.extend(["--link-loss-last-frame",str(args.link_loss_last_frame)])
+    if args.switch_focus_window_ms:
+        cmd.extend(["--switch-focus-window-ms",
+                    args.switch_focus_window_ms])
     proc=None;errors=[];summary=None;code=1
     try:
         proc=subprocess.Popen(cmd,cwd=str(ROOT))
@@ -161,6 +164,9 @@ def main():
     p.add_argument("--port",type=int,default=8765)
     p.add_argument("--hold",action="store_true")
     p.add_argument("--link-loss-last-frame",type=int,default=0)
+    p.add_argument("--switch-focus-window-ms",default=None,
+                   help="Optional 1..50ms source-only AQ/DB switching focus "
+                        "START:END virtual ms; default off")
     p.add_argument("--wall-timeout-s",type=int,default=180)
     args=p.parse_args()
     if not 0<=args.port<=65535 or not 30<=args.wall_timeout_s<=600:
