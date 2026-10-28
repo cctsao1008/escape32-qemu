@@ -154,17 +154,42 @@ This finding does NOT prove an observer side effect or observer neutrality.
    with no time shift, rounding, normalization tolerance or waived P0/P1.
 4. Retain original logs and reports via CI artifact on all failures.
 
-The differential workflow now opts into
-`--differential-sync-start` **only for this diagnostic replay**.
-QEMU begins in `-S` state **before the Guest has executed its first
-instruction**. The host prearms the existing non-silicon external-FC
-DShot calendar over QTest, then issues a single QMP `cont`. The
-observer follows the actual QEMU source log passively through the final
-DShot frame, with no periodic QTest/MMIO polling during that interval.
-No Guest WFI/GDB, register write, motor model modification or
-mid-execution CPU halt is introduced. This changes the test-harness
-startup synchronization and must **not** be represented as the
-original production-like unsynchronized P0/P1 acceptance run.
+**2026-10-28 independent OFF/OFF evidence:** CI
+[#40695903916](https://github.com/cctsao1008/escape32-qemu/actions/runs/40695903916)
+completed both uninstrumented Guest runs and both original ENERGY audits.
+The final comparison step itself failed on a Python import path
+(`ModuleNotFoundError: tools`), but the preserved artifacts directly show
+that OFF-A and OFF-B are *not* bit-exact:
+- First DShot: **66032 ns** versus **45396 ns**.
+- Original-source records through 2990 ms: **28335** versus **28336**.
+- Original valid DShot feeds: **2380** versus **2381**.
+- Neutral-window Bus energy delta: **-0.049230638 J** versus
+  **-0.049217576 J**.
+- After excluding only the first DShot event as an *investigative
+  localization*, original records first diverge at approximately
+  **2697.2374 ms**: ROTOR virtual timestamps **2697237408** versus
+  **2697237656 ns** (248 ns apart), with different rotor/current and
+  ENERGY payloads. This localization does **not** waive the strict
+  first-event mismatch in the actual gate.
+
+The dedicated comparator in
+`tools/native_source_focus_differential.py` and its seven unit tests
+make OFF/OFF equality a mandatory prerequisite and return
+`FAIL_BASELINE_NONREPRODUCIBLE` without making an OFF/ON causal claim.
+It preserves exact virtual timestamps, sequence/order, all six source
+fields and signed source ENERGY deltas; no event dropping except isolated
+focus instrumentation, no alignment and no tolerance.
+
+The experimental runner separately supports QMP `-S` synchronized
+startup and QEMU `icount record/replay`, but CI
+[#40694606626](https://github.com/cctsao1008/escape32-qemu/actions/runs/40694606626)
+showed that combining paused startup with recording blocked the first
+QTest `readl 0x5ffeb000` for 20 seconds and produced a zero-byte
+recording. This experimental path is **not yet validated** and is not
+enabled in the current fail-closed Differential CI. The current workflow
+uses the legacy free-running Original Guest for OFF/OFF controls, then
+attempts ON only after the strict baseline passes. The experimental
+runner's opt-in flags do not change production-like P0/P1 gate criteria.
 
 **Acceptance boundary:** A/A replay equality is a prerequisite;
 A/B equality can support source-only observation neutrality **within
