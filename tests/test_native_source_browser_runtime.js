@@ -153,5 +153,5 @@ expr("load("+JSON.stringify(wfi)+")");
 assert.equal(nodes.get("dashboard").hidden,false);
 assert.equal(nodes.get("source-dashboard").hidden,true);
 assert.match(nodes.get("scope").textContent,/NATIVE WFI/);
-assert.equal(nodes.get("sample-count").textContent,"1");
+assert.equal(nodes.get("sample-count").textContent,1);
 console.log("PASS_E62_BROWSER_JS_RUNTIME_OFFLINE_LIVE_GAP_DSHOT_STALE_PWM_WFI_COMPAT");
