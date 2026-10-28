@@ -832,8 +832,10 @@ static void am13e_sim_wwdt_expired(void *opaque)
         s->gpio[1].dout &= ~(1U << 13);
         am13e_pwm4_reset(&s->pwm4);
         s->wwdt_reset_pending = true;
-        error_report("ESC_SIM_WWDT_BOOTRST_REQUESTED: source-owned input "
-                     "watchdog expired; PB13 LOW; PWM frozen; resetcause=0x0e");
+        error_report("ESC_SIM_WWDT_BOOTRST_REQUESTED: vns=%" PRId64
+                     " source-owned input watchdog expired; "
+                     "PB13 LOW; PWM frozen; resetcause=0x0e",
+                     qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL));
         qemu_system_reset_request(SHUTDOWN_CAUSE_GUEST_RESET);
         return;
     }
@@ -912,6 +914,13 @@ static MemTxResult am13e_sim_wwdt_write(void *opaque, hwaddr off,
         }
         w->feed_count++;
         am13e_sim_wwdt_schedule(w);
+        /* Genuine Original Guest WWDT0 feed MMIO, observation only.
+         * External DShot silence has no Host Guest/WWDT writes. */
+        if (w->machine) {
+            am13e_p0_event(w->machine, "WWDT_FEED",
+                           w->feed_count, w->ctl0,
+                           w->ctl1, 0, 0, 0);
+        }
         return MEMTX_OK;
     default:
         return am13e_sim_wwdt_unmodeled(w, off, true, size);

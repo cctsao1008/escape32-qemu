@@ -117,8 +117,8 @@ def _continuous_dshot_stages(*, neutral_ms, ramp_ms, hold_ms, coast_ms,
 def _configure_autonomous_dshot(qtest, *, neutral_ms, ramp_ms,
                                 hold_ms, coast_ms, drive_permille,
                                 ramp_update_ms, scenario_stages=None,
-                                external_fault=None):
-    """Stage uninterrupted PA26 DShot traffic, not Guest synchronization."""
+                                external_fault=None, max_frames=0):
+    """Stage PA26 traffic; optional bounded abrupt external FC disconnect."""
     get = lambda key: qtest.read(AUTO_BASE+REG[key])
     put = lambda key, val: qtest.write(AUTO_BASE+REG[key], val)
     if get("magic") != 0x41323645 or get("abi_version") != 4:
@@ -138,7 +138,10 @@ def _configure_autonomous_dshot(qtest, *, neutral_ms, ramp_ms,
             put(key, val)
             if get(key) != val:
                 raise RuntimeError("DShot input staging readback changed")
-    put("max_frames", 0)
+    total = sum(stage[0] for stage in stages)
+    if max_frames and not (0 < max_frames < total):
+        raise ValueError("Link loss must stop before the last scenario frame")
+    put("max_frames", max_frames)
     if external_fault is not None:
         # Physical PA22 input calendar ONLY; QEMU timer asserts and
         # releases the external pin at exact 1ms DShot frame boundaries.
@@ -151,7 +154,7 @@ def _configure_autonomous_dshot(qtest, *, neutral_ms, ramp_ms,
             if qtest.read(AUTO_BASE+offset)!=value:
                 raise RuntimeError("Native external nFAULT plan readback failed")
     put("command", 1)
-    return sum(stage[0] for stage in stages)
+    return max_frames if max_frames else total
 
 
 def _motor_snapshot(qtest):
@@ -409,7 +412,9 @@ def run(args):
             cmd = [
                 str(args.qemu.resolve()), "-M",
                 "am13e23019,esc-sim=on,esc-sim-native-motor=on,"
-                "esc-sim-nfault-asserted=off",
+                "esc-sim-nfault-asserted=off" +
+                (",esc-sim-wwdt-bootrst=on"
+                 if getattr(args,"link_loss_last_frame",0) else ""),
                 "-kernel", str(args.elf.resolve()),
                 "-display", "none", "-serial", "none", "-monitor", "none",
                 "-qtest", f"unix:path={sockpath}",
@@ -480,7 +485,8 @@ def run(args):
                         drive_permille=args.drive_permille,
                         ramp_update_ms=args.ramp_update_ms,
                         scenario_stages=scenario_stages,
-                        external_fault=external_fault)
+                        external_fault=external_fault,
+                        max_frames=getattr(args,"link_loss_last_frame",0))
                     deadline = time.monotonic() + args.wall_timeout_s
                     last_stage = None
                     previous_sent = -1
@@ -561,8 +567,13 @@ def run(args):
                         raise AssertionError("Artificial BEMF generator leaked into native mode")
                     if auto["sent"] != evidence["configured_dshot_frames"]:
                         raise AssertionError("Not all continuous DShot frames delivered")
-                    if (auto["target_frames"] != evidence["configured_dshot_frames"] or
-                            auto["last_dshot"] != 0):
+                    if auto["target_frames"] != evidence["configured_dshot_frames"]:
+                        raise AssertionError("Native external frame boundary mismatch")
+                    if getattr(args,"link_loss_last_frame",0):
+                        if auto["last_dshot"] == 0:
+                            raise AssertionError(
+                                "Link-loss test must stop on actual positive DShot")
+                    elif auto["last_dshot"] != 0:
                         raise AssertionError(
                             "No full-length neutral-ramp-hold-neutral DShot")
                     if evidence["receiver_failure_reasons"] and (
@@ -576,9 +587,52 @@ def run(args):
                         raise AssertionError(
                             "No source-clocked PWM motor BEMF coupling: "+
                             ",".join(evidence["wiring_failure_reasons"]))
+                    if getattr(args,"link_loss_last_frame",0):
+                        # P1: after QEMU's independent FC STOPS sending
+                        # physical frames, keep the unhalted Guest running.
+                        # Only READ WWDTSTAT; never service/modify its counter.
+                        wwdt_run = 0x400d110c
+                        running_before=qtest.read(wwdt_run)
+                        evidence["link_loss_last_frame"]=auto["sent"]
+                        evidence["link_loss_last_dshot"]=auto["last_dshot"]
+                        evidence["link_loss_wwdt_running_on_disconnect"]=(
+                            running_before==1)
+                        if running_before != 1:
+                            raise AssertionError(
+                                "Original Guest WWDT not armed at signal loss")
+                        deadline_loss=time.monotonic()+args.link_loss_wall_timeout_s
+                        marker="ESC_SIM_WWDT_BOOTRST_REQUESTED:"
+                        found=False
+                        while time.monotonic()<deadline_loss:
+                            if proc.poll() is not None:
+                                raise RuntimeError(
+                                    "QEMU exited during Original Guest input loss")
+                            with qemu_log_path.open("rb") as log:
+                                log.seek(0,2)
+                                size=log.tell()
+                                log.seek(max(0,size-16384))
+                                tail=log.read().decode(
+                                    "utf-8",errors="replace")
+                            if marker in tail:
+                                found=True
+                                break
+                            # Read-only WWDTSTATE keeps the QTest alive
+                            # without altering a Guest-controlled timer.
+                            evidence["link_loss_wwdt_last_running"]=(
+                                qtest.read(wwdt_run)==1)
+                            time.sleep(.20)
+                        if not found:
+                            raise TimeoutError(
+                                "Real original Guest loss did not cause WWDT "
+                                "BOOTRST in the bounded virtual timer test")
+                        evidence["link_loss_bootrst_observed"]=True
+                        evidence["link_loss_guest_writes"]=False
+                        evidence["link_loss_original_firmware_unchanged"]=True
                     evidence["status"] = (
                         "OBSERVED_P1_EXTERNAL_NFAULT_NO_RECOVERY_CLAIM"
                         if external_fault is not None else
+                        "OBSERVED_P1_GUEST_WWDT_INPUT_LOSS_SIM_ONLY"
+                        if getattr(args,"link_loss_last_frame",0) else
                         "PASS_NATIVE_AUTONOMOUS_WIRING_SMOKE_SIM_ONLY_"
                         "STRICT_STABILITY_STILL_OPEN")
             except Exception as exc:
@@ -680,6 +734,13 @@ def main():
     parser.add_argument("--ramp-update-ms",type=int,default=5,
                         help="Native integer-permille throttle step interval")
     parser.add_argument("--drive-permille",type=int,default=200)
+    parser.add_argument("--link-loss-last-frame",type=int,default=0,
+                        help="P1 opt-in: stop external DShot source before "
+                             "final neutral stage at this positive frame; "
+                             "do not send any further wire commands")
+    parser.add_argument("--link-loss-wall-timeout-s",type=int,default=180,
+                        help="Bounded wall time for Guest WWDT to expire "
+                             "after source stops; not virtual timeout")
     parser.add_argument("--wall-timeout-s",type=int,default=180)
     parser.add_argument("--qtest-response-timeout-s",type=int,default=20,
                         help="Individual QTest readl deadline, not a CPU halt")
@@ -687,6 +748,7 @@ def main():
                         help="Fail if DShot sent counter is unchanged while responsive")
     args = parser.parse_args()
     if (not 30 <= args.wall_timeout_s <= 600 or
+        not 30 <= args.link_loss_wall_timeout_s <= 360 or
         not 5 <= args.qtest_response_timeout_s <= 60 or
         not 5 <= args.stall_wall_timeout_s <= 120):
         parser.error("Explicit bounded wall/QTest/progress timeouts required")
@@ -698,6 +760,8 @@ def main():
             ramp_update_ms=args.ramp_update_ms)
     except ValueError as exc:
         parser.error(str(exc))
+    if args.link_loss_last_frame and args.fault_scenario:
+        parser.error("P1 input-loss and external PA22 fault tests must be separate")
     evidence=run(args)
     print("E62_NATIVE_AUTONOMOUS_NO_WFI_PROBE "+
           json.dumps(evidence,sort_keys=True))
