@@ -75,6 +75,32 @@ static void am13e_native_motor_pwm_event(AM13ESimPWM *p,
             m->p0_last_logged_gate=gate && valid;
             p0_recorded_switch = true;
         }
+        /* Optional, bounded, independent post-neutral SWITCH evidence.
+         * Same original AQ/DB callback, same clock and mask; records only
+         * transitions. Default OFF. No extrapolated carrier edges, no
+         * motor-state writes, no Guest MMIO, no effect on P0 strict SWITCH
+         * records. Separate event kind prevents accidental P0 gate reuse. */
+        if (m->source_focus_end_ns > m->source_focus_begin_ns &&
+            now >= m->source_focus_begin_ns &&
+            now <= m->source_focus_end_ns &&
+            (newmask != m->source_focus_last_logged_mask ||
+             (gate && valid) != m->source_focus_last_logged_gate)) {
+            if (m->source_focus_record_count < 12000U) {
+                am13e_p0_event(p->machine, "SWITCH_FOCUS",
+                               newmask & 0x3fU, gate && valid,
+                               am13e_pwm4_hist_gate_word(p),
+                               m->energy_steps, p->zero_events,
+                               m->switch_events);
+                ++m->source_focus_record_count;
+                m->source_focus_last_logged_mask = newmask;
+                m->source_focus_last_logged_gate = gate && valid;
+            } else if (!m->source_focus_budget_hit) {
+                am13e_p0_event(p->machine, "SWITCH_FOCUS_LIMIT",
+                               m->source_focus_record_count, 12000,
+                               0, 0, 0, 0);
+                m->source_focus_budget_hit = true;
+            }
+        }
         m->mask = newmask & 0x3fU;
         m->gate = gate && valid;
         if (p0_recorded_switch) {
