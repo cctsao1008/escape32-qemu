@@ -1,8 +1,8 @@
-name: E62 EXPERIMENT Pinned Original vs 2-MOVW 4ms Startup BEMF (NOT P1)
+name: E62 EXPERIMENT Pinned Original vs 2-MOVW 3ms Startup BEMF (NOT P1)
 
 on:
   push:
-    branches: [experiment/e62-early-bemf-direct20]
+    branches: [experiment/e62-early-bemf-ival3000]
     paths:
       - 'tools/experimental_e62_pinned_ival_patch.py'
       - 'tools/experimental_e62_bemf_ab.py'
