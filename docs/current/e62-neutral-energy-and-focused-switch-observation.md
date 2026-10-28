@@ -238,6 +238,45 @@ Motor Plant, original ELF, native P0/P1 acceptance tests and safety
 gates remain unchanged. Even an eventual A/B PASS is source-only
 evidence for this specific replay, **not a Motor P1 PASS**.
 
+### QEMU icount replay evidence — reproducibility is a separate gate
+
+Three independent **preboot source, free-running icount** CI trials
+eliminated host-delayed first frames (first DShot consistently 100 ns),
+but did **not** establish whole-VM determinism. Independent OFF/OFF
+runs had first ROTOR timer disagreements at 417.235ms (540 ns) and
+1297.235ms (32 ns), while one other OFF/OFF pair happened to match.
+A matching pair cannot be generalized to stable execution.
+
+QEMU `icount rr=record/replay` was therefore added **without any
+QTest, QMP, Guest halt or host-progress polling**. The first two
+independently checked record/replay smoke runs
+[#40699709108](https://github.com/cctsao1008/escape32-qemu/actions/runs/40699709108)
+and
+[#40699842401](https://github.com/cctsao1008/escape32-qemu/actions/runs/40699842401)
+had bit-exact OFF/OFF and OFF/ON source/energy, each with 1512 genuine
+focused switching records. However
+[#40699628231](https://github.com/cctsao1008/escape32-qemu/actions/runs/40699628231)
+still exhibited record-versus-replay differences, first at ~1616.208 ms.
+Therefore no blanket claim of reproducibility or Observer neutrality
+across arbitrary runs is supported.
+
+**Revised strict design:** Run one `record` **seed**, then three
+separate `replay` processes with **the same RR SHA256**:
+`OFF-A`, `OFF-B`, `ON(2795:2840)`. The recording seed is evidence of
+the nondeterministic-event stream but is **not** a source comparison
+control; comparing record vs replay would conflate distinct execution
+modes. The comparator requires seed provenance, original unchanged ELF,
+identical scenario, 3000 actual DShot source records per run, no
+QTest/QMP writes, no host virtual-time step, strict original timestamps
+and all six event fields through 2990ms, and exact ENERGY deltas.
+Any mismatch returns FAIL; no threshold, time alignment, interpolation,
+or P0/P1 waiver is introduced.
+
+An eventual PASS only means *source-only replay observational
+equivalence under that exact seed and QEMU version*. It cannot prove
+zero host overhead, absence of all code-level observer effects, motor
+stability, hardware energy recovery or intentional firmware braking.
+
 ## 4. Causal limits
 
 Even with the focused switching available, combining DShot,
