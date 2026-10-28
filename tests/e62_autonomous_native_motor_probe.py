@@ -414,7 +414,10 @@ def run(args):
                 "am13e23019,esc-sim=on,esc-sim-native-motor=on,"
                 "esc-sim-nfault-asserted=off" +
                 (",esc-sim-wwdt-bootrst=on"
-                 if getattr(args,"link_loss_last_frame",0) else ""),
+                 if getattr(args,"link_loss_last_frame",0) else "") +
+                (",esc-sim-switch-focus-window-ms="+
+                 args.switch_focus_window_ms
+                 if getattr(args,"switch_focus_window_ms",None) else ""),
                 "-kernel", str(args.elf.resolve()),
                 "-display", "none", "-serial", "none", "-monitor", "none",
                 "-qtest", f"unix:path={sockpath}",
@@ -442,6 +445,9 @@ def run(args):
                 "host_guest_register_writes": False,
                 "used_guest_wfi_or_gdb": False,
                 "motor_mode": "QEMU_VIRTUAL_CLOCK_NATIVE_ECX87_KV147_SIM_ONLY",
+                "source_focus_window_ms":getattr(
+                    args,"switch_focus_window_ms",None),
+                "source_focus_guest_or_motor_control":False,
                 "synthetic_timed_bemf_enabled": False,
                 "physical_motor_qualified": False,
                 "readable_original_guest_diagnostics": sorted(symbol_addrs),
@@ -741,6 +747,11 @@ def main():
     parser.add_argument("--link-loss-wall-timeout-s",type=int,default=180,
                         help="Bounded wall time for Guest WWDT to expire "
                              "after source stops; not virtual timeout")
+    parser.add_argument("--switch-focus-window-ms",default=None,
+                        help="Opt-in source-only native six-pad AQ/DB SWITCH "
+                             "trace; START:END integer QEMU virtual ms, "
+                             "1..50ms span (e.g. 2795:2840). Default off; "
+                             "does NOT affect Guest or motor dynamics.")
     parser.add_argument("--wall-timeout-s",type=int,default=180)
     parser.add_argument("--qtest-response-timeout-s",type=int,default=20,
                         help="Individual QTest readl deadline, not a CPU halt")
@@ -760,6 +771,15 @@ def main():
             ramp_update_ms=args.ramp_update_ms)
     except ValueError as exc:
         parser.error(str(exc))
+    if args.switch_focus_window_ms is not None:
+        import re
+        match=re.fullmatch(r"([1-9][0-9]{0,5}):([1-9][0-9]{0,5})",
+                           args.switch_focus_window_ms)
+        if not match:
+            parser.error("--switch-focus-window-ms requires START:END integer ms")
+        begin,end=map(int,match.groups())
+        if end<=begin or end-begin>50 or end>180000:
+            parser.error("Bounded switch observer requires 1..50ms span")
     if args.link_loss_last_frame and args.fault_scenario:
         parser.error("P1 input-loss and external PA22 fault tests must be separate")
     evidence=run(args)
