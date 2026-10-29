@@ -9,10 +9,18 @@ def frontend_events(coast=300,phase_diff=1):
     s=scenario(coast)
     rows=rotor_events(s)
     restart=rows[3000+coast]["vns"]
-    for i in range(100):
-        t=restart-(100-i)*1_000_000+500_000
+    coast_start=restart-coast*1_000_000
+    for i in range(300):
+        t=coast_start+i*1_000_000+500_000
+        contrast=(20 if i<100 else 5 if i<150 else
+                  2 if i<200 else phase_diff)
         rows.append({"kind":"BEMF_FRONTEND","vns":t,
-                    "data":(2047,2047+phase_diff,2047,2,2048,0)})
+                    "data":(2047,2047+contrast,2047,2,2048,0)})
+    if coast>300:
+        for i in range(100):
+            t=restart-(100-i)*1_000_000+500_000
+            rows.append({"kind":"BEMF_FRONTEND","vns":t,
+                        "data":(2047,2047+phase_diff,2047,2,2048,0)})
     return sorted(rows,key=lambda v:v["vns"]),s
 
 
@@ -26,6 +34,9 @@ class PassiveBEMFCoastAuditTest(unittest.TestCase):
         self.assertFalse(r["passive_model_signal_qualified_for_rotor_angle"])
         self.assertFalse(r["firmware_enable_granted"])
         self.assertEqual(r["source_bemf_samples"],100)
+        self.assertEqual([x["max_phase_code_contrast"]
+                          for x in r["first_300ms_passive_coast_decay_50ms_buckets"]],
+                         [20,20,5,2,1,1])
 
     def test_five_codes_still_cannot_grant_angle(self):
         ev,s=frontend_events(3000,phase_diff=5)
@@ -34,6 +45,7 @@ class PassiveBEMFCoastAuditTest(unittest.TestCase):
                          "SOME_MODEL_CODE_CONTRAST_DIRECTION_STILL_UNQUALIFIED")
         self.assertFalse(r["passive_model_signal_qualified_for_rotor_angle"])
         self.assertFalse(r["firmware_enable_granted"])
+        self.assertEqual(len(r["first_300ms_passive_coast_decay_50ms_buckets"]),6)
 
     def test_missing_phase_source_is_rejected(self):
         ev,s=frontend_events()
