@@ -33,6 +33,12 @@ jobs:
             first: direct20
             second: ramp20_100ms
             expected_dac: 2032
+          - label: plus16-switch-noise
+            fixture: plus16
+            stress: '16:20'
+            first: direct20
+            second: ramp20_500ms
+            expected_dac: 2064
     steps:
       - uses: actions/checkout@v4
       - name: Freeze Original P1 and independent causal diagnostics
@@ -95,7 +101,7 @@ jobs:
           python3 tools/e62_reference_elf_load_diff.py \
             --control artifacts/reference-causality/control.elf \
             --matched artifacts/reference-causality/matched.elf \
-            --offset ${{ matrix.stress == '16:0' && '16' || '-16' }} \
+            --offset ${{ matrix.expected_dac == 2032 && '-16' || '16' }} \
             --output artifacts/reference-causality/load-diff-proof.json
           sha256sum artifacts/reference-causality/{control,matched}.elf > artifacts/reference-causality/both-sha256.txt
           python3 tools/sim_motor_cfg.py --sim-only-opt-in \
