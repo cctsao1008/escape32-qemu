@@ -49,6 +49,10 @@ static void am13e_native_motor_reset(AM13ENativeMotor *m)
     m->active = m->faulted = m->gate = false;
     m->fault_code = m->mask = m->ticks = m->switch_events = 0U;
     m->analog_updates = 0U;
+    /* Retain machine-property stress amplitude across QEMU resets;
+     * clear only epoch/counters. Default off changes no prior behavior. */
+    m->bemf_stress_last_switch_ns = -1;
+    m->bemf_stress_switch_edges = m->bemf_stress_trace_count = 0U;
     m->first_ost3_seen = false;
     m->first_ost3_count = m->oc_publications = 0U;
     m->first_ost3_ns = 0;
