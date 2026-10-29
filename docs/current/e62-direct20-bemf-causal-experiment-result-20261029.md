@@ -116,3 +116,15 @@ The corresponding guarded **source** test variant lives in
 **Recommendation:** use this as an isolated, causal
 controller-design experiment. Do not merge production code based
 on Direct20 alone or claim the whole system physically qualified.
+
+
+## 2026-10-29 continuation: five-scenario and source-built safety diagnosis
+
+- [Full 1,500ms Direct20 automated gate #40735921806](https://github.com/cctsao1008/escape32-qemu/actions/runs/40735921806) **SUCCESS** for the exact 9-byte candidate. This is a SIM_ONLY candidate A/B and does NOT change Original P1's pinned-ELF acceptance.
+- [Five-profile external DShot source contract #40791543727](https://github.com/cctsao1008/escape32-qemu/actions/runs/40791543727) **SUCCESS**: `smoke`, `gentle`, `steps`, `ramp100`, `ramp500` static preboot FC stages match exactly the immutable source JSON profiles. No guest motor writes or manufactured sensor events.
+- [Five-profile 1.5s-wide candidate A/B motor matrix #40791759457](https://github.com/cctsao1008/escape32-qemu/actions/runs/40791759457) remains **PENDING** as of this update; require every candidate to have 12 physical PWM_PAIR, CAP1_ACK and TIMG12_ACK, at least +50RPM, no significant powered-window reverse. No waivers to original P1.
+- Separately source-built Motor Output=1 original-policy Control (distinct from pinned ELF) still enters `am13e_app_motor_commutation_enable()` -> `runtime_fault()` at the first positive DShot, with no CAP1/TIMG12. Read-only pre-fault marker recorded `audio_owner=0`, `safety_initialized=1`, `fault_latched=0`, `motor_timebase_running=0`. The Cortex-M33 compiler merges multiple failing guard branches to the same `0xA7CA` BL; the saved caller PC `0xA7CF` **cannot identify which later safety check returned false**.
+- An explicitly SIM_ONLY `e62_sim_runtime_fault_reason` marker was added before **eight original enable/stop safety branches**. It records the failing branch without modifying the safety condition, OC/Trip state, GPIO/PWM output, Guest IRQ, or fault handler. Follow-up diagnostic CI is [#40792045153](https://github.com/cctsao1008/escape32-qemu/actions/runs/40792045153), not yet a motor PASS.
+- All motor experiment build profiles explicitly require `AM13E_MOTOR_OUTPUT_CONFIGURED=1` or fail compilation. No real hardware board parameter, OC threshold or reset-inactive wiring has been qualified by these simulations.
+
+Do not confuse **early-capture policy causal improvement**, **source-built electrical preflight availability**, **P1 strict**, and **hardware safety**: these are four independent gates.
