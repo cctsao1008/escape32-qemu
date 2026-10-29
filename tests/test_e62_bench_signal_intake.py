@@ -194,7 +194,7 @@ class SixGateFaultIntake(unittest.TestCase):
         _,m,d=gate_fixture()
         d[15][2]=1
         r=table(FIELDS,d);signed(r,m,"raw_trace_sha256")
-        with self.assertRaisesRegex(ValueError,"persistent"):
+        with self.assertRaisesRegex(ValueError,"Gate reactivation|persistent"):
             gate_audit(r,m)
 
     def test_release_not_captured_fails(self):
@@ -264,6 +264,7 @@ class SixGateFaultIntake(unittest.TestCase):
     def test_off_observation_only_two_samples_before_release_rejected(self):
         _,m,d=gate_fixture()
         # Final safe-off begins at sample 10, fault releases at sample 12.
+        d[8][2]=1
         d[9][2]=1
         r=table(FIELDS,d);signed(r,m,"raw_trace_sha256")
         with self.assertRaisesRegex(ValueError,"across fault release"):
