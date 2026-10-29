@@ -86,10 +86,19 @@ def main():
     cf=data["control_noise"];flt=data["filtered_noise"]
     if cf["motor_reversals"] is None or flt["motor_reversals"] is None:
         problems.append("MISSING_DIRECTION_COUNT")
-    elif cf["motor_reversals"]<=flt["motor_reversals"]:
-        problems.append("NO_QUANTIFIED_NOISE_IMPROVEMENT")
+    elif cf["motor_reversals"]>0:
+        if flt["motor_reversals"]>=cf["motor_reversals"]:
+            problems.append("NO_QUANTIFIED_NOISE_IMPROVEMENT")
+    elif flt["motor_reversals"]!=0:
+        problems.append("NOISE_REGRESSION_FROM_ZERO_BASELINE")
+    # Direct20 already passed 0:16 in the pinned-ELF experiment.
+    # A zero-reversal control CANNOT show a reduction below zero.
+    # Require strict no-regression and preserve its distinct classification.
+    can_claim_improvement=cf["motor_reversals"] is not None and cf["motor_reversals"]>0
     result={"schema":"e62.experimental.source-filter-ab.v1",
-        "status":"FAIL_EXPERIMENT" if problems else "PASS_EXPERIMENTAL_ONLY",
+        "status":("FAIL_EXPERIMENT" if problems else
+                  "PASS_EXPERIMENTAL_IMPROVEMENT" if can_claim_improvement else
+                  "PASS_EXPERIMENTAL_NONREGRESSION"),
         "source_commit":a.source_commit,
         "profile":a.profile,
         "original_p1_qualified":False,
