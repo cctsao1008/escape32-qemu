@@ -76,7 +76,7 @@ jobs:
             --patch-proof artifacts/e62-exp-patch-proof.json \
             --cfg artifacts/e62-g13b3-exp-robustness-cfg-flash.bin \
             --case "${{ matrix.pair[0] }}" --case "${{ matrix.pair[1] }}" \
-            --bemf-robustness "${{ matrix.stress }}" \
+            --bemf-robustness="${{ matrix.stress }}" \
             --output artifacts/e62-exp-robustness \
             --wall-timeout-s 300
       - name: Preserve ALL negative/positive mechanical, original-SHA and analog-source evidence
