@@ -48,7 +48,26 @@ jobs:
             -DAM13E_BOARD_BOARD_PROFILE_FILE="$PWD/.build/e62-reacquire-esc/mcu/_support/AM13E/cmake/test_profiles/e62_sim_only_early_bemf_stable_filter.cmake"
           cmake --build .build/e62-fw-filtered --target AM13E-rev17.3.elf -j 2
           cp .build/e62-fw-filtered/AM13E-rev17.3.elf artifacts/e62-second-demand/filtered.elf
-          echo '5b90b200429333cef82b982b7a7f845f31fb885c7ea63fc7e783c75232fac8d1  artifacts/e62-second-demand/filtered.elf' | sha256sum -c -
+          # The full ELF includes non-loadable CMake/debug path metadata.
+          # Pin the EXACT independently verified historical ARM entrypoint
+          # plus all PT_LOAD layouts and loaded bytes; do not weaken executable
+          # image identity or accept arbitrary changed Guest firmware.
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,struct
+          from tools.e62_reference_elf_load_diff import read_elf,BASELINE_LOAD_SHA
+          path=Path('artifacts/e62-second-demand/filtered.elf')
+          data,entry,loads=read_elf(path)
+          digest=hashlib.sha256()
+          digest.update(struct.pack('<I',entry))
+          for seg in loads:
+              digest.update(struct.pack('<IIIIII',seg['vaddr'],seg['paddr'],
+                  seg['filesz'],seg['memsz'],seg['flags'],seg['align']))
+              digest.update(seg['data'])
+          assert digest.hexdigest()==BASELINE_LOAD_SHA, 'UNQUALIFIED_ARM_LOAD_IMAGE'
+          print('PASS_PREQUALIFIED_SOURCE_BUILT_ARM_PT_LOAD',digest.hexdigest(),
+                'ACTUAL_FULL_ELF_SHA256',hashlib.sha256(data).hexdigest())
+          PY
           python3 tools/sim_motor_cfg.py --sim-only-opt-in \
             --motor-profile ecx87-kv147 \
             --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
@@ -57,10 +76,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          candidate_sha="$(sha256sum artifacts/e62-second-demand/filtered.elf | cut -d' ' -f1)"
+          test "${#candidate_sha}" -eq 64
           python3 tests/e62_autonomous_native_motor_probe.py \
             --qemu .build/qemu-src/build/qemu-system-arm \
             --elf artifacts/e62-second-demand/filtered.elf \
-            --experimental-candidate-sha256 5b90b200429333cef82b982b7a7f845f31fb885c7ea63fc7e783c75232fac8d1 \
+            --experimental-candidate-sha256 "$candidate_sha" \
             --cfg-flash artifacts/e62-second-demand/e62-g13b3-reacquisition-cfg-flash.bin \
             --scenario scenarios/e62-experimental-two-demand-coast-reacquire.json \
             --artifact artifacts/e62-second-demand/two-demand.json \
