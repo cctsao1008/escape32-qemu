@@ -278,3 +278,37 @@ significant reversals *recover* under reference alignment;
 it does not establish a physically measured E62 board coefficient
 and is not a release-qualification shortcut. If alignment does not
 restore the closed loop, another mechanism must be diagnosed.
+
+## Reference-bias source-built causal A/B — +16 PROVEN IN MODEL
+
+[CI #40877818256](https://github.com/cctsao1008/escape32-qemu/actions/runs/40877818256)
+`+16` source-built Guest job successfully completed. The identical
+PT_LOAD image check anchors the control to the prequalified stable
+filter reference image, using independently calculated SHA256
+`8e8eb3472bfee51711d93e333b0dba52d649a1acc6c01376e9e66503f42499e2`.
+Control and matched versions differ at only physical address
+`0xC190`: `0x00 -> 0x01` corresponding to initial SIM_ONLY DACH
+`2048 -> 2064`; **every other loadable byte is the same**.
+Complete ELF hashes are retained separately; nonloaded ELF metadata
+is not a hardware-instruction difference.
+
+| Offset +16 | Control DACH 2048 | Matched DACH 2064 |
+| --- | ---: | ---: |
+| direct20, significant reversals | 233 | **0** |
+| direct20, CAP1/TIMG12 guest W1C ACK | 232 / 232 | **2742 / 2742** |
+| steps, significant reversals | 154 | **0** |
+| steps, CAP1/TIMG12 guest W1C ACK | 154 / 154 | **2170 / 2170** |
+| non-SHA complete motor observability | FAIL both | **PASS both** |
+
+The QEMU physical BEMF analog stress source applied the same
+`+16:0` perturbation in both cases, with source-owned diagnostic
+events present. Original P1 identity rejection remains active for
+both experimental Guest versions; no Guest register writes, no
+synthetic timed BEMF, no WFI/GDB. This demonstrates a **bounded
+relative-reference mismatch causal mechanism in the modeled
+sensorless startup**, not real board calibration or 12S qualification.
+
+**Pending:** `-16` direct20/ramp100 second job in same workflow.
+The synthetic DAC seed is not the runtime SC5 calibrated
+ADC→VBUS→phase sense→DACH publication pathway and must not be
+promoted to a production `AM13E_BEMF_INITIAL_DAC_CODE` constant.
