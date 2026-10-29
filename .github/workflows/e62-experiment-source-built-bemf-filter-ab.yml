@@ -40,8 +40,8 @@ jobs:
           git submodule update --init --depth 1 qemu
           ./build.sh
           git clone --quiet https://github.com/cctsao1008/ESCape32.git .build/e62-filter-esc
-          git -C .build/e62-filter-esc checkout --quiet --detach 73f48f3b0c89a984d3f74177fd6342c84f5c7e95
-          test "$(git -C .build/e62-filter-esc rev-parse HEAD)" = 73f48f3b0c89a984d3f74177fd6342c84f5c7e95
+          git -C .build/e62-filter-esc checkout --quiet --detach 3ea4e672c0770db10c936531e7b3420b09473b18
+          test "$(git -C .build/e62-filter-esc rev-parse HEAD)" = 3ea4e672c0770db10c936531e7b3420b09473b18
           git clone --quiet --depth 1 https://github.com/TexasInstruments/am13e2x_sdk.git /tmp/am13e-ti-sdk
           git -C /tmp/am13e-ti-sdk fetch --quiet --depth 1 origin b872469ceef18de5e39a1d3acb0821ec158b44c7
           git -C /tmp/am13e-ti-sdk checkout --quiet --detach b872469ceef18de5e39a1d3acb0821ec158b44c7
@@ -122,7 +122,7 @@ jobs:
           python3 tools/experimental_e62_filter_validation.py \
             --dir artifacts/filter-ab \
             --profile "$case_name" \
-            --source-commit 73f48f3b0c89a984d3f74177fd6342c84f5c7e95 \
+            --source-commit 3ea4e672c0770db10c936531e7b3420b09473b18 \
             --control-elf artifacts/filter-ab/control.elf \
             --filter-elf artifacts/filter-ab/filtered.elf \
             --output "artifacts/filter-ab/$case_name-verdict.json"
