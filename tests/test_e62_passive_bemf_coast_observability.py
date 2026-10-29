@@ -2,7 +2,7 @@
 import unittest
 
 from tools.e62_passive_bemf_coast_observability import evaluate
-from tests.test_e62_restart_phase_torque_audit import scenario, events as rotor_events
+from test_e62_restart_phase_torque_audit import scenario, events as rotor_events
 
 
 def frontend_events(coast=300,phase_diff=1):
