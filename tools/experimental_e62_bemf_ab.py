@@ -72,7 +72,7 @@ def run(a):
     qmp_path.unlink(missing_ok=True)
     command = [
         str(a.qemu.resolve()), "-machine",
-        "am13e23019,esc-sim=on,esc-sim-native-motor=on,"
+        "am13e23019,esc-sim=on,esc-sim-native-motor=on," +
         ("esc-sim-nfault-asserted=off,esc-sim-experimental-fc-direct20=on"
          if a.profile=="direct20" else
          "esc-sim-nfault-asserted=off,esc-sim-experimental-fc-profile="+a.profile),
