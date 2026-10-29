@@ -1,0 +1,89 @@
+name: E62 EXPERIMENT Original Neutral OC/OST3 Route Retention (NOT Running / NOT Board)
+
+on:
+  push:
+    branches: [experiment/e62-early-bemf-quartergate]
+    paths:
+      - '.github/workflows/e62-experiment-original-neutral-oc-ost3-retention.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  original-model-only-neutral-oc-trip:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check original Guest and model-only neutral current safety boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0  baseline/e62-g13b3/firmware/AM13E-rev17.3.elf' | sha256sum -c -
+          python3 -m unittest discover -s tests -p 'test_safety_qualification.py' -v
+          python3 tests/test_native_p1_fault_matrix.py
+      - name: Build QEMU source with original unmodified Guest
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            libglib2.0-dev libpixman-1-dev libfdt-dev meson ninja-build pkg-config binutils-arm-none-eabi
+          git submodule update --init --depth 1 qemu
+          ./build.sh
+      - name: Run four INDEPENDENT external simulated analog OC and nFAULT safety routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          for fault in nfault oc-u oc-v oc-w; do
+            echo "E62_ORIGINAL_NEUTRAL_SAFETY_FAULT=$fault"
+            python3 tests/g13b2_native_fault.py \
+              --qemu .build/qemu-src/build/qemu-system-arm \
+              --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+              --fault "$fault" \
+              --artifact "artifacts/e62-safety-$fault.json" \
+              2>&1 | tee "artifacts/e62-safety-$fault.log"
+          done
+      - name: Strict original simulated IRQ / OST3 / source shutdown with explicit NEUTRAL limitation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/ci/safety_qualification.py \
+            --artifacts-dir artifacts \
+            --output artifacts/e62-safety-qualification.json \
+            | tee artifacts/e62-safety-qualification.log
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('artifacts/e62-safety-qualification.json')
+          x=json.loads(p.read_text())
+          expected=['nfault','oc-u','oc-v','oc-w']
+          if x['status']!='PASS_SIM_ONLY_EXTERNAL_FAULT_IRQ_SHUTDOWN_ONLY' or x['issues'] or x['independent_cases_passed']!=expected:
+              raise SystemExit('FAIL_MODEL_NEUTRAL_OST3_SAFETY_MATRIX')
+          if (x['scope']!='MODEL_ONLY_NATIVE_NEUTRAL_NOT_MOTOR_RUNNING'
+                  or x['real_power_stage']!='NOT_QUALIFIED'
+                  or x['signal_loss_watchdog_recovery']!='OPEN_NOT_QUALIFIED'):
+              raise SystemExit('FAIL_NEUTRAL_FAULT_BECAME_UNSUPPORTED_RUNNING_HARDWARE_CLAIM')
+          print('PASS_E62_EXACT_ORIGINAL_NEUTRAL_OC_OST3_ONLY_NOT_RUNNING_OR_HARDWARE')
+          PY
+          printf '%s\n' \
+            'original_elf_sha256=05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0' \
+            "qemu_git_commit=$(git rev-parse HEAD)" \
+            'scope=NEUTRAL_GDB_WFI_SOURCE_MODEL_IRQ_OST3_SHUTDOWN_ONLY' \
+            'real_hardware_qualified=false' \
+            'motor_running_under_load=false' \
+            'original_p1_no_wfi_recovery_not_proven_by_these_cases=true' \
+            > artifacts/e62-safety-provenance.txt
+      - name: Preserve all neutral GDB/WFI model fault traces even if a single phase fails
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-original-neutral-four-external-fault-irq-sim-only-NOT-RUNNING
+          path: |
+            artifacts/e62-safety-*.json
+            artifacts/e62-safety-*.log
+            artifacts/e62-safety-provenance.txt
+          retention-days: 21
+          if-no-files-found: warn
