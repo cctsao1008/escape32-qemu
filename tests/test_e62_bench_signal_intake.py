@@ -88,7 +88,7 @@ class BoardADCIntake(unittest.TestCase):
     def test_simulation_not_hardware(self):
         raw,meta,_=adc_fixture()
         meta["capture_kind"]="SIM_ONLY"
-        with self.assertRaisesRegex(ValueError,"simulated"):
+        with self.assertRaisesRegex(ValueError,"synthetic model"):
             adc_audit(raw,meta)
 
     def test_stale_or_future_timestamp_rejected(self):
