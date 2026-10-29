@@ -514,7 +514,9 @@ def run(args):
                  if getattr(args,"link_loss_last_frame",0) else "") +
                 (",esc-sim-switch-focus-window-ms="+
                  args.switch_focus_window_ms
-                 if getattr(args,"switch_focus_window_ms",None) else ""),
+                 if getattr(args,"switch_focus_window_ms",None) else "") +
+                (",esc-sim-bemf-robustness="+args.experimental_bemf_robustness
+                 if getattr(args,"experimental_bemf_robustness",None) else ""),
                 *(["-S","-qmp",f"unix:{qmp_sockpath},server=on,wait=off"]
                   if args.differential_sync_start else []),
                 "-kernel", str(args.elf.resolve()),
@@ -547,6 +549,12 @@ def run(args):
                 "candidate_elf_sha256":observed if exp_sha else None,
                 "original_qualified":False if exp_sha else None,
                 "experimental_only_not_original_p1":bool(exp_sha),
+                "experimental_bemf_robustness":getattr(
+                    args,"experimental_bemf_robustness",None),
+                "robustness_injection_location":
+                    "NATIVE_ANALOG_FRONTEND_POST_ROTOR_PRE_CMPSS"
+                    if getattr(args,"experimental_bemf_robustness",None)
+                    else None,
                 "host_guest_register_writes": False,
                 "used_guest_wfi_or_gdb": False,
                 "motor_mode": "QEMU_VIRTUAL_CLOCK_NATIVE_ECX87_KV147_SIM_ONLY",
@@ -855,6 +863,10 @@ def main():
                         help="EXPERIMENT BRANCH ONLY: exact non-original ELF "
                              "sha256 for passive physical source diagnostics; "
                              "does not confer Original Rel17 P1 qualification")
+    parser.add_argument("--experimental-bemf-robustness", default=None,
+                        help="EXPERIMENT ONLY: bounded QEMU analog "
+                             "OFFSET:SWITCH_CODE; no Guest writes; "
+                             "requires separate non-original candidate SHA")
     parser.add_argument("--cfg-flash", type=Path, required=True)
     parser.add_argument("--artifact", type=Path, default=Path(
         "artifacts/e62-autonomous-native-motor-smoke.json"))
@@ -912,6 +924,17 @@ def main():
         not 5 <= args.qtest_response_timeout_s <= 60 or
         not 5 <= args.stall_wall_timeout_s <= 120):
         parser.error("Explicit bounded wall/QTest/progress timeouts required")
+    if args.experimental_bemf_robustness is not None:
+        import re
+        if args.experimental_candidate_sha256 is None:
+            parser.error("BEMF stress requires non-original candidate SHA")
+        match=re.fullmatch(r"(-?[0-9]{1,2}):([0-9]{1,2})",
+                           args.experimental_bemf_robustness)
+        if not match:
+            parser.error("BEMF stress must be OFFSET:SWITCH_CODE")
+        offset,spike=map(int,match.groups())
+        if abs(offset)>24 or not 0<=spike<=32 or not (offset or spike):
+            parser.error("BEMF analog stress out of bounded range")
     if args.experimental_candidate_sha256 is not None:
         import re
         if not re.fullmatch(r"[0-9a-f]{64}",args.experimental_candidate_sha256):
