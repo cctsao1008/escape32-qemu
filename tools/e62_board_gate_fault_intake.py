@@ -134,12 +134,20 @@ def audit(raw:bytes,manifest:dict):
     # Need at least 3 independent all-off samples (avoid 1-point false PASS).
     if len(rows)-index<3 or rows[index][0]>trelease:
         raise ValueError("No persistent six-gate off before fault release")
-    observed_upper_ns=rows[index][0]-tassert
+    # Both the fault assertion edge and final gate disable occurred
+    # BETWEEN samples. Never under-report them as exact timestamps.
+    # Conservative delay bound: all-off sample minus previous inactive
+    # fault sample. The last still-active gate sample yields a lower
+    # bound when its timestamp follows the asserted-fault sample.
+    observed_upper_ns=rows[index][0]-rows[on-1][0]
+    observed_lower_ns=max(0,rows[index-1][0]-tassert) if index>on else 0
     accepted_bound=manifest["approved_max_gate_off_ns"]
     spec_state=("NO_APPROVED_NUMERIC_CRITERION" if accepted_bound is None
-                else "MEASURED_UPPER_BOUND_WITHIN_DECLARED_LIMIT"
+                else "CAPTURED_TIMING_UPPER_BOUND_WITHIN_DECLARED_LIMIT"
                 if observed_upper_ns<=accepted_bound else
-                "MEASURED_UPPER_BOUND_EXCEEDS_DECLARED_LIMIT")
+                "CAPTURED_TIMING_LOWER_BOUND_EXCEEDS_DECLARED_LIMIT"
+                if observed_lower_ns>accepted_bound else
+                "TIMING_INDETERMINATE_AT_SAMPLE_RESOLUTION")
     return {
         "schema":"e62.bench.six-gate-fault-intake-result.v1",
         "fault_source":manifest["fault_source"],
@@ -148,6 +156,10 @@ def audit(raw:bytes,manifest:dict):
         "fault_assert_sample_ns":tassert,"fault_release_sample_ns":trelease,
         "all_six_vgs_discriminators_off_at_ns":rows[index][0],
         "sampled_gate_off_upper_bound_ns":observed_upper_ns,
+        "sampled_gate_off_lower_bound_ns":observed_lower_ns,
+        "fault_transition_time_uncertainty_ns":tassert-rows[on-1][0],
+        "gate_transition_time_uncertainty_ns":(
+            rows[index][0]-rows[index-1][0]),
         "time_resolution_gap_max_ns":max(
             rows[i+1][0]-rows[i][0] for i in range(len(rows)-1)),
         "gate_off_numeric_acceptance":spec_state,
