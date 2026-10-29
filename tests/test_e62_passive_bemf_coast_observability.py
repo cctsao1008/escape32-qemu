@@ -67,7 +67,7 @@ class PassiveBEMFCoastAuditTest(unittest.TestCase):
         idx=next(i for i,e in enumerate(ev)
                  if e["kind"]=="BEMF_FRONTEND")
         ev[idx]["data"]=(4096,2048,2048,2,2048,0)
-        with self.assertRaisesRegex(ValueError,"Invalid three phase"):
+        with self.assertRaisesRegex(ValueError,"Invalid .*BEMF"):
             evaluate(ev,s)
 
     def test_disconnected_source_clock_is_rejected(self):
