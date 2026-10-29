@@ -364,6 +364,12 @@ typedef struct AM13ENativeMotor {
     int64_t last_ns;
     double currents[3], theta, omega, last_torque;
     uint32_t bemf_codes[3];
+    /* SIM_ONLY, explicit opt-in perturbations AFTER rotor/energy integration,
+     * BEFORE real CMPSS0 input. Not a motor-model or protection bypass. */
+    int bemf_stress_offset_code;
+    unsigned bemf_stress_switch_code;
+    int64_t bemf_stress_last_switch_ns;
+    uint32_t bemf_stress_switch_edges, bemf_stress_trace_count;
     double theta_unwrapped, energy_bus_j, energy_copper_j;
     double energy_diode_j, energy_bemf_j, energy_magnetic_j;
     double energy_backward_euler_j, energy_abs_residual_j;
@@ -4362,6 +4368,38 @@ static void am13e_set_native_motor(Object *obj, bool on, Error **errp)
     AM13E_MACHINE(obj)->native_motor.enabled = on;
 }
 
+/* Uncalibrated and strictly bounded analog source robustness fixture.
+ * "off" is byte-identical default behavior.  1 code ≈ 0.806mV
+ * on the QEMU 3.3V/4095 ADC scale; NO real PCB calibration implied. */
+static char *am13e_get_bemf_stress(Object *obj, Error **errp)
+{
+    AM13ENativeMotor *m=&AM13E_MACHINE(obj)->native_motor;
+    return (m->bemf_stress_offset_code || m->bemf_stress_switch_code) ?
+        g_strdup_printf("%d:%u",m->bemf_stress_offset_code,
+                        m->bemf_stress_switch_code) : g_strdup("off");
+}
+static void am13e_set_bemf_stress(Object *obj, const char *value,
+                                  Error **errp)
+{
+    AM13ENativeMotor *m=&AM13E_MACHINE(obj)->native_motor;
+    int offset; unsigned spike; char trailing;
+    if (value && !strcmp(value,"off")) {
+        m->bemf_stress_offset_code=0;
+        m->bemf_stress_switch_code=0U;
+        return;
+    }
+    if (!value || sscanf(value,"%d:%u%c",&offset,&spike,&trailing)!=2 ||
+        offset < -24 || offset > 24 || spike > 32U ||
+        (!offset && !spike)) {
+        error_setg(errp,"SIM_ONLY BEMF stress must be off or "
+                   "OFFSET:SWITCH_CODE with OFFSET [-24,24] "
+                   "and SWITCH_CODE [0,32], not both zero");
+        return;
+    }
+    m->bemf_stress_offset_code=offset;
+    m->bemf_stress_switch_code=spike;
+}
+
 static char *am13e_get_switch_focus_window(Object *obj, Error **errp)
 {
     AM13ENativeMotor *m = &AM13E_MACHINE(obj)->native_motor;
@@ -4488,6 +4526,15 @@ static void am13e_class_init(ObjectClass *oc, void *data)
     object_class_property_set_description(oc, "esc-sim-native-motor",
         "SIM_ONLY uncalibrated ECX87-KV147 virtual-time PWM-to-rotor-to-BEMF "
         "engine. Independent of Guest WFI and GDB; not physical qualified.");
+    object_class_property_add_str(oc, "esc-sim-bemf-robustness",
+                                  am13e_get_bemf_stress,
+                                  am13e_set_bemf_stress);
+    object_class_property_set_description(oc,"esc-sim-bemf-robustness",
+        "EXPERIMENT ONLY: off or OFFSET:SWITCH_CODE, bounded -24..24 "
+        "ADC-code reference bias and 0..32 code 2us pulses after real "
+        "QEMU PWM switch-mask transitions. Affects physical BEMF analog "
+        "frontend only, not rotor physics, Guest CAP1, OC/Trip, or PWM; "
+        "default off; never qualifies hardware/P1.");
     object_class_property_add_str(oc, "esc-sim-switch-focus-window-ms",
                                   am13e_get_switch_focus_window,
                                   am13e_set_switch_focus_window);
