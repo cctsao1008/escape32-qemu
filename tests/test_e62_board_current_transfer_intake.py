@@ -45,7 +45,7 @@ class CurrentTransferUnit(unittest.TestCase):
     def test_signed_three_phase_candidate_never_hardware(self):
         raw,meta,_=fixture()
         x=audit(raw,meta)
-        self.assertEqual(set(x["channels"]),"UVW")
+        self.assertEqual(set(x["channels"]),set("UVW"))
         for p in "UVW":
             self.assertAlmostEqual(x["channels"][p]["candidate_gain_adc_codes_per_amp"],2.)
             self.assertAlmostEqual(x["channels"][p]["candidate_adc_offset_code"],2050.)
