@@ -1,0 +1,25 @@
+name: E62 Experimental FC JSON-vs-QEMU Source Contract (NO GUEST EXECUTION)
+on:
+  push:
+    branches: [experiment/e62-early-bemf-quartergate]
+    paths:
+      - 'tests/test_e62_experimental_fc_profiles.py'
+      - 'machine/am13e_autonomous_sitl.inc'
+      - 'machine/am13e23019.c'
+      - 'scenarios/e62-native-p0-*.json'
+      - 'scenarios/e62-native-p1-ramp20-*.json'
+      - '.github/workflows/e62-experimental-fc-profile-static.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  exact-fc-profile-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate five preboot physical FC sources match untouched P1 scenarios
+        run: |
+          set -euo pipefail
+          python3 tests/test_e62_experimental_fc_profiles.py
+          echo "PASS_SIM_ONLY_FC_PROFILE_SOURCE_CONTRACT_NOT_P1"
