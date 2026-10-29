@@ -554,3 +554,70 @@ passive phase/direction observer or a separately bounded, gate-safe
 current-limited rotor alignment/start strategy. No source code may
 arm the hardware from QEMU model-internal ground-truth angle.
 #5 stays open.
+
+## Passive three-phase voltage-order alias gate (#5)
+
+The existing AM13E firmware DOES have `adc_latest.phase_a/phase_b/phase_c`
+from the sequential ADC0/ADC1/ADC2 software-triggered scan, and a
+coherent `am13e_app_adc_get_raw()` API. That should NOT be confused
+with a calibrated/synchronized passive windmilling observer or a
+proven real-board phase-voltage wiring route. The actual
+`BEMF_FRONTEND` QEMU debug telemetry is sampled at a different
+**1kHz source-diagnostic cadence**; it is **not** evidence that the
+hardware ADC is limited to 1kHz.
+
+The strictly read-only
+[phase order CI #40913885732](https://github.com/cctsao1008/escape32-qemu/actions/runs/40913885732)
+**SUCCESS** with 7 host negative/positive tests and four original
+motor artifact replays. It ranks the native source's three ADC-like
+voltage codes into six distinct U/V/W relative permutations, with an
+illustrative >=2-code per-adjacent-level separation, and refuses
+to claim actual rotor phase or release motor outputs.
+
+| Coast interval | Oldstep: nonadjacent rank changes | Cold-sector: nonadjacent rank changes |
+| --- | ---: | ---: |
+| First 100ms of 300ms coast | **2** (27 total changes) | **2** (26 changes) |
+| First 100ms of 3000ms coast | **2** (27 changes) | **2** (27 changes) |
+
+Those skipped rank transitions are evidence that a **1ms QEMU
+telemetry snapshot does not preserve a guaranteed full adjacent
+phase-state sequence**, *not* evidence of a genuine motor reversal.
+A real windmill detector would require measured phase sequence,
+sampling rate, analog noise/hysteresis, phase gain/offset/reference,
+IRQ timing and physical sensorless motor characterization. Any
+inference from QEMU model-internal rotor angle/speed/torque is
+forbidden as a shortcut to guest firmware.
+
+The distinct [coast code-contrast CI #40907076649](https://github.com/cctsao1008/escape32-qemu/actions/runs/40907076649)
+already demonstrated ≤1 ADC-like code of phase contrast in the
+last 100ms before re-demand for all cases. Hence both early
+sampling alias risk and late analog unobservability remain #5
+design blockers. Neither `oldstep` nor blind `step=0` is a
+general, approved solution.
+
+## Original Guest modeled safety retention (#7)
+
+The **running, no-WFI** source-built Original Rel17.3
+[CI #40907619582](https://github.com/cctsao1008/escape32-qemu/actions/runs/40907619582)
+**SUCCESS**:
+- Actual external PA22 nFAULT asserted at frame 2100, released
+  at frame 2300; hard source OST2 remained latched, output Gate
+  safe-off and no automatic rearm; strict zero-failure audit.
+- Separate 2800-frame external DShot hard-loss source test passed
+  strict Guest WWDT BOOTRST with 2679 firmware feed writes
+  and no observed model deadline error.
+
+A separate current-branch **neutral/WFI/GDB** fault-routing
+[CI #40913109969](https://github.com/cctsao1008/escape32-qemu/actions/runs/40913109969)
+**SUCCESS** for physical-model `nfault` plus
+`oc-u`, `oc-v`, `oc-w`, each through OST2/OST3
+latch→Original MCU interrupt `IPSR=44`→native shutdown.
+The strict four-fault matrix reports zero errors and intentionally
+sets `MODEL_ONLY_NATIVE_NEUTRAL_NOT_MOTOR_RUNNING`.
+
+**DO NOT CONFLATE:** three-phase neutral OC/IRQ tests do **not**
+establish no-WFI **running** OC protection; and even running
+nFAULT/DShot model passes do **not** establish real MOSFET/GaN
+driver, 12S, physical current comparator or fault propagation
+latency. Issue #7 stays OPEN for real running OC and board
+electrical/thermal safety evidence.
