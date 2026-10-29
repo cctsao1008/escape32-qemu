@@ -2,6 +2,7 @@
 import unittest
 
 from tools.e62_restart_phase_torque_audit import diagnose
+from tools.native_p1_qualification import commands_for_scenario
 
 def scenario(coast=300):
     return {"schema":"e62.native.dshot.v1","protocol":"DSHOT600",
@@ -17,12 +18,15 @@ def events(s,torque=-125000,rpm=8):
     ds=[]
     stage=0
     border=s["stages"][0]["duration_ms"]
-    for i in range(sum(z["duration_ms"] for z in s["stages"])):
+    for i,(source_stage,command) in enumerate(commands_for_scenario([
+          (z["duration_ms"],z["permille"],z["permille"],1)
+          for z in s["stages"]])):
         while i>=border:
             stage+=1
             border+=s["stages"][stage]["duration_ms"]
+        assert source_stage==stage
         ds.append({"kind":"DSHOT","vns":26_872+i*1_000_000,
-                   "data":(i,stage,s["stages"][stage]["permille"],0,0,0)})
+                   "data":(i,stage,command,0,0,0)})
     restart_at=ds[3000+s["stages"][2]["duration_ms"]]["vns"]
     ds.extend([
         {"kind":"ROTOR","vns":restart_at-310_000,
