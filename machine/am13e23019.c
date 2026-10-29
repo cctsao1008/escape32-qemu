@@ -465,6 +465,13 @@ typedef struct AM13EAutoSITL {
      * and fault handlers remain authentic and unmodified. */
     uint32_t p1_nfault_enable, p1_nfault_assert_frame;
     uint32_t p1_nfault_release_frame, p1_nfault_events;
+    /* #7 separate SIM_ONLY current-SENSE analogue overrange fixture.
+     * This is NOT real mechanical/driver current or a Guest register write.
+     * QEMU FC 1kHz frame owns the assertion time, and the native OC
+     * current-sensor producer alone owns the analog sample value. */
+    uint32_t p1_oc_enable, p1_oc_assert_frame, p1_oc_release_frame;
+    uint32_t p1_oc_channel, p1_oc_events;
+    bool p1_oc_active;
     /* Host interactive ESC-SIM FC override, never Guest throttle.
      * Applied only by the existing 1kHz QEMU PA26 frame callback. */
     uint32_t live_override_enabled, live_permille;
