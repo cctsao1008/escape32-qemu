@@ -123,7 +123,7 @@ def main():
                 if " kind=BEMF_STRESS " not in row:
                     continue
                 import re
-                m=re.search(r" kind=BEMF_STRESS a=(-?\\d+) b=(-?\\d+) c=(-?\\d+) d=(-?\\d+) e=(-?\\d+) f=(-?\\d+)",row)
+                m=re.search(r" kind=BEMF_STRESS a=(-?\d+) b=(-?\d+) c=(-?\d+) d=(-?\d+) e=(-?\d+) f=(-?\d+)",row)
                 if m:
                     analog_stress_count+=1
                     if int(m.group(5))!=0:
