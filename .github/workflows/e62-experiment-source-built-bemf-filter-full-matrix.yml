@@ -1,0 +1,115 @@
+name: E62 EXPERIMENT Source-Built Stable CMPSS Filter Full Matrix (NOT Original P1)
+
+on:
+  push:
+    branches: [experiment/e62-early-bemf-quartergate]
+    paths:
+      - '.github/workflows/e62-experiment-source-built-bemf-filter-full-matrix.yml'
+      - 'tools/experimental_e62_source_bemf_filter_matrix.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pinned-source-filter:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        include:
+          - label: nominal-smoke-gentle
+            stress: 'off'
+            pair: [smoke, gentle]
+          - label: nominal-direct20-steps
+            stress: 'off'
+            pair: [direct20, steps]
+          - label: nominal-ramp100-ramp500
+            stress: 'off'
+            pair: [ramp20_100ms, ramp20_500ms]
+          - label: switching-impulse
+            stress: '0:16'
+            pair: [direct20, gentle]
+          - label: positive-reference-offset
+            stress: '16:0'
+            pair: [direct20, steps]
+          - label: negative-reference-offset
+            stress: '-16:0'
+            pair: [direct20, ramp20_100ms]
+          - label: combined-offset-noise
+            stress: '16:20'
+            pair: [direct20, ramp20_500ms]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assert independent Original and experimental source identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0  baseline/e62-g13b3/firmware/AM13E-rev17.3.elf' | sha256sum -c -
+          python3 -m py_compile \
+            tools/experimental_e62_source_bemf_filter_matrix.py \
+            tests/e62_autonomous_native_motor_probe.py \
+            tools/native_p1_qualification.py
+      - name: Install Arm GCC/Newlib and source QEMU dependencies
+        uses: carlosperate/arm-none-eabi-gcc-action@v1
+      - name: Fetch pinned ESCape32 source, TI SDK and build native QEMU
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            libglib2.0-dev libpixman-1-dev libfdt-dev pkg-config meson ninja-build
+          git submodule update --init --depth 1 qemu
+          ./build.sh
+          git clone --quiet https://github.com/cctsao1008/ESCape32.git .build/e62-filter-esc
+          git -C .build/e62-filter-esc checkout --quiet --detach 3ea4e672c0770db10c936531e7b3420b09473b18
+          test "$(git -C .build/e62-filter-esc rev-parse HEAD)" = 3ea4e672c0770db10c936531e7b3420b09473b18
+          git clone --quiet --depth 1 https://github.com/TexasInstruments/am13e2x_sdk.git /tmp/am13e-ti-sdk
+          git -C /tmp/am13e-ti-sdk fetch --quiet --depth 1 origin b872469ceef18de5e39a1d3acb0821ec158b44c7
+          git -C /tmp/am13e-ti-sdk checkout --quiet --detach b872469ceef18de5e39a1d3acb0821ec158b44c7
+      - name: Build byte-exact source-built filtered ELF with SIM_ONLY Motor Output=1
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/e62-filter-full
+          fw="$PWD/.build/e62-filter-esc"
+          profile="$fw/mcu/_support/AM13E/cmake/test_profiles/e62_sim_only_early_bemf_stable_filter.cmake"
+          grep -Fq 'AM13E_SIM_ONLY_BEMF_STABLE_FILTER=1' "$profile"
+          grep -Fq 'AM13E_BEMF_INITIAL_DAC_CODE=2048' "$fw/mcu/_support/AM13E/cmake/test_profiles/e62_sim_only_motor_output.cmake"
+          grep -Fq 'AM13E_SIM_ONLY_EXPERIMENTAL_EARLY_BEMF=1' "$fw/mcu/_support/AM13E/cmake/test_profiles/e62_sim_only_early_bemf.cmake"
+          grep -Fq 'AM13E_E62_REQUIRE_MOTOR_OUTPUT=1' "$fw/mcu/_support/AM13E/cmake/test_profiles/e62_sim_only_motor_output.cmake"
+          cmake -S "$fw" -B ".build/e62-fw-filtered" -G "Unix Makefiles" \
+            -DESCAPE32_BUILD_AM13E=ON -DAM13E_SDK_ROOT=/tmp/am13e-ti-sdk \
+            -DAM13E_BOARD_BOARD_PROFILE_FILE="$profile"
+          cmake --build ".build/e62-fw-filtered" --target AM13E-rev17.3.elf -j 2
+          cp ".build/e62-fw-filtered/AM13E-rev17.3.elf" artifacts/e62-filter-full/filtered.elf
+          echo '5b90b200429333cef82b982b7a7f845f31fb885c7ea63fc7e783c75232fac8d1  artifacts/e62-filter-full/filtered.elf' | sha256sum -c -
+          python3 tools/sim_motor_cfg.py --sim-only-opt-in \
+            --motor-profile ecx87-kv147 \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --output artifacts/e62-filter-full/motor-cfg-flash.bin
+      - name: Run two immutable scenarios with physical analog sources and unchanged strict P1
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/experimental_e62_source_bemf_filter_matrix.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --candidate artifacts/e62-filter-full/filtered.elf \
+            --original baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --cfg artifacts/e62-filter-full/motor-cfg-flash.bin \
+            --case "${{ matrix.pair[0] }}" \
+            --case "${{ matrix.pair[1] }}" \
+            --stress="${{ matrix.stress }}" \
+            --output artifacts/e62-filter-full/results \
+            --wall-timeout-s 300
+      - name: Retain full source traces, mechanical failures, strict rejection, and ELF
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-source-filter-full-${{ matrix.label }}-NOT-ORIGINAL-P1
+          path: |
+            artifacts/e62-filter-full/**
+          if-no-files-found: warn
+          retention-days: 21
