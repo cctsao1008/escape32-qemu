@@ -34,7 +34,8 @@ def readonly_qmp_cpu_snapshot(path, elf):
     names={"audio_owner","fault_latched","safety_initialized",
            "e62_sim_runtime_fault_caller_pc",
            "e62_sim_runtime_fault_prestate",
-           "e62_sim_runtime_fault_reason"}
+           "e62_sim_runtime_fault_reason",
+           "e62_sim_motor_output_start_reject"}
     found={}
     nm=subprocess.run(["arm-none-eabi-nm","-an",str(elf)],check=True,
                       capture_output=True,text=True,timeout=12).stdout
