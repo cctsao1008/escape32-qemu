@@ -22,7 +22,7 @@ Independent mandatory inputs:
 
 Return values are `REJECT`, `COLLECT`, or `CANDIDATE_ONLY`. The explicit function `am13e_windmill_motor_rearm_permitted()` **always returns 0**. No rotor angle is taken from QEMU and there is no direct PWM, DShot, timer or motor control call.
 
-Host CI [#40917501312](https://github.com/cctsao1008/ESCape32/actions/runs/40917501312) passed earlier pure-C O2/UBSan tests; after adding explicit six-output-inactive, fault-latch-clear and coherency gates, **final CI [#40918574582](https://github.com/cctsao1008/ESCape32/actions/runs/40918574582) must pass separately** before claiming final-source tests complete.
+Host CI [#40917501312](https://github.com/cctsao1008/ESCape32/actions/runs/40917501312) first passed pure-C O2/UBSan. Added explicit six-output-inactive, fault-latch-clear and coherent-three-phase-epoch gates, then a required `max_sector_hold_ticks` to expire static phase ranks rather than inheriting stale rotor-motion confidence. **Final source CI [#40919333015](https://github.com/cctsao1008/ESCape32/actions/runs/40919333015) SUCCESS** on [commit `80121bd`](https://github.com/cctsao1008/ESCape32/commit/80121bd9585c6f3b85948eb8ae38f471ded8aa79), O2/-Werror + UBSan, all negative and positive tests. This proves only the pure-C defensive contract, not actual ADC/BEMF signals.
 
 **Source-limited observability:** In 4 original native QEMU coast artifacts, terminal 100ms has **≤1 code** maximum phase contrast; 1kHz sampled debug trace shows **2 non-adjacent phase-rank transitions** during the earliest 100ms. A QEMU debug telemetry period is **not** the MCU ADC cadence. Real hardware current/bus/phase configuration and noise remain open.
 
