@@ -45,12 +45,12 @@ jobs:
         run: |
           set -euo pipefail
           git clone --quiet https://github.com/cctsao1008/ESCape32.git .build/experimental-escape32
-          git -C .build/experimental-escape32 checkout --quiet --detach 0f2c3960085641291f479dbd3e945a250dc48a12
-          test "$(git -C .build/experimental-escape32 rev-parse HEAD)" = "0f2c3960085641291f479dbd3e945a250dc48a12"
+          git -C .build/experimental-escape32 checkout --quiet --detach d467ab4b35fdf1a0996680649498004e23f52001
+          test "$(git -C .build/experimental-escape32 rev-parse HEAD)" = "d467ab4b35fdf1a0996680649498004e23f52001"
           git clone --quiet --depth 1 https://github.com/TexasInstruments/am13e2x_sdk.git /tmp/am13e-ti-sdk
           git -C /tmp/am13e-ti-sdk fetch --quiet --depth 1 origin b872469ceef18de5e39a1d3acb0821ec158b44c7
           git -C /tmp/am13e-ti-sdk checkout --quiet --detach b872469ceef18de5e39a1d3acb0821ec158b44c7
-          echo "EXPERIMENT_SOURCE_SHA=0f2c3960085641291f479dbd3e945a250dc48a12"
+          echo "EXPERIMENT_SOURCE_SHA=d467ab4b35fdf1a0996680649498004e23f52001"
       - name: Compile matched default and explicit early CAP1 firmware variants
         shell: bash
         run: |
@@ -89,6 +89,7 @@ jobs:
             arm-none-eabi-nm -an "$elf" | grep -q 'e62_sim_runtime_fault_caller_pc'
             arm-none-eabi-nm -an "$elf" | grep -q 'e62_sim_runtime_fault_prestate'
             arm-none-eabi-nm -an "$elf" | grep -q 'e62_sim_runtime_fault_reason'
+            arm-none-eabi-nm -an "$elf" | grep -q 'e62_sim_motor_output_start_reject'
           done
           echo "PASS_MOTOR_OUTPUT_1_AND_PREFAULT_DIAG_LINKED"
           echo "PASS_TWO_DISTINCT_NONORIGINAL_GUEST_BUILDS"
