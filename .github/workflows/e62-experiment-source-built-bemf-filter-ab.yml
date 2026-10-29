@@ -1,0 +1,138 @@
+name: E62 EXPERIMENT Source-Built CMPSS Filter Robustness A-B (NOT Original P1)
+
+on:
+  push:
+    branches: [experiment/e62-early-bemf-quartergate]
+    paths:
+      - '.github/workflows/e62-experiment-source-built-bemf-filter-ab.yml'
+      - 'tools/experimental_e62_filter_validation.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-built-filter-ab:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        profile: [direct20, gentle]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate frozen original guest and independent test scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0  baseline/e62-g13b3/firmware/AM13E-rev17.3.elf' | sha256sum -c -
+          python3 -m py_compile tests/e62_autonomous_native_motor_probe.py tools/native_p1_qualification.py tools/experimental_e62_filter_validation.py
+      - name: Install pinned Arm GCC with Newlib
+        uses: carlosperate/arm-none-eabi-gcc-action@v1
+      - name: Build source QEMU and pin SDK / ESCape32 filter experiment
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            libglib2.0-dev libpixman-1-dev libfdt-dev pkg-config meson ninja-build
+          git submodule update --init --depth 1 qemu
+          ./build.sh
+          git clone --quiet https://github.com/cctsao1008/ESCape32.git .build/e62-filter-esc
+          git -C .build/e62-filter-esc checkout --quiet --detach 73f48f3b0c89a984d3f74177fd6342c84f5c7e95
+          test "$(git -C .build/e62-filter-esc rev-parse HEAD)" = 73f48f3b0c89a984d3f74177fd6342c84f5c7e95
+          git clone --quiet --depth 1 https://github.com/TexasInstruments/am13e2x_sdk.git /tmp/am13e-ti-sdk
+          git -C /tmp/am13e-ti-sdk fetch --quiet --depth 1 origin b872469ceef18de5e39a1d3acb0821ec158b44c7
+          git -C /tmp/am13e-ti-sdk checkout --quiet --detach b872469ceef18de5e39a1d3acb0821ec158b44c7
+      - name: Build identical source with filter OFF and ON (both Motor Output=1)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/filter-ab
+          fw="$PWD/.build/e62-filter-esc"
+          base="$fw/mcu/_support/AM13E/cmake/test_profiles"
+          grep -Fxq '    AM13E_E62_REQUIRE_MOTOR_OUTPUT=1' "$base/e62_sim_only_motor_output.cmake"
+          grep -Fq 'AM13E_BEMF_INITIAL_DAC_CODE=2048' "$base/e62_sim_only_motor_output.cmake"
+          grep -Fq 'AM13E_SIM_ONLY_EXPERIMENTAL_EARLY_BEMF=1' "$base/e62_sim_only_early_bemf.cmake"
+          grep -Fq 'AM13E_SIM_ONLY_BEMF_STABLE_FILTER=1' "$base/e62_sim_only_early_bemf_stable_filter.cmake"
+          grep -Fq 'E62_BEMF_FILTER_THRESHOLD 20U' "$fw/mcu/AM13E/hal/motor_bemf.c"
+          for variant in control filtered; do
+            profile="$base/e62_sim_only_early_bemf.cmake"
+            if [ "$variant" = filtered ]; then
+              profile="$base/e62_sim_only_early_bemf_stable_filter.cmake"
+            fi
+            cmake -S "$fw" -B ".build/e62-fw-$variant" -G "Unix Makefiles" \
+              -DESCAPE32_BUILD_AM13E=ON -DAM13E_SDK_ROOT=/tmp/am13e-ti-sdk \
+              -DAM13E_BOARD_BOARD_PROFILE_FILE="$profile"
+            cmake --build ".build/e62-fw-$variant" --target AM13E-rev17.3.elf -j 2
+            cp ".build/e62-fw-$variant/AM13E-rev17.3.elf" \
+              "artifacts/filter-ab/$variant.elf"
+          done
+          sha256sum artifacts/filter-ab/{control,filtered}.elf > artifacts/filter-ab/elves.sha256
+          test "$(sha256sum artifacts/filter-ab/control.elf | cut -c1-64)" != \
+               "$(sha256sum artifacts/filter-ab/filtered.elf | cut -c1-64)"
+          python3 tools/sim_motor_cfg.py --sim-only-opt-in \
+            --motor-profile ecx87-kv147 \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --output artifacts/e62-g13b3-experimental-filter-cfg.bin
+      - name: Independent no-WFI Original-policy P1 gate for both source builds and both stress conditions
+        shell: bash
+        run: |
+          set -euo pipefail
+          case_name="${{ matrix.profile }}"
+          scenario="scenarios/e62-native-p0-$case_name.json"
+          if [ "$case_name" = direct20 ]; then
+            scenario="scenarios/e62-native-p1-direct20.json"
+          fi
+          test -s "$scenario"
+          for variant in control filtered; do
+            elf="artifacts/filter-ab/$variant.elf"
+            exact_sha="$(sha256sum "$elf" | cut -c1-64)"
+            for stress in nominal noise; do
+              prefix="artifacts/filter-ab/$case_name-$variant-$stress"
+              opts=()
+              if [ "$stress" = noise ]; then
+                opts+=(--experimental-bemf-robustness=0:16)
+              fi
+              python3 tests/e62_autonomous_native_motor_probe.py \
+                --qemu .build/qemu-src/build/qemu-system-arm \
+                --elf "$elf" \
+                --experimental-candidate-sha256 "$exact_sha" \
+                --cfg-flash artifacts/e62-g13b3-experimental-filter-cfg.bin \
+                --scenario "$scenario" \
+                --artifact "$prefix.json" \
+                --wall-timeout-s 300 "${opts[@]}" \
+                > "$prefix.probe.stdout.log" 2>&1
+              set +e
+              python3 tools/native_p1_qualification.py \
+                --scenario "$scenario" \
+                --evidence "$prefix.json" \
+                --events "$prefix.p0.events.log" \
+                --output "$prefix.strict-original-p1.json" \
+                > "$prefix.strict.stdout.log" 2>&1
+              rc=$?
+              set -e
+              if [ "$rc" -ne 1 ]; then
+                echo "Unexpected Original P1 verdict exit code: $rc"
+                exit 1
+              fi
+            done
+          done
+          python3 tools/experimental_e62_filter_validation.py \
+            --dir artifacts/filter-ab \
+            --profile "$case_name" \
+            --source-commit 73f48f3b0c89a984d3f74177fd6342c84f5c7e95 \
+            --control-elf artifacts/filter-ab/control.elf \
+            --filter-elf artifacts/filter-ab/filtered.elf \
+            --output "artifacts/filter-ab/$case_name-verdict.json"
+      - name: Retain both ELFs / QEMU events / strict P1 FAIL verdicts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-experimental-source-cmpss-filter-${{ matrix.profile }}-NOT-P1
+          path: |
+            artifacts/filter-ab/**
+            artifacts/e62-g13b3-experimental-filter-cfg.bin
+          if-no-files-found: warn
+          retention-days: 21
