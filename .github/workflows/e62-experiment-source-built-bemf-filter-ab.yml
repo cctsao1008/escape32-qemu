@@ -83,7 +83,7 @@ jobs:
           case_name="${{ matrix.profile }}"
           scenario="scenarios/e62-native-p0-$case_name.json"
           if [ "$case_name" = direct20 ]; then
-            scenario="scenarios/e62-native-p1-direct20.json"
+            scenario="scenarios/e62-native-p0-direct20.json"
           fi
           test -s "$scenario"
           for variant in control filtered; do
