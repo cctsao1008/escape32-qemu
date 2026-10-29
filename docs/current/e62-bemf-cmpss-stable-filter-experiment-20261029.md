@@ -159,3 +159,59 @@ The rerun is
 The compiler-only failure is **not** a failed BEMF robustness
 measurement. Do not claim the filter is effective until there is
 an actual non-SHA mechanical PASS.
+
+## Verified source-built A/B: genuine closed-loop data (2026-10-29)
+
+[CI #40821992940](https://github.com/cctsao1008/escape32-qemu/actions/runs/40821992940)
+has **completed successfully**. Both source-built jobs use EXACT
+firmware source commit `3ea4e672c0770db10c936531e7b3420b09473b18`
+and two distinct ELFs:
+
+- **Control ELF SHA256**:
+  `029043a46e186df26831c2de05cf9ac6145e7feec85f5dd12a31908424ec3899`
+- **Filtered ELF SHA256**:
+  `5b90b200429333cef82b982b7a7f845f31fb885c7ea63fc7e783c75232fac8d1`
+- Original Rel17.3 SHA: `05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0`
+  (**not** any of these source-built test Guests).
+
+Independently downloaded `e62-experimental-source-cmpss-filter-gentle-NOT-P1`
+artifact `12875326671`. The following per-case strict P1 JSONs
+were read directly. Except for immutable Original SHA rejection,
+all non-SHA P1 criteria were unwaived:
+
+| Gentle trial | CMP_FILTER events | CAP1 Guest ACK | TIMG12 Guest ACK | Reversals >=50rpm | Peak SIM RPM | Non-SHA verdict |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| Control nominal | 3,387 | 2,234 | 2,234 | 0 | 493.820 | PASS diagnostic |
+| Control 0:16 | 94,479 | 14,957 | 4,453 | 6 | 527.463 | FAIL significant reversal |
+| Filtered nominal | 2,258 | 2,234 | 2,234 | 0 | 493.496 | PASS diagnostic |
+| **Filtered 0:16** | **2,416** | **2,234** | **2,233** | **0** | **493.094** | **PASS diagnostic** |
+
+All four cases preserve source QEMU motor physics, independent
+flight controller's exact 1kHz wire schedule, fault routing, and
+unchanged Original P1 checker. The **filtered/noise** row has 36
+source-diagnostic stress events independently proving physical source
+perturbation before CMPSS. No Host-written Guest CAP1/IRQ.
+
+The reduced simulated CMP_FILTER event rate (94,479 -> 2,416)
+is strong evidence that the majority filter rejects the injected
+short switching artifacts. The approximately unchanged model
+peak speed and 0 reversals support a bounded improvement in
+this one model / scenario. **Not** evidence of board noise immunity
+or 47V real motor performance.
+
+For direct20, all four A/B cases preserve zero reversals and the
+unaltered non-SHA strict gates; **non-regression** is the only
+justified classification. A control already at 0 reversals cannot
+be numerically improved below zero.
+
+### Larger matrix, separate verification
+
+[Full matrix workflow #40823411978](https://github.com/cctsao1008/escape32-qemu/actions/runs/40823411978):
+seven parallel job groups, one byte-exact pinned filtered source ELF,
+six unchanged nominal scenarios and eight untouched analog stress
+cases (14 Guest runs). The existing `tools/native_p1_qualification.py`
+and all strict non-SHA criteria remain intact; any source Guest
+reversal or missing CAP1/TIMG12 ACK is kept as RED. The
+`tools/experimental_e62_source_bemf_filter_matrix.py` must refuse
+ELF SHA drift, fabricated source stress, missing physical evidence,
+or an Original P1 identity waiver. **Results not yet asserted here.**
