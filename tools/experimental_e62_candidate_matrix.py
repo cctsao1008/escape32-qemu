@@ -157,11 +157,14 @@ def main():
         "results":[[x["case"],x["diagnostic_mechanical_closed_loop_criteria_met"],
                     x["non_sha_failures"]] for x in results]
     },sort_keys=True),flush=True)
-    # Fail closed if any source evidence is absent or the original SHA gate
-    # accepted a non-original Guest. A negative motor case remains a recorded
-    # experimental negative result; do not turn it into a fake P1 pass.
-    return 0 if all(x["scenario_physical_source_observed"] and
-                    x["strict_original_p1_sha_guard_held"] for x in results) else 1
+    # An experimental job is green only if EVERY unchanged non-SHA P1
+    # physical/observability criterion passes AND the immutable Original
+    # Guest SHA guard still rejects the non-original candidate.
+    # This verdict is expressly NOT original P1 qualification.
+    return 0 if all(x["diagnostic_mechanical_closed_loop_criteria_met"]
+                    and x["strict_original_p1_sha_guard_held"]
+                    and not x["strict_original_p1_qualified"]
+                    for x in results) else 1
 
 
 if __name__=="__main__":
