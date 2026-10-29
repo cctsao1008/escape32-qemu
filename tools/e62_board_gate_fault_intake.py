@@ -125,11 +125,12 @@ def audit(raw:bytes,manifest:dict):
     # Earliest point at which all six gate-to-source channels are low
     # and remain low for EVERY subsequent recorded sample (including
     # after the fault source is released). Any reactivation fails closed.
-    candidates=[i for i in range(on,len(rows)) if
-                all(flags[g]==0 for _,flags in rows[i:] for g in GATES)]
-    if not candidates:
+    last_postfault_active=max(
+        (i for i in range(on,len(rows))
+         if any(rows[i][1][g] for g in GATES)),default=on-1)
+    index=last_postfault_active+1
+    if index>=len(rows):
         raise ValueError("Postfault gate reactivation or no six-gate safe-off")
-    index=candidates[0]
     # Need at least 3 independent all-off samples (avoid 1-point false PASS).
     if len(rows)-index<3 or rows[index][0]>trelease:
         raise ValueError("No persistent six-gate off before fault release")
