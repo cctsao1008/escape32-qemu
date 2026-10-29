@@ -403,3 +403,49 @@ unchanged; source-built Guest must remain SHA-rejected as
 `ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN`.
 **No physical standstill restart, hardware, or release qualification
 is asserted from this new test.**
+
+## Source-built oldstep versus cold-sector second-demand causal A/B (#5)
+
+[CI #40892524402](https://github.com/cctsao1008/escape32-qemu/actions/runs/40892524402)
+**completed SUCCESS** on two separately compiled exact experimental
+ARM Guests, driven by the SAME 6300 frames of genuine 1kHz DShot600
+and the same 24V uncalibrated ECX87 KV147 QEMU physical motor model.
+
+The control deliberately retains the actual Rel17 `laststep()`
+sector memory `oldstep`, restored at the next start; its
+PT_LOAD fingerprint is identical to the earlier source-built
+filtered firmware:
+`8e8eb3472bfee51711d93e333b0dba52d649a1acc6c01376e9e66503f42499e2`.
+The cold-sector candidate alone enables the explicitly
+nonflashable `AM13E_SIM_ONLY_EXPERIMENTAL_COLD_RESTART=1` guard,
+choosing `step=0` before the original `nextstep()`. This
+**does not measure electrical rotor position**, and is a
+mechanism-isolation test only.
+
+| Window source observation | Original oldstep restore | SIM_ONLY cold-sector |
+| --- | ---: | ---: |
+| First 20% demand, negative rotor samples ≤−50RPM | 0 | 0 |
+| First demand CAP1 / TIMG12 Guest ACK | 2742 / 2742 | 2742 / 2742 |
+| Second 20% demand, negative rotor samples ≤−50RPM | **5** | **0** |
+| Second demand PWM_PAIR | 2734 | **2741** |
+| Second demand CAP1 / TIMG12 Guest ACK | 2734 / 2734 | **2740 / 2740** |
+| Neutral/coast, active motor events ≥200ms after neutral start | 0 | 0 |
+| Original P1 identity acceptance | Rejected | Rejected |
+| Original P1 non-SHA motor gate | FAIL rotor reversal | **PASS** |
+| Independent per-demand oracle | FAIL | **PASS** |
+
+This source-owned A/B supports the conclusion that **reusing
+the stale commutation sector across a long neutral/coast is a
+significant contributor** to this specific second-start rotor
+reversal. It does not demonstrate that forcing sector 1 is
+universally safe for an arbitrary rotor phase or windmilling
+direction; no production behavior is changed.
+
+The next bounded no-waiver regression is
+[coast duration CI #40894919388](https://github.com/cctsao1008/escape32-qemu/actions/runs/40894919388):
+300ms coast (significant retained spinning likely) and
+3000ms coast (near stop), each with paired oldstep control
+and cold-sector Guest. These source scenarios are independent
+of motor readiness, retain the original strict P1 negative SHA
+gate and preserve all non-SHA failures as **red**, including
+unexpected motor energization in neutral/coast.
