@@ -21,6 +21,7 @@ from g0_memory import QTest
 from tools.sitl_autonomous_transport import AUTO_BASE, REG, read_auto
 from tools.native_dshot_scenario import load_native_scenario
 from tools.native_p1_fault_plan import load_fault_plan
+from tools.native_p1_oc_fault_plan import load_oc_plan
 
 MOTOR_BASE = 0x5ffeb000
 MOTOR_MAGIC = 0x4d323645
@@ -201,7 +202,8 @@ def _continuous_dshot_stages(*, neutral_ms, ramp_ms, hold_ms, coast_ms,
 def _configure_autonomous_dshot(qtest, *, neutral_ms, ramp_ms,
                                 hold_ms, coast_ms, drive_permille,
                                 ramp_update_ms, scenario_stages=None,
-                                external_fault=None, max_frames=0):
+                                external_fault=None, external_oc_fault=None,
+                                max_frames=0):
     """Stage PA26 traffic; optional bounded abrupt external FC disconnect."""
     get = lambda key: qtest.read(AUTO_BASE+REG[key])
     put = lambda key, val: qtest.write(AUTO_BASE+REG[key], val)
@@ -237,6 +239,16 @@ def _configure_autonomous_dshot(qtest, *, neutral_ms, ramp_ms,
             qtest.write(AUTO_BASE+offset,value)
             if qtest.read(AUTO_BASE+offset)!=value:
                 raise RuntimeError("Native external nFAULT plan readback failed")
+    if external_oc_fault is not None:
+        for offset,value in (
+            (0x140,external_oc_fault["assert_frame"]),
+            (0x144,external_oc_fault["release_frame"]),
+            (0x148,external_oc_fault["channel"]),
+            (0x14c,1),
+        ):
+            qtest.write(AUTO_BASE+offset,value)
+            if qtest.read(AUTO_BASE+offset)!=value:
+                raise RuntimeError("Native external OC-sense plan readback failed")
     put("command", 1)
     return max_frames if max_frames else total
 
@@ -492,6 +504,8 @@ def run(args):
     scenario_stages, scenario_meta = load_native_scenario(args.scenario)
     external_fault=(load_fault_plan(args.fault_scenario,scenario_stages)
                     if args.fault_scenario else None)
+    external_oc_fault=(load_oc_plan(args.oc_fault_scenario,scenario_stages)
+                       if args.oc_fault_scenario else None)
     with tempfile.TemporaryDirectory(prefix="e62-native-no-wfi-") as td:
         tmp = Path(td)
         sockpath = tmp/"qtest.sock"
@@ -602,6 +616,7 @@ def run(args):
                     }
                     evidence["native_dshot_scenario"] = scenario_meta
                     evidence["native_external_fault_plan"] = external_fault
+                    evidence["native_external_oc_sense_fault_plan"] = external_oc_fault
                     evidence["configured_dshot_frames"] = _configure_autonomous_dshot(
                         qtest, neutral_ms=args.arm_ms, ramp_ms=args.drive_ms,
                         hold_ms=args.hold_ms, coast_ms=args.coast_ms,
@@ -609,6 +624,7 @@ def run(args):
                         ramp_update_ms=args.ramp_update_ms,
                         scenario_stages=scenario_stages,
                         external_fault=external_fault,
+                        external_oc_fault=external_oc_fault,
                         max_frames=getattr(args,"link_loss_last_frame",0))
                     if args.differential_sync_start:
                         _resume_prearmed_differential_vm(qmp_sockpath)
@@ -874,6 +890,10 @@ def main():
         Path(__file__).resolve().parents[1]/
         "scenarios/e62-native-p0-smoke.json"),
         help="Versioned external 1kHz DShot JSON; Guest readiness NEVER gates")
+    parser.add_argument("--oc-fault-scenario",type=Path,default=None,
+                        help="EXPERIMENTAL SIM_ONLY source-clock external ADC-like "
+                             "current-sense overrange JSON; not actual rotor current, "
+                             "no Guest/Trip/IRQ register writes")
     parser.add_argument("--fault-scenario",type=Path,default=None,
                         help="Optional SIM_ONLY external PA22 nFAULT JSON "
                              "scheduled by QEMU virtual 1kHz clock; no "
@@ -969,10 +989,11 @@ def main():
     elif args.differential_rr_file is not None:
         parser.error("RR file requires explicit record/replay mode")
     if args.differential_sync_start and (args.link_loss_last_frame or
-                                         args.fault_scenario):
+                                         args.fault_scenario or args.oc_fault_scenario):
         parser.error("Synchronized source replay is diagnostics-only, not P1")
-    if args.link_loss_last_frame and args.fault_scenario:
-        parser.error("P1 input-loss and external PA22 fault tests must be separate")
+    if (sum(bool(v) for v in (args.link_loss_last_frame,
+                             args.fault_scenario,args.oc_fault_scenario))>1):
+        parser.error("External nFAULT, OC-sense and input-loss must run separately")
     evidence=run(args)
     print("E62_NATIVE_AUTONOMOUS_NO_WFI_PROBE "+
           json.dumps(evidence,sort_keys=True))
