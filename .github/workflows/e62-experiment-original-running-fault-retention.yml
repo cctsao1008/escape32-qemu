@@ -5,6 +5,13 @@ on:
     branches: [experiment/e62-early-bemf-quartergate]
     paths:
       - '.github/workflows/e62-experiment-original-running-fault-retention.yml'
+      - 'machine/am13e23019.c'
+      - 'machine/am13e_autonomous_sitl.inc'
+      - 'machine/am13e_native_analog_frontend.inc'
+      - 'machine/am13e_trip_safety.inc'
+      - 'tests/e62_autonomous_native_motor_probe.py'
+      - 'tools/native_p1_nfault_audit.py'
+      - 'tools/native_p1_input_loss_audit.py'
   workflow_dispatch:
 
 permissions:
