@@ -1,0 +1,64 @@
+name: E62 EXPERIMENT Board Trace Intake Negative Gates (NO Hardware PASS)
+
+on:
+  push:
+    branches: [experiment/e62-early-bemf-quartergate]
+    paths:
+      - 'tools/e62_board_adc_epoch_intake.py'
+      - 'tools/e62_board_gate_fault_intake.py'
+      - 'tests/test_e62_bench_signal_intake.py'
+      - '.github/workflows/e62-experiment-board-trace-evidence-intake.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  adc-epoch-and-six-vgs-fault:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python syntax and strict zero-third-party-dependencies regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile \
+            tools/e62_board_adc_epoch_intake.py \
+            tools/e62_board_gate_fault_intake.py \
+            tests/test_e62_bench_signal_intake.py
+          python3 -m unittest discover -s tests -p test_e62_bench_signal_intake.py -v
+      - name: Preserve previous strict hardware intake and no silent hardware signoff
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p test_e62_hardware_evidence.py -v
+          mkdir -p artifacts/e62-board-intake
+          python3 tools/e62_hardware_evidence.py \
+            --csv docs/fixtures/e62-hardware-measurements.csv \
+            --output artifacts/e62-board-intake/hardware-coverage.json
+          python3 - <<'PY'
+          import json
+          x=json.load(open('artifacts/e62-board-intake/hardware-coverage.json'))
+          assert x['physical_evidence_state']=='OPEN_NO_BOARD_MEASUREMENTS'
+          assert x['captured_rows']==0
+          assert x['hardware_qualified'] is False
+          print('E62_REAL_BOARD_EVIDENCE_NOT_COLLECTED',x['total_required_rows'])
+          PY
+      - name: Preserve scope limitation
+        shell: bash
+        run: |
+          printf '%s\n' 'SOURCE=MOCK_UNIT_INPUTS_ONLY' \
+            'BOARD_ADC_SAMPLING_NOT_MEASURED' \
+            'BOARD_SIX_GATE_VGS_NOT_MEASURED' \
+            'NO_FIRMWARE_REARM' \
+            'NO_HARDWARE_QUALIFICATION' \
+            > artifacts/e62-board-intake/scope.txt
+      - name: Retain schema/open-only status
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-bench-adc-vgs-trace-intake-schema-only-NOT-MEASURED
+          path: artifacts/e62-board-intake/**
+          if-no-files-found: warn
+          retention-days: 21
