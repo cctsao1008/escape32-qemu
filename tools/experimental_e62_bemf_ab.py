@@ -196,6 +196,17 @@ def run(a):
         first_cap = first("CAP1")
         first_timg = first("TIMG12")
         rotor = [(t,d) for t,k,d in after if k=="ROTOR" and t<cutoff]
+        # Exact 1500ms held-positive Direct20 stage from original JSON.
+        # A 50ms-only check hides delayed reversal and is NOT acceptable.
+        window = [(t,k,d) for t,k,d in after if
+                  t < onset + 1_500_000_000]
+        full_rotor = [(t,d) for t,k,d in window if k=="ROTOR"]
+        if len(full_rotor) != 1500:
+            raise ValueError("Incomplete 1500-sample powered rotor source")
+        full_reversed = [(t,d) for t,d in full_rotor if d[0] <= -50000]
+        full_pulse_count = sum(k=="PWM_PAIR" for t,k,d in window)
+        full_cap_ack_count = sum(k=="CAP1_ACK" for t,k,d in window)
+        full_t12_ack_count = sum(k=="TIMG12_ACK" for t,k,d in window)
         first_reverse = next((t for t,d in rotor if d[0]<=-50000),None)
         first_neg_torque = next((t for t,d in rotor if d[5]<-100000),None)
         pairs = [(t,d[0],d[1]) for t,k,d in after if k=="PWM_PAIR" and t<cutoff]
@@ -220,6 +231,15 @@ def run(a):
             first_change_pair_ms=ms(pairs[1][0]) if len(pairs)>1 else None,
             first_reverse_50rpm_ms=ms(first_reverse),
             first_negative_torque_ms=ms(first_neg_torque),
+            full_positive_window_ms=1500,
+            full_positive_rotor_samples=len(full_rotor),
+            full_positive_min_rpm=min(d[0] for t,d in full_rotor)/1000,
+            full_positive_max_rpm=max(d[0] for t,d in full_rotor)/1000,
+            full_positive_reverse_50rpm_samples=len(full_reversed),
+            full_positive_first_reverse_ms=ms(full_reversed[0][0]) if full_reversed else None,
+            full_positive_pwm_pairs=full_pulse_count,
+            full_positive_cap1_acks=full_cap_ack_count,
+            full_positive_timg12_acks=full_t12_ack_count,
             first_50ms_pwm_pairs=len(pairs),
             first_50ms_rotor_samples=len(rotor),
             first_50ms_min_rpm=min(d[0] for t,d in rotor)/1000,
@@ -267,10 +287,23 @@ def compare(a):
             candidate_early_timg12=(trial is not None and
                                    baseline is not None and trial<baseline),
             candidate_no_early_reverse=candidate["first_reverse_50rpm_ms"] is None,
+            control_full_positive_reverse_samples=control["full_positive_reverse_50rpm_samples"],
+            candidate_full_positive_reverse_samples=candidate["full_positive_reverse_50rpm_samples"],
+            candidate_no_full_positive_reverse=(
+                candidate["full_positive_reverse_50rpm_samples"]==0),
+            candidate_real_closed_loop_source=all(
+                candidate[k]>=12 for k in (
+                    "full_positive_pwm_pairs","full_positive_cap1_acks",
+                    "full_positive_timg12_acks")),
+            candidate_sustained_physical_motion=(
+                candidate["full_positive_max_rpm"]>=50),
         )
         result["classification"]=("EARLY_SOURCE_IMPROVED_NOT_P1"
               if result["candidate_early_timg12"] and
-                 result["candidate_no_early_reverse"]
+                 result["candidate_no_early_reverse"] and
+                 result["candidate_no_full_positive_reverse"] and
+                 result["candidate_real_closed_loop_source"] and
+                 result["candidate_sustained_physical_motion"]
               else "FAIL_EXPERIMENT_NOT_FIXED")
     except (KeyError,TypeError,ValueError) as e:
         result.update(classification="FAIL_EXPERIMENT_INVALID_EVIDENCE",
