@@ -125,9 +125,9 @@ def main():
         if qemu_diag.exists():
             import re
             event_re=re.compile(
-                r"E62_BEMF_STRESS_DIAG vns=(\\d+) a=(-?\\d+) "
-                r"b=(-?\\d+) c=(-?\\d+) d=(-?\\d+) "
-                r"e=(-?\\d+) f=(\\d+)")
+                r"E62_BEMF_STRESS_DIAG vns=(\d+) a=(-?\d+) "
+                r"b=(-?\d+) c=(-?\d+) d=(-?\d+) "
+                r"e=(-?\d+) f=(\d+)")
             for row in qemu_diag.open(errors="replace"):
                 m=event_re.search(row)
                 if m:
