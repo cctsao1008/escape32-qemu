@@ -53,12 +53,25 @@ def main():
     p.add_argument("--cfg",type=Path,required=True)
     p.add_argument("--output",type=Path,required=True)
     p.add_argument("--case",action="append",choices=list(SCENARIOS),required=True)
+    p.add_argument("--bemf-robustness",default=None,
+                   help="EXPERIMENT ONLY: bounded OFFSET:SWITCH_CODE; "
+                        "requires real upstream analog stress source evidence")
     p.add_argument("--wall-timeout-s",type=int,default=300)
     a=p.parse_args()
     a.output.mkdir(parents=True,exist_ok=True)
     original_sha=sha256(a.original)
     candidate_sha=sha256(a.candidate)
     proof=json.loads(a.patch_proof.read_text())
+    if a.bemf_robustness is not None:
+        import re
+        mo=re.fullmatch(r"(-?[0-9]{1,2}):([0-9]{1,2})",a.bemf_robustness)
+        if mo is None:
+            p.error("Invalid opt-in BEMF stress syntax")
+        offset,spike=map(int,mo.groups())
+        if abs(offset)>24 or spike>32 or not (offset or spike):
+            p.error("BEMF stress exceeds deterministic bounds")
+    else:
+        offset=spike=0
     if (original_sha!=EXPECTED_ORIGINAL or
         proof["original_sha256"]!=EXPECTED_ORIGINAL or
         proof["candidate_sha256"]!=candidate_sha or
@@ -83,6 +96,8 @@ def main():
             "--artifact",str(evidence),
             "--wall-timeout-s",str(a.wall_timeout_s),
         ]
+        if a.bemf_robustness is not None:
+            probe.extend(["--experimental-bemf-robustness",a.bemf_robustness])
         probe_rc=invoke(probe,prefix.with_suffix(".probe.stdout.log"),
                         a.wall_timeout_s+30)
         if evidence.exists() and events.exists():
@@ -101,11 +116,31 @@ def main():
             try: report=json.loads(strict.read_text())
             except (OSError,ValueError): pass
         failures=(report or {}).get("unwaived_observability_failures",[])
+        analog_stress_count=0
+        switch_noise_events=0
+        if events.exists():
+            for row in events.open(errors="replace"):
+                if " kind=BEMF_STRESS " not in row:
+                    continue
+                import re
+                m=re.search(r" kind=BEMF_STRESS a=(-?\\d+) b=(-?\\d+) c=(-?\\d+) d=(-?\\d+) e=(-?\\d+) f=(-?\\d+)",row)
+                if m:
+                    analog_stress_count+=1
+                    if int(m.group(5))!=0:
+                        switch_noise_events+=1
+        stress_source_proven=(
+            a.bemf_robustness is None or
+            (analog_stress_count>=1 and
+             (not spike or switch_noise_events>=1)))
         # The immutable ORIGINAL SHA gate MUST reject candidate; if it
         # doesn't, fail closed because it means the strict gate was waived.
         original_guard_held="ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN" in failures
         result={
             "case":case,
+            "bemf_robustness":a.bemf_robustness,
+            "bemf_stress_source_events":analog_stress_count,
+            "bemf_switching_artifact_events":switch_noise_events,
+            "bemf_stress_source_proven":stress_source_proven,
             "status":"EXPERIMENTAL_DIAGNOSTIC_ONLY_NOT_P1",
             "candidate_sha256":candidate_sha,
             "source_scenario_sha256":sha256(scenario),
@@ -133,6 +168,7 @@ def main():
             x for x in failures if x!="ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN"]
         result["diagnostic_mechanical_closed_loop_criteria_met"]=bool(
             probe_rc==0 and report is not None and original_guard_held and
+            stress_source_proven and
             not result["non_sha_failures"] and
             result["direction_changes_observed"]==0 and
             result["active_speed_signs_above_50rpm"]==[1] and
