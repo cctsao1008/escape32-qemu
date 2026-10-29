@@ -1,0 +1,28 @@
+name: E62 EXPERIMENT Read-Only Restart Phase Torque Audit Unit Gates
+
+on:
+  push:
+    branches: [experiment/e62-early-bemf-quartergate]
+    paths:
+      - 'tools/e62_restart_phase_torque_audit.py'
+      - 'tests/test_e62_restart_phase_torque_audit.py'
+      - '.github/workflows/e62-experiment-restart-phase-torque-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-rotor-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate read-only model diagnostics and fail-closed source fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p test_e62_restart_phase_torque_audit.py -v
+          python3 -m py_compile tools/e62_restart_phase_torque_audit.py
+          python3 tools/e62_restart_phase_torque_audit.py --help
+          echo 'ROTOR b / f are QEMU model diagnostics only, never Guest inputs'
