@@ -1,0 +1,105 @@
+name: E62 EXPERIMENT Original Guest Running Fault Retention (NOT Board)
+
+on:
+  push:
+    branches: [experiment/e62-early-bemf-quartergate]
+    paths:
+      - '.github/workflows/e62-experiment-original-running-fault-retention.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  original-no-wfi-physical-faults:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Original Guest SHA and unwaived native fault-negative test contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0  baseline/e62-g13b3/firmware/AM13E-rev17.3.elf' | sha256sum -c -
+          python3 tests/test_native_p1_nfault.py
+          python3 tests/test_native_p1_fault_matrix.py
+          python3 tests/test_native_p1_input_loss.py
+          python3 tests/test_wwdt_bootrst_contract.py
+      - name: Build native QEMU from exactly current source with immutable Original Guest
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            libglib2.0-dev libpixman-1-dev libfdt-dev pkg-config meson ninja-build binutils-arm-none-eabi
+          git submodule update --init --depth 1 qemu
+          ./build.sh
+          mkdir -p artifacts/e62-original-safety
+          python3 tools/sim_motor_cfg.py --sim-only-opt-in \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --motor-profile ecx87-kv147 \
+            --output artifacts/e62-original-safety/e62-g13b3-safety-cfg-flash.bin
+          printf '%s\n' "firmware_original_sha256=05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0" \
+            "qemu_source_commit=$(git rev-parse HEAD)" "hardware_qualified=false" \
+            "original_p1_requires_independent_fault_verdict=true" \
+            > artifacts/e62-original-safety/provenance.txt
+      - name: Native source 1kHz flight controller + physical PA22 nFAULT while running
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tests/e62_autonomous_native_motor_probe.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --cfg-flash artifacts/e62-original-safety/e62-g13b3-safety-cfg-flash.bin \
+            --scenario scenarios/e62-native-p0-smoke.json \
+            --fault-scenario scenarios/e62-native-p1-nfault.json \
+            --wall-timeout-s 240 \
+            --artifact artifacts/e62-original-safety/nfault.json \
+            2>&1 | tee artifacts/e62-original-safety/nfault-probe.log
+      - name: Unchanged Original P1 nFAULT latch + no auto rearm verdict
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/native_p1_nfault_audit.py \
+            --scenario scenarios/e62-native-p0-smoke.json \
+            --fault-scenario scenarios/e62-native-p1-nfault.json \
+            --evidence artifacts/e62-original-safety/nfault.json \
+            --events artifacts/e62-original-safety/nfault.p0.events.log \
+            --output artifacts/e62-original-safety/nfault.verdict.json \
+            2>&1 | tee artifacts/e62-original-safety/nfault-audit.log
+      - name: Original Guest external source DShot hard loss → WWDT BOOTRST
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tests/e62_autonomous_native_motor_probe.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --cfg-flash artifacts/e62-original-safety/e62-g13b3-safety-cfg-flash.bin \
+            --scenario scenarios/e62-native-p1-input-loss.json \
+            --link-loss-last-frame 2800 \
+            --link-loss-wall-timeout-s 150 \
+            --wall-timeout-s 210 \
+            --artifact artifacts/e62-original-safety/link-loss.json \
+            2>&1 | tee artifacts/e62-original-safety/link-loss-probe.log
+      - name: Unchanged Original P1 source loss → WWDT reset fail-closed verdict
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/native_p1_input_loss_audit.py \
+            --events artifacts/e62-original-safety/link-loss.p0.events.log \
+            --evidence artifacts/e62-original-safety/link-loss.json \
+            --qemu-log artifacts/e62-original-safety/link-loss.qemu.log \
+            --scenario scenarios/e62-native-p1-input-loss.json \
+            --output artifacts/e62-original-safety/link-loss.verdict.json \
+            2>&1 | tee artifacts/e62-original-safety/link-loss-audit.log
+      - name: Retain strict Original motor fault observations on failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-current-branch-original-guest-nfault-and-wwdt-source-physical-SIM_ONLY
+          path: artifacts/e62-original-safety/**
+          if-no-files-found: warn
+          retention-days: 21
