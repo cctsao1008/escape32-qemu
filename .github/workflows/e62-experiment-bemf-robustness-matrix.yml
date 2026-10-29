@@ -1,0 +1,91 @@
+name: E62 EXPERIMENT BEMF Analog Robustness Matrix (NOT Original P1)
+
+on:
+  push:
+    branches: [experiment/e62-early-bemf-quartergate]
+    paths:
+      - 'machine/am13e23019.c'
+      - 'machine/am13e_native_analog_frontend.inc'
+      - 'machine/am13e_native_motor_plant.inc'
+      - 'machine/am13e_native_pwm_coupling.inc'
+      - 'tests/e62_autonomous_native_motor_probe.py'
+      - 'tools/experimental_e62_candidate_matrix.py'
+      - '.github/workflows/e62-experiment-bemf-robustness-matrix.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  physical-bemf-stress-pairs:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 48
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: switching-impulse
+            stress: '0:16'
+            pair: [direct20, gentle]
+          - label: positive-reference-offset
+            stress: '16:0'
+            pair: [direct20, steps]
+          - label: negative-reference-offset
+            stress: '-16:0'
+            pair: [direct20, ramp20_100ms]
+          - label: combined-positive-offset-noise
+            stress: '16:20'
+            pair: [direct20, ramp20_500ms]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned source dependencies and enforce default-off P1 scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0  baseline/e62-g13b3/firmware/AM13E-rev17.3.elf' | sha256sum -c -
+          python3 -m py_compile tests/e62_autonomous_native_motor_probe.py tools/experimental_e62_candidate_matrix.py tools/experimental_e62_pinned_ival_patch.py
+          grep -Fq 'AM13E_MOTOR' machine/am13e_native_motor_plant.inc
+          grep -Fq 'if getattr(args,"experimental_bemf_robustness",None) else ""' tests/e62_autonomous_native_motor_probe.py
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            libglib2.0-dev libpixman-1-dev libfdt-dev pkg-config meson ninja-build binutils-arm-none-eabi
+          git submodule update --init --depth 1 qemu
+          ./build.sh
+      - name: Produce exact three-instruction candidate, preserving SHA audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          python3 tools/experimental_e62_pinned_ival_patch.py \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --output-elf artifacts/e62-exp-three-instruction-NOT-ORIGINAL.elf \
+            --proof-json artifacts/e62-exp-patch-proof.json
+          echo '0975dd2169b308e1b4a3d131078f744ab6c0f6efa6acc65c7953d2a5f9ecfcd5  artifacts/e62-exp-three-instruction-NOT-ORIGINAL.elf' | sha256sum -c -
+          python3 tools/sim_motor_cfg.py --sim-only-opt-in \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --motor-profile ecx87-kv147 \
+            --output artifacts/e62-g13b3-exp-robustness-cfg-flash.bin
+      - name: Execute two unchanged scenarios with real analog source perturbation and strict Original P1 analyzer
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/experimental_e62_candidate_matrix.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --candidate artifacts/e62-exp-three-instruction-NOT-ORIGINAL.elf \
+            --original baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --patch-proof artifacts/e62-exp-patch-proof.json \
+            --cfg artifacts/e62-g13b3-exp-robustness-cfg-flash.bin \
+            --case "${{ matrix.pair[0] }}" --case "${{ matrix.pair[1] }}" \
+            --bemf-robustness "${{ matrix.stress }}" \
+            --output artifacts/e62-exp-robustness \
+            --wall-timeout-s 300
+      - name: Preserve ALL negative/positive mechanical, original-SHA and analog-source evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-bemf-robustness-${{ matrix.label }}-NOT-P1
+          path: |
+            artifacts/e62-exp-robustness/**
+            artifacts/e62-exp-patch-proof.json
+          if-no-files-found: warn
+          retention-days: 21
