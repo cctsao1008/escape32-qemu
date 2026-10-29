@@ -41,7 +41,15 @@ Independent strict acceptance of each phase:
 - OST3 latch persistent after analog fault release, **all six outputs inactive**, PWM carrier stopped at end, no automatic rearm;
 - exact Original ELF SHA, no WFI/GDB, no Host Guest writes; explicit non-hardware/not-current provenance.
 
-Workflow [#40918337864](https://github.com/cctsao1008/escape32-qemu/actions/runs/40918337864) is the strict independent source-built **three-phase OC-sense fault** experiment. A failure is not a reason to change the native P1 acceptance gate, fake a Trip or suppress output safety checks. Every artifact is preserved even on failure.
+The first OC workflow run [#40918337864](https://github.com/cctsao1008/escape32-qemu/actions/runs/40918337864) failed **before motor execution** because a CFG binary filename lacked the mandatory `g13b3` SIM_ONLY provenance token; this was corrected **without changing the fault safety gate**. The rerun [#40919458272](https://github.com/cctsao1008/escape32-qemu/actions/runs/40919458272) **SUCCESS 3/3 independent OC-U/OC-V/OC-W no-WFI jobs**, with zero strict-fault-audit failures in each.
+
+| Injected phase | Analog source index | DShot frames | Trip3 latched on source assertion | End Trip3 persistent | All six outputs off | Strict status |
+| --- | ---: | ---: | --- | --- | --- | --- |
+| OC-U | 2 | 3000 | PASS | PASS | PASS | PASS |
+| OC-V | 1 | 3000 | PASS | PASS | PASS | PASS |
+| OC-W | 0 | 3000 | PASS | PASS | PASS | PASS |
+
+These tests prove a **running external ADC-like current-sense fault source → modeled original CMPSS/OST3 → Original Guest safe-off** route. They **do not** prove true motor winding overcurrent, current-sense gain/offset, actual power-stage gate response latency or any silicon electrical threshold. The fault source has a deliberately explicit `SIM_ONLY_ADC_LIKE_OVERRANGE_NOT_PHYSICAL_MOTOR_CURRENT` classification. Keep strict artifacts and physical hardware items OPEN.
 
 **Product-level OPEN:** Running current-sense overrange model PASS, if achieved, cannot qualify the actual physical motor current, shunt/amplifier gain and offset, MOSFET gate shutdown time or thermal/47V/propeller performance. Require schematic and electrical current/voltage limit provenance and scope-based bench evidence before adoption.
 
