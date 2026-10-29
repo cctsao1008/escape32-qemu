@@ -503,3 +503,54 @@ A viable hardware program must validate the phase
 observation or bounded current-limited alignment/start
 contract and test both CW/CCW and physically loaded cases;
 neither Original P1 nor customer hardware readiness changes.
+
+## Native passive BEMF code observability during coast (#5)
+
+The independent read-only [passive coast BEMF audit #40907076649](https://github.com/cctsao1008/escape32-qemu/actions/runs/40907076649)
+**SUCCESS**; its seven positive/negative source tests also PASS.
+It replays the four *unaltered* QEMU native model
+`E62_P0_EVENT BEMF_FRONTEND` traces from the actual prior
+[300/3000ms motor sweep #40894919388](https://github.com/cctsao1008/escape32-qemu/actions/runs/40894919388).
+This telemetry contains three ADC-like BEMF codes from the QEMU model,
+**not a proven MCU-accessible, pinmux-validated passive voltage measurement**.
+Neither the tool nor the Guest reads QEMU's true rotor angle, speed or torque.
+The source 1kHz external FC DShot frames, negative strict Original P1 SHA,
+coast zero-output condition and sample-ordering validity remain checked.
+
+All four cases had **at most 1 LSB phase-to-phase code contrast** over
+the final 100ms before restarting after either 300ms or 3000ms of coast.
+A 3-code threshold is used **only as an illustrative diagnostic floor**
+greater than a one-code quantization ambiguity; it is **not an
+actual board ADC noise figure, hysteresis or customer qualification gate**.
+Even higher model contrast cannot establish phase sequence/direction
+without an authenticated hardware input route and multiple consistent
+phase crossings. All cases therefore set
+`passive_model_signal_qualified_for_rotor_angle=false`,
+`board_ADC_route_qualified=false`, `firmware_enable_granted=false`.
+
+Actual 50ms QEMU source BEMF contrast maxima during early coast:
+
+| Neutral age | Model max U/V/W code contrast |
+| --- | ---: |
+| 0–50ms | 131–137 |
+| 50–100ms | 15 |
+| 100–150ms | 6 |
+| 150–200ms | 2 |
+| 200–250ms | 1 |
+| 250–300ms | 1 |
+
+Model mechanical dynamics/friction and analog scaling remain
+**uncalibrated relative to the actual EC87 KV210 / 47V / APC 24×12E
+motor/propeller/board**. The relative decline nevertheless demonstrates
+why windmill direction detection must be attempted in a suitably
+observable regime instead of assuming a BEMF zero crossing survives
+all the way to a very slow second start.
+
+**Blocked product question:** no qualified low-speed rotor-phase
+acquisition exists for the blind re-demand region. Source-built
+`oldstep` produces reverse torque; SIM_ONLY cold-sector also fails
+300ms coast. None of those sectors is a safe substitute for a validated
+passive phase/direction observer or a separately bounded, gate-safe
+current-limited rotor alignment/start strategy. No source code may
+arm the hardware from QEMU model-internal ground-truth angle.
+#5 stays open.
