@@ -32,8 +32,9 @@ jobs:
           set -euo pipefail
           sudo apt-get update -qq
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            libglib2.0-dev libpixman-1-dev libfdt-dev pkg-config meson ninja-build
+            libglib2.0-dev libpixman-1-dev libfdt-dev pkg-config meson ninja-build binutils-arm-none-eabi
           git submodule update --init --depth 1 qemu
+          command -v arm-none-eabi-nm
           python3 -m py_compile tests/e62_autonomous_native_motor_probe.py \
             tools/experimental_e62_pinned_ival_patch.py \
             tools/experimental_e62_candidate_matrix.py
