@@ -161,8 +161,17 @@ python3 tools/e62_board_gate_fault_intake.py \
   --output artifacts/e62-board-six-gate-fault-intake.json
 ```
 
-The result is the **sampled upper time bound**, not a proven silicon
-propagation-delay specification. It rejects an unobserved fault edge,
+The tool computes a **conservative two-edge latency interval**.
+The upper bound uses the last fault-inactive sample before assertion
+to the first stable six-off sample. The lower bound uses the last
+still-gate-active sample relative to the first fault-active sample
+(clipped at zero). This accounts for both unobserved transitions
+**between scope samples**; simply subtracting the two sampled
+transition times can underestimate fault-to-off delay.
+If an approved numeric limit falls between the bounds, the result is
+`TIMING_INDETERMINATE_AT_SAMPLE_RESOLUTION`, not PASS or FAIL.
+
+The result is not a proven silicon propagation-delay specification. It rejects an unobserved fault edge,
 missing release, missing pre-fault active Gate, incomplete six-device
 capture, gaps, late gate activity, or fewer than three stable off
 samples. Captured no-rearm is **only within the recorded trace**;
