@@ -72,8 +72,15 @@ Original P1 analyzer **expected** SHA rejection. The unchanged
 ELFs. All **other** original strict conditions must pass for
 control nominal, filtered nominal, and filtered noise. The
 control/noise negative case is preserved with its actual failures;
-the candidate must show *fewer* reversals and zero unwaived motor
-failures, otherwise this experimental A/B job is RED. Additional
+the candidate must show zero unwaived motor failures, otherwise this
+experimental A/B job is RED. If the noise control **already has zero
+reversals** (as happened in direct20), require strict no-regression:
+zero candidate reversals and all source/ACK requirements PASS. This
+is labeled `PASS_EXPERIMENTAL_NONREGRESSION`, NOT an improvement.
+If the noise control has any reversals (as in the earlier gentle
+pinned-ELF case), additionally require a strictly smaller candidate
+reversal count and label only such a success as
+`PASS_EXPERIMENTAL_IMPROVEMENT`. Additional
 source-owned `E62_BEMF_STRESS_DIAG` events must prove that analog
 noise was applied; these events are kept outside strict P1 event schema.
 
