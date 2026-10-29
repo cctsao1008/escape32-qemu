@@ -11,7 +11,35 @@ static void am13e_native_motor_publish(AM13ENativeMotor *m)
             am13e_native_motor_fault(m, 3U);
             return; /* NO silent analog saturation/clipping. */
         }
-        uint32_t code = (uint32_t)round(4095.0*voltage/3.3);
+        int64_t code_signed=(int64_t)llround(4095.0*voltage/3.3);
+        int noise_code=0;
+        if (m->bemf_stress_switch_code &&
+            m->bemf_stress_last_switch_ns >= 0) {
+            int64_t elapsed=qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL)-
+                            m->bemf_stress_last_switch_ns;
+            if (elapsed >= 0 && elapsed < INT64_C(2000)) {
+                noise_code=(m->bemf_stress_switch_edges & 1U) ?
+                    (int)m->bemf_stress_switch_code :
+                    -(int)m->bemf_stress_switch_code;
+            }
+        }
+        int64_t original_code=code_signed;
+        code_signed += (int64_t)m->bemf_stress_offset_code + noise_code;
+        /* Sensor out of 12-bit range is a FAIL-CLOSED model error;
+         * never silently saturate a forbidden value into a good CAP1. */
+        if (code_signed < 0 || code_signed > 4095) {
+            am13e_native_motor_fault(m, 3U);
+            return;
+        }
+        uint32_t code=(uint32_t)code_signed;
+        if ((m->bemf_stress_offset_code || noise_code) &&
+            m->bemf_stress_trace_count < 36U) {
+            am13e_p0_event(m->machine,"BEMF_STRESS",
+                           p,original_code,code,
+                           m->bemf_stress_offset_code,noise_code,
+                           m->bemf_stress_switch_edges);
+            ++m->bemf_stress_trace_count;
+        }
         if (code > 4095U) {
             am13e_native_motor_fault(m, 3U);
             return;
