@@ -32,8 +32,9 @@ static void am13e_native_motor_publish(AM13ENativeMotor *m)
             return;
         }
         uint32_t code=(uint32_t)code_signed;
-        if ((m->bemf_stress_offset_code || noise_code) &&
-            m->bemf_stress_trace_count < 36U) {
+        if (m->bemf_stress_trace_count < 36U &&
+            (noise_code || (m->bemf_stress_offset_code &&
+                            m->bemf_stress_trace_count < 3U))) {
             am13e_p0_event(m->machine,"BEMF_STRESS",
                            p,original_code,code,
                            m->bemf_stress_offset_code,noise_code,
