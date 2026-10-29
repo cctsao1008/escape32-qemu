@@ -14,7 +14,10 @@ import json
 import struct
 from pathlib import Path
 
-BASELINE_SHA = "5b90b200429333cef82b982b7a7f845f31fb885c7ea63fc7e783c75232fac8d1"
+BASELINE_FULL_ELF_SHA = "5b90b200429333cef82b982b7a7f845f31fb885c7ea63fc7e783c75232fac8d1"
+# Independently computed from the A/B artifact's validated filtered ELF,
+# over entrypoint and each PT_LOAD (vaddr,paddr,filesz,memsz,flags,align,data).
+BASELINE_LOAD_SHA = "8e8eb3472bfee51711d93e333b0dba52d649a1acc6c01376e9e66503f42499e2"
 ALLOWED_PHYSICAL_ADDRESS = 0xC190
 EXPECTED_CHANGED_BYTE = {16: 0x01, -16: 0xFE}
 
@@ -57,8 +60,18 @@ def main():
     raw_c,entry_c,ctrl=read_elf(a.control)
     raw_m,entry_m,matched=read_elf(a.matched)
     source_hash=hashlib.sha256(raw_c).hexdigest()
-    if source_hash!=BASELINE_SHA:
-        p.error("Control is NOT the exact previously validated source-built filtered ELF")
+    load_hasher=hashlib.sha256()
+    load_hasher.update(struct.pack("<I",entry_c))
+    for x in ctrl:
+        load_hasher.update(struct.pack("<IIIIII",*(
+            x["vaddr"],x["paddr"],x["filesz"],x["memsz"],
+            x["flags"],x["align"])))
+        load_hasher.update(x["data"])
+    load_sha=load_hasher.hexdigest()
+    if load_sha!=BASELINE_LOAD_SHA:
+        p.error("Control's actual PT_LOAD image does NOT match the independently validated A/B firmware")
+    if source_hash==hashlib.sha256(raw_m).hexdigest():
+        p.error("Control and matched ELFs are identical; no real A/B")
     if entry_c!=entry_m or len(ctrl)!=len(matched):
         p.error("Different ARM entry point or loadable segment count")
     diffs=[]
@@ -77,6 +90,10 @@ def main():
         "schema":"e62.sim-only.bemf-dac-reference-elf-loaded-diff.v1",
         "classification":"EXACT_SINGLE_LOADED_DAC_IMMEDIATE_ONLY",
         "control_elf_sha256":source_hash,
+        "independent_prior_ab_full_elf_sha256":BASELINE_FULL_ELF_SHA,
+        "control_pt_load_sha256":load_sha,
+        "expected_prior_ab_pt_load_sha256":BASELINE_LOAD_SHA,
+        "full_elf_sha_may_differ_in_nonloaded_metadata":True,
         "matched_elf_sha256":hashlib.sha256(raw_m).hexdigest(),
         "control_not_original_p1":True,"hardware_qualified":False,
         "source_model_offset_code":a.offset,
