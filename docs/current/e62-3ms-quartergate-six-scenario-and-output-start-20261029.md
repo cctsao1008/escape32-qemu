@@ -103,3 +103,27 @@ Direct20 first sequence relative to first positive DShot:
 - +3.867 ms next physical PWM_PAIR
 
 This preserves the observed CAP1 -> Guest TIMG12 -> physical PWM chain.
+
+## Follow-up verified negative control #40812856179
+
+After this note was written, the same-source Motor Output=1
+SIM_ONLY negative/positive control completed successfully:
+[GitHub CI #40812856179](https://github.com/cctsao1008/escape32-qemu/actions/runs/40812856179).
+
+At fixed ESCape32 source commit `907c5c3285ea1eebafe247c918c882609bf2db16`,
+the **only** build-fixture difference was the presence or absence of
+`AM13E_BEMF_INITIAL_DAC_CODE=2048`. Both received 3300 independent
+QEMU Direct20 DShot frames. Passive read-only linked-SRAM markers
+established:
+
+| Setting | `motor_output_start_reject` | `runtime_fault_reason` | `fault_latched` | CI |
+| --- | ---: | ---: | ---: | --- |
+| No DAC seed | **3** (BEMF start reference not ready) | **6** (Motor Output Start rejected) | 1 | PASS expected fault |
+| 2048 QEMU model seed | **0** | **0** | 0 | PASS expected start |
+
+This **directly proves the nested reject predicate in the controlled
+reproduction**, unlike the older failure artifact which only logged
+outer fault reason 6. The old 2026-10-29 historical ELF did not itself
+record nested reject=3; keep that provenance distinction.
+This addresses the SIM_ONLY fixture fault, **not** a 12S hardware
+calibration or permission to bypass the BEMF reference guard.
