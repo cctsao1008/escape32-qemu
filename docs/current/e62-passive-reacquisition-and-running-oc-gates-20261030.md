@@ -51,7 +51,25 @@ The first OC workflow run [#40918337864](https://github.com/cctsao1008/escape32-
 
 These tests prove a **running external ADC-like current-sense fault source → modeled original CMPSS/OST3 → Original Guest safe-off** route. They **do not** prove true motor winding overcurrent, current-sense gain/offset, actual power-stage gate response latency or any silicon electrical threshold. The fault source has a deliberately explicit `SIM_ONLY_ADC_LIKE_OVERRANGE_NOT_PHYSICAL_MOTOR_CURRENT` classification. Keep strict artifacts and physical hardware items OPEN.
 
-**Product-level OPEN:** Running current-sense overrange model PASS, if achieved, cannot qualify the actual physical motor current, shunt/amplifier gain and offset, MOSFET gate shutdown time or thermal/47V/propeller performance. Require schematic and electrical current/voltage limit provenance and scope-based bench evidence before adoption.
+## Post-change Original powered safety regression — verified
+
+[CI #40920976687](https://github.com/cctsao1008/escape32-qemu/actions/runs/40920976687)
+**SUCCESS** on the new source after adding the opt-in three-phase
+current-sense overrange fault stimulus:
+- Original PA22 nFAULT 3000-frame native source → OST2 latches after
+  assert at frame 2100; release at 2300 does NOT clear OST2; six-pad
+  safe-off/no auto rearm, 0 auditor failures.
+- Separate Original DShot source hard stop after 2800 frames → genuine
+  original WWDT BOOTRST; 0 auditor issues and no modeled deadline
+  error. Neither test uses Guest GDB/WFI or guest IRQ/Trip writes.
+- Both use the same immutable Original Rel17.3 ELF and default-off
+  QEMU current-sense injection, not either OC test condition.
+
+The original powered safety retention workflow now automatically runs
+on native QEMU machine/fault-source/probe changes. These remain
+SIM_ONLY protections, not physical silicon qualification.
+
+**Product-level OPEN:** Running current-sense overrange model PASS cannot qualify the actual physical motor current, shunt/amplifier gain and offset, MOSFET gate shutdown time or thermal/47V/propeller performance. Require schematic and electrical current/voltage limit provenance and scope-based bench evidence before adoption.
 
 ## Provenance policy
 
