@@ -308,7 +308,33 @@ synthetic timed BEMF, no WFI/GDB. This demonstrates a **bounded
 relative-reference mismatch causal mechanism in the modeled
 sensorless startup**, not real board calibration or 12S qualification.
 
-**Pending:** `-16` direct20/ramp100 second job in same workflow.
+The independent `-16` source-built job also passed in
+[#40877818256](https://github.com/cctsao1008/escape32-qemu/actions/runs/40877818256):
+`direct20` control reference 2048 produced 234 significant reversals
+and 234 CAP1/TIMG12 ACKs; matched synthetic reference 2032 produced
+**0 reversals and 2741 CAP1/TIMG12 ACKs**. For `ramp20_100ms`,
+control produced 43 reversals and **0 CAP1/TIMG12 ACKs**;
+matched produced **0 reversals and 1911 CAP1/TIMG12 ACKs**.
+Both matched cases passed **all non-SHA** P1 motor observability gates.
+Independent PT_LOAD proof anchored to the exact prequalified control
+image showed one loaded byte changed at `0xC190`:
+`0x00 -> 0xFE`. No input, plant, or P1 gate changes.
+
+**Joint causal result:** all four pure ±16 model bias scenarios fail
+with an uncompensated 2048 reference and pass with a model-matched
+reference, while preserving original Guest SHA rejection and real
+QEMU motor/ECAP/TIMG12 feedback. This identifies fixed relative
+reference bias as a model-level *sufficient causal mechanism*.
+It is not a demonstration of production ADC/DAC transfer accuracy.
+
+The subsequent independent
+[#40879428785](https://github.com/cctsao1008/escape32-qemu/actions/runs/40879428785)
+adds combined `+16:20` offset and 2us switching-source noise to
+`direct20` and `ramp20_500ms`, with unchanged filter and physical
+source to verify whether both mitigations are jointly sufficient.
+Its results must be judged separately and cannot be inferred
+from these four pure-offset scenarios.
+
 The synthetic DAC seed is not the runtime SC5 calibrated
 ADC→VBUS→phase sense→DACH publication pathway and must not be
 promoted to a production `AM13E_BEMF_INITIAL_DAC_CODE` constant.
