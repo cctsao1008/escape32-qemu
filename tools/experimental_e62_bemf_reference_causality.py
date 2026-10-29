@@ -23,6 +23,7 @@ SCENARIO = {
     "direct20": "scenarios/e62-native-p0-direct20.json",
     "steps": "scenarios/e62-native-p0-steps.json",
     "ramp20_100ms": "scenarios/e62-native-p1-ramp20-100ms.json",
+    "ramp20_500ms": "scenarios/e62-native-p1-ramp20-500ms.json",
 }
 
 def sha256(p: Path) -> str:
@@ -70,15 +71,22 @@ def run_case(a, label, elf, stress, scenario_name, exact_sha):
     if not isinstance(failures, list):
         failures = ["MISSING_FAIL_LIST"]
     diagnostics = 0
+    switching_noise_events = 0
     logpath = prefix.with_suffix(".qemu.log")
+    diag_re = re.compile(r"E62_BEMF_STRESS_DIAG vns=\\d+ a=-?\\d+ b=-?\\d+ "
+                         r"c=-?\\d+ d=-?\\d+ e=(-?\\d+) f=\\d+")
     if logpath.exists():
         with logpath.open(errors="replace") as f:
             for line in f:
-                if "E62_BEMF_STRESS_DIAG " in line:
+                match = diag_re.search(line)
+                if match:
                     diagnostics += 1
+                    if int(match.group(1))!=0:
+                        switching_noise_events += 1
     original_rejected = SHA_GUARD in failures
     provenance = (
         rc == 0 and strict_rc == 1 and original_rejected and diagnostics > 0
+        and (stress!="16:20" or switching_noise_events>0)
         and ev.get("original_elf_sha256") == exact_sha
         and ev.get("experimental_candidate_not_original") is True
         and ev.get("host_guest_register_writes") is False
@@ -103,7 +111,9 @@ def run_case(a, label, elf, stress, scenario_name, exact_sha):
         "hardware_qualified": False,
         "source_stress_code":stress,
         "original_identity_rejected":original_rejected,
-        "source_stress_events":diagnostics, "source_provenance_valid":bool(provenance),
+        "source_stress_events":diagnostics,
+        "source_switching_noise_events":switching_noise_events,
+        "source_provenance_valid":bool(provenance),
         "motor_reversals":report.get("significant_rotor_direction_changes"),
         "speed_signs":report.get("active_speed_signs_above_50rpm"),
         "non_sha_failures":non_sha, "source_counts":counts,
@@ -119,7 +129,7 @@ def main():
     p.add_argument("--original-elf",type=Path,required=True)
     p.add_argument("--cfg",type=Path,required=True)
     p.add_argument("--source-commit",required=True)
-    p.add_argument("--stress",choices=["16:0","-16:0"],required=True)
+    p.add_argument("--stress",choices=["16:0","-16:0","16:20"],required=True)
     p.add_argument("--case",action="append",choices=list(SCENARIO),required=True)
     p.add_argument("--output",type=Path,required=True)
     p.add_argument("--wall-timeout-s",type=int,default=300)
@@ -145,18 +155,27 @@ def main():
     # Preserve the true mechanical verdict without making 2048 vs matched
     # comparison a production qualification. We require one distinct
     # failing control; a universally green control does NOT prove causality.
-    observed_bias_effect = bool(
-        not invalid and any(not x["non_sha_motor_pass"] for x in control)
-        and any(x["non_sha_motor_pass"] for x in matched))
+    paired = list(zip(control,matched))
+    if any(a["name"]!=b["name"] for a,b in paired):
+        p.error("Control/matched scenario pairing was reordered")
+    recovered = [(a,b) for a,b in paired
+                 if not a["non_sha_motor_pass"] and b["non_sha_motor_pass"]]
+    fully_recovered = bool(not invalid and len(recovered)==len(paired))
+    partially_recovered = bool(not invalid and recovered and not fully_recovered)
     payload={
         "schema":"e62.exp.synthetic-reference-causality.v1",
-        "classification":("VALID_CAUSAL_DIAGNOSTIC_ONLY" if observed_bias_effect
-                          else "NO_PROVEN_CAUSAL_RECOVERY"),
+        "classification":("ALL_TESTED_CASES_RECOVERED_EXPERIMENTAL_ONLY"
+                          if fully_recovered else
+                          "PARTIAL_CAUSAL_RECOVERY_EXPERIMENTAL_ONLY"
+                          if partially_recovered else
+                          "NO_PROVEN_CAUSAL_RECOVERY"),
         "source_commit":a.source_commit,"original_elf_sha256":hashes["original"],
         "control_elf_sha256":hashes["control"],
         "matched_elf_sha256":hashes["matched"],
         "native_qemu_sha256":sha256(a.qemu),
         "stress":a.stress,
+        "matched_case_count":len(matched),
+        "recovered_case_count":len(recovered),
         "synthetic_reference_adjustment_only":True,
         "hardware_calibration_established":False,
         "p1_qualified":False,"hardware_qualified":False,
