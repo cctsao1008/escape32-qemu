@@ -128,3 +128,43 @@ on Direct20 alone or claim the whole system physically qualified.
 - All motor experiment build profiles explicitly require `AM13E_MOTOR_OUTPUT_CONFIGURED=1` or fail compilation. No real hardware board parameter, OC threshold or reset-inactive wiring has been qualified by these simulations.
 
 Do not confuse **early-capture policy causal improvement**, **source-built electrical preflight availability**, **P1 strict**, and **hardware safety**: these are four independent gates.
+
+
+## 2026-10-29 source-built Motor Output=1 validation (new)
+
+The original ELF three-instruction experiment is now complemented by an
+actual **source-built**, separately linkable ESCape32 pair (control and
+3000us / quarter-window candidate); both use the exact same SIM_ONLY
+Motor Output=1 board fixture. This builds the motor-control source code
+directly rather than byte-patching the Original ELF.
+
+- [Source-built Direct20 CI #40806638889](https://github.com/cctsao1008/escape32-qemu/actions/runs/40806638889): PASS experimental full-window, no significant negative rotor RPM.
+- [Source-built five-profile CI #40806799665](https://github.com/cctsao1008/escape32-qemu/actions/runs/40806799665): five independent jobs PASS, all source-built Control/Candidate pairs, no candidate rotor RPM <= -50 during any full commanded positive window.
+
+| Profile | Full positive commanded window | Candidate max RPM | Candidate significant reverse (<=-50 RPM) | Candidate physical PWM_PAIR |
+|---|---:|---:|---:|---:|
+| smoke | 1295 ms | 884.937 | 0 | 1552 |
+| gentle | 2980 ms | 493.794 | 0 | 2257 |
+| steps | 1500 ms | 1276.313 | 0 | 2739 |
+| ramp20_100ms | 1095 ms | 885.278 | 0 | 1914 |
+| ramp20_500ms | 1495 ms | 885.550 | 0 | 2330 |
+
+Original-policy source-built controls have severe reversal in some
+profiles and insufficient closed-loop switching in others. The
+candidate uses identical front-end/Guest board definitions and includes
+real CAP1 and TIMG12 feedback, not host-injected commutations.
+
+**Crucial scope:** The above QEMU analog frontend assumes an
+uncalibrated 1.65V zero-BEMF reference (code 2048 on a 3.3V/12bit ADC),
+0.02 V per modeled BEMF volt. The OC comparator thresholds, power
+stage and startup rotor angle are also SIM_ONLY assumptions; this is
+not measured ECX87 analog-electrical validation. A CI experiment's
+success does not promote an original ELF P1 FAIL to PASS.
+
+An additional six-scenario test on the exact three-instruction
+non-original ELF, using the existing unchanged Native P1 scenario
+JSONs and the unchanged strict P1 analyzer, runs separately on
+[CI #40808471350](https://github.com/cctsao1008/escape32-qemu/actions/runs/40808471350).
+Because the Guest SHA is *not* Original Rel17.3, the original P1
+analyzer must continue to reject it; the report distinctly classifies
+physical behavior and the unwaived SHA provenance gate.
