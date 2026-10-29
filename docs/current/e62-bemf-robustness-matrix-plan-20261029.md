@@ -61,7 +61,7 @@ not a board-characterized noise amplitude.
 4. For `SWITCH_CODE > 0`, apply a deterministic bounded signed
    transient for 2us after **actual clocked MCPWM six-pad mask changes**.
    Alternation is reproducible; no artificial zero-cross event is
-   inserted. A stress log `BEMF_STRESS` records original code,
+   inserted. A separate non-P1 QEMU stderr log `E62_BEMF_STRESS_DIAG` records original code,
    perturbed code, signed offset, applied spike and switch count.
 5. Any 12-bit overflow is fail-closed; never clip it to a plausible
    sensor code. OC, nFAULT, gate readiness and fault latch are untouched.
@@ -93,8 +93,8 @@ proof of a standalone stop/rearm/restart protocol.
 Every case:
 - Exact pinned candidate and original SHA, signed three-instruction proof,
   unchanged original scenario JSON digest, independent 1kHz FC source.
-- Actual physical BEMF perturbation must be present in `BEMF_STRESS`
-  logs; when `SWITCH_CODE > 0`, at least one nonzero *source-owned*
+- Actual physical BEMF perturbation must be present in isolated `E62_BEMF_STRESS_DIAG`
+  QEMU logs; when `SWITCH_CODE > 0`, at least one nonzero *source-owned*
   switch artifact is mandatory. If not observed, **FAIL**, not a
   successful noise-tolerance measurement.
 - Run the **unchanged** strict Original P1 analyzer. It MUST reject
