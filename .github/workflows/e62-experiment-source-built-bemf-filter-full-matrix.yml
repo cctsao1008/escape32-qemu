@@ -89,7 +89,7 @@ jobs:
           python3 tools/sim_motor_cfg.py --sim-only-opt-in \
             --motor-profile ecx87-kv147 \
             --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
-            --output artifacts/e62-filter-full/motor-cfg-flash.bin
+            --output artifacts/e62-filter-full/e62-g13b3-filter-motor-cfg-flash.bin
       - name: Run two immutable scenarios with physical analog sources and unchanged strict P1
         shell: bash
         run: |
@@ -98,7 +98,7 @@ jobs:
             --qemu .build/qemu-src/build/qemu-system-arm \
             --candidate artifacts/e62-filter-full/filtered.elf \
             --original baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
-            --cfg artifacts/e62-filter-full/motor-cfg-flash.bin \
+            --cfg artifacts/e62-filter-full/e62-g13b3-filter-motor-cfg-flash.bin \
             --case "${{ matrix.pair[0] }}" \
             --case "${{ matrix.pair[1] }}" \
             --stress="${{ matrix.stress }}" \
