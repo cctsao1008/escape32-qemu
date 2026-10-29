@@ -137,7 +137,8 @@ class SixGateFaultIntake(unittest.TestCase):
     def test_scoped_fault_gates_stable_after_release_needs_review(self):
         raw,meta,_=gate_fixture()
         x=gate_audit(raw,meta)
-        self.assertEqual(x["sampled_gate_off_upper_bound_ns"],10)
+        self.assertEqual(x["sampled_gate_off_upper_bound_ns"],20)
+        self.assertEqual(x["sampled_gate_off_lower_bound_ns"],0)
         self.assertEqual(x["fault_assert_sample_ns"],50)
         self.assertEqual(x["all_six_vgs_discriminators_off_at_ns"],60)
         self.assertEqual(x["gate_off_numeric_acceptance"],
@@ -190,7 +191,27 @@ class SixGateFaultIntake(unittest.TestCase):
         meta["approved_max_gate_off_ns"]=5
         x=gate_audit(raw,meta)
         self.assertEqual(x["gate_off_numeric_acceptance"],
-                         "MEASURED_UPPER_BOUND_EXCEEDS_DECLARED_LIMIT")
+                         "TIMING_INDETERMINATE_AT_SAMPLE_RESOLUTION")
+        self.assertFalse(x["hardware_qualified"])
+
+    def test_true_lower_bound_exceeds_approved_latency(self):
+        _,m,d=gate_fixture()
+        d[6][2]=1  # actual gate remains ON at a later sampled instant
+        r=table(FIELDS,d);signed(r,m,"raw_trace_sha256")
+        m["approved_max_gate_off_ns"]=5
+        x=gate_audit(r,m)
+        self.assertEqual(x["sampled_gate_off_lower_bound_ns"],10)
+        self.assertEqual(x["sampled_gate_off_upper_bound_ns"],30)
+        self.assertEqual(x["gate_off_numeric_acceptance"],
+                         "CAPTURED_TIMING_LOWER_BOUND_EXCEEDS_DECLARED_LIMIT")
+        self.assertFalse(x["hardware_qualified"])
+
+    def test_upper_bound_within_declared_limit_still_requires_lab(self):
+        raw,m,_=gate_fixture()
+        m["approved_max_gate_off_ns"]=20
+        x=gate_audit(raw,m)
+        self.assertEqual(x["gate_off_numeric_acceptance"],
+                         "CAPTURED_TIMING_UPPER_BOUND_WITHIN_DECLARED_LIMIT")
         self.assertFalse(x["hardware_qualified"])
 
     def test_missing_capture_provenance_rejected(self):
