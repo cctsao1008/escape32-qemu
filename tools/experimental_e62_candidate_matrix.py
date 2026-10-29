@@ -97,7 +97,7 @@ def main():
             "--wall-timeout-s",str(a.wall_timeout_s),
         ]
         if a.bemf_robustness is not None:
-            probe.extend(["--experimental-bemf-robustness",a.bemf_robustness])
+            probe.append("--experimental-bemf-robustness="+a.bemf_robustness)
         probe_rc=invoke(probe,prefix.with_suffix(".probe.stdout.log"),
                         a.wall_timeout_s+30)
         if evidence.exists() and events.exists():
@@ -118,15 +118,21 @@ def main():
         failures=(report or {}).get("unwaived_observability_failures",[])
         analog_stress_count=0
         switch_noise_events=0
-        if events.exists():
-            for row in events.open(errors="replace"):
-                if " kind=BEMF_STRESS " not in row:
-                    continue
-                import re
-                m=re.search(r" kind=BEMF_STRESS a=(-?\d+) b=(-?\d+) c=(-?\d+) d=(-?\d+) e=(-?\d+) f=(-?\d+)",row)
+        # Diagnostic records are deliberately NOT a strict P1 event kind;
+        # they live in the full QEMU stderr source, and the legacy
+        # E62_P0_EVENT parser remains unchanged and fail-closed.
+        qemu_diag=evidence.with_suffix(".qemu.log")
+        if qemu_diag.exists():
+            import re
+            event_re=re.compile(
+                r"E62_BEMF_STRESS_DIAG vns=(\\d+) a=(-?\\d+) "
+                r"b=(-?\\d+) c=(-?\\d+) d=(-?\\d+) "
+                r"e=(-?\\d+) f=(\\d+)")
+            for row in qemu_diag.open(errors="replace"):
+                m=event_re.search(row)
                 if m:
                     analog_stress_count+=1
-                    if int(m.group(5))!=0:
+                    if int(m.group(6))!=0:
                         switch_noise_events+=1
         stress_source_proven=(
             a.bemf_robustness is None or
