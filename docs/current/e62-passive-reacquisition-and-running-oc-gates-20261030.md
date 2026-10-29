@@ -71,6 +71,40 @@ SIM_ONLY protections, not physical silicon qualification.
 
 **Product-level OPEN:** Running current-sense overrange model PASS cannot qualify the actual physical motor current, shunt/amplifier gain and offset, MOSFET gate shutdown time or thermal/47V/propeller performance. Require schematic and electrical current/voltage limit provenance and scope-based bench evidence before adoption.
 
+## 2026-10-30 actual board sample/capture intake readiness
+
+Dedicated [H0/H1 board ADC / current transfer / six-device Vgs evidence SOP](./e62-board-adc-current-vgs-bench-intake-20261030.md)
+and strict CLI source have now been committed:
+- `tools/e62_board_adc_epoch_intake.py` — real coherent raw
+  three-ADC sample identity/cadence/freshness/code ranking intake;
+  never grants rotor-angle confidence or PWM authorization.
+- `tools/e62_board_current_transfer_intake.py` — separately
+  referenced U/V/W zero/signed current sweep; fit only a
+  **candidate** codes/A gain, zero offset and residual. Both
+  `SIGNED_LINEAR` and `ABSOLUTE_LINEAR` must be explicitly
+  selected from board design, not the fictitious QEMU transfer.
+- `tools/e62_board_gate_fault_intake.py` — actual six device
+  Gate-to-Source Vgs capture and fault input, requiring a retained
+  raw scope source, approved digitization thresholds, and computing
+  conservative **two-edge sampled timing upper/lower bounds** with
+  `TIMING_INDETERMINATE_AT_SAMPLE_RESOLUTION` if required.
+- [Host CI #40925190903](https://github.com/cctsao1008/escape32-qemu/actions/runs/40925190903)
+  **SUCCESS** for **29** synthetic-only positive/negative tests, plus
+  unchanged physical evidence intake tests. The original
+  `docs/fixtures/e62-hardware-measurements.csv` continues to report
+  `OPEN_NO_BOARD_MEASUREMENTS`, 0 actual captures and
+  `hardware_qualified=false`.
+
+**Missing essential next actual data:** a real firmware ADC export
+mechanism with authentic EOC/coherence and six-pad/Trip flags;
+hardware-certified timing and phase mux/ADC reference; separately
+referenced current sweep; valid six-device Vgs/fault scope recordings
+and approved latency limit. Existing housekeeping snapshot has
+`AM13E_AdcRaw`, but it **does not export independently proven
+inter-channel sampling skew, board pin electrical identity, or a
+standalone lab acquisition transcript**. Those may not be inferred
+from the CI fixtures or QEMU motor source.
+
 ## Provenance policy
 
 - Original Rel17.3 ELF SHA256: `05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0`.
