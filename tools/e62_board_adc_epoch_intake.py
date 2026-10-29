@@ -27,6 +27,7 @@ MANIFEST=("schema","capture_kind","board_revision","board_serial",
           "max_age_ticks","max_rank_hold_ticks","min_adjacent_codes")
 SECTOR=((0,1,2),(0,2,1),(2,0,1),(2,1,0),(1,2,0),(1,0,2))
 U32=2**32
+MAX_CSV_BYTES=24*1024*1024  # Defensive bound for up to 200,000 scan rows.
 
 def strict_int(x,minimum=0,maximum=U32-1):
     if type(x) is int:
@@ -40,6 +41,8 @@ def strict_int(x,minimum=0,maximum=U32-1):
     return n
 
 def metadata(raw, manifest):
+    if not isinstance(manifest,dict):
+        raise ValueError("ADC manifest must be a JSON object")
     if set(manifest)!=set(MANIFEST) or manifest["schema"]!="e62.bench.adc-epoch.v1":
         raise ValueError("ADC manifest schema mismatch")
     if manifest["capture_kind"]!="BENCH_CAPTURE_DECLARED_UNVERIFIED":
@@ -65,6 +68,8 @@ def metadata(raw, manifest):
         raise ValueError("ADC bench timestamp must be UTC")
     for field in ("tick_hz","max_scan_ticks","max_gap_ticks",
                   "max_age_ticks","max_rank_hold_ticks","min_adjacent_codes"):
+        if type(manifest[field]) is not int:
+            raise ValueError("ADC board timing budget must be a JSON integer: "+field)
         strict_int(manifest[field],1)
     if (strict_int(manifest["tick_hz"])>100_000_000 or
         strict_int(manifest["min_adjacent_codes"])>4095 or
@@ -74,6 +79,8 @@ def metadata(raw, manifest):
 
 def audit(raw:bytes, manifest:dict):
     metadata(raw,manifest)
+    if len(raw)>MAX_CSV_BYTES:
+        raise ValueError("ADC trace exceeds bounded CSV intake size")
     try:
         content=raw.decode("utf-8-sig")
     except UnicodeDecodeError as exc:
@@ -85,7 +92,7 @@ def audit(raw:bytes, manifest:dict):
     rows=list(reader)
     if not 4<=len(rows)<=200000:
         raise ValueError("ADC trace missing or excessive epochs")
-    prev_id=prev_end=prev_overruns=None
+    prev_id=prev_end=prev_read=prev_overruns=None
     prev_rank=last_rank_tick=rank_dir=None
     transitions=skips=low_contrast=0
     min_delta= strict_int(manifest["min_adjacent_codes"])
@@ -113,6 +120,14 @@ def audit(raw:bytes, manifest:dict):
             total>manifest["max_age_ticks"]):
             raise ValueError("ADC scan/staleness violates declared board budget")
         max_scan=max(max_scan,scan); max_age=max(max_age,total)
+        if prev_read is not None:
+            # The PendSV housekeeping exporter owns one completed and
+            # consumed snapshot before initiating the next acquisition.
+            # Modulo subtraction admits genuine uint32 wrap but rejects
+            # an overlapping/reordered acquisition as a huge backward gap.
+            after_read=(x["acquisition_tick"]-prev_read)%U32
+            if after_read>manifest["max_gap_ticks"]:
+                raise ValueError("ADC overlapping or reordered snapshot epochs")
         if prev_end is not None:
             gap=(x["completion_tick"]-prev_end)%U32
             if gap==0 or gap>manifest["max_gap_ticks"]:
@@ -149,6 +164,7 @@ def audit(raw:bytes, manifest:dict):
                 last_rank_tick=x["completion_tick"]
             prev_rank=rank
         prev_id=x["sample_count"];prev_end=x["completion_tick"]
+        prev_read=x["read_tick"]
         prev_overruns=x["trigger_overruns"]
     return {
         "schema":"e62.bench.adc-epoch-intake-result.v1",

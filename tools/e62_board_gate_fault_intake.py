@@ -22,6 +22,7 @@ import re
 GATES=("u_h","u_l","v_h","v_l","w_h","w_l")
 FIELDS=("time_ns","fault_active",*GATES)
 SOURCES=("nfault","oc_u","oc_v","oc_w")
+MAX_CSV_BYTES=32*1024*1024  # Bounded 250k-row digitized capture.
 MANIFEST=("schema","capture_kind","fault_source","board_revision",
           "board_serial","firmware_commit","instrument_id","measured_at_utc",
           "raw_trace_sha256","gate_probe_reference","fault_probe_reference",
@@ -36,6 +37,8 @@ def positive(v,allow_none=False):
     return v
 
 def verify(raw,meta):
+    if not isinstance(meta,dict):
+        raise ValueError("Gate manifest must be a JSON object")
     if set(meta)!=set(MANIFEST) or meta["schema"]!="e62.bench.six-gate-fault.v1":
         raise ValueError("Gate trace manifest schema mismatch")
     if meta["capture_kind"]!="BENCH_VGS_SCOPE_DIGITALIZED_UNVERIFIED" or (
@@ -46,7 +49,7 @@ def verify(raw,meta):
                 "gate_discriminator_ref","fault_polarity_ref"):
         v=meta[key]
         if (not isinstance(v,str) or not v.strip() or
-            re.match(r"(?i)^(sim|qemu|mock|unit|fixture):",v)):
+            re.match(r"(?i)^(sim|qemu|mock|unit|fixture):",v.strip())):
             raise ValueError("Incomplete physical six-gate bench provenance: "+key)
     if not isinstance(meta["firmware_commit"],str) or not re.fullmatch(
             r"[a-f0-9]{40}",meta["firmware_commit"]):
@@ -67,6 +70,8 @@ def verify(raw,meta):
 
 def audit(raw:bytes,manifest:dict):
     verify(raw,manifest)
+    if len(raw)>MAX_CSV_BYTES:
+        raise ValueError("Gate scope trace exceeds bounded CSV intake size")
     try:
         reader=csv.DictReader(io.StringIO(raw.decode("utf-8-sig")),strict=True)
     except UnicodeDecodeError as exc:
@@ -81,8 +86,8 @@ def audit(raw:bytes,manifest:dict):
             t=int(row["time_ns"])
         except (TypeError,ValueError) as exc:
             raise ValueError("Invalid numeric scope time") from exc
-        if t<0 or str(t)!=row["time_ns"]:
-            raise ValueError("Scope time must be monotonic unsigned nanoseconds")
+        if t<0 or t>=2**63 or str(t)!=row["time_ns"]:
+            raise ValueError("Scope time must be canonical bounded unsigned nanoseconds")
         flags={}
         for k in ("fault_active",*GATES):
             if row[k] not in ("0","1"):
@@ -122,25 +127,30 @@ def audit(raw:bytes,manifest:dict):
     if not any(any(flags[g] for g in GATES)
                for _,flags in rows[max(0,on-3):on+1]):
         raise ValueError("Fault injected only after gate outputs already stopped")
-    # Earliest point at which all six gate-to-source channels are low
-    # and remain low for EVERY subsequent recorded sample (including
-    # after the fault source is released). Any reactivation fails closed.
-    last_postfault_active=max(
-        (i for i in range(on,len(rows))
-         if any(rows[i][1][g] for g in GATES)),default=on-1)
-    index=last_postfault_active+1
-    if index>=len(rows):
-        raise ValueError("Postfault gate reactivation or no six-gate safe-off")
-    # Need at least 3 independent all-off samples (avoid 1-point false PASS).
-    if len(rows)-index<3 or rows[index][0]>trelease:
-        raise ValueError("No persistent six-gate off before fault release")
-    # Both the fault assertion edge and final gate disable occurred
-    # BETWEEN samples. Never under-report them as exact timestamps.
-    # Conservative delay bound: all-off sample minus previous inactive
-    # fault sample. The last still-active gate sample yields a lower
-    # bound when its timestamp follows the asserted-fault sample.
+    # A temporary all-off window followed by gate reactivation is NOT
+    # evidence of a latched safe-off, even if the trace ends with gates off.
+    # Three samples are a defensively chosen digitization check, NOT a
+    # physical propagation-latency or OST-latch qualification threshold.
+    def gate_active(i):
+        return any(rows[i][1][g] for g in GATES)
+
+    index=next((i for i in range(on,len(rows)-2)
+                if not any(gate_active(j) for j in range(i,i+3))),None)
+    if index is None:
+        raise ValueError("No sustained three-sample six-gate safe-off")
+    if any(gate_active(i) for i in range(index,len(rows))):
+        raise ValueError("Gate reactivation after sustained six-gate safe-off")
+    # Need independent observation during the asserted fault AND after
+    # source release; never use release-only off samples to imply latch.
+    if off-index<3 or len(rows)-off<3:
+        raise ValueError("Insufficient stable six-gate-off observations across fault release")
+    # Both edges occurred between samples. For the lower bound use the
+    # last ACTUALLY gate-active sample rather than index-1: index-1 may
+    # already be off due to a two-sample intermediate PWM blanking gap.
     observed_upper_ns=rows[index][0]-rows[on-1][0]
-    observed_lower_ns=max(0,rows[index-1][0]-tassert) if index>on else 0
+    last_active_ns=next((rows[i][0] for i in range(index-1,on-1,-1)
+                         if gate_active(i)),None)
+    observed_lower_ns=max(0,last_active_ns-tassert) if last_active_ns is not None else 0
     accepted_bound=manifest["approved_max_gate_off_ns"]
     spec_state=("NO_APPROVED_NUMERIC_CRITERION" if accepted_bound is None
                 else "CAPTURED_TIMING_UPPER_BOUND_WITHIN_DECLARED_LIMIT"

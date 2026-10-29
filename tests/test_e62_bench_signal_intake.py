@@ -133,6 +133,31 @@ class BoardADCIntake(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"header"):
             adc_audit(r,m)
 
+
+    def test_overlapping_adc_acquisition_rejected_even_with_valid_each_scan(self):
+        _,m,d=adc_fixture()
+        # 2nd conversion begins before the prior published snapshot is read.
+        # Each individual scan and the completion-to-completion gap fit.
+        d[1][1:4]=[102,104,105]
+        r=table(HEADER,d);signed(r,m,"trace_sha256")
+        with self.assertRaisesRegex(ValueError,"overlapping or reordered"):
+            adc_audit(r,m)
+
+    def test_noncanonical_adc_budget_type_fails_closed(self):
+        raw,m,_=adc_fixture()
+        m["max_scan_ticks"]="4"
+        with self.assertRaisesRegex(ValueError,"JSON integer"):
+            adc_audit(raw,m)
+        raw,m,_=adc_fixture()
+        m["tick_hz"]=True
+        with self.assertRaisesRegex(ValueError,"JSON integer"):
+            adc_audit(raw,m)
+
+    def test_adc_manifest_not_an_object_rejected(self):
+        raw,_,_=adc_fixture()
+        with self.assertRaisesRegex(ValueError,"JSON object"):
+            adc_audit(raw,[])
+
 class SixGateFaultIntake(unittest.TestCase):
     def test_scoped_fault_gates_stable_after_release_needs_review(self):
         raw,meta,_=gate_fixture()
@@ -219,6 +244,48 @@ class SixGateFaultIntake(unittest.TestCase):
         meta["gate_probe_reference"]="qemu:fake"
         with self.assertRaisesRegex(ValueError,"provenance"):
             gate_audit(raw,meta)
+
+
+    def test_gate_redispatch_after_stable_off_while_fault_asserted_rejected(self):
+        _,m,d=gate_fixture()
+        # Old last-active-sample logic incorrectly accepted off->on->off.
+        d[10][2]=1
+        r=table(FIELDS,d);signed(r,m,"raw_trace_sha256")
+        with self.assertRaisesRegex(ValueError,"Gate reactivation"):
+            gate_audit(r,m)
+
+    def test_gate_reactivation_after_release_then_final_off_rejected(self):
+        _,m,d=gate_fixture()
+        d[13][2]=1
+        r=table(FIELDS,d);signed(r,m,"raw_trace_sha256")
+        with self.assertRaisesRegex(ValueError,"Gate reactivation"):
+            gate_audit(r,m)
+
+    def test_off_observation_only_two_samples_before_release_rejected(self):
+        _,m,d=gate_fixture()
+        # Final safe-off begins at sample 10, fault releases at sample 12.
+        d[9][2]=1
+        r=table(FIELDS,d);signed(r,m,"raw_trace_sha256")
+        with self.assertRaisesRegex(ValueError,"across fault release"):
+            gate_audit(r,m)
+
+    def test_scope_time_overflow_rejected(self):
+        _,m,d=gate_fixture()
+        d[1][0]=2**63
+        r=table(FIELDS,d);signed(r,m,"raw_trace_sha256")
+        with self.assertRaisesRegex(ValueError,"bounded unsigned"):
+            gate_audit(r,m)
+
+    def test_gate_manifest_not_an_object_rejected(self):
+        raw,_,_=gate_fixture()
+        with self.assertRaisesRegex(ValueError,"JSON object"):
+            gate_audit(raw,[])
+
+    def test_gate_provenance_prefix_with_leading_spaces_rejected(self):
+        raw,m,_=gate_fixture()
+        m["gate_probe_reference"]="   qemu:invalid-physical-proof"
+        with self.assertRaisesRegex(ValueError,"provenance"):
+            gate_audit(raw,m)
 
 if __name__=="__main__":
     unittest.main()
