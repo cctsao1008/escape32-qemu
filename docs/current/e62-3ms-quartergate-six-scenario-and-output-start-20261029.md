@@ -64,3 +64,42 @@ The paired rebuilt-source CI [#40806638889](https://github.com/cctsao1008/escape
 - Earlier 3ms/quarter Direct20 experiment includes negative electromagnetic torque samples even though RPM never goes significantly negative. Never represent the improvement as torque ripple elimination.
 
 No Original P0/P1 threshold, source phase-order, board safety policy, or baseline ELF was changed by this report.
+
+## Raw physical-event negative-torque audit (same six original scenarios)
+
+The following values were independently computed by streaming each original
+`.p0.events.log` archived in successful six-scenario run
+[#40809353792](https://github.com/cctsao1008/escape32-qemu/actions/runs/40809353792),
+using the strict analyzer's scenario-reported
+`input_positive_start_virtual_ns` and `input_positive_end_virtual_ns`.
+All six have zero sampled rotor events <= -50rpm, but all have some
+negative electromagnetic torque samples below -0.1 Nm; this is NOT a
+torque-ripple-free result.
+
+| Scenario | Positive commanded window (ms) | Number of ROTOR samples with torque < -0.1 Nm | Min torque (Nm) | First physical CAP1/Guest CAP1_ACK after positive onset (ms) | First TIMG12/Guest TIMG12_ACK after positive onset (ms) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| smoke | 1295 | 171 | -0.27323 | 21.567 | 23.466 |
+| gentle | 2980 | 228 | -0.19178 | 23.084 | 25.077 |
+| direct20 | 1500 | 375 | -0.28063 | 3.065 | 3.807 |
+| steps | 1500 | 194 | -0.27478 | 503.107 | 503.852 |
+| ramp20_100ms | 1095 | 238 | -0.28893 | 11.597 | 12.873 |
+| ramp20_500ms | 1495 | 241 | -0.26264 | 20.303 | 22.123 |
+
+`steps` includes a positive-demand interval preceding its actual motor
+startup/engagement by ~500 ms; therefore its first CAP1 latency is *not*
+a bare startup time and must not be compared to Direct20 without accounting
+for the command stages.
+
+The event field interpretation follows `tools/experimental_e62_bemf_ab.py`:
+`ROTOR` field `f` is electromagnetic torque in micro-Nm, thus
+`f < -100000` means torque < -0.1 Nm. Source direction criterion uses
+`ROTOR.a <= -50000` for -50 rpm. These are observational diagnostics,
+not a newly relaxed P1 gate.
+
+Direct20 first sequence relative to first positive DShot:
+- +0.284 ms first physical PWM_PAIR
+- +3.065 ms CAP1 and Guest CAP1_ACK
+- +3.807 ms TIMG12 and Guest TIMG12_ACK
+- +3.867 ms next physical PWM_PAIR
+
+This preserves the observed CAP1 -> Guest TIMG12 -> physical PWM chain.
