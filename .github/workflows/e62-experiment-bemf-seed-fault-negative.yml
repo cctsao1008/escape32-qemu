@@ -1,0 +1,119 @@
+name: E62 SIM_ONLY BEMF Seed Fault Negative Control (NOT P1)
+on:
+  push:
+    branches: [experiment/e62-early-bemf-quartergate]
+    paths:
+      - '.github/workflows/e62-experiment-bemf-seed-fault-negative.yml'
+      - 'tools/experimental_e62_bemf_seed_fault_probe.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prove-motor-output-start-fail-closed:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install complete ARM GNU/Newlib toolchain
+        uses: carlosperate/arm-none-eabi-gcc-action@v1
+      - name: Verify immutable original, source code and QMP-only observer
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0  baseline/e62-g13b3/firmware/AM13E-rev17.3.elf' | sha256sum -c -
+          python3 -m py_compile tools/experimental_e62_bemf_seed_fault_probe.py
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            libglib2.0-dev libpixman-1-dev libfdt-dev pkg-config meson ninja-build
+          git submodule update --init --depth 1 qemu
+          ./build.sh
+          git clone --quiet https://github.com/cctsao1008/ESCape32.git .build/e62-exact-source
+          git -C .build/e62-exact-source checkout --quiet --detach 907c5c3285ea1eebafe247c918c882609bf2db16
+          test "$(git -C .build/e62-exact-source rev-parse HEAD)" = '907c5c3285ea1eebafe247c918c882609bf2db16'
+          git clone --quiet --depth 1 https://github.com/TexasInstruments/am13e2x_sdk.git /tmp/am13e-ti-sdk
+          git -C /tmp/am13e-ti-sdk fetch --quiet --depth 1 origin b872469ceef18de5e39a1d3acb0821ec158b44c7
+          git -C /tmp/am13e-ti-sdk checkout --quiet --detach b872469ceef18de5e39a1d3acb0821ec158b44c7
+      - name: Build matched Motor Output=1 original-policy images with ONLY BEMF seed toggled
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          fw="$PWD/.build/e62-exact-source"
+          seeded="$fw/mcu/_support/AM13E/cmake/test_profiles/e62_sim_only_motor_output.cmake"
+          no_seed="$PWD/.build/e62-negative-no-seed.cmake"
+          python3 - "$seeded" "$no_seed" <<'PY'
+          import pathlib,sys
+          a=pathlib.Path(sys.argv[1]).read_text()
+          seed="    AM13E_BEMF_INITIAL_DAC_CODE=2048\n"
+          assert a.count(seed)==1, "Source fixture changed, fail closed"
+          assert "    AM13E_E62_REQUIRE_MOTOR_OUTPUT=1" in a
+          assert "    AM13E_E62_SIM_ONLY_MOTOR_FAULT_DIAG=1" in a
+          b=a.replace(seed,"")
+          assert b.replace("    AM13E_E62_REQUIRE_MOTOR_OUTPUT=1","")==a.replace(seed,"").replace("    AM13E_E62_REQUIRE_MOTOR_OUTPUT=1","")
+          pathlib.Path(sys.argv[2]).write_text(b)
+          print("PASS_ONE_LINE_BEMF_DAC_SEED_NEGATIVE_CONTROL")
+          PY
+          for label in no_seed with_seed; do
+            if [ "$label" = no_seed ]; then board="$no_seed"; else board="$seeded"; fi
+            cmake -S "$fw" -B ".build/e62-build-$label" -G "Unix Makefiles" \
+              -DESCAPE32_BUILD_AM13E=ON -DAM13E_SDK_ROOT=/tmp/am13e-ti-sdk \
+              -DAM13E_BOARD_BOARD_PROFILE_FILE="$board"
+            cmake --build ".build/e62-build-$label" --target AM13E-rev17.3.elf -j 2
+            cp ".build/e62-build-$label/AM13E-rev17.3.elf" "artifacts/e62-$label.elf"
+            arm-none-eabi-nm -an "artifacts/e62-$label.elf" | grep -q e62_sim_motor_output_start_reject
+          done
+          test "$(sha256sum artifacts/e62-no_seed.elf | cut -c1-64)" != \
+               "$(sha256sum artifacts/e62-with_seed.elf | cut -c1-64)"
+          sha256sum artifacts/e62-no_seed.elf artifacts/e62-with_seed.elf > artifacts/e62-bemf-seed-elf-pair.sha256
+          python3 tools/sim_motor_cfg.py --sim-only-opt-in \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --motor-profile ecx87-kv147 \
+            --output artifacts/e62-g13b3-bemf-seed-fault-cfg.bin
+      - name: Negative control — no BEMF DAC seed must fault at output-start reference-ready predicate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/experimental_e62_bemf_seed_fault_probe.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf artifacts/e62-no_seed.elf \
+            --cfg artifacts/e62-g13b3-bemf-seed-fault-cfg.bin \
+            --label no_seed --expect-start-reject 3 --expect-runtime-fault 6 \
+            --output artifacts/e62-bemf-no-seed-fault.json --wall-timeout-s 250
+      - name: Positive control — modeled BEMF zero-reference seed must permit legitimate output startup
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/experimental_e62_bemf_seed_fault_probe.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf artifacts/e62-with_seed.elf \
+            --cfg artifacts/e62-g13b3-bemf-seed-fault-cfg.bin \
+            --label with_seed --expect-start-reject 0 --expect-runtime-fault 0 \
+            --output artifacts/e62-bemf-seeded-start.json --wall-timeout-s 250
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          a=json.loads(Path("artifacts/e62-bemf-no-seed-fault.json").read_text())
+          b=json.loads(Path("artifacts/e62-bemf-seeded-start.json").read_text())
+          assert a["result"]==b["result"]=="PASS"
+          for x in (a,b):
+              assert x["external_dshot_frames"]==3300
+              assert not x["guest_writes"]
+              assert not x["hardware_qualified"]
+              assert not x["original_p1_qualified"]
+              assert x["cfg_sha256"]==a["cfg_sha256"]
+              assert x["qemu_sha256"]==a["qemu_sha256"]
+          assert a["elf_sha256"] != b["elf_sha256"]
+          assert a["observed_fields"]["e62_sim_motor_output_start_reject"]==3
+          assert b["observed_fields"]["e62_sim_motor_output_start_reject"]==0
+          print("PASS_SIM_ONLY_BEMF_SEED_CAUSAL_AB_NOT_ORIGINAL_P1")
+          PY
+      - name: Preserve all evidence including negative or incomplete runs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-bemf-seed-output-start-negative-control-NOT-P1
+          path: artifacts/e62-*
+          if-no-files-found: warn
+          retention-days: 21
