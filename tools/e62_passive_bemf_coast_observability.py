@@ -85,6 +85,26 @@ def evaluate(events, scenario):
             phase[p].append(values[p])
         contrasts.append(max(values)-min(values))
         comparator.append(e["data"][5])
+    # Pure source-owned model diagnostic: 50ms windows at the start
+    # of neutral capture the rapid disappearance of phase-code contrast.
+    # These are NOT proof of rotor direction or a calibrated ADC route.
+    decay=[]
+    for interval_ms in range(0,300,50):
+        begin=coast_start+interval_ms*1_000_000
+        finish=begin+50_000_000
+        window=[e for e in events if
+            e["kind"]=="BEMF_FRONTEND" and begin<=e["vns"]<finish]
+        if len(window)<35 or len(window)>65:
+            raise ValueError("Incomplete native 50ms coast source window")
+        code_contrast=[max(e["data"][:3])-min(e["data"][:3])
+                       for e in window]
+        if any(v<0 or v>4095 for e in window for v in e["data"][:3]):
+            raise ValueError("Invalid native coast BEMF quantization")
+        decay.append({"neutral_age_start_ms":interval_ms,
+                      "neutral_age_end_ms":interval_ms+50,
+                      "sample_count":len(window),
+                      "max_phase_code_contrast":max(code_contrast),
+                      "min_phase_code_contrast":min(code_contrast)})
     spans=[max(p)-min(p) for p in phase]
     max_contrast=max(contrasts)
     # A model BEMF array is source-only telemetry, not a firmware
@@ -112,6 +132,7 @@ def evaluate(events, scenario):
         "per_phase_code_temporal_spans":spans,
         "min_max_per_phase":[[min(p),max(p)] for p in phase],
         "phase_contrast_histogram":dict(Counter(contrasts)),
+        "first_300ms_passive_coast_decay_50ms_buckets":decay,
         "number_of_postsettle_active_motor_events":len(coast_active),
         "comment":"Without an authenticated board ADC route and reliable phase-order edges, quantized model codes cannot establish a safe windmill restart sector."
     }
