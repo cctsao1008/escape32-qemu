@@ -215,3 +215,66 @@ reversal or missing CAP1/TIMG12 ACK is kept as RED. The
 `tools/experimental_e62_source_bemf_filter_matrix.py` must refuse
 ELF SHA drift, fabricated source stress, missing physical evidence,
 or an Original P1 identity waiver. **Results not yet asserted here.**
+
+## Final fourteen-case pinned source-built result (#3)
+
+The corrected [CI #40865298408](https://github.com/cctsao1008/escape32-qemu/actions/runs/40865298408)
+**completed** on the exact stable-filter source-built ELF SHA
+`5b90b200429333cef82b982b7a7f845f31fb885c7ea63fc7e783c75232fac8d1`.
+The workflow has an overall red status because **six legitimate
+model-level motor/observability gates failed**, not because QEMU,
+firmware build, or configuration failed. All seven job groups saved
+artifacts, including strict Original-P1 SHA rejection.
+
+| BEMF analog condition | Scenario | Source CAP1 ACK | TIMG12 ACK | Reversals (>=50RPM) | Diagnostic non-SHA |
+| --- | --- | ---: | ---: | ---: | --- |
+| nominal | smoke | 1540 | 1540 | 0 | PASS |
+| nominal | gentle | 2234 | 2233 | 0 | PASS |
+| nominal | direct20 | 2742 | 2742 | 0 | PASS |
+| nominal | steps | 2112 | 2112 | 0 | PASS |
+| nominal | ramp20_100ms | 1905 | 1904 | 0 | PASS |
+| nominal | ramp20_500ms | 2321 | 2320 | 0 | PASS |
+| `0:16` switching noise | direct20 | 2741 | 2741 | 0 | PASS |
+| `0:16` switching noise | gentle | 2235 | 2234 | 0 | PASS |
+| `16:0` reference bias | direct20 | 232 | 232 | 233 | FAIL reversal |
+| `16:0` reference bias | steps | 169 | 168 | 169 | FAIL reversal |
+| `-16:0` reference bias | direct20 | 234 | 234 | 234 | FAIL reversal |
+| `-16:0` reference bias | ramp20_100ms | 0 | 0 | 44 | FAIL reversal, closed loop, missing comparator transitions |
+| `16:20` combined | direct20 | 232 | 232 | 233 | FAIL reversal |
+| `16:20` combined | ramp20_500ms | 0 | 0 | 0 | FAIL missing closed loop and comparator transitions |
+
+**Totals: 8/14 bounded simulated motor PASS; 6/14 FAIL.**
+A zero-reversal case is **not** a PASS if CAP1/TIMG12
+never establish closed loop. The strict Original Rel17.3 SHA gate
+remains intentionally failed on all these source-built Guest trials;
+Original P1, real board, propeller and product qualification remain
+false. No test thresholds, model motor torque, fault semantics or
+DFC source signals were relaxed.
+
+The previous G13B3 SIM_ONLY CFG output basename issue
+[issue #2](https://github.com/cctsao1008/escape32-qemu/issues/2)
+was fixed in commit `e6942d211452ce4ba24695ebbd5c50a32373dcf5`
+and closed independently of the real robustness failures.
+
+### Follow-on relative-reference causality experiment (#4)
+
+Existing `ESCape32` firmware contains a physical-board calibration
+structure with separate per-phase ADC gain/offset, comparator correction
+and DAC offset fields, plus an opt-in source-managed ADC measurement/
+DAC publication path. No actual board electrical coefficients are
+known, and `AM13E_BEMF_INITIAL_DAC_CODE=2048` is only the initial
+**SIM_ONLY** reference model.
+
+To test the limited *relative reference bias* hypothesis, source-built
+GitHub Actions
+[#40867595824](https://github.com/cctsao1008/escape32-qemu/actions/runs/40867595824)
+compares unchanged `2048` control with separately compiled,
+explicitly non-flash synthetic `2064` and `2032` DAC variants,
+under unchanged corresponding `+16:0` and `-16:0` physical source
+perturbations. QEMU motor plant, DShot fixtures, electrical fault
+enforcement and strict Original P1 analyzer remain the same.
+The experiment records whether closed-loop CAP1/TIMG12 and zero
+significant reversals *recover* under reference alignment;
+it does not establish a physically measured E62 board coefficient
+and is not a release-qualification shortcut. If alignment does not
+restore the closed loop, another mechanism must be diagnosed.
