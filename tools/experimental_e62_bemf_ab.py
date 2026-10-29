@@ -33,7 +33,8 @@ def readonly_qmp_cpu_snapshot(path, elf):
     # offsets: recompiles can shift these addresses.
     names={"audio_owner","fault_latched","safety_initialized",
            "e62_sim_runtime_fault_caller_pc",
-           "e62_sim_runtime_fault_prestate"}
+           "e62_sim_runtime_fault_prestate",
+           "e62_sim_runtime_fault_reason"}
     found={}
     nm=subprocess.run(["arm-none-eabi-nm","-an",str(elf)],check=True,
                       capture_output=True,text=True,timeout=12).stdout
