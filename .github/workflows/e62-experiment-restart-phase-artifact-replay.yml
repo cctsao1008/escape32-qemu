@@ -1,0 +1,109 @@
+name: E62 EXPERIMENT Immutable Native Restart Angle Torque Artifact Replay
+
+on:
+  push:
+    branches: [experiment/e62-early-bemf-quartergate]
+    paths:
+      - '.github/workflows/e62-experiment-restart-phase-artifact-replay.yml'
+      - 'tools/e62_restart_phase_torque_audit.py'
+      - 'tests/test_e62_restart_phase_torque_audit.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  frozen-source-model-replay:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify source-model phase/torque auditor fail-closed unit tests
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p test_e62_restart_phase_torque_audit.py -v
+      - name: Retrieve immutable previous run's real source-owned motor artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for duration in short300 long3000; do
+            mkdir -p "artifacts/replay/$duration"
+            gh run download 40894919388 \
+              --repo ${{ github.repository }} \
+              --name "e62-cold-sector-coast-$duration-no-wfi-NOT-P1" \
+              --dir "artifacts/replay/$duration"
+            test -s "artifacts/replay/$duration/control.p0.events.log"
+            test -s "artifacts/replay/$duration/cold.p0.events.log"
+            test -s "artifacts/replay/$duration/control.strict-original-p1.json"
+            test -s "artifacts/replay/$duration/cold.strict-original-p1.json"
+          done
+      - name: Replay source-owned electrical angle/torque around each restart
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/replay/reports
+          for duration in short300 long3000; do
+            for variant in control cold; do
+              python3 tools/e62_restart_phase_torque_audit.py \
+                --events "artifacts/replay/$duration/$variant.p0.events.log" \
+                --scenario "scenarios/e62-experimental-two-demand-coast-$duration.json" \
+                --output "artifacts/replay/reports/$duration-$variant.json"
+            done
+          done
+      - name: Prove native torque sign and strict-red no-waiver results
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path('artifacts/replay')
+          rows={}
+          for duration in ('short300','long3000'):
+              rows[duration]={}
+              for variant in ('control','cold'):
+                  report=json.loads((root/'reports'/f'{duration}-{variant}.json').read_text())
+                  strict=json.loads((root/duration/f'{variant}.strict-original-p1.json').read_text())
+                  original=strict.get('unwaived_observability_failures',[])
+                  if 'ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN' not in original:
+                      raise SystemExit('FAIL: strict SHA rejection no longer enforced')
+                  real=[x for x in original if x!='ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN']
+                  assert report['source_dshot_frames']==(5100 if duration=='short300' else 7800)
+                  assert not report['has_guest_rotor_angle_measurement']
+                  assert report['do_not_use_angle_or_torque_as_guest_input']
+                  rows[duration][variant]={
+                      'prestart_rpm':report['pre_demand_rpm'],
+                      'electrical_angle_deg_SIM_MODEL_ONLY':report['pre_demand_wrapped_electrical_angle_deg'],
+                      'first_torque_Nm':report['first_post_demand_model_torque_nm'],
+                      'negative_first_torque':report['first_post_demand_model_torque_negative'],
+                      'negative_rpm_samples_first_20ms':report['first_20ms_negative_rpm_samples_le_minus50'],
+                      'first_cap1_ms':report['first_new_guest_cap1_ack_ms'],
+                      'strict_non_sha_failures':real
+                  }
+                  if (duration=='short300' and variant=='cold' and (
+                      not real or not report['first_post_demand_model_torque_negative'])):
+                      raise SystemExit('FAIL: short-coast candidate motor reversal/negative torque was waived')
+                  if (duration=='long3000' and variant=='cold' and (
+                      real or report['first_post_demand_model_torque_negative'])):
+                      raise SystemExit('FAIL: long-coast candidate original positive-torque evidence drifted')
+          output={'schema':'e62.experimental.native-rotor-phase-artifact-replay.v1',
+                  'source_workflow_run':40894919388,
+                  'classification':'SOURCE_OWNED_MODEL_DIAGNOSTIC_NO_GUEST_ANGLE_INPUT',
+                  'original_p1_qualified':False,'hardware_qualified':False,
+                  'do_not_use_model_angle_as_firmware_input':True,
+                  'cases':rows}
+          (root/'reports'/'cross-duration-summary.json').write_text(
+              json.dumps(output,indent=2,sort_keys=True)+'\n')
+          print('E62_NATIVE_RESTART_PHASE_REPLAY',json.dumps(output,sort_keys=True))
+          PY
+      - name: Retain replay reports and exact source-run provenance
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-native-restart-phase-torque-frozen-replay-NOT-HARDWARE
+          path: artifacts/replay/reports/**
+          if-no-files-found: warn
+          retention-days: 21
