@@ -6,7 +6,9 @@ on:
     paths:
       - 'tools/e62_board_adc_epoch_intake.py'
       - 'tools/e62_board_gate_fault_intake.py'
+      - 'tools/e62_board_current_transfer_intake.py'
       - 'tests/test_e62_bench_signal_intake.py'
+      - 'tests/test_e62_board_current_transfer_intake.py'
       - '.github/workflows/e62-experiment-board-trace-evidence-intake.yml'
   workflow_dispatch:
 
@@ -26,8 +28,11 @@ jobs:
           python3 -m py_compile \
             tools/e62_board_adc_epoch_intake.py \
             tools/e62_board_gate_fault_intake.py \
-            tests/test_e62_bench_signal_intake.py
+            tools/e62_board_current_transfer_intake.py \
+            tests/test_e62_bench_signal_intake.py \
+            tests/test_e62_board_current_transfer_intake.py
           python3 -m unittest discover -s tests -p test_e62_bench_signal_intake.py -v
+          python3 -m unittest discover -s tests -p test_e62_board_current_transfer_intake.py -v
       - name: Preserve previous strict hardware intake and no silent hardware signoff
         shell: bash
         run: |
@@ -51,6 +56,7 @@ jobs:
           printf '%s\n' 'SOURCE=MOCK_UNIT_INPUTS_ONLY' \
             'BOARD_ADC_SAMPLING_NOT_MEASURED' \
             'BOARD_SIX_GATE_VGS_NOT_MEASURED' \
+            'BOARD_CURRENT_AMPLIFIER_TRANSFER_NOT_MEASURED' \
             'NO_FIRMWARE_REARM' \
             'NO_HARDWARE_QUALIFICATION' \
             > artifacts/e62-board-intake/scope.txt
