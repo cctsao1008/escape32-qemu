@@ -10,7 +10,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
+
+# Running as "python tools/<script>.py" places tools/, not repo root,
+# on sys.path. Keep source imports stable in CI and standalone runs.
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 
 from tools.native_dshot_scenario import load_native_scenario
 from tools.native_p1_qualification import commands_for_scenario
