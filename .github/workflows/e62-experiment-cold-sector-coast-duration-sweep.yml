@@ -1,0 +1,180 @@
+name: E62 EXPERIMENT Cold-Sector Coast Duration Sweep (NOT P1)
+
+on:
+  push:
+    branches: [experiment/e62-early-bemf-quartergate]
+    paths:
+      - '.github/workflows/e62-experiment-cold-sector-coast-duration-sweep.yml'
+      - 'scenarios/e62-experimental-two-demand-coast-short300.json'
+      - 'scenarios/e62-experimental-two-demand-coast-long3000.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  coast-duration-phase-restart-causality:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 48
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        coast: [short300, long3000]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pin baseline and test independent second-demand negative controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p test_e62_second_demand_oracle.py -v
+          python3 -m py_compile tools/e62_experimental_second_demand_oracle.py
+          echo '05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0  baseline/e62-g13b3/firmware/AM13E-rev17.3.elf' | sha256sum -c -
+      - uses: carlosperate/arm-none-eabi-gcc-action@v1
+      - name: Build single pinned QEMU, TI SDK and source tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            libglib2.0-dev libpixman-1-dev libfdt-dev pkg-config meson ninja-build
+          git submodule update --init --depth 1 qemu
+          ./build.sh
+          git clone --quiet https://github.com/cctsao1008/ESCape32.git .build/e62-reacquire-esc
+          git -C .build/e62-reacquire-esc checkout --quiet --detach b48b7fd3d99c2781124fa735028b97aae252ffc4
+          test "$(git -C .build/e62-reacquire-esc rev-parse HEAD)" = b48b7fd3d99c2781124fa735028b97aae252ffc4
+          git clone --quiet --depth 1 https://github.com/TexasInstruments/am13e2x_sdk.git /tmp/am13e-ti-sdk
+          git -C /tmp/am13e-ti-sdk fetch --quiet --depth 1 origin b872469ceef18de5e39a1d3acb0821ec158b44c7
+          git -C /tmp/am13e-ti-sdk checkout --quiet --detach b872469ceef18de5e39a1d3acb0821ec158b44c7
+          test "$(git -C /tmp/am13e-ti-sdk rev-parse HEAD)" = b872469ceef18de5e39a1d3acb0821ec158b44c7
+          mkdir -p artifacts/e62-cold-sector-ab
+          fw="$PWD/.build/e62-reacquire-esc"
+          grep -Fq 'step = oldstep;' "$fw/src/main.c"
+          grep -Fq 'AM13E_SIM_ONLY_EXPERIMENTAL_COLD_RESTART' "$fw/src/main.c"
+          grep -Fq 'AM13E_SIM_ONLY_EXPERIMENTAL_COLD_RESTART=1' "$fw/mcu/_support/AM13E/cmake/test_profiles/e62_sim_only_cold_sector_restart.cmake"
+          # Use one identical CMake path, as startup compatibility text
+          # can contain that build path and change the actual ARM PT_LOAD.
+          builddir=.build/e62-fw-filtered
+          for variant in control cold; do
+            profile="$fw/mcu/_support/AM13E/cmake/test_profiles/e62_sim_only_early_bemf_stable_filter.cmake"
+            if [ "$variant" = cold ]; then
+              profile="$fw/mcu/_support/AM13E/cmake/test_profiles/e62_sim_only_cold_sector_restart.cmake"
+            fi
+            cmake -S "$fw" -B "$builddir" -G "Unix Makefiles" \
+              -DESCAPE32_BUILD_AM13E=ON -DAM13E_SDK_ROOT=/tmp/am13e-ti-sdk \
+              -DAM13E_BOARD_BOARD_PROFILE_FILE="$profile"
+            cmake --build "$builddir" --target AM13E-rev17.3.elf -j 2
+            cp "$builddir/AM13E-rev17.3.elf" "artifacts/e62-cold-sector-ab/$variant.elf"
+          done
+          python3 - <<'PY'
+          import hashlib,json,struct
+          from pathlib import Path
+          from tools.e62_reference_elf_load_diff import read_elf,BASELINE_LOAD_SHA
+          output={}
+          for label in ("control","cold"):
+              path=Path("artifacts/e62-cold-sector-ab")/(label+".elf")
+              raw,entry,loads=read_elf(path)
+              h=hashlib.sha256()
+              h.update(struct.pack("<I",entry))
+              for s in loads:
+                  h.update(struct.pack("<IIIIII",s["vaddr"],s["paddr"],s["filesz"],s["memsz"],s["flags"],s["align"]))
+                  h.update(s["data"])
+              output[label]={"elf_sha256":hashlib.sha256(raw).hexdigest(),
+                             "pt_load_sha256":h.hexdigest(),
+                             "entrypoint":entry,
+                             "number_load_segments":len(loads)}
+          if output["control"]["pt_load_sha256"]!=BASELINE_LOAD_SHA:
+              raise SystemExit("FAIL: oldstep-control load image drifted from frozen source A/B")
+          if output["cold"]["pt_load_sha256"]==BASELINE_LOAD_SHA:
+              raise SystemExit("FAIL: cold-sector candidate did not change executable image")
+          payload={"schema":"e62.sim-only.cold-restart-source-built-provenance.v1",
+                   "source_sha":"b48b7fd3d99c2781124fa735028b97aae252ffc4",
+                   "sdk_sha":"b872469ceef18de5e39a1d3acb0821ec158b44c7",
+                   "same_cmake_directory":True,"native_source_motor_plant_unchanged":True,
+                   "original_guest_p1_qualified":False,"hardware_qualified":False,
+                   "variants":output}
+          Path("artifacts/e62-cold-sector-ab/arm-load-provenance.json").write_text(json.dumps(payload,indent=2,sort_keys=True)+"\n")
+          print("E62_COLD_RESTART_ELF_PROVENANCE",json.dumps(payload,sort_keys=True))
+          PY
+          python3 tools/sim_motor_cfg.py --sim-only-opt-in \
+            --motor-profile ecx87-kv147 \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --output artifacts/e62-cold-sector-ab/e62-g13b3-cold-sector-cfg-flash.bin
+      - name: Run unchanged 6300-frame FC source with ORIGINAL and COLD restart guests
+        shell: bash
+        run: |
+          set -euo pipefail
+          for variant in control cold; do
+            prefix="artifacts/e62-cold-sector-ab/$variant"
+            sha="$(sha256sum "$prefix.elf" | cut -d' ' -f1)"
+            test "${#sha}" -eq 64
+            echo "E62_COLD_RESTART_TRIAL_BEGIN variant=$variant sha=$sha"
+            python3 tests/e62_autonomous_native_motor_probe.py \
+              --qemu .build/qemu-src/build/qemu-system-arm \
+              --elf "$prefix.elf" \
+              --experimental-candidate-sha256 "$sha" \
+              --cfg-flash artifacts/e62-cold-sector-ab/e62-g13b3-cold-sector-cfg-flash.bin \
+              --scenario scenarios/e62-experimental-two-demand-coast-${{ matrix.coast }}.json \
+              --artifact "$prefix.json" \
+              --wall-timeout-s 300
+            set +e
+            python3 tools/native_p1_qualification.py \
+              --scenario scenarios/e62-experimental-two-demand-coast-${{ matrix.coast }}.json \
+              --evidence "$prefix.json" \
+              --events "$prefix.p0.events.log" \
+              --output "$prefix.strict-original-p1.json"
+            strict_rc=$?
+            python3 tools/e62_experimental_second_demand_oracle.py \
+              --events "$prefix.p0.events.log" \
+              --scenario scenarios/e62-experimental-two-demand-coast-${{ matrix.coast }}.json \
+              --evidence "$prefix.json" \
+              --strict-original-p1 "$prefix.strict-original-p1.json" \
+              --output "$prefix.second-demand.json"
+            oracle_rc=$?
+            set -e
+            test "$strict_rc" -eq 1
+            printf '%s\n' "$oracle_rc" > "$prefix.oracle-exit.txt"
+            echo "E62_COLD_RESTART_TRIAL_END variant=$variant strict_rc=$strict_rc oracle_rc=$oracle_rc"
+          done
+      - name: Compare both actual motor/strict verdicts WITHOUT hiding real failures
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path("artifacts/e62-cold-sector-ab")
+          cases={}
+          for variant in ("control","cold"):
+              evidence=json.loads((root/(variant+".json")).read_text())
+              strict=json.loads((root/(variant+".strict-original-p1.json")).read_text())
+              oracle=json.loads((root/(variant+".second-demand.json")).read_text())
+              v=oracle["independent_demand_oracle"]
+              failures=strict.get("unwaived_observability_failures",[])
+              if "ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN" not in failures:
+                  raise SystemExit("FAIL: the Original P1 SHA-rejection guard was bypassed")
+              if not evidence.get("experimental_candidate_not_original"):
+                  raise SystemExit("FAIL: source-built candidate not labeled experimental")
+              cases[variant]={"original_sha_rejected":True,"strict_non_sha_failures":[x for x in failures if x!="ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN"],
+                   "second_demand_pass":v["pass"],"stage_oracle_failures":v["failures"],
+                   "two_motor_windows":v["demand_windows"],"coast":v["coast"]}
+          payload={"schema":"e62.sim-only.cold-sector-paired-motor-v1","cases":cases,
+                   "experimental_cold_pass":bool(cases["cold"]["second_demand_pass"]),
+                   "control_non_sha_failure_expected":not cases["control"]["second_demand_pass"],
+                   "original_p1_qualified":False,"hardware_qualified":False,
+                   "no_motor_acceptance_waivers":True}
+          (root/"ab-comparison.json").write_text(json.dumps(payload,indent=2,sort_keys=True)+"\n")
+          print("E62_COLD_SECTOR_AB_VERDICT",json.dumps(payload,sort_keys=True))
+          if not payload["control_non_sha_failure_expected"]:
+              raise SystemExit("INCONCLUSIVE: historical second-start failure did not reproduce")
+          if not payload["experimental_cold_pass"]:
+              raise SystemExit("FAIL: cold-sector restart still violates original second-demand criteria")
+          PY
+      - name: Retain both original and candidate traces, strict FAIL and executable ELF provenance
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-cold-sector-coast-${{ matrix.coast }}-no-wfi-NOT-P1
+          path: artifacts/e62-cold-sector-ab/**
+          if-no-files-found: warn
+          retention-days: 21
