@@ -35,10 +35,14 @@ static void am13e_native_motor_publish(AM13ENativeMotor *m)
         if (m->bemf_stress_trace_count < 36U &&
             (noise_code || (m->bemf_stress_offset_code &&
                             m->bemf_stress_trace_count < 3U))) {
-            am13e_p0_event(m->machine,"BEMF_STRESS",
-                           p,original_code,code,
-                           m->bemf_stress_offset_code,noise_code,
-                           m->bemf_stress_switch_edges);
+            /* Diagnostics intentionally OUTSIDE strict E62_P0_EVENT stream:
+             * the immutable P1 event schema must remain untouched. */
+            error_report("E62_BEMF_STRESS_DIAG vns=%lld a=%d b=%lld "
+                         "c=%u d=%d e=%d f=%u",
+                         (long long)qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL),
+                         p,(long long)original_code,code,
+                         m->bemf_stress_offset_code,noise_code,
+                         m->bemf_stress_switch_edges);
             ++m->bemf_stress_trace_count;
         }
         if (code > 4095U) {
