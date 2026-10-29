@@ -12,7 +12,11 @@ import argparse
 import json
 import math
 import re
+import sys
 from pathlib import Path
+
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from tools.native_p1_qualification import commands_for_scenario
 
 EVENT = re.compile(
     r"\bE62_P0_EVENT seq=(\d+) vns=(\d+) kind=([A-Z0-9_]+)"
@@ -57,12 +61,20 @@ def diagnose(events, scenario):
     borders=[0]
     for s in stages:
         borders.append(borders[-1]+s["duration_ms"])
+    # E62_P0_EVENT DSHOT.c is the encoded DShot command (e.g.
+    # 200-permille -> 448), NOT permille. Reuse the existing strict P1
+    # source decoder rather than invent an alternate throttle mapping.
+    commands=list(commands_for_scenario([
+        (item["duration_ms"],item["permille"],item["permille"],1)
+        for item in stages]))
+    if len(commands)!=len(ds):
+        raise ValueError("Invalid canonical strict P1 DShot command count")
     for i,e in enumerate(ds):
-        if e["data"][0]!=i or e["data"][1]!=next(
-            idx for idx in range(5) if borders[idx]<=i<borders[idx+1]):
+        expected_stage, expected_encoded_command=commands[i]
+        if e["data"][0]!=i or e["data"][1]!=expected_stage:
             raise ValueError("Wrong source-owned frame/stage")
-        if e["data"][2]!=stages[e["data"][1]]["permille"]:
-            raise ValueError("Unexpected DShot source value")
+        if e["data"][2]!=expected_encoded_command:
+            raise ValueError("Unexpected DShot encoded source command")
         if i>=2 and abs((e["vns"]-ds[i-1]["vns"])-1_000_000)>100:
             raise ValueError("DSHOT source clock discontinuity")
     stage3_start=ds[borders[3]]["vns"]
