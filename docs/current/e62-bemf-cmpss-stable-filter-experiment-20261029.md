@@ -338,3 +338,68 @@ from these four pure-offset scenarios.
 The synthetic DAC seed is not the runtime SC5 calibrated
 ADC→VBUS→phase sense→DACH publication pathway and must not be
 promoted to a production `AM13E_BEMF_INITIAL_DAC_CODE` constant.
+
+## Combined offset+switching stress with reference aligned (#3/#4)
+
+[Source-built A/B CI #40879428785](https://github.com/cctsao1008/escape32-qemu/actions/runs/40879428785)
+**completed SUCCESS for all three jobs** (pure ±16 and joint
+`+16:20`). On the latter, real source-owned 2us switching transients
+were active concurrently with static +16 sense bias. The physical
+analog perturbation diagnostics contain **36 source events each**
+for both controls and matches, with actual nonzero noise codes.
+
+| Combined +16:20 stress | Control DAC 2048 | Matched DAC 2064 |
+| --- | ---: | ---: |
+| direct20 rotor reversals | 233 | **0** |
+| direct20 CAP1 / TIMG12 Guest ACK | 232 / 232 | **2742 / 2742** |
+| ramp20_500ms rotor reversals | 0 | **0** |
+| ramp20_500ms CAP1 / TIMG12 Guest ACK | **0 / 0** | **2321 / 2321** |
+| all unwaived non-SHA motor/observability gates | FAIL | **PASS** |
+
+**Zero rotor reversal is insufficient**: ramp500 control has 0
+reversals but **no genuine hardware feedback**; it is a real FAIL.
+The matched ELF differs by only the audited SIM_ONLY DACH seed byte
+(`2048 → 2064`), preserving the same source-built 31/25/20 CMPSS
+filter, independent DShot source, QEMU analog plant/perturbation and
+unaltered Original P1 negative SHA gate. This is **joint
+model-level causality**, not a calibrated AM13E board.
+
+### SC5 source-code reference-epoch negative gate (#4)
+
+The native FW experimental branch
+[ESCape32 commit b6d0c6c](https://github.com/cctsao1008/ESCape32/commit/b6d0c6cd959f5f0f7da2fbe0410ff40343bd611)
+now rejects incomplete/zero-identity ADC reference epochs before
+calculating/publishing a BEMF reference. The pure C
+`am13e_bemf_reference_fresh()` requires a nonzero completed sample
+and *each* of the unsigned modular elapsed intervals
+acquisition→completion, completion→now and acquisition→now to remain
+within the explicitly configured maximum age (including legitimate
+32-bit SysTick wrap). No board transfer coefficients were invented.
+
+[Host CI #40885636881](https://github.com/cctsao1008/ESCape32/actions/runs/40885636881)
+**SUCCESS**, both optimized `-Werror` and UBSan executions,
+including negative tests for incomplete scans, future/old time stamps,
+identity-zero and expiry boundary; existing numeric SC5 calibration
+and 4096-input ADC normalization tests also pass. This is **unit
+evidence** only, not an AM13E ADC ISR or PWM-synchronized DACH
+publication integration test.
+
+### Independent second-demand experiment (#5)
+
+[Source-built CI #40886338291](https://github.com/cctsao1008/escape32-qemu/actions/runs/40886338291)
+exercises an unchanged, pinned stable-filter source ELF with
+a **new separate** 1kHz DShot schedule:
+1500ms neutral → 1500ms 20% → 1500ms neutral/coast →
+1500ms 20% → 300ms neutral.
+
+An independent source-time oracle verifies separately that EACH
+powered window contains ≥12 real Guest PWM_PAIR/CAP1_ACK/TIMG12_ACK,
+no significant reverse rotor response, and positive ≥50rpm
+response, plus no active motor events after 200ms settle in the
+intermediate coast interval. It must reject borrowed first-demand
+ACKs, corrupted DShot, sustained coast energization, and false
+claims of full standstill. The strict original P1 analyzer stays
+unchanged; source-built Guest must remain SHA-rejected as
+`ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN`.
+**No physical standstill restart, hardware, or release qualification
+is asserted from this new test.**
