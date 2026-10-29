@@ -1,0 +1,88 @@
+name: E62 EXPERIMENT Passive Phase-Order Alias Risk (NOT Guest Angle)
+
+on:
+  push:
+    branches: [experiment/e62-early-bemf-quartergate]
+    paths:
+      - 'tools/e62_passive_phase_order_alias_audit.py'
+      - 'tests/test_e62_passive_phase_order_alias_audit.py'
+      - '.github/workflows/e62-experiment-passive-phase-order-alias.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  no-model-truth-rotor-phase-rank:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test positive and negative passive three-ADC phase rank with no firmware rearm
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p test_e62_passive_phase_order_alias_audit.py -v
+          python3 -m py_compile tools/e62_passive_phase_order_alias_audit.py
+      - name: Obtain Original source-owned coast traces without touching motor physics
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for duration in short300 long3000; do
+            mkdir -p "artifacts/source/$duration"
+            gh run download 40894919388 \
+              --repo ${{ github.repository }} \
+              --name "e62-cold-sector-coast-$duration-no-wfi-NOT-P1" \
+              --dir "artifacts/source/$duration"
+            test -s "artifacts/source/$duration/control.p0.events.log"
+            test -s "artifacts/source/$duration/cold.p0.events.log"
+          done
+      - name: Replay source phase permutation jumps and do not infer motor direction
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/results
+          for duration in short300 long3000; do
+            for variant in control cold; do
+              python3 tools/e62_passive_phase_order_alias_audit.py \
+                --events "artifacts/source/$duration/$variant.p0.events.log" \
+                --scenario "scenarios/e62-experimental-two-demand-coast-$duration.json" \
+                --output "artifacts/results/$duration-$variant.json"
+            done
+          done
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          rows={}
+          for duration in ('short300','long3000'):
+              rows[duration]={}
+              for variant in ('control','cold'):
+                  x=json.loads((Path('artifacts/results')/f'{duration}-{variant}.json').read_text())
+                  if x['raw_bemf_source_samples']<90 or x['skipped_or_ambiguous_sector_transitions']<1:
+                      raise SystemExit('FAIL: historical phase sampling alias risk not observed; analyze changed source')
+                  if x['native_guest_rearm_permitted'] or x['qualified_physical_rotor_phase'] or x['qualified_physical_rotor_direction']:
+                      raise SystemExit('FAIL: phase rank alone incorrectly authorized physical rotor angle or rearm')
+                  rows[duration][variant]={
+                      'raw_samples':x['raw_bemf_source_samples'],
+                      'rank_transitions':x['observed_rank_transitions'],
+                      'skipped_or_ambiguous_rank_transitions':x['skipped_or_ambiguous_sector_transitions'],
+                      'status':x['classification']}
+          report={'schema':'e62.experimental.native-1khz-passive-phase-rank-alias.v1',
+                  'source_motor_run':40894919388,
+                  'no_model_rotor_truth_as_guest_input':True,
+                  'hardware_qualified':False,'guest_restart_qualified':False,
+                  'cases':rows}
+          Path('artifacts/results/summary.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
+          print('E62_PASSIVE_RANK_SOURCE_VERDICT '+json.dumps(report,sort_keys=True))
+          PY
+      - name: Retain source-analysis reports whether test is red or green
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-source-owned-passive-phase-order-alias-not-rotor-sensor
+          path: artifacts/results/**
+          retention-days: 21
+          if-no-files-found: warn
