@@ -4,6 +4,10 @@ on:
   push:
     branches: [experiment/e62-early-bemf-quartergate]
     paths:
+      - 'machine/am13e23019.c'
+      - 'machine/am13e_native_analog_frontend.inc'
+      - 'machine/am13e_native_motor_plant.inc'
+      - 'machine/am13e_native_pwm_coupling.inc'
       - 'tests/e62_autonomous_native_motor_probe.py'
       - 'tools/experimental_e62_pinned_ival_patch.py'
       - 'tools/experimental_e62_candidate_matrix.py'
