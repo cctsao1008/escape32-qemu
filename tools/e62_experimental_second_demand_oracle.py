@@ -123,7 +123,6 @@ def main():
     provenance=(
         isinstance(original_failures,list) and
         SHA_GUARD in original_failures and
-        not [x for x in original_failures if x!=SHA_GUARD] and
         ev.get("experimental_candidate_not_original") is True and
         ev.get("native_dshot_scenario",{}).get("sha256")==meta["sha256"] and
         ev.get("host_guest_register_writes") is False and
@@ -133,7 +132,14 @@ def main():
     )
     if not provenance:
         result["failures"].append("SECOND_DEMAND_PROVENANCE_OR_ORIGINAL_P1_GATE")
-    result["pass"]=not result["failures"]
+    strict_non_sha=(
+        [x for x in original_failures if x!=SHA_GUARD]
+        if isinstance(original_failures,list) else ["MISSING_STRICT_FAIL_LIST"])
+    # Strict mechanical failures are NOT provenance faults and MUST still
+    # keep the entire scenario red, even if the independent stage oracle
+    # happens to have a different coverage of the same physical event.
+    result["strict_original_p1_non_sha_failures"]=strict_non_sha
+    result["pass"]=not result["failures"] and not strict_non_sha
     report={
         "schema":"e62.experimental.independent-second-demand.v1",
         "classification":"EXPERIMENTAL_ONLY_NOT_ORIGINAL_P1_OR_HARDWARE",
@@ -147,6 +153,7 @@ def main():
     a.output.write_text(json.dumps(report,indent=2,sort_keys=True)+"\n")
     print("E62_SECOND_DEMAND_ORACLE "+json.dumps({
         "pass":result["pass"],"failures":result["failures"],
+        "strict_non_sha_failures":strict_non_sha,
         "windows":result["demand_windows"],"coast":result["coast"]},
         sort_keys=True),flush=True)
     return 0 if result["pass"] else 1
