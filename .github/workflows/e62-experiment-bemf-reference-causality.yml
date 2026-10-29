@@ -1,0 +1,110 @@
+name: E62 EXPERIMENT Reference Bias Causality A-B (NOT Board Calibration)
+
+on:
+  push:
+    branches: [experiment/e62-early-bemf-quartergate]
+    paths:
+      - 'tools/experimental_e62_bemf_reference_causality.py'
+      - '.github/workflows/e62-experiment-bemf-reference-causality.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  reference-bias-causality:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - label: plus16
+            fixture: plus16
+            stress: '16:0'
+            first: direct20
+            second: steps
+            expected_dac: 2064
+          - label: minus16
+            fixture: minus16
+            stress: '-16:0'
+            first: direct20
+            second: ramp20_100ms
+            expected_dac: 2032
+    steps:
+      - uses: actions/checkout@v4
+      - name: Freeze Original P1 and independent causal diagnostics
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0  baseline/e62-g13b3/firmware/AM13E-rev17.3.elf' | sha256sum -c -
+          python3 -m py_compile tools/experimental_e62_bemf_reference_causality.py tests/e62_autonomous_native_motor_probe.py tools/native_p1_qualification.py
+      - uses: carlosperate/arm-none-eabi-gcc-action@v1
+      - name: Build same native QEMU model and pin synthetic-only firmware source
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            libglib2.0-dev libpixman-1-dev libfdt-dev pkg-config meson ninja-build
+          git submodule update --init --depth 1 qemu
+          ./build.sh
+          git clone --quiet https://github.com/cctsao1008/ESCape32.git .build/e62-reference-esc
+          git -C .build/e62-reference-esc checkout --quiet --detach 2999715ebaa1572fff82d6ea83048dbfe2be66b4
+          test "$(git -C .build/e62-reference-esc rev-parse HEAD)" = 2999715ebaa1572fff82d6ea83048dbfe2be66b4
+          git clone --quiet --depth 1 https://github.com/TexasInstruments/am13e2x_sdk.git /tmp/am13e-ti-sdk
+          git -C /tmp/am13e-ti-sdk fetch --quiet --depth 1 origin b872469ceef18de5e39a1d3acb0821ec158b44c7
+          git -C /tmp/am13e-ti-sdk checkout --quiet --detach b872469ceef18de5e39a1d3acb0821ec158b44c7
+      - name: Build identical source control 2048 versus model-matched reference ONLY
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/reference-causality
+          fw="$PWD/.build/e62-reference-esc"
+          profiles="$fw/mcu/_support/AM13E/cmake/test_profiles"
+          grep -Fq 'AM13E_BEMF_INITIAL_DAC_CODE=2048' "$profiles/e62_sim_only_motor_output.cmake"
+          grep -Fq "AM13E_BEMF_INITIAL_DAC_CODE=${{ matrix.expected_dac }}" "$profiles/e62_sim_only_bemf_reference_${{ matrix.fixture }}.cmake"
+          grep -Fq 'AM13E_SIM_ONLY_BEMF_STABLE_FILTER=1' "$profiles/e62_sim_only_early_bemf_stable_filter.cmake"
+          grep -Fq 'AM13E_E62_REQUIRE_MOTOR_OUTPUT=1' "$profiles/e62_sim_only_motor_output.cmake"
+          for variant in control matched; do
+            profile="$profiles/e62_sim_only_early_bemf_stable_filter.cmake"
+            if [ "$variant" = matched ]; then
+              profile="$profiles/e62_sim_only_bemf_reference_${{ matrix.fixture }}.cmake"
+            fi
+            cmake -S "$fw" -B ".build/e62-ref-$variant" -G "Unix Makefiles" \
+              -DESCAPE32_BUILD_AM13E=ON -DAM13E_SDK_ROOT=/tmp/am13e-ti-sdk \
+              -DAM13E_BOARD_BOARD_PROFILE_FILE="$profile"
+            cmake --build ".build/e62-ref-$variant" --target AM13E-rev17.3.elf -j 2
+            cp ".build/e62-ref-$variant/AM13E-rev17.3.elf" "artifacts/reference-causality/$variant.elf"
+          done
+          echo '5b90b200429333cef82b982b7a7f845f31fb885c7ea63fc7e783c75232fac8d1  artifacts/reference-causality/control.elf' | sha256sum -c -
+          test "$(sha256sum artifacts/reference-causality/control.elf | cut -c1-64)" != "$(sha256sum artifacts/reference-causality/matched.elf | cut -c1-64)"
+          sha256sum artifacts/reference-causality/{control,matched}.elf > artifacts/reference-causality/both-sha256.txt
+          python3 tools/sim_motor_cfg.py --sim-only-opt-in \
+            --motor-profile ecx87-kv147 \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --output artifacts/reference-causality/e62-g13b3-reference-causality-cfg.bin
+      - name: Two unchanged scenarios each, no Guest control, no original P1 bypass
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/experimental_e62_bemf_reference_causality.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --original-elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --control-elf artifacts/reference-causality/control.elf \
+            --matched-elf artifacts/reference-causality/matched.elf \
+            --cfg artifacts/reference-causality/e62-g13b3-reference-causality-cfg.bin \
+            --source-commit 2999715ebaa1572fff82d6ea83048dbfe2be66b4 \
+            --stress="${{ matrix.stress }}" \
+            --case "${{ matrix.first }}" --case "${{ matrix.second }}" \
+            --output "artifacts/reference-causality/results" \
+            --wall-timeout-s 300
+      - name: Retain causal diagnostics, unwaived motor FAILs and both experimental ELFs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-sim-only-dac-offset-causality-${{ matrix.label }}-NOT-HARDWARE
+          path: artifacts/reference-causality/**
+          if-no-files-found: warn
+          retention-days: 21
