@@ -1,0 +1,92 @@
+name: E62 EXPERIMENT Independent Second Demand after Coast (NOT P1)
+
+on:
+  push:
+    branches: [experiment/e62-early-bemf-quartergate]
+    paths:
+      - 'scenarios/e62-experimental-two-demand-coast-reacquire.json'
+      - 'tools/e62_experimental_second_demand_oracle.py'
+      - 'tests/test_e62_second_demand_oracle.py'
+      - '.github/workflows/e62-experiment-independent-second-demand.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  physical-source-second-demand:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test source-time window oracle with missing second CAP1/TIMG12 negative controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p test_e62_second_demand_oracle.py -v
+          python3 -m py_compile tools/e62_experimental_second_demand_oracle.py \
+            tests/e62_autonomous_native_motor_probe.py tools/native_p1_qualification.py
+          echo '05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0  baseline/e62-g13b3/firmware/AM13E-rev17.3.elf' | sha256sum -c -
+      - uses: carlosperate/arm-none-eabi-gcc-action@v1
+      - name: Build pinned native QEMU and unmodified source-built stable-filter candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            libglib2.0-dev libpixman-1-dev libfdt-dev pkg-config meson ninja-build
+          git submodule update --init --depth 1 qemu
+          ./build.sh
+          git clone --quiet https://github.com/cctsao1008/ESCape32.git .build/e62-reacquire-esc
+          git -C .build/e62-reacquire-esc checkout --quiet --detach 3ea4e672c0770db10c936531e7b3420b09473b18
+          git clone --quiet --depth 1 https://github.com/TexasInstruments/am13e2x_sdk.git /tmp/am13e-ti-sdk
+          git -C /tmp/am13e-ti-sdk fetch --quiet --depth 1 origin b872469ceef18de5e39a1d3acb0821ec158b44c7
+          git -C /tmp/am13e-ti-sdk checkout --quiet --detach b872469ceef18de5e39a1d3acb0821ec158b44c7
+          mkdir -p artifacts/e62-second-demand
+          cmake -S .build/e62-reacquire-esc -B .build/e62-fw-filtered -G "Unix Makefiles" \
+            -DESCAPE32_BUILD_AM13E=ON -DAM13E_SDK_ROOT=/tmp/am13e-ti-sdk \
+            -DAM13E_BOARD_BOARD_PROFILE_FILE="$PWD/.build/e62-reacquire-esc/mcu/_support/AM13E/cmake/test_profiles/e62_sim_only_early_bemf_stable_filter.cmake"
+          cmake --build .build/e62-fw-filtered --target AM13E-rev17.3.elf -j 2
+          cp .build/e62-fw-filtered/AM13E-rev17.3.elf artifacts/e62-second-demand/filtered.elf
+          echo '5b90b200429333cef82b982b7a7f845f31fb885c7ea63fc7e783c75232fac8d1  artifacts/e62-second-demand/filtered.elf' | sha256sum -c -
+          python3 tools/sim_motor_cfg.py --sim-only-opt-in \
+            --motor-profile ecx87-kv147 \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --output artifacts/e62-second-demand/e62-g13b3-reacquisition-cfg-flash.bin
+      - name: Execute 1kHz independent FC with neutral coast, second powered demand
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tests/e62_autonomous_native_motor_probe.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf artifacts/e62-second-demand/filtered.elf \
+            --experimental-candidate-sha256 5b90b200429333cef82b982b7a7f845f31fb885c7ea63fc7e783c75232fac8d1 \
+            --cfg-flash artifacts/e62-second-demand/e62-g13b3-reacquisition-cfg-flash.bin \
+            --scenario scenarios/e62-experimental-two-demand-coast-reacquire.json \
+            --artifact artifacts/e62-second-demand/two-demand.json \
+            --wall-timeout-s 300
+          set +e
+          python3 tools/native_p1_qualification.py \
+            --scenario scenarios/e62-experimental-two-demand-coast-reacquire.json \
+            --evidence artifacts/e62-second-demand/two-demand.json \
+            --events artifacts/e62-second-demand/two-demand.p0.events.log \
+            --output artifacts/e62-second-demand/two-demand.strict-original-p1.json
+          rc=$?
+          set -e
+          # Source-built nonoriginal identity MUST be rejected. Other
+          # original P1 mechanical failures remain red in the new oracle.
+          test "$rc" -eq 1
+          python3 tools/e62_experimental_second_demand_oracle.py \
+            --events artifacts/e62-second-demand/two-demand.p0.events.log \
+            --scenario scenarios/e62-experimental-two-demand-coast-reacquire.json \
+            --evidence artifacts/e62-second-demand/two-demand.json \
+            --strict-original-p1 artifacts/e62-second-demand/two-demand.strict-original-p1.json \
+            --output artifacts/e62-second-demand/independent-window-verdict.json
+      - name: Retain raw first/second demand traces even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-independent-second-demand-source-built-not-original-p1
+          path: artifacts/e62-second-demand/**
+          retention-days: 21
+          if-no-files-found: warn
