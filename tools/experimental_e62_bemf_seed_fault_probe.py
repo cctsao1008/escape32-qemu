@@ -22,9 +22,9 @@ SYMBOLS=(
     "e62_sim_runtime_fault_caller_pc", "e62_sim_runtime_fault_prestate",
     "e62_sim_runtime_fault_reason", "e62_sim_motor_output_start_reject",
 )
-FRAME_RE=re.compile(r"\\bkind=DSHOT a=(\\d+)\\b")
-EVENT_RE=re.compile(r"\\bkind=([A-Z0-9_]+)\\b")
-VAL_RE=re.compile(r":\\s*0x([0-9a-fA-F]+)")
+FRAME_RE=re.compile(r"\bkind=DSHOT a=(\d+)\b")
+EVENT_RE=re.compile(r"\bkind=([A-Z0-9_]+)\b")
+VAL_RE=re.compile(r":\s*0x([0-9a-fA-F]+)")
 
 
 def get_symbols(elf):
@@ -55,7 +55,7 @@ def read_qmp(sock, symbols):
             msg={"execute":command}
             if arguments is not None:
                 msg["arguments"]=arguments
-            client.sendall((json.dumps(msg)+"\\n").encode())
+            client.sendall((json.dumps(msg)+"\n").encode())
             while True:
                 line=stream.readline()
                 if not line:
@@ -170,7 +170,7 @@ def main():
     report["result"]="PASS" if (report.get("external_dshot_frames")==3300 and
         report.get("post_frames",{}).get("read_only") is True and
         all(get(key)==value for key,value in expected.items())) else "FAIL"
-    a.output.write_text(json.dumps(report,indent=2,sort_keys=True)+"\\n")
+    a.output.write_text(json.dumps(report,indent=2,sort_keys=True)+"\n")
     print("E62_BEMF_SEED_FAULT_NEGATIVE_CONTROL "+json.dumps({
         "label":a.label,"result":report["result"],"expected":expected,
         "observed":report["observed_fields"],
