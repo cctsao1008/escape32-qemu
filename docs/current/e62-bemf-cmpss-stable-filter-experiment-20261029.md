@@ -449,3 +449,57 @@ and cold-sector Guest. These source scenarios are independent
 of motor readiness, retain the original strict P1 negative SHA
 gate and preserve all non-SHA failures as **red**, including
 unexpected motor energization in neutral/coast.
+
+## Cold-sector coast sensitivity and physical torque diagnostic (2026-10-29)
+
+The [300ms/3000ms coast sweep #40894919388](https://github.com/cctsao1008/escape32-qemu/actions/runs/40894919388)
+fully executed both original source-built `oldstep` and strictly
+SIM_ONLY cold-sector restart variants (unchanged source model,
+6300/5100/7800-frame independent external-FC commands as applicable,
+strict source identity). **Overall CI RED is correct**:
+- 300ms coast: **oldstep FAIL 9 negative ≥50RPM samples**;
+  **cold-sector FAIL 6**.
+- Prior 1500ms coast: oldstep FAIL 5; cold-sector PASS 0.
+- 3000ms coast: **oldstep FAIL 7; cold-sector PASS 0**.
+All cases retained Guest CAP1/TIMG12 evidence, original P1 SHA
+rejection, and complete motor trace. A zero capture regression
+cannot be called PASS, nor can a start with transient reversal.
+
+A separate [read-only artifact-replay CI #40905207362](https://github.com/cctsao1008/escape32-qemu/actions/runs/40905207362)
+**SUCCESS** regenerated machine-readable initial rotor-state
+evidence from the unmodified archived source-generated motor traces.
+It also passed six positive/negative source parser unit tests in
+[#40905206962](https://github.com/cctsao1008/escape32-qemu/actions/runs/40905206962).
+The replay tool uses QEMU's documented model-internal `ROTOR`:
+`a=milliRPM`, `b=milliradians unwrapped electrical angle`,
+`f=micronewton-metres actual modeled torque`. These fields
+**are NOT inputs readable by the running firmware**; they are
+strictly read-only diagnostic information.
+
+| Coast | Experimental Guest | Pre-second-demand RPM | QEMU model electrical phase | First torque | First new CAP1 | Negative ≥50 RPM first 20ms |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| 300ms | original oldstep | +8.058 | 237.63° | **−0.165 N m** | 7.350ms | **9 — FAIL** |
+| 300ms | cold-sector | +8.376 | 247.08° | **−0.127 N m** | 1.434ms | **6 — FAIL** |
+| 3000ms | original oldstep | +1.010 | 312.02° | **−0.314 N m** | 8.319ms | **7 — FAIL** |
+| 3000ms | cold-sector | +1.010 | 312.02° | **+0.215 N m** | 4.105ms | **0 — PASS** |
+
+The *first* torque polarity change under cold-sector
+(negative at shorter coast; positive at longer coast) is a
+direct source-owned model observation; it is NOT proof of a
+particular HW DAC calibration or startup controller design.
+The two coast intervals change both electrical phase and
+residual mechanical RPM, so the present sweep does **not**
+independently isolate phase versus speed. At 300ms the
+control and cold candidate also have slightly different
+pre-restart states, so avoid a false claim of exact state
+equality within that pair.
+
+**Decision:** `AM13E_SIM_ONLY_EXPERIMENTAL_COLD_RESTART` remains
+a restricted diagnostic, NOT a production fix. Without a
+qualified rotor-phase/windmilling-acquisition mechanism,
+an arbitrary blind commutation sector cannot demonstrate
+guaranteed forward torque from every initial angle.
+A viable hardware program must validate the phase
+observation or bounded current-limited alignment/start
+contract and test both CW/CCW and physically loaded cases;
+neither Original P1 nor customer hardware readiness changes.
