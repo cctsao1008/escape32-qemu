@@ -73,8 +73,8 @@ def run_case(a, label, elf, stress, scenario_name, exact_sha):
     diagnostics = 0
     switching_noise_events = 0
     logpath = prefix.with_suffix(".qemu.log")
-    diag_re = re.compile(r"E62_BEMF_STRESS_DIAG vns=\\d+ a=-?\\d+ b=-?\\d+ "
-                         r"c=-?\\d+ d=-?\\d+ e=(-?\\d+) f=\\d+")
+    diag_re = re.compile(r"E62_BEMF_STRESS_DIAG vns=\d+ a=-?\d+ b=-?\d+ "
+                         r"c=-?\d+ d=-?\d+ e=(-?\d+) f=\d+")
     if logpath.exists():
         with logpath.open(errors="replace") as f:
             for line in f:
