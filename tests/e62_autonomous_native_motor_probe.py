@@ -478,8 +478,14 @@ def _guest_symbol_addresses(elf):
 def run(args):
     import hashlib
     observed = hashlib.sha256(args.elf.read_bytes()).hexdigest()
-    if observed != ORIGINAL_SHA:
-        raise RuntimeError("Pinned original ESCape32 Rel17.3 ELF SHA mismatch")
+    # This option exists ONLY on the isolated E62 experiment branch.
+    # It never changes the existing Original Rel17.3 qualification rules.
+    # Pinned-exact candidate sha is mandatory, and source labels MUST
+    # distinguish an experimental Guest from the Original qualification.
+    exp_sha=getattr(args,"experimental_candidate_sha256",None)
+    expected_sha=exp_sha or ORIGINAL_SHA
+    if observed != expected_sha or (exp_sha and exp_sha==ORIGINAL_SHA):
+        raise RuntimeError("Original or explicitly pinned experimental Guest SHA mismatch")
     if not args.cfg_flash.is_file():
         raise FileNotFoundError(args.cfg_flash)
     symbol_addrs, unresolved_guest_symbols = _guest_symbol_addresses(args.elf)
@@ -537,6 +543,10 @@ def run(args):
             evidence = {
                 "status": "OPEN_NATIVE_AUTONOMOUS_CLOSED_LOOP_NOT_STRICT_PASS",
                 "original_elf_sha256": observed,
+                "experimental_candidate_not_original":bool(exp_sha),
+                "candidate_elf_sha256":observed if exp_sha else None,
+                "original_qualified":False if exp_sha else None,
+                "experimental_only_not_original_p1":bool(exp_sha),
                 "host_guest_register_writes": False,
                 "used_guest_wfi_or_gdb": False,
                 "motor_mode": "QEMU_VIRTUAL_CLOCK_NATIVE_ECX87_KV147_SIM_ONLY",
@@ -841,6 +851,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--qemu", type=Path, required=True)
     parser.add_argument("--elf", type=Path, required=True)
+    parser.add_argument("--experimental-candidate-sha256",default=None,
+                        help="EXPERIMENT BRANCH ONLY: exact non-original ELF "
+                             "sha256 for passive physical source diagnostics; "
+                             "does not confer Original Rel17 P1 qualification")
     parser.add_argument("--cfg-flash", type=Path, required=True)
     parser.add_argument("--artifact", type=Path, default=Path(
         "artifacts/e62-autonomous-native-motor-smoke.json"))
@@ -898,6 +912,12 @@ def main():
         not 5 <= args.qtest_response_timeout_s <= 60 or
         not 5 <= args.stall_wall_timeout_s <= 120):
         parser.error("Explicit bounded wall/QTest/progress timeouts required")
+    if args.experimental_candidate_sha256 is not None:
+        import re
+        if not re.fullmatch(r"[0-9a-f]{64}",args.experimental_candidate_sha256):
+            parser.error("Experimental candidate SHA256 must be lowercase hex")
+        if args.experimental_candidate_sha256==ORIGINAL_SHA:
+            parser.error("Do not relabel Original Guest as an experiment")
     try:
         _continuous_dshot_stages(
             neutral_ms=args.arm_ms, ramp_ms=args.drive_ms,
