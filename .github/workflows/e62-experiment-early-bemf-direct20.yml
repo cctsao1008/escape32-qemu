@@ -82,6 +82,14 @@ jobs:
           cp "$board" artifacts/e62-exp-SIM-ONLY-NOT-A-PHYSICAL-BOARD.cmake
           test "$(sha256sum artifacts/e62-exp-control.elf | cut -c1-64)" != \
                "$(sha256sum artifacts/e62-exp-candidate.elf | cut -c1-64)"
+          # Fail before simulation if the compiled Guest does not carry
+          # read-only before-latch fault provenance. This cannot authorize
+          # gate activity or suppress any OC/nFAULT trip.
+          for elf in artifacts/e62-exp-control.elf artifacts/e62-exp-candidate.elf; do
+            arm-none-eabi-nm -an "$elf" | grep -q 'e62_sim_runtime_fault_caller_pc'
+            arm-none-eabi-nm -an "$elf" | grep -q 'e62_sim_runtime_fault_prestate'
+          done
+          echo "PASS_MOTOR_OUTPUT_1_AND_PREFAULT_DIAG_LINKED"
           echo "PASS_TWO_DISTINCT_NONORIGINAL_GUEST_BUILDS"
       - name: Provision identical SIM_ONLY ECX87 motor config
         shell: bash
