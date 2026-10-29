@@ -1,4 +1,4 @@
-name: E62 EXPERIMENT Direct20 BEMF Startup A/B (NOT Original P1)
+name: E62 EXPERIMENT Source-built 3ms + Quarter-BEMF Direct20 Full-window (NOT P1)
 
 on:
   push:
@@ -112,7 +112,7 @@ jobs:
             --label control \
             --artifact artifacts/e62-exp-control.json \
             --wall-timeout-s 250
-      - name: 4ms initial BEMF interval, separately compiled Guest (experimental candidate)
+      - name: 3ms initial BEMF and quarter-window, separately compiled Guest (SIM_ONLY candidate)
         shell: bash
         run: |
           set -euo pipefail
@@ -123,7 +123,7 @@ jobs:
             --label candidate \
             --artifact artifacts/e62-exp-candidate.json \
             --wall-timeout-s 250
-      - name: Fail closed if early CAP1 experiment did not improve startup
+      - name: Fail closed unless all 1500ms powered samples have no significant reversal and real Guest ACKs
         shell: bash
         run: |
           set -euo pipefail
