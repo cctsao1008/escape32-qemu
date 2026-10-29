@@ -54,7 +54,7 @@ jobs:
           python3 tools/sim_motor_cfg.py --sim-only-opt-in \
             --motor-profile ecx87-kv147 \
             --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
-            --output artifacts/e62-exp-matrix-cfg.bin
+            --output artifacts/e62-g13b3-exp-matrix-cfg.bin
       - name: Control exact Original ELF and independent external FC
         shell: bash
         run: |
@@ -62,7 +62,7 @@ jobs:
           python3 tools/experimental_e62_bemf_ab.py run \
             --qemu .build/qemu-src/build/qemu-system-arm \
             --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
-            --cfg-flash artifacts/e62-exp-matrix-cfg.bin \
+            --cfg-flash artifacts/e62-g13b3-exp-matrix-cfg.bin \
             --profile ${{ matrix.profile }} --label control \
             --artifact artifacts/e62-exp-control.json --wall-timeout-s 250
       - name: Candidate 3ms initial and 1/4 accelerating CAP1 filter, unchanged physics
@@ -72,7 +72,7 @@ jobs:
           python3 tools/experimental_e62_bemf_ab.py run \
             --qemu .build/qemu-src/build/qemu-system-arm \
             --elf artifacts/e62-exp-3-instruction-candidate-NOT-ORIGINAL.elf \
-            --cfg-flash artifacts/e62-exp-matrix-cfg.bin \
+            --cfg-flash artifacts/e62-g13b3-exp-matrix-cfg.bin \
             --profile ${{ matrix.profile }} --label candidate \
             --artifact artifacts/e62-exp-candidate.json --wall-timeout-s 250
       - name: Fail closed on any significant reversal, lost physical source or missing Guest ACK
