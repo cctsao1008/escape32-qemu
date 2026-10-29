@@ -1,0 +1,107 @@
+name: E62 EXPERIMENT Passive Coast BEMF Observability (NOT Rotor Angle Sensor)
+
+on:
+  push:
+    branches: [experiment/e62-early-bemf-quartergate]
+    paths:
+      - 'tools/e62_passive_bemf_coast_observability.py'
+      - 'tests/test_e62_passive_bemf_coast_observability.py'
+      - '.github/workflows/e62-experiment-passive-coast-bemf-observability.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  immutable-model-phase-codes-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run independent source-only BEMF 1-LSB/false-phase detection negative tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p test_e62_passive_bemf_coast_observability.py -v
+          python3 -m py_compile tools/e62_passive_bemf_coast_observability.py
+      - name: Download genuine immutable source motor traces
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for duration in short300 long3000; do
+            mkdir -p "artifacts/passive/$duration"
+            gh run download 40894919388 \
+              --repo ${{ github.repository }} \
+              --name "e62-cold-sector-coast-$duration-no-wfi-NOT-P1" \
+              --dir "artifacts/passive/$duration"
+            test -s "artifacts/passive/$duration/control.p0.events.log"
+            test -s "artifacts/passive/$duration/cold.p0.events.log"
+            test -s "artifacts/passive/$duration/control.strict-original-p1.json"
+            test -s "artifacts/passive/$duration/cold.strict-original-p1.json"
+          done
+      - name: Audit passive phase-code contrast without reading true theta or rotor state
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/passive/reports
+          for duration in short300 long3000; do
+            for variant in control cold; do
+              python3 tools/e62_passive_bemf_coast_observability.py \
+                --events "artifacts/passive/$duration/$variant.p0.events.log" \
+                --scenario "scenarios/e62-experimental-two-demand-coast-$duration.json" \
+                --output "artifacts/passive/reports/$duration-$variant.json"
+            done
+          done
+      - name: Confirm every low-speed coast falls below even diagnostic quantization contrast
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path("artifacts/passive")
+          result={}
+          for duration in ("short300","long3000"):
+              result[duration]={}
+              for variant in ("control","cold"):
+                  x=json.loads((root/"reports"/f"{duration}-{variant}.json").read_text())
+                  strict=json.loads((root/duration/f"{variant}.strict-original-p1.json").read_text())
+                  assert "ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN" in strict["unwaived_observability_failures"]
+                  assert x["max_instantaneous_phase_to_phase_code_contrast"]<=1, (
+                      "This source trace has different phase contrast: do not hide a changed plant")
+                  assert x["classification"]=="INSUFFICIENT_MODEL_BEMF_CODE_CONTRAST"
+                  assert x["passive_model_signal_qualified_for_rotor_angle"] is False
+                  assert x["firmware_enable_granted"] is False
+                  assert x["number_of_postsettle_active_motor_events"]==0
+                  assert x["source_bemf_samples"]>=80
+                  result[duration][variant]={
+                      "coast_ms":x["coast_duration_ms"],
+                      "phase_code_contrast":x["max_instantaneous_phase_to_phase_code_contrast"],
+                      "phase_spans":x["per_phase_code_temporal_spans"],
+                      "diagnostic_floor":x["diagnostic_contrast_floor_codes"],
+                      "passive_rotor_angle_qualified":False,
+                      "strict_non_sha_failures":[y for y in strict["unwaived_observability_failures"]
+                                                 if y!="ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN"]
+                  }
+          payload={"schema":"e62.experimental.passive-sense-observability-frozen-replay.v1",
+                   "source_motor_run":40894919388,
+                   "classification":"BOUNDED_SOURCE_SIGNAL_INSUFFICIENT_NOT_BOARD_QUALIFIED",
+                   "no_plant_change":True,
+                   "no_model_rotor_truth_as_guest_input":True,
+                   "hardware_qualified":False,
+                   "original_p1_qualified":False,
+                   "cases":result}
+          (root/"reports"/"summary.json").write_text(json.dumps(payload,sort_keys=True,indent=2)+"\n")
+          print("E62_BEMF_COAST_QUANTIZATION_VERDICT",json.dumps(payload,sort_keys=True))
+          PY
+      - name: Retain all numeric evidence and strict negative provenance
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-passive-bemf-coast-quantization-4-source-traces-NOT-HARDWARE
+          path: artifacts/passive/reports/**
+          if-no-files-found: warn
+          retention-days: 21
