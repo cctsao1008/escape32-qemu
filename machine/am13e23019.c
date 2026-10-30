@@ -4446,6 +4446,7 @@ static char *am13e_get_native_motor_profile(Object *obj, Error **errp)
     case 210U: return g_strdup("ecx87-kv210");
     case 211U: return g_strdup("ecx87-kv210-apc24x12e-47v-j1");
     case 212U: return g_strdup("ecx87-kv210-apc24x12e-47v-j2");
+    case 213U: return g_strdup("ecx87-kv210-47v-no-prop");
     case 215U: return g_strdup("ecx87-kv210-apc24x12e-47v-j5");
     default: return g_strdup("ecx87-kv147");
     }
@@ -4462,6 +4463,8 @@ static void am13e_set_native_motor_profile(Object *obj,
         m->model_profile=211U;
     } else if (value && !strcmp(value,"ecx87-kv210-apc24x12e-47v-j2")) {
         m->model_profile=212U;
+    } else if (value && !strcmp(value,"ecx87-kv210-47v-no-prop")) {
+        m->model_profile=213U;
     } else if (value && !strcmp(value,"ecx87-kv210-apc24x12e-47v-j5")) {
         m->model_profile=215U;
     } else {
@@ -4670,7 +4673,7 @@ static void am13e_class_init(ObjectClass *oc, void *data)
                                   am13e_get_native_motor_profile,
                                   am13e_set_native_motor_profile);
     object_class_property_set_description(oc, "esc-sim-native-motor-profile",
-        "SIM_ONLY: historical KV147/KV210 or independent 47V KV210 "
+        "SIM_ONLY: historical KV147/KV210; independent 47V KV210 no-prop; "
         "APC24x12E static aerodynamic-load J1/J2/J5 sensitivity. "
         "Never modifies Guest firmware, Original P1 or historical profiles.");
     object_class_property_add_bool(oc, "esc-sim-native-adc-bemf",
