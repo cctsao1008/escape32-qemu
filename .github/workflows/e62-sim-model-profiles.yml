@@ -1,0 +1,170 @@
+name: E62 SIM_ONLY Effective Motor Profile Contract (NO Hardware Signoff)
+
+on:
+  push:
+    branches: [main, integration/e62-main-sim-consolidation-20261030]
+    paths:
+      - 'machine/am13e23019.c'
+      - 'machine/am13e_autonomous_sitl.inc'
+      - 'machine/am13e_native_pwm_coupling.inc'
+      - 'scenarios/e62-native-p1-running-oc-*.json'
+      - 'tools/native_p1_oc_fault_plan.py'
+      - 'tools/native_p1_running_oc_audit.py'
+      - 'machine/am13e_native_motor_plant.inc'
+      - 'machine/am13e_native_motor_dynamics.inc'
+      - 'machine/am13e_native_analog_frontend.inc'
+      - 'tests/e62_autonomous_native_motor_probe.py'
+      - 'tools/e62_sim_profile_contract.py'
+      - 'tools/native_motor_model_profiles.py'
+      - 'tests/test_e62_sim_model_profile.py'
+      - 'tests/test_e62_native_running_oc_sense.py'
+      - 'tests/test_e62_second_demand_oracle.py'
+      - 'tests/test_e62_restart_phase_torque_audit.py'
+      - 'tests/test_e62_passive_bemf_coast_observability.py'
+      - 'tests/test_e62_passive_phase_order_alias_audit.py'
+      - 'configs/e62-sim-profile-matrix-v1.json'
+      - '.github/workflows/e62-sim-model-profiles.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  strict-profile-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate effective source profile and reject unsupported model parameters
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile tools/e62_sim_profile_contract.py tests/test_e62_sim_model_profile.py tests/e62_autonomous_native_motor_probe.py
+          python3 -m unittest discover -s tests -p test_e62_sim_model_profile.py -v
+          python3 -m unittest discover -s tests -p test_e62_native_running_oc_sense.py -v
+          python3 -m unittest discover -s tests -p test_e62_second_demand_oracle.py -v
+          python3 -m unittest discover -s tests -p test_e62_restart_phase_torque_audit.py -v
+          python3 -m unittest discover -s tests -p test_e62_passive_bemf_coast_observability.py -v
+          python3 -m unittest discover -s tests -p test_e62_passive_phase_order_alias_audit.py -v
+          mkdir -p artifacts/sim-profile
+          python3 -m tools.e62_sim_profile_contract --output artifacts/sim-profile/feasibility.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('artifacts/sim-profile/feasibility.json'))
+          assert len(d['computed_points'])==10
+          assert d['rearm_permitted'] is False
+          assert d['hardware_qualified'] is False
+          assert any(x['model_diagnostic_at_risk_of_phase_rank_alias']
+                     for x in d['computed_points'])
+          assert any(x['model_BEMF_peak_below_requested_code_contrast']
+                     for x in d['computed_points'])
+          print('PASS_SIM_PROFILE_CONTRACT_NOT_REACQUISITION_ACCEPTANCE')
+          PY
+      - name: Preserve authentic scope
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-sim-profile-feasibility-NOT-END-TO-END
+          path: artifacts/sim-profile/*
+          if-no-files-found: warn
+          retention-days: 21
+
+  real-qemu-profile-and-running-oc:
+    needs: strict-profile-contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pin the immutable Original Guest and build actual QEMU source
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0  baseline/e62-g13b3/firmware/AM13E-rev17.3.elf' | sha256sum -c -
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            libglib2.0-dev libpixman-1-dev libfdt-dev pkg-config meson ninja-build binutils-arm-none-eabi
+          git submodule update --init --depth 1 qemu
+          ./build.sh
+          mkdir -p artifacts/e62-profile-live
+      - name: Run Original Guest in each configured QEMU model and all OC-U/V/W source faults
+        shell: bash
+        run: |
+          set -euo pipefail
+          profiles="$(python3 -c 'from tools.e62_sim_profile_contract import load; print(" ".join(load()["profiles"]))')"
+          for profile in $profiles; do
+            root="artifacts/e62-profile-live/$profile"
+            python3 tools/sim_motor_cfg.py --sim-only-opt-in \
+              --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+              --motor-profile "$profile" \
+              --output "$root-g13b3-cfg-flash.bin"
+            for phase in u v w; do
+              prefix="$root-$phase"
+              python3 tests/e62_autonomous_native_motor_probe.py \
+                --qemu .build/qemu-src/build/qemu-system-arm \
+                --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+                --sim-motor-profile "$profile" \
+                --cfg-flash "$root-g13b3-cfg-flash.bin" \
+                --scenario scenarios/e62-native-p0-smoke.json \
+                --oc-fault-scenario "scenarios/e62-native-p1-running-oc-$phase.json" \
+                --wall-timeout-s 300 \
+                --artifact "$prefix.json"
+              python3 tools/native_p1_running_oc_audit.py \
+                --scenario scenarios/e62-native-p0-smoke.json \
+                --oc-fault-scenario "scenarios/e62-native-p1-running-oc-$phase.json" \
+                --evidence "$prefix.json" \
+                --events "$prefix.p0.events.log" \
+                --qemu-log "$prefix.qemu.log" \
+                --output "$prefix-strict.json"
+            done
+          done
+      - name: Require six actual QEMU parameter readbacks, Original Guest OST3 latch and no waivers
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          from tools.e62_sim_profile_contract import load
+          cfg=load()
+          checks=0
+          for name,kv,r,l,kt in [
+              ('ecx87-kv147',147,53000,24000,64900),
+              ('ecx87-kv210',210,28300,8750,45400)]:
+              assert name in cfg['profiles']
+              expected=dict(kv_rpm_per_v=kv,
+                            phase_resistance_microohm=r,
+                            phase_inductance_nanohenry=l,
+                            terminal_kt_micro_nm_per_a=kt,
+                            bus_millivolts=24000)
+              for phase in ('u','v','w'):
+                  root=Path('artifacts/e62-profile-live')/(name+'-'+phase)
+                  run=json.loads(root.with_suffix('.json').read_text())
+                  strict=json.loads(Path(str(root)+'-strict.json').read_text())
+                  effective=run['effective_sim_profile']
+                  assert effective['name']==name
+                  assert effective['effective_parameters']==expected,(name,phase,effective)
+                  assert effective['checked_against_named_model'] is True
+                  assert run['host_guest_register_writes'] is False
+                  assert run['used_guest_wfi_or_gdb'] is False
+                  assert run['original_elf_sha256']=='05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0'
+                  assert strict['qualified'] is True,(name,phase,strict['failures'])
+                  assert strict['source_phase']=='oc-'+phase
+                  assert strict['source_edges']==2
+                  assert strict['source_frames']==3000
+                  assert strict['final_ost3_latched'] is True
+                  assert strict['six_gate_outputs_off'] is True
+                  assert strict['automatic_rearm_qualified'] is False
+                  assert strict['real_board_protection_qualified'] is False
+                  checks+=1
+                  print('PASS_SIM_NATIVE_QEMU_PROFILE_RUNNING_OC',name,phase,expected)
+          assert checks==6
+          print('PASS_SIM_NATIVE_QEMU_PROFILE_OC_6_OF_6')
+          PY
+      - name: Retain both measured QEMU simulation profile diagnostics and failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-native-qemu-kv147-kv210-oc-uvw-SIM_ONLY
+          path: artifacts/e62-profile-live/**
+          if-no-files-found: warn
+          retention-days: 21

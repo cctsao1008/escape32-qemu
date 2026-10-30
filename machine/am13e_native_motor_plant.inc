@@ -31,11 +31,14 @@
  * This convention is a datasheet-equivalent SIM_ONLY approximation:
  * the actual motor's phase waveform/driver/load are not calibrated.
  */
-#define AM13E_NATIVE_KT_TERMINAL 0.0649
+/* Exactly two bounded source models: default KV147 preserves the
+ * historical native QEMU plant; opt-in KV210 uses maxon p.1 R/L/Kt.
+ * All expansions occur in functions with the AM13ENativeMotor *m. */
+#define AM13E_NATIVE_KT_TERMINAL (m->model_profile == 210U ? 0.0454 : 0.0649)
 #define AM13E_NATIVE_K_PHASE (AM13E_NATIVE_KT_TERMINAL / 1.7320508075688772935)
 #define AM13E_NATIVE_J 0.00013
-#define AM13E_NATIVE_L 0.000024
-#define AM13E_NATIVE_R 0.053
+#define AM13E_NATIVE_L (m->model_profile == 210U ? 0.00000875 : 0.000024)
+#define AM13E_NATIVE_R (m->model_profile == 210U ? 0.0283 : 0.053)
 #define AM13E_NATIVE_VBUS 24.0
 #define AM13E_NATIVE_DIODE 0.7
 #define AM13E_NATIVE_FRICTION 0.0001
@@ -49,6 +52,10 @@ static void am13e_native_motor_reset(AM13ENativeMotor *m)
     m->active = m->faulted = m->gate = false;
     m->fault_code = m->mask = m->ticks = m->switch_events = 0U;
     m->analog_updates = 0U;
+    /* Retain machine-property stress amplitude across QEMU resets;
+     * clear only epoch/counters. Default off changes no prior behavior. */
+    m->bemf_stress_last_switch_ns = -1;
+    m->bemf_stress_switch_edges = m->bemf_stress_trace_count = 0U;
     m->first_ost3_seen = false;
     m->first_ost3_count = m->oc_publications = 0U;
     m->first_ost3_ns = 0;
@@ -218,6 +225,14 @@ static MemTxResult am13e_native_motor_read(void *opaque, hwaddr off,
     case 0x80: *v=m->first_ost3_ipsr; break;
     case 0x84: *v=m->first_ost3_prior; break;
     case 0x88: *v=m->first_ost3_invert; break;
+    /* Non-silicon read-only effective plant, never guest-authored:
+     * Kv rpm/V; phase R micro-ohm; phase L nH; terminal Kt micro-Nm/A;
+     * virtual DC bus mV. Preserve all prior QTest offsets. */
+    case 0x8c: *v=m->model_profile == 210U ? 210U : 147U; break;
+    case 0x90: *v=(uint32_t)llround(AM13E_NATIVE_R*1e6); break;
+    case 0x94: *v=(uint32_t)llround(AM13E_NATIVE_L*1e9); break;
+    case 0x98: *v=(uint32_t)llround(AM13E_NATIVE_KT_TERMINAL*1e6); break;
+    case 0x9c: *v=(uint32_t)llround(AM13E_NATIVE_VBUS*1e3); break;
     default: return MEMTX_ERROR;
     }
     return MEMTX_OK;

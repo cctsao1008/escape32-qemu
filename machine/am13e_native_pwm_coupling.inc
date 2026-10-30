@@ -101,6 +101,13 @@ static void am13e_native_motor_pwm_event(AM13ESimPWM *p,
                 m->source_focus_budget_hit = true;
             }
         }
+        /* Tie analog switching artifact to ACTUAL MCPWM AQ/DB transitions,
+         * not to a guessed carrier frequency or synthetic ECAP event. */
+        if (gate && valid && newmask != m->mask &&
+            m->bemf_stress_switch_code) {
+            m->bemf_stress_last_switch_ns=now;
+            ++m->bemf_stress_switch_edges;
+        }
         m->mask = newmask & 0x3fU;
         m->gate = gate && valid;
         if (p0_recorded_switch) {

@@ -95,6 +95,9 @@ static void am13e_auto_reset(AM13EAutoSITL *a)
     a->last_sample_word = 0U;
     a->p1_nfault_enable = a->p1_nfault_assert_frame =
         a->p1_nfault_release_frame = a->p1_nfault_events = 0U;
+    a->p1_oc_enable = a->p1_oc_assert_frame = a->p1_oc_release_frame = 0U;
+    a->p1_oc_channel = a->p1_oc_events = 0U;
+    a->p1_oc_active = false;
     a->live_override_enabled = a->live_permille = 0U;
     a->live_changes = a->live_last_applied_frame = 0U;
     a->stage_seen_mask = a->stage_route_transitions = 0U;
@@ -142,6 +145,15 @@ static bool am13e_auto_validate(AM13EAutoSITL *a)
         a->p1_nfault_release_frame >= total)) {
         return false; /* no physical fault scheduled outside live frames */
     }
+    if (a->p1_oc_enable &&
+        (!a->machine->native_motor.enabled ||
+         a->p1_nfault_enable ||
+         a->p1_oc_channel>2U ||
+         !a->p1_oc_assert_frame ||
+         a->p1_oc_assert_frame>=a->p1_oc_release_frame ||
+         a->p1_oc_release_frame>=total)) {
+        return false; /* never mix fault classes or accept no-active interval */
+    }
     a->total_frames = total; /* Exactly 1ms per DShot frame. */
     a->target_frames = a->max_frames ? a->max_frames : a->total_frames;
     return a->target_frames > 0U && a->target_frames <= a->total_frames;
@@ -151,6 +163,89 @@ static bool am13e_auto_validate(AM13EAutoSITL *a)
  * no guest readiness trigger, and no change to the physical PA26 source
  * callback, 1kHz timeline, native motor, or original firmware.
  * These stage words exactly match e62-native-p0-smoke.json. */
+/* EXPERIMENT branch only: exact DShot600 original Direct20 scenario,
+ * no Host pacing, Guest register modifications, or synthetic commutation.
+ * A clean 1ms source per frame, from the QEMU virtual reset epoch.
+ */
+/* SIM_ONLY preboot FC scenario matrix; deliberately uses the EXACT
+ * immutable original JSON stage words, but a patched experimental ELF.
+ * No QTest/Host writes into Guest motor state; real PA26 DShot, CMPSS,
+ * ECAP1 and TIMG12 path remains guest-owned.
+ */
+static void am13e_auto_arm_experimental_profile(AM13EAutoSITL *a,
+                                                 const char *profile)
+{
+    static const AM13EAutoStage smoke[] = {
+        {1500U,0U,0U,1U},{1000U,0U,200U,5U},
+        {300U,200U,200U,1U},{200U,0U,0U,1U},
+    };
+    static const AM13EAutoStage gentle[] = {
+        {1500U,0U,0U,1U},{2000U,0U,100U,20U},
+        {1000U,100U,100U,1U},{500U,0U,0U,1U},
+    };
+    static const AM13EAutoStage steps[] = {
+        {1500U,0U,0U,1U},{500U,100U,100U,1U},
+        {500U,200U,200U,1U},{500U,300U,300U,1U},
+        {300U,0U,0U,1U},
+    };
+    static const AM13EAutoStage ramp100[] = {
+        {1500U,0U,0U,1U},{100U,0U,200U,5U},
+        {1000U,200U,200U,1U},{200U,0U,0U,1U},
+    };
+    static const AM13EAutoStage ramp500[] = {
+        {1500U,0U,0U,1U},{500U,0U,200U,5U},
+        {1000U,200U,200U,1U},{200U,0U,0U,1U},
+    };
+    const AM13EAutoStage *stages = NULL;
+    unsigned count = 0;
+    if (!strcmp(profile, "smoke")) {
+        stages=smoke;count=G_N_ELEMENTS(smoke);
+    } else if (!strcmp(profile, "gentle")) {
+        stages=gentle;count=G_N_ELEMENTS(gentle);
+    } else if (!strcmp(profile, "steps")) {
+        stages=steps;count=G_N_ELEMENTS(steps);
+    } else if (!strcmp(profile, "ramp100")) {
+        stages=ramp100;count=G_N_ELEMENTS(ramp100);
+    } else if (!strcmp(profile, "ramp500")) {
+        stages=ramp500;count=G_N_ELEMENTS(ramp500);
+    } else {
+        error_report("E62 invalid experimental physical-FC profile");
+        exit(EXIT_FAILURE);
+    }
+    g_assert(a->dshot_timer && a->machine->native_motor.enabled);
+    g_assert(!a->running && !a->done && !a->error_code);
+    memcpy(a->stages, stages, count * sizeof(*stages));
+    a->stage_count = count;
+    if (!am13e_auto_validate(a) ||
+        a->target_frames != a->total_frames) {
+        error_report("E62 experimental FC scenario contract invalid");
+        exit(EXIT_FAILURE);
+    }
+    a->start_ns = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + 100U;
+    a->running = true;
+    timer_mod(a->dshot_timer,a->start_ns);
+}
+
+static void am13e_auto_arm_experimental_direct20(AM13EAutoSITL *a)
+{
+    static const AM13EAutoStage stages[] = {
+        {1500U, 0U, 0U, 1U},
+        {1500U, 200U, 200U, 1U},
+        {300U, 0U, 0U, 1U},
+    };
+    g_assert(a->dshot_timer && a->machine->native_motor.enabled);
+    g_assert(!a->running && !a->done && !a->error_code);
+    memcpy(a->stages, stages, sizeof(stages));
+    a->stage_count = G_N_ELEMENTS(stages);
+    if (!am13e_auto_validate(a) || a->target_frames != 3300U) {
+        error_report("E62 experimental Direct20 FC stage contract invalid");
+        exit(EXIT_FAILURE);
+    }
+    a->start_ns = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + 100U;
+    a->running = true;
+    timer_mod(a->dshot_timer, a->start_ns);
+}
+
 static void am13e_auto_arm_differential_smoke(AM13EAutoSITL *a)
 {
     static const AM13EAutoStage stages[] = {
@@ -297,6 +392,26 @@ static void am13e_auto_dshot_event(void *opaque)
                        asserted,a->sent,
                        machine->pwm4.reg[0xb0U/4U],
                        machine->pwm4.irqs,0,0);
+    }
+    /* Separate, bounded SIM_ONLY analog current-SENSOR excursion.
+     * QEMU physical source callback, not the Host, changes the sample;
+     * original CMPSS1/2/3 -> Trip3 -> MCPWM4 IRQ remains guest-owned.
+     * Log outside E62_P0_EVENT so the Original P1 event schema stays
+     * bit-for-bit unmodified. This is not a motor-current measurement.
+     */
+    if (a->p1_oc_enable &&
+        (a->sent==a->p1_oc_assert_frame ||
+         a->sent==a->p1_oc_release_frame)) {
+        const bool asserted=a->sent==a->p1_oc_assert_frame;
+        a->p1_oc_active=asserted;
+        am13e_native_motor_publish_oc(&machine->native_motor);
+        ++a->p1_oc_events;
+        error_report("E62_NATIVE_EXTERNAL_OC_EDGE vns=%" PRId64
+                     " frame=%u channel=%u asserted=%u "
+                     "code=%u trip=0x%x irq=0x%x",
+                     now,a->sent,a->p1_oc_channel,asserted,
+                     machine->trip.oc_input[a->p1_oc_channel],
+                     machine->pwm4.reg[0xb0U/4U],machine->pwm4.irqs);
     }
     unsigned previous_stage = a->current_stage;
     uint32_t target = am13e_auto_target_for_frame(a, a->sent);
@@ -643,6 +758,11 @@ static MemTxResult am13e_auto_read(void *opaque, hwaddr off,
     case 0x134: *v = a->live_permille; break;
     case 0x138: *v = a->live_changes; break;
     case 0x13c: *v = a->live_last_applied_frame; break;
+    case 0x140: *v = a->p1_oc_assert_frame; break;
+    case 0x144: *v = a->p1_oc_release_frame; break;
+    case 0x148: *v = a->p1_oc_channel; break;
+    case 0x14c: *v = a->p1_oc_enable; break;
+    case 0x150: *v = a->p1_oc_events; break;
     default: return MEMTX_ERROR;
     }
     return MEMTX_OK;
@@ -725,10 +845,22 @@ static MemTxResult am13e_auto_write(void *opaque, hwaddr off,
     case 0x120: a->p1_nfault_assert_frame = v; return MEMTX_OK;
     case 0x124: a->p1_nfault_release_frame = v; return MEMTX_OK;
     case 0x128:
-        if (v>1U || (v && !a->machine->native_motor.enabled))
+        if (v>1U || (v && (!a->machine->native_motor.enabled ||
+                          a->p1_oc_enable)))
             return MEMTX_ERROR;
         a->p1_nfault_enable = v;
         return MEMTX_OK;
+    /* The source calendar, not the Host, may drive this analogue line.
+     * It is a SIM_ONLY current-sense fault injection, not real load current. */
+    case 0x140: a->p1_oc_assert_frame=v; return MEMTX_OK;
+    case 0x144: a->p1_oc_release_frame=v; return MEMTX_OK;
+    case 0x148:
+        if(v>2U)return MEMTX_ERROR;
+        a->p1_oc_channel=v;return MEMTX_OK;
+    case 0x14c:
+        if(v>1U || (v && (!a->machine->native_motor.enabled ||
+                         a->p1_nfault_enable)))return MEMTX_ERROR;
+        a->p1_oc_enable=v;return MEMTX_OK;
     default: return MEMTX_ERROR;
     }
 }

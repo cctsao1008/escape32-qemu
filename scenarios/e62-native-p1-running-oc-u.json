@@ -1,0 +1,8 @@
+{
+  "schema": "e62.native.external-oc-sense.v1",
+  "source": "adc_like_current_sense_overrange",
+  "phase": "oc-u",
+  "assert_frame": 2100,
+  "release_frame": 2300,
+  "expectation": "OST3_LATCHED_GATE_SAFE_OFF_NO_REARM"
+}

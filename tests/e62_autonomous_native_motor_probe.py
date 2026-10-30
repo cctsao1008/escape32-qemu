@@ -21,6 +21,9 @@ from g0_memory import QTest
 from tools.sitl_autonomous_transport import AUTO_BASE, REG, read_auto
 from tools.native_dshot_scenario import load_native_scenario
 from tools.native_p1_fault_plan import load_fault_plan
+from tools.native_p1_oc_fault_plan import load_oc_plan
+from tools.native_motor_model_profiles import (
+    DATASHEET_PROFILES, native_motor_parameters, native_motor_model_metadata)
 
 MOTOR_BASE = 0x5ffeb000
 MOTOR_MAGIC = 0x4d323645
@@ -201,7 +204,8 @@ def _continuous_dshot_stages(*, neutral_ms, ramp_ms, hold_ms, coast_ms,
 def _configure_autonomous_dshot(qtest, *, neutral_ms, ramp_ms,
                                 hold_ms, coast_ms, drive_permille,
                                 ramp_update_ms, scenario_stages=None,
-                                external_fault=None, max_frames=0):
+                                external_fault=None, external_oc_fault=None,
+                                max_frames=0):
     """Stage PA26 traffic; optional bounded abrupt external FC disconnect."""
     get = lambda key: qtest.read(AUTO_BASE+REG[key])
     put = lambda key, val: qtest.write(AUTO_BASE+REG[key], val)
@@ -237,6 +241,16 @@ def _configure_autonomous_dshot(qtest, *, neutral_ms, ramp_ms,
             qtest.write(AUTO_BASE+offset,value)
             if qtest.read(AUTO_BASE+offset)!=value:
                 raise RuntimeError("Native external nFAULT plan readback failed")
+    if external_oc_fault is not None:
+        for offset,value in (
+            (0x140,external_oc_fault["assert_frame"]),
+            (0x144,external_oc_fault["release_frame"]),
+            (0x148,external_oc_fault["channel"]),
+            (0x14c,1),
+        ):
+            qtest.write(AUTO_BASE+offset,value)
+            if qtest.read(AUTO_BASE+offset)!=value:
+                raise RuntimeError("Native external OC-sense plan readback failed")
     put("command", 1)
     return max_frames if max_frames else total
 
@@ -247,6 +261,13 @@ def _motor_snapshot(qtest):
     get = lambda offset: qtest.read(MOTOR_BASE+offset)
     signed = lambda v: (v if v < 0x80000000 else v-0x100000000)
     return {
+        "effective_sim_motor_model": {
+            "kv_rpm_per_v":get(0x8c),
+            "phase_resistance_microohm":get(0x90),
+            "phase_inductance_nanohenry":get(0x94),
+            "terminal_kt_micro_nm_per_a":get(0x98),
+            "bus_millivolts":get(0x9c),
+        },
         "status_flags": get(0x04),
         "native_1us_physics_ticks": get(0x08),
         "actual_pwm_event_notifications": get(0x0c),
@@ -275,6 +296,26 @@ def _motor_snapshot(qtest):
         "first_ost3_trip3_xbar_invert":get(0x88),
     }
 
+
+def _assert_effective_sim_model(snapshot, profile):
+    """Fail if the QEMU numeric model differs from its named profile."""
+    p=native_motor_parameters(profile)
+    meta=native_motor_model_metadata(profile)
+    expected={
+        "kv_rpm_per_v":int(meta["published_kv_rpm_per_v"]),
+        "phase_resistance_microohm":round(p.phase_resistance_ohm*1e6),
+        "phase_inductance_nanohenry":round(p.phase_inductance_h*1e9),
+        "terminal_kt_micro_nm_per_a":round(meta["published_kt_nm_per_a"]*1e6),
+        "bus_millivolts":round(p.vbus_v*1000),
+    }
+    observed=snapshot["effective_sim_motor_model"]
+    if observed!=expected:
+        raise RuntimeError(
+            f"SIM QEMU effective motor profile mismatch {profile}: "
+            f"expected={expected}; observed={observed}")
+    return {"name":profile, "effective_parameters":observed,
+            "checked_against_named_model":True,
+            "classification":"SIM_ONLY_EFFECTIVE_QEMU_PLANT"}
 
 def _pwm_source_snapshot(qtest):
     """Non-silicon read-only QEMU edge/clock journal, NOT duty estimates."""
@@ -478,14 +519,22 @@ def _guest_symbol_addresses(elf):
 def run(args):
     import hashlib
     observed = hashlib.sha256(args.elf.read_bytes()).hexdigest()
-    if observed != ORIGINAL_SHA:
-        raise RuntimeError("Pinned original ESCape32 Rel17.3 ELF SHA mismatch")
+    # This option exists ONLY on the isolated E62 experiment branch.
+    # It never changes the existing Original Rel17.3 qualification rules.
+    # Pinned-exact candidate sha is mandatory, and source labels MUST
+    # distinguish an experimental Guest from the Original qualification.
+    exp_sha=getattr(args,"experimental_candidate_sha256",None)
+    expected_sha=exp_sha or ORIGINAL_SHA
+    if observed != expected_sha or (exp_sha and exp_sha==ORIGINAL_SHA):
+        raise RuntimeError("Original or explicitly pinned experimental Guest SHA mismatch")
     if not args.cfg_flash.is_file():
         raise FileNotFoundError(args.cfg_flash)
     symbol_addrs, unresolved_guest_symbols = _guest_symbol_addresses(args.elf)
     scenario_stages, scenario_meta = load_native_scenario(args.scenario)
     external_fault=(load_fault_plan(args.fault_scenario,scenario_stages)
                     if args.fault_scenario else None)
+    external_oc_fault=(load_oc_plan(args.oc_fault_scenario,scenario_stages)
+                       if args.oc_fault_scenario else None)
     with tempfile.TemporaryDirectory(prefix="e62-native-no-wfi-") as td:
         tmp = Path(td)
         sockpath = tmp/"qtest.sock"
@@ -508,7 +557,10 @@ def run(args):
                  if getattr(args,"link_loss_last_frame",0) else "") +
                 (",esc-sim-switch-focus-window-ms="+
                  args.switch_focus_window_ms
-                 if getattr(args,"switch_focus_window_ms",None) else ""),
+                 if getattr(args,"switch_focus_window_ms",None) else "") +
+                (",esc-sim-bemf-robustness="+args.experimental_bemf_robustness
+                 if getattr(args,"experimental_bemf_robustness",None) else "") +
+                ",esc-sim-native-motor-profile="+args.sim_motor_profile,
                 *(["-S","-qmp",f"unix:{qmp_sockpath},server=on,wait=off"]
                   if args.differential_sync_start else []),
                 "-kernel", str(args.elf.resolve()),
@@ -537,6 +589,16 @@ def run(args):
             evidence = {
                 "status": "OPEN_NATIVE_AUTONOMOUS_CLOSED_LOOP_NOT_STRICT_PASS",
                 "original_elf_sha256": observed,
+                "experimental_candidate_not_original":bool(exp_sha),
+                "candidate_elf_sha256":observed if exp_sha else None,
+                "original_qualified":False if exp_sha else None,
+                "experimental_only_not_original_p1":bool(exp_sha),
+                "experimental_bemf_robustness":getattr(
+                    args,"experimental_bemf_robustness",None),
+                "robustness_injection_location":
+                    "NATIVE_ANALOG_FRONTEND_POST_ROTOR_PRE_CMPSS"
+                    if getattr(args,"experimental_bemf_robustness",None)
+                    else None,
                 "host_guest_register_writes": False,
                 "used_guest_wfi_or_gdb": False,
                 "motor_mode": "QEMU_VIRTUAL_CLOCK_NATIVE_ECX87_KV147_SIM_ONLY",
@@ -559,6 +621,8 @@ def run(args):
                     qtest = TimedAutonomousQTest(
                         conn, response_timeout_s=args.qtest_response_timeout_s)
                     evidence["motor_before"] = _motor_snapshot(qtest)
+                    evidence["effective_sim_profile"] = _assert_effective_sim_model(
+                        evidence["motor_before"],args.sim_motor_profile)
                     evidence["pwm_source_before"] = _pwm_source_snapshot(qtest)
                     evidence["original_guest_before"] = _read_original_guest_telemetry(qtest,symbol_addrs)
                     evidence["receiver_before"] = _receiver_snapshot(qtest.read)
@@ -584,6 +648,7 @@ def run(args):
                     }
                     evidence["native_dshot_scenario"] = scenario_meta
                     evidence["native_external_fault_plan"] = external_fault
+                    evidence["native_external_oc_sense_fault_plan"] = external_oc_fault
                     evidence["configured_dshot_frames"] = _configure_autonomous_dshot(
                         qtest, neutral_ms=args.arm_ms, ramp_ms=args.drive_ms,
                         hold_ms=args.hold_ms, coast_ms=args.coast_ms,
@@ -591,6 +656,7 @@ def run(args):
                         ramp_update_ms=args.ramp_update_ms,
                         scenario_stages=scenario_stages,
                         external_fault=external_fault,
+                        external_oc_fault=external_oc_fault,
                         max_frames=getattr(args,"link_loss_last_frame",0))
                     if args.differential_sync_start:
                         _resume_prearmed_differential_vm(qmp_sockpath)
@@ -841,6 +907,18 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--qemu", type=Path, required=True)
     parser.add_argument("--elf", type=Path, required=True)
+    parser.add_argument("--experimental-candidate-sha256",default=None,
+                        help="EXPERIMENT BRANCH ONLY: exact non-original ELF "
+                             "sha256 for passive physical source diagnostics; "
+                             "does not confer Original Rel17 P1 qualification")
+    parser.add_argument("--experimental-bemf-robustness", default=None,
+                        help="EXPERIMENT ONLY: bounded QEMU analog "
+                             "OFFSET:SWITCH_CODE; no Guest writes; "
+                             "requires separate non-original candidate SHA")
+    parser.add_argument("--sim-motor-profile",choices=DATASHEET_PROFILES,
+                        default="ecx87-kv147",
+                        help="SIM_ONLY QEMU native motor parameter set; "
+                             "verify effective model by read-only QTest")
     parser.add_argument("--cfg-flash", type=Path, required=True)
     parser.add_argument("--artifact", type=Path, default=Path(
         "artifacts/e62-autonomous-native-motor-smoke.json"))
@@ -848,6 +926,10 @@ def main():
         Path(__file__).resolve().parents[1]/
         "scenarios/e62-native-p0-smoke.json"),
         help="Versioned external 1kHz DShot JSON; Guest readiness NEVER gates")
+    parser.add_argument("--oc-fault-scenario",type=Path,default=None,
+                        help="EXPERIMENTAL SIM_ONLY source-clock external ADC-like "
+                             "current-sense overrange JSON; not actual rotor current, "
+                             "no Guest/Trip/IRQ register writes")
     parser.add_argument("--fault-scenario",type=Path,default=None,
                         help="Optional SIM_ONLY external PA22 nFAULT JSON "
                              "scheduled by QEMU virtual 1kHz clock; no "
@@ -898,6 +980,23 @@ def main():
         not 5 <= args.qtest_response_timeout_s <= 60 or
         not 5 <= args.stall_wall_timeout_s <= 120):
         parser.error("Explicit bounded wall/QTest/progress timeouts required")
+    if args.experimental_bemf_robustness is not None:
+        import re
+        if args.experimental_candidate_sha256 is None:
+            parser.error("BEMF stress requires non-original candidate SHA")
+        match=re.fullmatch(r"(-?[0-9]{1,2}):([0-9]{1,2})",
+                           args.experimental_bemf_robustness)
+        if not match:
+            parser.error("BEMF stress must be OFFSET:SWITCH_CODE")
+        offset,spike=map(int,match.groups())
+        if abs(offset)>24 or not 0<=spike<=32 or not (offset or spike):
+            parser.error("BEMF analog stress out of bounded range")
+    if args.experimental_candidate_sha256 is not None:
+        import re
+        if not re.fullmatch(r"[0-9a-f]{64}",args.experimental_candidate_sha256):
+            parser.error("Experimental candidate SHA256 must be lowercase hex")
+        if args.experimental_candidate_sha256==ORIGINAL_SHA:
+            parser.error("Do not relabel Original Guest as an experiment")
     try:
         _continuous_dshot_stages(
             neutral_ms=args.arm_ms, ramp_ms=args.drive_ms,
@@ -926,10 +1025,11 @@ def main():
     elif args.differential_rr_file is not None:
         parser.error("RR file requires explicit record/replay mode")
     if args.differential_sync_start and (args.link_loss_last_frame or
-                                         args.fault_scenario):
+                                         args.fault_scenario or args.oc_fault_scenario):
         parser.error("Synchronized source replay is diagnostics-only, not P1")
-    if args.link_loss_last_frame and args.fault_scenario:
-        parser.error("P1 input-loss and external PA22 fault tests must be separate")
+    if (sum(bool(v) for v in (args.link_loss_last_frame,
+                             args.fault_scenario,args.oc_fault_scenario))>1):
+        parser.error("External nFAULT, OC-sense and input-loss must run separately")
     evidence=run(args)
     print("E62_NATIVE_AUTONOMOUS_NO_WFI_PROBE "+
           json.dumps(evidence,sort_keys=True))
