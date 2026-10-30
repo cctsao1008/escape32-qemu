@@ -360,10 +360,17 @@ typedef struct AM13ENativeMotor {
     QEMUTimer *tick_timer;
     struct AM13EMachineState *machine;
     bool enabled, active, faulted, gate;
+    uint32_t model_profile; /* default KV147=0, opt-in KV210=210 */
     uint32_t fault_code, mask, ticks, switch_events, analog_updates;
     int64_t last_ns;
     double currents[3], theta, omega, last_torque;
     uint32_t bemf_codes[3];
+    /* SIM_ONLY, explicit opt-in perturbations AFTER rotor/energy integration,
+     * BEFORE real CMPSS0 input. Not a motor-model or protection bypass. */
+    int bemf_stress_offset_code;
+    unsigned bemf_stress_switch_code;
+    int64_t bemf_stress_last_switch_ns;
+    uint32_t bemf_stress_switch_edges, bemf_stress_trace_count;
     double theta_unwrapped, energy_bus_j, energy_copper_j;
     double energy_diode_j, energy_bemf_j, energy_magnetic_j;
     double energy_backward_euler_j, energy_abs_residual_j;
@@ -459,6 +466,13 @@ typedef struct AM13EAutoSITL {
      * and fault handlers remain authentic and unmodified. */
     uint32_t p1_nfault_enable, p1_nfault_assert_frame;
     uint32_t p1_nfault_release_frame, p1_nfault_events;
+    /* #7 separate SIM_ONLY current-SENSE analogue overrange fixture.
+     * This is NOT real mechanical/driver current or a Guest register write.
+     * QEMU FC 1kHz frame owns the assertion time, and the native OC
+     * current-sensor producer alone owns the analog sample value. */
+    uint32_t p1_oc_enable, p1_oc_assert_frame, p1_oc_release_frame;
+    uint32_t p1_oc_channel, p1_oc_events;
+    bool p1_oc_active;
     /* Host interactive ESC-SIM FC override, never Guest throttle.
      * Applied only by the existing 1kHz QEMU PA26 frame callback. */
     uint32_t live_override_enabled, live_permille;
@@ -609,6 +623,8 @@ struct AM13EMachineState {
     bool esc_sim_nfault_asserted;
     bool esc_sim_wwdt_bootrst; /* opt-in full reset semantics */
     bool esc_sim_differential_fc_smoke; /* opt-in preboot FC ONLY */
+    bool esc_sim_experimental_fc_direct20; /* separate experiment */
+    char *esc_sim_experimental_fc_profile; /* explicit scenario enum string */
     bool wwdt_reset_pending; /* survives until machine reset callback */
     MemoryRegion factory_rom;
     char *factory_pll_file;
@@ -3932,6 +3948,13 @@ static void am13e_handoff_reset(void *opaque)
     if (s->esc_sim_differential_fc_smoke) {
         am13e_auto_arm_differential_smoke(&s->auto_sitl);
     }
+    if (s->esc_sim_experimental_fc_direct20) {
+        am13e_auto_arm_experimental_direct20(&s->auto_sitl);
+    }
+    if (s->esc_sim_experimental_fc_profile) {
+        am13e_auto_arm_experimental_profile(
+            &s->auto_sitl,s->esc_sim_experimental_fc_profile);
+    }
 }
 
 static void am13e_init(MachineState *machine)
@@ -3948,6 +3971,16 @@ static void am13e_init(MachineState *machine)
     }
     if (!s->esc_sim && s->sim_rstcause_seed != 0U) {
         error_report("esc-sim-reset-cause requires esc-sim=on");
+        exit(EXIT_FAILURE);
+    }
+    if ((s->esc_sim_experimental_fc_direct20 ||
+         s->esc_sim_experimental_fc_profile) &&
+        (s->esc_sim_differential_fc_smoke || !s->esc_sim ||
+         !s->native_motor.enabled || s->esc_sim_wwdt_bootrst ||
+         (s->esc_sim_experimental_fc_direct20 &&
+          s->esc_sim_experimental_fc_profile))) {
+        error_report("E62 experimental Direct20 requires native motor, "
+                     "esc-sim and no competing FC or BOOTRST");
         exit(EXIT_FAILURE);
     }
     if (s->esc_sim_differential_fc_smoke &&
@@ -4334,6 +4367,25 @@ static void am13e_init(MachineState *machine)
     qemu_register_reset(am13e_handoff_reset, s);
 }
 
+/* Host QEMU machine property only, never a Guest firmware knob. */
+static char *am13e_get_native_motor_profile(Object *obj, Error **errp)
+{
+    AM13ENativeMotor *m=&AM13E_MACHINE(obj)->native_motor;
+    return g_strdup(m->model_profile==210U ? "ecx87-kv210" : "ecx87-kv147");
+}
+static void am13e_set_native_motor_profile(Object *obj,
+                                            const char *value, Error **errp)
+{
+    AM13ENativeMotor *m=&AM13E_MACHINE(obj)->native_motor;
+    if (value && !strcmp(value,"ecx87-kv147")) {
+        m->model_profile=0U;
+    } else if (value && !strcmp(value,"ecx87-kv210")) {
+        m->model_profile=210U;
+    } else {
+        error_setg(errp,"SIM_ONLY native motor profile must be ecx87-kv147 or ecx87-kv210");
+    }
+}
+
 static bool am13e_get_native_motor(Object *obj, Error **errp)
 {
     return AM13E_MACHINE(obj)->native_motor.enabled;
@@ -4341,6 +4393,38 @@ static bool am13e_get_native_motor(Object *obj, Error **errp)
 static void am13e_set_native_motor(Object *obj, bool on, Error **errp)
 {
     AM13E_MACHINE(obj)->native_motor.enabled = on;
+}
+
+/* Uncalibrated and strictly bounded analog source robustness fixture.
+ * "off" is byte-identical default behavior.  1 code ≈ 0.806mV
+ * on the QEMU 3.3V/4095 ADC scale; NO real PCB calibration implied. */
+static char *am13e_get_bemf_stress(Object *obj, Error **errp)
+{
+    AM13ENativeMotor *m=&AM13E_MACHINE(obj)->native_motor;
+    return (m->bemf_stress_offset_code || m->bemf_stress_switch_code) ?
+        g_strdup_printf("%d:%u",m->bemf_stress_offset_code,
+                        m->bemf_stress_switch_code) : g_strdup("off");
+}
+static void am13e_set_bemf_stress(Object *obj, const char *value,
+                                  Error **errp)
+{
+    AM13ENativeMotor *m=&AM13E_MACHINE(obj)->native_motor;
+    int offset; unsigned spike; char trailing;
+    if (value && !strcmp(value,"off")) {
+        m->bemf_stress_offset_code=0;
+        m->bemf_stress_switch_code=0U;
+        return;
+    }
+    if (!value || sscanf(value,"%d:%u%c",&offset,&spike,&trailing)!=2 ||
+        offset < -24 || offset > 24 || spike > 32U ||
+        (!offset && !spike)) {
+        error_setg(errp,"SIM_ONLY BEMF stress must be off or "
+                   "OFFSET:SWITCH_CODE with OFFSET [-24,24] "
+                   "and SWITCH_CODE [0,32], not both zero");
+        return;
+    }
+    m->bemf_stress_offset_code=offset;
+    m->bemf_stress_switch_code=spike;
 }
 
 static char *am13e_get_switch_focus_window(Object *obj, Error **errp)
@@ -4375,6 +4459,41 @@ static void am13e_set_switch_focus_window(Object *obj,
     }
     m->source_focus_begin_ns = (int64_t)begin_ms * INT64_C(1000000);
     m->source_focus_end_ns = (int64_t)end_ms * INT64_C(1000000);
+}
+
+static char *am13e_get_experimental_fc_profile(Object *obj, Error **errp)
+{
+    const char *p=AM13E_MACHINE(obj)->esc_sim_experimental_fc_profile;
+    return g_strdup(p?p:"off");
+}
+static void am13e_set_experimental_fc_profile(Object *obj,
+                                             const char *value, Error **errp)
+{
+    AM13EMachineState *s=AM13E_MACHINE(obj);
+    if (!value || !strcmp(value,"off")) {
+        g_free(s->esc_sim_experimental_fc_profile);
+        s->esc_sim_experimental_fc_profile=NULL;
+        return;
+    }
+    if (strcmp(value,"smoke") && strcmp(value,"gentle") &&
+        strcmp(value,"steps") && strcmp(value,"ramp100") &&
+        strcmp(value,"ramp500")) {
+        error_setg(errp,"Experimental FC profile must be "
+                   "off|smoke|gentle|steps|ramp100|ramp500");
+        return;
+    }
+    g_free(s->esc_sim_experimental_fc_profile);
+    s->esc_sim_experimental_fc_profile=g_strdup(value);
+}
+
+static bool am13e_get_experimental_fc_direct20(Object *obj, Error **errp)
+{
+    return AM13E_MACHINE(obj)->esc_sim_experimental_fc_direct20;
+}
+static void am13e_set_experimental_fc_direct20(Object *obj,
+                                                bool enabled, Error **errp)
+{
+    AM13E_MACHINE(obj)->esc_sim_experimental_fc_direct20 = enabled;
 }
 
 static bool am13e_get_differential_fc_smoke(Object *obj, Error **errp)
@@ -4432,8 +4551,22 @@ static void am13e_class_init(ObjectClass *oc, void *data)
                                    am13e_get_native_motor,
                                    am13e_set_native_motor);
     object_class_property_set_description(oc, "esc-sim-native-motor",
-        "SIM_ONLY uncalibrated ECX87-KV147 virtual-time PWM-to-rotor-to-BEMF "
-        "engine. Independent of Guest WFI and GDB; not physical qualified.");
+        "SIM_ONLY PWM-to-rotor-to-BEMF model; default KV147, optional KV210.");
+    object_class_property_add_str(oc, "esc-sim-native-motor-profile",
+                                  am13e_get_native_motor_profile,
+                                  am13e_set_native_motor_profile);
+    object_class_property_set_description(oc, "esc-sim-native-motor-profile",
+        "EXPERIMENT ONLY: default ecx87-kv147 or opt-in ecx87-kv210; "
+        "changes source motor R/L/Kt/Ke, never Guest startup policy/P1.");
+    object_class_property_add_str(oc, "esc-sim-bemf-robustness",
+                                  am13e_get_bemf_stress,
+                                  am13e_set_bemf_stress);
+    object_class_property_set_description(oc,"esc-sim-bemf-robustness",
+        "EXPERIMENT ONLY: off or OFFSET:SWITCH_CODE, bounded -24..24 "
+        "ADC-code reference bias and 0..32 code 2us pulses after real "
+        "QEMU PWM switch-mask transitions. Affects physical BEMF analog "
+        "frontend only, not rotor physics, Guest CAP1, OC/Trip, or PWM; "
+        "default off; never qualifies hardware/P1.");
     object_class_property_add_str(oc, "esc-sim-switch-focus-window-ms",
                                   am13e_get_switch_focus_window,
                                   am13e_set_switch_focus_window);
@@ -4449,6 +4582,22 @@ static void am13e_class_init(ObjectClass *oc, void *data)
         "Diagnostic ONLY: prearm exact 1500/1000/300/200ms independent "
         "flight-controller PA26 DShot scenario at virtual time +100ns "
         "before Guest starts. Default off; no P0/P1 waiver.");
+    object_class_property_add_str(oc, "esc-sim-experimental-fc-profile",
+                                  am13e_get_experimental_fc_profile,
+                                  am13e_set_experimental_fc_profile);
+    object_class_property_set_description(oc,
+        "esc-sim-experimental-fc-profile",
+        "EXPERIMENT ONLY: off|smoke|gentle|steps|ramp100|ramp500. "
+        "Preboot 1kHz PA26 FC source; Original JSON-equivalent stage "
+        "durations; cannot combine with another preboot FC; not P1.");
+    object_class_property_add_bool(oc, "esc-sim-experimental-fc-direct20",
+                                   am13e_get_experimental_fc_direct20,
+                                   am13e_set_experimental_fc_direct20);
+    object_class_property_set_description(oc,
+        "esc-sim-experimental-fc-direct20",
+        "EXPERIMENT ONLY, NOT P0/P1: virtual-clock 1500ms neutral, "
+        "1500ms step to 20pct, 300ms neutral source, before Guest; "
+        "default off. Intended for paired Guest startup tests.");
     object_class_property_add_bool(oc, "esc-sim-wwdt-bootrst",
                                    am13e_get_wwdt_bootrst,
                                    am13e_set_wwdt_bootrst);
