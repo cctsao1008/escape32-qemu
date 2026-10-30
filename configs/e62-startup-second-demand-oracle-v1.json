@@ -1,0 +1,22 @@
+{
+  "schema": "e62.sim.startup-second-demand-oracle.v1",
+  "scope": "SIM_ONLY_NEGATIVE_QUALIFICATION_NOT_GUEST_REARM",
+  "source_dshot_period_ns": 1000000,
+  "source_tolerance_ns": 100,
+  "coast_settle_ms": 200,
+  "minimum_original_guest_events_per_powered_demand": 12,
+  "minimum_positive_rotor_samples_per_demand": 12,
+  "minimum_positive_rotor_span_ms": 20,
+  "minimum_positive_rotor_fraction": 0.75,
+  "maximum_significant_reverse_rotor_samples": 0,
+  "profiles": {
+    "ecx87-kv147": {
+      "positive_rpm_floor": 50,
+      "significant_reverse_rpm_floor": 50
+    },
+    "ecx87-kv210": {
+      "positive_rpm_floor": 50,
+      "significant_reverse_rpm_floor": 50
+    }
+  }
+}
