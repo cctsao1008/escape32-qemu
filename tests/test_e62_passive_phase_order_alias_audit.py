@@ -42,6 +42,20 @@ class PassiveRank(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"Missing or duplicated"):
             audit(e,s)
 
+    def test_stale_repeated_bemf_observation_timestamp_fails_closed(self):
+        e,s=make_source([0,5,4,3,2,1])
+        samples=[x for x in e if x["kind"]=="BEMF_FRONTEND"]
+        samples[42]["vns"]=samples[41]["vns"]
+        with self.assertRaisesRegex(ValueError,"Stale"):
+            audit(sorted(e,key=lambda x:x["vns"]),s)
+
+    def test_large_gap_bemf_observations_not_silent_sector_pass(self):
+        e,s=make_source([0,5,4,3,2,1])
+        samples=[x for x in e if x["kind"]=="BEMF_FRONTEND"]
+        samples[51]["vns"]+=400000
+        with self.assertRaisesRegex(ValueError,"Stale"):
+            audit(sorted(e,key=lambda x:x["vns"]),s)
+
     def test_adc_overflow_rejected(self):
         e,s=make_source([0,5,4,3,2,1])
         v=next(x for x in e if x["kind"]=="BEMF_FRONTEND")
