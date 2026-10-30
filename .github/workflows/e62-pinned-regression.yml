@@ -26,6 +26,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: false
+          # Immutable publication commit must be readable for exact SHA pairing.
+          fetch-depth: 0
       - name: Restore original read-only ARM ELF inspection CLI
         id: binutils
         uses: actions/cache/restore@v4
@@ -96,6 +98,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: false
+          # Immutable publication commit must be readable for exact SHA pairing.
+          fetch-depth: 0
       - name: Restore source-verified ARM host inspection tools
         id: binutils
         uses: actions/cache/restore@v4
