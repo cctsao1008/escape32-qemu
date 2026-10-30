@@ -1,0 +1,55 @@
+name: E62 SIM_ONLY Effective Motor Profile Contract (NO Hardware Signoff)
+
+on:
+  push:
+    branches: [experiment/e62-early-bemf-quartergate]
+    paths:
+      - 'machine/am13e23019.c'
+      - 'machine/am13e_native_motor_plant.inc'
+      - 'machine/am13e_native_motor_dynamics.inc'
+      - 'machine/am13e_native_analog_frontend.inc'
+      - 'tests/e62_autonomous_native_motor_probe.py'
+      - 'tools/e62_sim_profile_contract.py'
+      - 'tools/native_motor_model_profiles.py'
+      - 'tests/test_e62_sim_model_profile.py'
+      - 'configs/e62-sim-profile-matrix-v1.json'
+      - '.github/workflows/e62-experiment-sim-model-profiles.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  strict-profile-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate effective source profile and reject unsupported model parameters
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile tools/e62_sim_profile_contract.py tests/test_e62_sim_model_profile.py tests/e62_autonomous_native_motor_probe.py
+          python3 -m unittest discover -s tests -p test_e62_sim_model_profile.py -v
+          mkdir -p artifacts/sim-profile
+          python3 -m tools.e62_sim_profile_contract --output artifacts/sim-profile/feasibility.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('artifacts/sim-profile/feasibility.json'))
+          assert len(d['computed_points'])==10
+          assert d['rearm_permitted'] is False
+          assert d['hardware_qualified'] is False
+          assert any(x['model_diagnostic_at_risk_of_phase_rank_alias']
+                     for x in d['computed_points'])
+          assert any(x['model_BEMF_peak_below_requested_code_contrast']
+                     for x in d['computed_points'])
+          print('PASS_SIM_PROFILE_CONTRACT_NOT_REACQUISITION_ACCEPTANCE')
+          PY
+      - name: Preserve authentic scope
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-sim-profile-feasibility-NOT-END-TO-END
+          path: artifacts/sim-profile/*
+          if-no-files-found: warn
+          retention-days: 21
