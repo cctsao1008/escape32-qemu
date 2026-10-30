@@ -47,7 +47,7 @@ def recomposed_source(commit=None):
     document=(_git_content(commit,f"machine/{ORIGINAL}") if commit else
               (MACHINE/ORIGINAL).read_text())
     for name in MODULES:
-        marker=f'#include "{name}"\\n'
+        marker=f'#include "{name}"\n'
         if document.count(marker)!=1:
             raise AssertionError("Missing or duplicated module include: "+name)
         module=(_git_content(commit,f"machine/{name}") if commit else

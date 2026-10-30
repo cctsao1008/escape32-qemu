@@ -84,8 +84,8 @@ class ECX87PhaseNormalizationTests(unittest.TestCase):
         dynamics = (ROOT/"machine/am13e_native_motor_dynamics.inc").read_text()
         frontend = (ROOT/"machine/am13e_native_analog_frontend.inc").read_text()
         terminal = re.search(
-            r"#define AM13E_NATIVE_KT_TERMINAL \\(m->model_profile == 210U "
-            r"\\? ([0-9.]+) : ([0-9.]+)\\)", plant)
+            r"#define AM13E_NATIVE_KT_TERMINAL \(m->model_profile == 210U "
+            r"\? ([0-9.]+) : ([0-9.]+)\)", plant)
         self.assertIsNotNone(terminal)
         self.assertEqual(float(terminal.group(1)), 0.0454)
         self.assertEqual(float(terminal.group(2)), 0.0649)
