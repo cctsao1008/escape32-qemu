@@ -20,15 +20,66 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from tools.native_dshot_scenario import load_native_scenario
 from tools.native_p1_qualification import commands_for_scenario
 from tools.native_p0_strict import parse_events
+from tools.native_motor_model_profiles import DATASHEET_PROFILES
+import math
 
 SHA_GUARD="ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN"
 KIND_MIN=("PWM_PAIR","CAP1_ACK","TIMG12_ACK")
 MIN_PER_DEMAND=12
 COAST_SETTLE_NS=200_000_000
 RPM_SIGN_THRESHOLD_MILLI=50_000
+PROFILE_PATH=Path(__file__).resolve().parents[1]/"configs/e62-startup-second-demand-oracle-v1.json"
+
+def load_oracle_profile(path=PROFILE_PATH, motor_profile="ecx87-kv147"):
+    """Versioned negative qualification thresholds, never Guest rearm knobs."""
+    d=json.loads(Path(path).read_text())
+    required={"schema","scope","source_dshot_period_ns","source_tolerance_ns",
+              "coast_settle_ms",
+              "minimum_original_guest_events_per_powered_demand",
+              "minimum_positive_rotor_samples_per_demand",
+              "minimum_positive_rotor_span_ms",
+              "minimum_positive_rotor_fraction",
+              "maximum_significant_reverse_rotor_samples","profiles"}
+    if (type(d) is not dict or set(d)!=required or
+        d["schema"]!="e62.sim.startup-second-demand-oracle.v1" or
+        d["scope"]!="SIM_ONLY_NEGATIVE_QUALIFICATION_NOT_GUEST_REARM" or
+        d["source_dshot_period_ns"]!=1000000 or
+        type(d["source_tolerance_ns"]) is not int or
+        not 0<=d["source_tolerance_ns"]<=100 or
+        type(d["coast_settle_ms"]) is not int or
+        not 200<=d["coast_settle_ms"]<=250 or
+        type(d["minimum_original_guest_events_per_powered_demand"]) is not int or
+        not 12<=d["minimum_original_guest_events_per_powered_demand"]<=100 or
+        type(d["minimum_positive_rotor_samples_per_demand"]) is not int or
+        not 12<=d["minimum_positive_rotor_samples_per_demand"]<=100 or
+        type(d["minimum_positive_rotor_span_ms"]) is not int or
+        not 20<=d["minimum_positive_rotor_span_ms"]<=200 or
+        type(d["minimum_positive_rotor_fraction"]) not in (int,float) or
+        not math.isfinite(d["minimum_positive_rotor_fraction"]) or
+        not 0.75<=d["minimum_positive_rotor_fraction"]<=1.0 or
+        type(d["maximum_significant_reverse_rotor_samples"]) is not int or
+        d["maximum_significant_reverse_rotor_samples"]!=0 or
+        type(d["profiles"]) is not dict or
+        set(d["profiles"])!=set(DATASHEET_PROFILES) or
+        motor_profile not in d["profiles"]):
+        raise ValueError("Unsafe or unsupported SIM_ONLY second-demand profile")
+    for name,p in d["profiles"].items():
+        if (type(p) is not dict or set(p)!={
+            "positive_rpm_floor","significant_reverse_rpm_floor"} or
+            any(type(p[k]) is not int or not 50<=p[k]<=300
+                for k in p) or
+            p["significant_reverse_rpm_floor"]!=p["positive_rpm_floor"]):
+            raise ValueError("Unsafe motor-specific second-demand threshold: "+name)
+    return d
 
 
-def evaluate_second_demand(events,stages):
+def evaluate_second_demand(events,stages,profile=None,motor_profile="ecx87-kv147"):
+    profile=profile if profile is not None else load_oracle_profile(motor_profile=motor_profile)
+    motor=profile["profiles"][motor_profile]
+    required=profile["minimum_original_guest_events_per_powered_demand"]
+    positive_floor=1000*motor["positive_rpm_floor"]
+    reverse_floor=1000*motor["significant_reverse_rpm_floor"]
+    coast_settle_ns=profile["coast_settle_ms"]*1_000_000
     issues=[]
     if len(stages)!=5 or any(stage[0]<300 for stage in stages) or (
         [int(stage[1]) for stage in stages] != [0,200,0,200,0] or
@@ -49,6 +100,14 @@ def evaluate_second_demand(events,stages):
             break
     if mismatches:
         issues.append("SECOND_DEMAND_DSHOT_SOURCE_MISMATCH")
+    if len(source)==len(expected) and any(
+        source[i]["vns"]<=source[i-1]["vns"] or
+        (i>=2 and
+         abs(source[i]["vns"]-source[i-1]["vns"]-
+             profile["source_dshot_period_ns"])>profile["source_tolerance_ns"])
+        for i in range(1,len(source))
+    ):
+        issues.append("SECOND_DEMAND_STALE_OR_DRIFTED_DSHOT_SOURCE_CLOCK")
     if issues:
         return {"pass":False,"failures":issues,
                 "demand_windows":[],"coast":None}
@@ -69,18 +128,24 @@ def evaluate_second_demand(events,stages):
                   start<=event["vns"]<stop]
         counts={kind:sum(e["kind"]==kind for e in selected)
                 for kind in KIND_MIN}
-        rpms=[e["data"][0] for e in selected if e["kind"]=="ROTOR"]
-        pos=sum(r>=RPM_SIGN_THRESHOLD_MILLI for r in rpms)
-        neg=sum(r<=-RPM_SIGN_THRESHOLD_MILLI for r in rpms)
-        if any(counts[kind]<MIN_PER_DEMAND for kind in KIND_MIN):
+        rotor=[e for e in selected if e["kind"]=="ROTOR"]
+        rpms=[e["data"][0] for e in rotor]
+        positive_times=[e["vns"] for e in rotor if e["data"][0]>=positive_floor]
+        pos=len(positive_times)
+        neg=sum(r<=-reverse_floor for r in rpms)
+        positive_span_ns=(max(positive_times)-min(positive_times)
+                          if positive_times else 0)
+        if any(counts[kind]<required for kind in KIND_MIN):
             issues.append("SECOND_DEMAND_" +
                           ("FIRST" if stage_idx==1 else "REACQUISITION") +
                           "_GUEST_CLOSED_LOOP_NOT_PROVEN")
-        if not pos:
+        if (pos<profile["minimum_positive_rotor_samples_per_demand"] or
+            pos<profile["minimum_positive_rotor_fraction"]*len(rotor) or
+            positive_span_ns<profile["minimum_positive_rotor_span_ms"]*1_000_000):
             issues.append("SECOND_DEMAND_" +
                           ("FIRST" if stage_idx==1 else "REACQUISITION") +
-                          "_POSITIVE_ROTOR_RESPONSE_MISSING")
-        if neg:
+                          "_SUSTAINED_POSITIVE_ROTOR_RESPONSE_MISSING")
+        if neg>profile["maximum_significant_reverse_rotor_samples"]:
             issues.append("SECOND_DEMAND_" +
                           ("FIRST" if stage_idx==1 else "REACQUISITION") +
                           "_SIGNIFICANT_REVERSE_ROTATION")
@@ -88,18 +153,21 @@ def evaluate_second_demand(events,stages):
             "stage_index":stage_idx,"start_virtual_ns":start,
             "end_virtual_ns":stop,"source_counts":counts,
             "positive_rotor_samples_ge_50rpm":pos,
-            "negative_rotor_samples_ge_50rpm":neg
+            "negative_rotor_samples_below_minus_floor":neg,
+            "positive_rotor_observation_span_ms":positive_span_ns/1_000_000,
+            "rotor_samples":len(rotor),
+            "profile_positive_rpm_floor":motor["positive_rpm_floor"]
         })
     coast_start=boundaries[2]
     coast_end=boundaries[3]
     coast_events=[e for e in events if
-                  coast_start+COAST_SETTLE_NS<=e["vns"]<coast_end]
+                  coast_start+coast_settle_ns<=e["vns"]<coast_end]
     late_counts={k:sum(e["kind"]==k for e in coast_events)
                  for k in KIND_MIN}
     if any(late_counts.values()):
         issues.append("SECOND_DEMAND_COAST_UNEXPECTED_ACTIVE_COMMUTATION")
     coast={"start_virtual_ns":coast_start,"end_virtual_ns":coast_end,
-           "settle_ms":COAST_SETTLE_NS//1000000,
+           "settle_ms":profile["coast_settle_ms"],
            "late_guest_motor_event_counts":late_counts,
            "verified_complete_standstill":False}
     return {"pass":not issues,"failures":issues,
@@ -113,12 +181,17 @@ def main():
     p.add_argument("--evidence",type=Path,required=True)
     p.add_argument("--strict-original-p1",type=Path,required=True)
     p.add_argument("--output",type=Path,required=True)
+    p.add_argument("--sim-oracle-profile",type=Path,default=PROFILE_PATH)
+    p.add_argument("--sim-motor-profile",choices=DATASHEET_PROFILES,
+                   default="ecx87-kv147")
     a=p.parse_args()
     stages,meta=load_native_scenario(a.scenario)
     events=parse_events(a.events.read_text(errors="replace").splitlines())
     ev=json.loads(a.evidence.read_text())
     strict=json.loads(a.strict_original_p1.read_text())
-    result=evaluate_second_demand(events,stages)
+    result=evaluate_second_demand(
+        events,stages,load_oracle_profile(a.sim_oracle_profile,a.sim_motor_profile),
+        a.sim_motor_profile)
     original_failures=strict.get("unwaived_observability_failures")
     provenance=(
         isinstance(original_failures,list) and
