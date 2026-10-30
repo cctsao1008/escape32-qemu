@@ -3155,6 +3155,14 @@ static void am13e_sim_adc_complete(void *opaque)
             adc->results[i] = (m->active ? m->bemf_codes[adc->instance] :
                               2048U); /* Model zero-speed bias midpoint. */
             ++m->phase_adc_publications[adc->instance];
+            /* Source proof is emitted only from REAL guest-triggered
+             * sequencer EOC, never from the 1kHz model diagnostic or
+             * a Host MMIO write. Epoch is per ADC, aligned by the
+             * normal three-ADC PendSV housekeeping schedule. */
+            am13e_p0_event(adc->machine,"ADC_PHASE_EOC",
+                           adc->instance,adc->results[i],
+                           channel,i,m->phase_adc_publications[adc->instance],
+                           m->gate ? 1U : 0U);
             if (m->active && adc->results[i] != 2048U) {
                 ++m->phase_adc_nonmidscale[adc->instance];
             }
@@ -3312,7 +3320,17 @@ static MemTxResult am13e_adc_results_read(void *opaque, hwaddr offset,
     if (adc->machine->esc_sim_native_adc_bemf) {
         const unsigned phase_soc=adc->instance == 1U ? 2U : 1U;
         if (idx <= phase_soc && phase_soc < idx + size / 2U) {
-            ++adc->machine->native_motor.phase_adc_guest_reads[adc->instance];
+            AM13ENativeMotor *m=&adc->machine->native_motor;
+            ++m->phase_adc_guest_reads[adc->instance];
+            /* Guest actually read the phase ADCRESULT; this event is
+             * downstream of the actual EOC and is strictly passive.
+             * The six fields deliberately contain NO model theta,
+             * speed, torque or synthetic rotor-state confidence. */
+            am13e_p0_event(adc->machine,"ADC_PHASE_READ",
+                           adc->instance,adc->results[phase_soc],
+                           (adc->registers[(0x04cU+phase_soc*4U)/4U]>>15U)&31U,
+                           phase_soc,m->phase_adc_publications[adc->instance],
+                           m->gate ? 1U : 0U);
         }
     }
     return MEMTX_OK;
