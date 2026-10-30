@@ -4,6 +4,7 @@ on:
   push:
     branches: [experiment/e62-apc24x12e-47v-coast-20261031]
     paths:
+      - 'build.sh'
       - 'machine/am13e23019.c'
       - 'machine/am13e_native_motor_plant.inc'
       - 'machine/am13e_native_motor_dynamics.inc'
