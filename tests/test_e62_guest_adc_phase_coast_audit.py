@@ -87,7 +87,7 @@ class RealGuestADCSource(unittest.TestCase):
         e=sample()
         target=next(x for x in e if x["kind"]=="ADC_PHASE_READ" and
                     x["data"][0]==2 and x["data"][4]==2)
-        target["vns"]+=4_990_000
+        target["vns"]+=5_100_000
         with self.assertRaisesRegex(ValueError,"fresh|triplet"):
             correlate_guest_phase_epochs(e)
 
