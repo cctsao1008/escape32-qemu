@@ -11,11 +11,22 @@ on:
       - 'tools/native_motor_model_profiles.py'
       - 'tools/e62_apc24x12e_static.py'
       - 'configs/e62-apc24x12e-47v-study-v1.json'
+      - 'configs/e62-sim-case-profiles-v1.json'
+      - 'tools/e62_sim_case_profiles.py'
+      - 'tests/test_e62_sim_case_profiles.py'
+      - 'scenarios/e62-experimental-two-demand-coast-medium1500.json'
       - 'tools/sim_motor_cfg.py'
       - 'tests/e62_autonomous_native_motor_probe.py'
       - 'tests/test_e62_apc24x12e_sim_profile.py'
       - '.github/workflows/e62-apc24x12e-47v-sim-only.yml'
   workflow_dispatch:
+    inputs:
+      coast_ms:
+        description: 'Source-owned DShot neutral coast duration (ms)'
+        type: choice
+        options: ['300', '1500', '3000']
+        default: '300'
+        required: true
 
 permissions:
   contents: read
@@ -29,8 +40,10 @@ jobs:
       - name: Validate official static torque grid, explicit inertia sensitivity and no policy waiver
         run: |
           set -euo pipefail
-          python3 -m py_compile tools/e62_apc24x12e_static.py tools/native_motor_model_profiles.py tests/e62_autonomous_native_motor_probe.py tools/sim_motor_cfg.py
+          python3 -m py_compile tools/e62_apc24x12e_static.py tools/native_motor_model_profiles.py tests/e62_autonomous_native_motor_probe.py tools/sim_motor_cfg.py tools/e62_sim_case_profiles.py
           python3 -m unittest discover -s tests -p test_e62_apc24x12e_sim_profile.py -v
+          python3 -m unittest discover -s tests -p test_e62_sim_case_profiles.py -v
+          python3 tools/e62_sim_case_profiles.py
           python3 -m unittest discover -s tests -p test_sim_motor_profiles.py -v
           python3 -m unittest discover -s tests -p test_e62_sim_model_profile.py -v
           python3 -m unittest discover -s tests -p test_e62_guest_adc_phase_coast_audit.py -v
@@ -50,7 +63,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        profile: [ecx87-kv210-apc24x12e-47v-j1, ecx87-kv210-apc24x12e-47v-j2, ecx87-kv210-apc24x12e-47v-j5]
+        profile_id: [QB-KV210-47V-APC24X12E-J1, QB-KV210-47V-APC24X12E-J2, QB-KV210-47V-APC24X12E-J5]
     steps:
       - uses: actions/checkout@v4
       - name: Pin unchanged Original Guest and build changed QEMU source
@@ -63,47 +76,46 @@ jobs:
           git submodule update --init --depth 1 qemu
           ./build.sh
           mkdir -p artifacts/e62-apc24x12e
+          coast="${{ inputs.coast_ms || '300' }}"
+          id="${{ matrix.profile_id }}"
+          motor="$(python3 tools/e62_sim_case_profiles.py --profile-id "$id" --coast-ms "$coast" --field qemu_motor_profile)"
+          root="artifacts/e62-apc24x12e/${id}-${coast}"
           python3 tools/sim_motor_cfg.py --sim-only-opt-in \
             --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
-            --motor-profile "${{ matrix.profile }}" \
-            --output "artifacts/e62-apc24x12e/${{ matrix.profile }}-g13b3-cfg-flash.bin"
-      - name: Run actual 300ms coast with unchanged DShot/ELF and require effective QEMU readback
+            --motor-profile "$motor" \
+            --output "$root-g13b3-cfg-flash.bin"
+      - name: Run actual selected coast with immutable Rel17.3 and profile-selected effective QEMU readback
         run: |
           set -euo pipefail
-          root="artifacts/e62-apc24x12e/${{ matrix.profile }}"
+          coast="${{ inputs.coast_ms || '300' }}"
+          id="${{ matrix.profile_id }}"
+          motor="$(python3 tools/e62_sim_case_profiles.py --profile-id "$id" --coast-ms "$coast" --field qemu_motor_profile)"
+          scenario="$(python3 tools/e62_sim_case_profiles.py --profile-id "$id" --coast-ms "$coast" --field scenario_path)"
+          root="artifacts/e62-apc24x12e/${id}-${coast}"
           python3 tests/e62_autonomous_native_motor_probe.py \
             --qemu .build/qemu-src/build/qemu-system-arm \
             --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
-            --sim-motor-profile "${{ matrix.profile }}" \
+            --sim-motor-profile "$motor" \
             --sim-native-adc-bemf \
             --cfg-flash "$root-g13b3-cfg-flash.bin" \
-            --scenario scenarios/e62-experimental-two-demand-coast-short300.json \
+            --scenario "$scenario" \
             --wall-timeout-s 600 \
             --artifact "$root.json"
-          python3 - <<'PY'
-          import json
-          from pathlib import Path
-          name="${{ matrix.profile }}"
-          path=Path("artifacts/e62-apc24x12e")/(name+".json")
-          ev=json.loads(path.read_text())
-          prop=ev["effective_sim_profile"]["effective_apc_propeller_source"]
-          expected=int(name[-1])
-          assert prop["apc24x12e_static_enabled"] is True
-          assert prop["inertia_ratio_to_motor"]==expected
-          assert prop["effective_total_inertia_nano_kg_m2"]==round(0.00013*expected*1e9)
-          assert ev["original_elf_sha256"]=="05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0"
-          assert ev["host_guest_register_writes"] is False
-          assert ev["used_guest_wfi_or_gdb"] is False
-          print("PASS_QEMU_APC_PLANT_EFFECTIVE_READBACK_NOT_RESTART",name,prop)
-          PY
+          python3 tools/e62_sim_case_profiles.py \
+            --profile-id "$id" --coast-ms "$coast" \
+            --evidence "$root.json" --output "$root-profile-readback.json"
+          echo "PASS_PROFILE_QEMU_SOURCE_READBACK_ONLY_NOT_REACQUISITION"
       - name: Preserve actual strict Original P1 no-waiver verdict even when source-backed motor fails
         if: always()
         run: |
           set -uo pipefail
-          root="artifacts/e62-apc24x12e/${{ matrix.profile }}"
+          coast="${{ inputs.coast_ms || '300' }}"
+          id="${{ matrix.profile_id }}"
+          root="artifacts/e62-apc24x12e/${id}-${coast}"
+          scenario="$(python3 tools/e62_sim_case_profiles.py --profile-id "$id" --coast-ms "$coast" --field scenario_path)"
           if [[ -f "$root.json" && -f "$root.p0.events.log" ]]; then
             python3 tools/native_p1_qualification.py \
-              --scenario scenarios/e62-experimental-two-demand-coast-short300.json \
+              --scenario "$scenario" \
               --evidence "$root.json" \
               --events "$root.p0.events.log" \
               --output "$root-strict-original-p1.json"
@@ -117,7 +129,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: e62-apc24x12e-${{ matrix.profile }}-SIM-ONLY
+          name: e62-case-${{ matrix.profile_id }}-${{ inputs.coast_ms || '300' }}-SIM-ONLY
           path: artifacts/e62-apc24x12e/**
           if-no-files-found: warn
           retention-days: 30
