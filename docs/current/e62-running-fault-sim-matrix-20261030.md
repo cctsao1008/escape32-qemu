@@ -61,5 +61,14 @@ implementation/qualification gates and must not inherit this PASS.
 - [#41060908950](https://github.com/cctsao1008/escape32-qemu/actions/runs/41060908950):
   **SUCCESS** original nFAULT/WWDT.
 - [#41076529941](https://github.com/cctsao1008/escape32-qemu/actions/runs/41076529941):
-  updated unit negative/profile checks **PASS**; full QEMU status to
-  confirm before issue closure.
+  **SUCCESS**: 58/58 strict host tests (9+16+11+6+7+9) and actual source
+  Original Guest KV147/KV210 x OC-U/V/W **6/6 PASS** on the updated
+  versioned profile with explicit UV/OV/thermal NOT_MODELED negative gates.
+
+## Final SIM_ONLY disposition
+**QUALIFIED within the declared three-source virtual protection scope:
+external current-sense OC (U/V/W), PA22 nFAULT and source-loss WWDT.**
+Original guest safety persistence/negative gates remain strict.
+UV/OV/thermal are intentionally **NOT_MODELED** and NOT qualified.
+No implication for #5 windmill re-acquisition or actual electrical safety.
+Issue #7 may be closed ONLY with this precise scope and evidence.
