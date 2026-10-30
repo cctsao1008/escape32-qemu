@@ -35,6 +35,9 @@ EXPECTED_ELF_SHA256 = (
 )
 QEMU_UPSTREAM_COMMIT = "44f28df24767cf9dca1ddc9b23157737c4cbb645"
 ESCAPE32_SOURCE_COMMIT = "b0204670515d2de0b2480b52273038f1ee13d30a"
+# Historical publication commit, NOT the current main source. The
+# archived binary is paired with this exact source snapshot only.
+PINNED_QEMU_SOURCE_COMMIT = "ee1c81c238e1f898e5d528e835d590dce3c473a4"
 TI_SDK_COMMIT = "b872469ceef18de5e39a1d3acb0821ec158b44c7"
 SOURCE_FILES = (
     "build.sh",
@@ -86,7 +89,27 @@ def check_binary_header(path: Path, *, host: bool):
 
 
 def source_hashes() -> dict[str, str]:
+    """Current tree hashes for new publication; never historical verification."""
     return {f: digest(ROOT / f) for f in SOURCE_FILES}
+
+def pinned_source_hashes() -> dict[str, str]:
+    """Verify archived pairing against exactly the historical source snapshot.
+
+    Historical source must be available (checkout fetch-depth: 0). Never
+    bless today's changed QEMU source as bit-identical to the old binary.
+    """
+    result={}
+    for path in SOURCE_FILES:
+        proc=subprocess.run(
+            ["git","show",f"{PINNED_QEMU_SOURCE_COMMIT}:{path}"],
+            cwd=ROOT,capture_output=True,check=False)
+        if proc.returncode:
+            raise ValueError(
+                "Pinned historical QEMU source missing: "+path+
+                "; fetch historical commit; "+proc.stderr.decode(
+                    errors="replace")[-200:])
+        result[path]=hashlib.sha256(proc.stdout).hexdigest()
+    return result
 
 
 def build_checksums(directory: Path, hashes: dict[str, str]):
@@ -97,6 +120,10 @@ def stage(elf: Path, qemu: Path, fdt: Path, *, source_run: str):
     if platform.system() != "Linux" or platform.machine() != "x86_64":
         raise ValueError("Baseline packaging runs only on Linux x86_64")
     gitlink_pin()
+    if source_hashes()!=pinned_source_hashes():
+        raise ValueError(
+            "Cannot republish historical binary from changed source; "
+            "requires a separately audited new binary/source pair")
     for path in (elf, qemu, fdt):
         require_regular(path)
     check_binary_header(elf, host=False)
@@ -189,8 +216,8 @@ def verify(*, smoke=False):
         or metadata["guest"]["source_revision"] != ESCAPE32_SOURCE_COMMIT
         or metadata["guest"]["ti_sdk_revision"] != TI_SDK_COMMIT):
         raise ValueError("Manifest identity/source revision mismatch")
-    if metadata["qemu"]["source_tree_sha256"] != source_hashes():
-        raise ValueError("Pinned QEMU/Guest build source drift: republish binary pair")
+    if metadata["qemu"]["source_tree_sha256"] != pinned_source_hashes():
+        raise ValueError("Pinned historical QEMU source does not match archived binary pair")
     hashes = {}
     if set(metadata["files"]) != {ELF, QEMU, FDT}:
         raise ValueError("Unexpected pinned binary contents")
