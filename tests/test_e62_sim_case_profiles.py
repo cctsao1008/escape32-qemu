@@ -13,8 +13,10 @@ class TestE62CaseProfiles(unittest.TestCase):
     def setUpClass(cls):
         cls.data=load()
     def test_five_profiles_three_coasts_genuine_unchanged_guest(self):
-        self.assertEqual(len(self.data["profiles"]),5)
+        self.assertEqual(len(self.data["profiles"]),6)
         self.assertEqual(len(self.data["scenarios"]),3)
+        self.assertEqual(self.data["profiles"][2]["qualification_class"],
+                         "VOLTAGE_CONTROL_MOTOR_ONLY")
         self.assertEqual([s["coast_ms"] for s in self.data["scenarios"]],
                          [300,1500,3000])
         for name in _PROFILE_MAP:
@@ -27,7 +29,7 @@ class TestE62CaseProfiles(unittest.TestCase):
     def test_24v_baselines_preserved_47v_analytical_separate(self):
         for p in self.data["profiles"]:
             apc=p["id"].startswith("QB-")
-            self.assertEqual(p["dc_bus_millivolts"],47000 if apc else 24000)
+            self.assertEqual(p["dc_bus_millivolts"],47000 if (apc or p["id"].startswith("CTL-")) else 24000)
             self.assertEqual(p["propeller_model"]=="NO_PROPELLER",not apc)
             self.assertFalse(p["product_hardware_calibrated"])
             self.assertFalse(p["propeller_inertia_measured"])
@@ -38,7 +40,7 @@ class TestE62CaseProfiles(unittest.TestCase):
             ("effective_total_inertia_nano_kg_m2",130000),
             ("source_identity","REAL_HARDWARE_TEST")]:
             d=copy.deepcopy(self.data)
-            d["profiles"][3][key]=value
+            d["profiles"][4][key]=value
             with tempfile.TemporaryDirectory() as root:
                 f=Path(root)/"unsafe.json";f.write_text(json.dumps(d))
                 with self.assertRaises(ValueError):
