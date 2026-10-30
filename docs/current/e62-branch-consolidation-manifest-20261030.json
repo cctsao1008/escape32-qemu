@@ -1,0 +1,75 @@
+{
+  "schema": "e62.qemu.branch-consolidation.v1",
+  "date": "2026-10-30",
+  "repository": "cctsao1008/escape32-qemu",
+  "canonical": "main",
+  "staging": "integration/e62-main-sim-consolidation-20261030",
+  "source_main_sha": "0b6ffa3397c6ece17ffd115df62ea2bf6abc72b8",
+  "physical_hardware_qualification_required": false,
+  "original_p1_unchanged": true,
+  "archive_only_parents": [
+    "9d660f593ffda3f16368063bdd6bf66dfffb8c8f",
+    "ba9f8ab8621ee58cbf159af87be7aedae4064d4e",
+    "5b425bdd04c0c2c86e38378b384e630ab7ca8782"
+  ],
+  "branches": [
+    {
+      "name": "baseline/g13b3l-6sector-pass-20261022",
+      "sha": "17b0153ccadcf8578fdb6092b26b03e8a3a4d2a1",
+      "reachability": "Already ancestor of main",
+      "role": "historical baseline"
+    },
+    {
+      "name": "baseline/g13b3m-90ms-sim-only-pass-20261023",
+      "sha": "06e8ce0160736bc5f073800243ad06ee18c45e43",
+      "reachability": "Already ancestor of main",
+      "role": "historical baseline"
+    },
+    {
+      "name": "experiment/e62-early-bemf-ival3000",
+      "sha": "0cf576f443ecc3b88a1987254989d3dfc30a4c42",
+      "reachability": "Ancestor of quartergate, retained by quarterly archive parent",
+      "role": "obsolete BEMF experiment"
+    },
+    {
+      "name": "experiment/e62-early-bemf-direct20",
+      "sha": "ba9f8ab8621ee58cbf159af87be7aedae4064d4e",
+      "reachability": "Independent archive-only parent required",
+      "role": "diverged first-20% throttle experiment"
+    },
+    {
+      "name": "experiment/e62-early-bemf-quartergate",
+      "sha": "9d660f593ffda3f16368063bdd6bf66dfffb8c8f",
+      "reachability": "Independent archive-only parent required",
+      "role": "source of selected SIM_ONLY infrastructure and historical experiment traces"
+    },
+    {
+      "name": "fix/g14-pwm-zero-shadow-continuity",
+      "sha": "5b425bdd04c0c2c86e38378b384e630ab7ca8782",
+      "reachability": "Independent archive-only parent required",
+      "role": "old G14 PWM fix branch; key regression test files already identical to main"
+    }
+  ],
+  "source_ci": {
+    "sim_profile_OC_6_of_6": {
+      "run_id": 41039976512,
+      "status": "success"
+    },
+    "original_nfault_wwdt": {
+      "run_id": 41038956854,
+      "status": "success"
+    },
+    "analog_robustness": {
+      "run_id": 41038956948,
+      "status": "failure",
+      "reason": "STARTUP_SIGNIFICANT_DIRECTION_REVERSAL"
+    }
+  },
+  "not_mainline_qualified": [
+    "Experimental early BEMF patches",
+    "Cold-sector restart success",
+    "300ms coast second demand",
+    "UV/OV and thermal source faults"
+  ],
+  "deletion_gate": "integration branch merged to main, live integration CI PASS, archive-only parents reachable from main; no branches deleted by this task"
+}
