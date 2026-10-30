@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """Negative controls for independent source-clock second-demand research oracle."""
 import unittest
+import json
+import tempfile
+from pathlib import Path
 
-from tools.e62_experimental_second_demand_oracle import evaluate_second_demand
+from tools.e62_experimental_second_demand_oracle import evaluate_second_demand,load_oracle_profile,PROFILE_PATH
 from tools.native_p1_qualification import commands_for_scenario
 
 STAGES=[
@@ -15,7 +18,8 @@ ONE_MS=1_000_000
 
 def synthetic_events(*,second_cap=True,second_timg=True,
                      coast_pwm=False,reverse_second=False,
-                     tamper_dshot=False):
+                     tamper_dshot=False, sparse_positive=False,
+                     stale_dshot=False):
     events=[]
     for i,(stage,dshot) in enumerate(commands_for_scenario(STAGES)):
         events.append({"vns":START+i*ONE_MS,"kind":"DSHOT",
@@ -29,14 +33,18 @@ def synthetic_events(*,second_cap=True,second_timg=True,
                 events.append({"vns":t+10,"kind":"CAP1_ACK","data":(0,)*6})
             if stage!=3 or second_timg:
                 events.append({"vns":t+20,"kind":"TIMG12_ACK","data":(0,)*6})
-        events.append({"vns":origin+250*ONE_MS,"kind":"ROTOR",
-                       "data":(-70000 if stage==3 and reverse_second
-                               else 70000,0,0,0,0,0)})
+        for k in range(30):
+            rpm = (-70000 if stage==3 and reverse_second else
+                   0 if sparse_positive and k>0 else 70000)
+            events.append({"vns":origin+(250+5*k)*ONE_MS,"kind":"ROTOR",
+                           "data":(rpm,0,0,0,0,0)})
     if coast_pwm:
         events.append({"vns":START+3500*ONE_MS,"kind":"PWM_PAIR",
                        "data":(0,)*6})
     if tamper_dshot:
         events[4500]["data"]=(4500,3,0,0,0,0)
+    if stale_dshot:
+        events[4600]["vns"]=events[4599]["vns"]
     events.sort(key=lambda e:e["vns"])
     return events
 
@@ -77,6 +85,40 @@ class SecondDemandOracleTest(unittest.TestCase):
         r=evaluate_second_demand(synthetic_events(tamper_dshot=True),STAGES)
         self.assertFalse(r["pass"])
         self.assertIn("SECOND_DEMAND_DSHOT_SOURCE_MISMATCH",r["failures"])
+
+    def test_one_positive_rotor_sample_is_not_reacquisition(self):
+        r=evaluate_second_demand(
+            synthetic_events(sparse_positive=True),STAGES)
+        self.assertFalse(r["pass"])
+        self.assertIn("SECOND_DEMAND_REACQUISITION_SUSTAINED_POSITIVE_ROTOR_RESPONSE_MISSING",
+                      r["failures"])
+
+    def test_stale_second_demand_source_clock_fails_closed(self):
+        r=evaluate_second_demand(synthetic_events(stale_dshot=True),STAGES)
+        self.assertFalse(r["pass"])
+        self.assertIn("SECOND_DEMAND_STALE_OR_DRIFTED_DSHOT_SOURCE_CLOCK",
+                      r["failures"])
+
+    def test_versioned_motor_profiles_and_unsafe_override_rejected(self):
+        d=load_oracle_profile()
+        self.assertEqual(set(d["profiles"]),
+                         {"ecx87-kv147","ecx87-kv210"})
+        self.assertEqual(d["minimum_positive_rotor_samples_per_demand"],12)
+        with tempfile.TemporaryDirectory() as folder:
+            p=Path(folder)/"override.json"
+            d["maximum_significant_reverse_rotor_samples"]=1
+            p.write_text(json.dumps(d))
+            with self.assertRaisesRegex(ValueError,"Unsafe"):
+                load_oracle_profile(p)
+
+    def test_versioned_profile_cannot_lower_positive_evidence_to_one_sample(self):
+        d=load_oracle_profile()
+        with tempfile.TemporaryDirectory() as folder:
+            p=Path(folder)/"override.json"
+            d["minimum_positive_rotor_samples_per_demand"]=1
+            p.write_text(json.dumps(d))
+            with self.assertRaisesRegex(ValueError,"Unsafe"):
+                load_oracle_profile(p)
 
     def test_no_valid_independent_coast_stage(self):
         bad=STAGES.copy()
