@@ -24,6 +24,9 @@ class PinnedBinaryContract(unittest.TestCase):
         self.assertEqual(len(b.ESCAPE32_SOURCE_COMMIT),40)
         self.assertEqual(len(b.TI_SDK_COMMIT),40)
         self.assertEqual(set(b.source_hashes()),set(b.SOURCE_FILES))
+        self.assertEqual(b.PINNED_QEMU_SOURCE_COMMIT,
+                         "ee1c81c238e1f898e5d528e835d590dce3c473a4")
+        self.assertEqual(set(b.pinned_source_hashes()),set(b.SOURCE_FILES))
 
     def test_checksum_and_elf_architecture_are_independent(self):
         with tempfile.TemporaryDirectory() as tmp:
