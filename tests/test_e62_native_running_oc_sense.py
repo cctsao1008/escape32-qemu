@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from tools.native_p1_oc_fault_plan import load_oc_plan
 from tools.native_p1_running_oc_audit import audit
+from tools.native_p1_qualification import commands_for_scenario
 
 STAGES=[(1500,0,0,1),(1000,0,200,5),(300,200,200,1),(200,0,0,1)]
 SHA="05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0"
@@ -21,7 +22,8 @@ def fixture(phase="oc-u",start=2100,stop=2300):
 def good_trace(plan):
     # This is a UNIT fixture, not substituted for real QEMU CI evidence.
     ev=[{"kind":"DSHOT","vns":999+i*1_000_000,
-         "data":(i,0,0,0,0,0)} for i in range(3000)]
+         "data":(i,stage,command,0,0,0)}
+         for i,(stage,command) in enumerate(commands_for_scenario(STAGES))]
     ev.append({"kind":"PWM_PAIR","vns":1_900_000_999,
                "data":(0,0,0,0,0,0)})
     ev.sort(key=lambda e:e["vns"])
@@ -89,6 +91,54 @@ class NativeRunningOCSenseNegative(unittest.TestCase):
         d["native_motor"]["actual_pwm_six_bit_mask"]=1
         d["receiver_after"]["native_ost_latched"]=0
         self.assertFalse(audit(e,d,p,l)["qualified"])
+
+    def test_all_3000_source_commands_and_clock_verified(self):
+        p=fixture();e,d,l=good_trace(p)
+        result=audit(e,d,p,l,stages=STAGES)
+        self.assertTrue(result["qualified"],result["failures"])
+
+    def test_tampered_nonfault_dshot_frame_fails_closed(self):
+        p=fixture();e,d,l=good_trace(p)
+        target=next(x for x in e if x["kind"]=="DSHOT"
+                    and x["data"][0]==1650)
+        idx,st,command,_,_,_=target["data"]
+        target["data"]=(idx,st,command+1,0,0,0)
+        result=audit(e,d,p,l,stages=STAGES)
+        self.assertIn("OC_SOURCE_DSHOT_FRAMES_OR_COMMANDS_CHANGED",
+                      result["failures"])
+
+    def test_stale_or_drifted_source_timestamp_is_not_qualified(self):
+        p=fixture();e,d,l=good_trace(p)
+        frames=[x for x in e if x["kind"]=="DSHOT"]
+        frames[1700]["vns"]=frames[1699]["vns"]
+        result=audit(e,d,p,l,stages=STAGES)
+        self.assertIn("OC_SOURCE_DSHOT_TIMESTAMP_STALE_OR_DRIFT",
+                      result["failures"])
+        e,d,l=good_trace(p)
+        frames=[x for x in e if x["kind"]=="DSHOT"]
+        frames[1800]["vns"]+=5000
+        result=audit(e,d,p,l,stages=STAGES)
+        self.assertIn("OC_SOURCE_DSHOT_TIMESTAMP_STALE_OR_DRIFT",
+                      result["failures"])
+
+    def test_release_cannot_keep_sensor_saturated(self):
+        p=fixture();e,d,l=good_trace(p)
+        l=l.replace("asserted=0 code=1000","asserted=0 code=4095")
+        self.assertIn("OC_SOURCE_NOT_RELEASED",
+                      audit(e,d,p,l,stages=STAGES)["failures"])
+
+    def test_invalid_source_stages_cannot_borrow_3000_valid_frames(self):
+        p=fixture();e,d,l=good_trace(p)
+        altered=[(1500,0,0,1),(1000,0,100,5),
+                 (300,200,200,1),(200,0,0,1)]
+        self.assertIn("OC_SOURCE_DSHOT_FRAMES_OR_COMMANDS_CHANGED",
+                      audit(e,d,p,l,stages=altered)["failures"])
+
+    def test_no_auto_rearm_after_trip_even_with_six_outputs_off(self):
+        p=fixture();e,d,l=good_trace(p)
+        d["pwm_source_after"]["running"]=True
+        self.assertIn("PWM_CARRIER_STILL_RUNNING_AFTER_OC",
+                      audit(e,d,p,l,stages=STAGES)["failures"])
 
     def test_bad_source_while_neutral_rejected(self):
         with self.assertRaisesRegex(ValueError,"positive drive"):
