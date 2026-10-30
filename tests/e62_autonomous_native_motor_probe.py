@@ -22,6 +22,8 @@ from tools.sitl_autonomous_transport import AUTO_BASE, REG, read_auto
 from tools.native_dshot_scenario import load_native_scenario
 from tools.native_p1_fault_plan import load_fault_plan
 from tools.native_p1_oc_fault_plan import load_oc_plan
+from tools.native_motor_model_profiles import (
+    DATASHEET_PROFILES, native_motor_parameters, native_motor_model_metadata)
 
 MOTOR_BASE = 0x5ffeb000
 MOTOR_MAGIC = 0x4d323645
@@ -259,6 +261,13 @@ def _motor_snapshot(qtest):
     get = lambda offset: qtest.read(MOTOR_BASE+offset)
     signed = lambda v: (v if v < 0x80000000 else v-0x100000000)
     return {
+        "effective_sim_motor_model": {
+            "kv_rpm_per_v":get(0x8c),
+            "phase_resistance_microohm":get(0x90),
+            "phase_inductance_nanohenry":get(0x94),
+            "terminal_kt_micro_nm_per_a":get(0x98),
+            "bus_millivolts":get(0x9c),
+        },
         "status_flags": get(0x04),
         "native_1us_physics_ticks": get(0x08),
         "actual_pwm_event_notifications": get(0x0c),
@@ -287,6 +296,26 @@ def _motor_snapshot(qtest):
         "first_ost3_trip3_xbar_invert":get(0x88),
     }
 
+
+def _assert_effective_sim_model(snapshot, profile):
+    """Fail if the QEMU numeric model differs from its named profile."""
+    p=native_motor_parameters(profile)
+    meta=native_motor_model_metadata(profile)
+    expected={
+        "kv_rpm_per_v":int(meta["published_kv_rpm_per_v"]),
+        "phase_resistance_microohm":round(p.phase_resistance_ohm*1e6),
+        "phase_inductance_nanohenry":round(p.phase_inductance_h*1e9),
+        "terminal_kt_micro_nm_per_a":round(meta["published_kt_nm_per_a"]*1e6),
+        "bus_millivolts":round(p.vbus_v*1000),
+    }
+    observed=snapshot["effective_sim_motor_model"]
+    if observed!=expected:
+        raise RuntimeError(
+            f"SIM QEMU effective motor profile mismatch {profile}: "
+            f"expected={expected}; observed={observed}")
+    return {"name":profile, "effective_parameters":observed,
+            "checked_against_named_model":True,
+            "classification":"SIM_ONLY_EFFECTIVE_QEMU_PLANT"}
 
 def _pwm_source_snapshot(qtest):
     """Non-silicon read-only QEMU edge/clock journal, NOT duty estimates."""
@@ -530,7 +559,8 @@ def run(args):
                  args.switch_focus_window_ms
                  if getattr(args,"switch_focus_window_ms",None) else "") +
                 (",esc-sim-bemf-robustness="+args.experimental_bemf_robustness
-                 if getattr(args,"experimental_bemf_robustness",None) else ""),
+                 if getattr(args,"experimental_bemf_robustness",None) else "") +
+                ",esc-sim-native-motor-profile="+args.sim_motor_profile,
                 *(["-S","-qmp",f"unix:{qmp_sockpath},server=on,wait=off"]
                   if args.differential_sync_start else []),
                 "-kernel", str(args.elf.resolve()),
@@ -591,6 +621,8 @@ def run(args):
                     qtest = TimedAutonomousQTest(
                         conn, response_timeout_s=args.qtest_response_timeout_s)
                     evidence["motor_before"] = _motor_snapshot(qtest)
+                    evidence["effective_sim_profile"] = _assert_effective_sim_model(
+                        evidence["motor_before"],args.sim_motor_profile)
                     evidence["pwm_source_before"] = _pwm_source_snapshot(qtest)
                     evidence["original_guest_before"] = _read_original_guest_telemetry(qtest,symbol_addrs)
                     evidence["receiver_before"] = _receiver_snapshot(qtest.read)
@@ -883,6 +915,10 @@ def main():
                         help="EXPERIMENT ONLY: bounded QEMU analog "
                              "OFFSET:SWITCH_CODE; no Guest writes; "
                              "requires separate non-original candidate SHA")
+    parser.add_argument("--sim-motor-profile",choices=DATASHEET_PROFILES,
+                        default="ecx87-kv147",
+                        help="SIM_ONLY QEMU native motor parameter set; "
+                             "verify effective model by read-only QTest")
     parser.add_argument("--cfg-flash", type=Path, required=True)
     parser.add_argument("--artifact", type=Path, default=Path(
         "artifacts/e62-autonomous-native-motor-smoke.json"))

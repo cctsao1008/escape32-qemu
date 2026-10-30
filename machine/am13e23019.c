@@ -360,6 +360,7 @@ typedef struct AM13ENativeMotor {
     QEMUTimer *tick_timer;
     struct AM13EMachineState *machine;
     bool enabled, active, faulted, gate;
+    uint32_t model_profile; /* default KV147=0, opt-in KV210=210 */
     uint32_t fault_code, mask, ticks, switch_events, analog_updates;
     int64_t last_ns;
     double currents[3], theta, omega, last_torque;
@@ -4366,6 +4367,25 @@ static void am13e_init(MachineState *machine)
     qemu_register_reset(am13e_handoff_reset, s);
 }
 
+/* Host QEMU machine property only, never a Guest firmware knob. */
+static char *am13e_get_native_motor_profile(Object *obj, Error **errp)
+{
+    AM13ENativeMotor *m=&AM13E_MACHINE(obj)->native_motor;
+    return g_strdup(m->model_profile==210U ? "ecx87-kv210" : "ecx87-kv147");
+}
+static void am13e_set_native_motor_profile(Object *obj,
+                                            const char *value, Error **errp)
+{
+    AM13ENativeMotor *m=&AM13E_MACHINE(obj)->native_motor;
+    if (value && !strcmp(value,"ecx87-kv147")) {
+        m->model_profile=0U;
+    } else if (value && !strcmp(value,"ecx87-kv210")) {
+        m->model_profile=210U;
+    } else {
+        error_setg(errp,"SIM_ONLY native motor profile must be ecx87-kv147 or ecx87-kv210");
+    }
+}
+
 static bool am13e_get_native_motor(Object *obj, Error **errp)
 {
     return AM13E_MACHINE(obj)->native_motor.enabled;
@@ -4531,8 +4551,13 @@ static void am13e_class_init(ObjectClass *oc, void *data)
                                    am13e_get_native_motor,
                                    am13e_set_native_motor);
     object_class_property_set_description(oc, "esc-sim-native-motor",
-        "SIM_ONLY uncalibrated ECX87-KV147 virtual-time PWM-to-rotor-to-BEMF "
-        "engine. Independent of Guest WFI and GDB; not physical qualified.");
+        "SIM_ONLY PWM-to-rotor-to-BEMF model; default KV147, optional KV210.");
+    object_class_property_add_str(oc, "esc-sim-native-motor-profile",
+                                  am13e_get_native_motor_profile,
+                                  am13e_set_native_motor_profile);
+    object_class_property_set_description(oc, "esc-sim-native-motor-profile",
+        "EXPERIMENT ONLY: default ecx87-kv147 or opt-in ecx87-kv210; "
+        "changes source motor R/L/Kt/Ke, never Guest startup policy/P1.");
     object_class_property_add_str(oc, "esc-sim-bemf-robustness",
                                   am13e_get_bemf_stress,
                                   am13e_set_bemf_stress);
