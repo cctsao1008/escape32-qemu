@@ -20,8 +20,9 @@ def static_torque(omega_rad_s:float)->float:
     if type(omega_rad_s) not in (int,float) or not math.isfinite(omega_rad_s):
         raise ValueError("Invalid rotor angular velocity")
     rpm=abs(omega_rad_s)*30.0/math.pi
-    if rpm>6000:
+    if rpm>6000+1e-8:
         raise ValueError("APC static source outside 0-6000rpm: no extrapolation")
+    rpm=min(rpm,6000.0)
     if rpm<=1000:
         tq=TORQUE_NM[0]*(rpm/1000.0)**2
     else:
