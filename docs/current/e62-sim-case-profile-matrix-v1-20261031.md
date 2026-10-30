@@ -10,6 +10,7 @@ Canonical machine-readable profile registry: [`configs/e62-sim-case-profiles-v1.
 |---|---|---:|---|---|---:|---|
 | `BASE-KV147-24V-NOPROP` | `ecx87-kv147` | 24 V | maxon EC87 KV147 | None | 1× published bare rotor J | **Historical motor-only baseline**, unchanged |
 | `BASE-KV210-24V-NOPROP` | `ecx87-kv210` | 24 V | maxon EC87 KV210 | None | 1× published bare rotor J | **Historical motor-only baseline**, unchanged |
+| `CTL-KV210-47V-NOPROP` | `ecx87-kv210-47v-no-prop` | 47 V | maxon EC87 KV210 | None | 1× bare rotor J | **Voltage-only control** for separating VBUS effects from APC load |
 | `QB-KV210-47V-APC24X12E-J1` | `ecx87-kv210-apc24x12e-47v-j1` | 47 V | maxon EC87 KV210 | APC 24×12E analytical static V=0 | 1× J_m | Product **simulation sensitivity**, no additional prop inertia |
 | `QB-KV210-47V-APC24X12E-J2` | `ecx87-kv210-apc24x12e-47v-j2` | 47 V | maxon EC87 KV210 | APC 24×12E analytical static V=0 | 2× J_m | Product **simulation sensitivity**, assumed prop J = 1× J_m |
 | `QB-KV210-47V-APC24X12E-J5` | `ecx87-kv210-apc24x12e-47v-j5` | 47 V | maxon EC87 KV210 | APC 24×12E analytical static V=0 | 5× J_m | Product **simulation sensitivity**, assumed prop J = 4× J_m |
@@ -28,7 +29,7 @@ Every model is paired with the **same pinned Original Guest** and exactly one so
 | C1500 | `scenarios/e62-experimental-two-demand-coast-medium1500.json` | 1500 / 1500 / **1500** / 1500 / 300 ms | 6300 |
 | C3000 | `scenarios/e62-experimental-two-demand-coast-long3000.json` | 1500 / 1500 / **3000** / 1500 / 300 ms | 7800 |
 
-**Total: 5 × 3 = 15 separately identifiable SIM_ONLY cases.** Profile existence does not imply a case has been run or passed. Normal push CI currently selects three APC models × C300; the GitHub workflow's manual `coast_ms` choice allows selecting C1500 or C3000 without changing any case/firmware parameters. Baseline profiles are preserved and available to the same resolver for independent comparison.
+**Total: 6 × 3 = 18 separately identifiable SIM_ONLY cases.** Profile existence does not imply a case has been run or passed. Normal push CI selects one 47 V motor-only control plus three APC models × C300; the GitHub workflow's manual `coast_ms` choice allows selecting C1500 or C3000 without changing any case/firmware parameters. Baseline profiles are preserved and available to the same resolver for independent comparison.
 
 ## Running and validating a case
 
@@ -61,5 +62,6 @@ The **unchanged** `tools/native_p1_qualification.py` runs separately and its fai
 - APC 24×12E data are analytical static estimates, not propeller inertia, negative windmilling curves, or bench calibration.
 - QEMU model is a research model with stated analog/current/driver assumptions; model provenance and empirical correctness are separate questions.
 - Product/hardware acceptance is not claimed from simulation.
+- The independent 47 V no-prop control separates the supply-voltage change from the APC aerodynamic-load change.
 - The existing Issue #5 300ms significant reversal counterexample remains FAIL until a source-backed, independently reviewed result establishes otherwise.
 - **Firmware may change only for a separately proven firmware bug, never to accommodate SITL.**
