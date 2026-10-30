@@ -15,8 +15,9 @@ import unittest
 
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 OLD_HEAD="ed29fc304c45465d9144343ef8a9264ddad8b067"
-PRE_PROFILE_HEAD="0b6ffa3397c6ece17ffd115df62ea2bf6abc72b8"
-# Immutable pre-profile main tree. Its refactor was an exact source split;
+PRE_PROFILE_HEAD="0dd56fee9601b145ec68ef0299c02924aac70be8"
+# Historical post-refactor source snapshot from the module-split contract commit.
+# At that commit textual expansion must equal the pinned pre-split source.
 # current main has intentional opt-in motor profile changes.
 MACHINE=ROOT/"machine"
 ORIGINAL="am13e_native_motor_plant.inc"
