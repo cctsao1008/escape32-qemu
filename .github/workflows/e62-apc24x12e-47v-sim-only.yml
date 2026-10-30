@@ -1,0 +1,120 @@
+name: "E62 #5 APC24x12E KV210 47V Source Study (No Firmware Edit)"
+
+on:
+  push:
+    branches: [experiment/e62-apc24x12e-47v-coast-20261031]
+    paths:
+      - 'machine/am13e23019.c'
+      - 'machine/am13e_native_motor_plant.inc'
+      - 'machine/am13e_native_motor_dynamics.inc'
+      - 'machine/am13e_native_apc_propeller.inc'
+      - 'tools/native_motor_model_profiles.py'
+      - 'tools/e62_apc24x12e_static.py'
+      - 'configs/e62-apc24x12e-47v-study-v1.json'
+      - 'tools/sim_motor_cfg.py'
+      - 'tests/e62_autonomous_native_motor_probe.py'
+      - 'tests/test_e62_apc24x12e_sim_profile.py'
+      - '.github/workflows/e62-apc24x12e-47v-sim-only.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  independent-apc-model-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate official static torque grid, explicit inertia sensitivity and no policy waiver
+        run: |
+          set -euo pipefail
+          python3 -m py_compile tools/e62_apc24x12e_static.py tools/native_motor_model_profiles.py tests/e62_autonomous_native_motor_probe.py tools/sim_motor_cfg.py
+          python3 -m unittest discover -s tests -p test_e62_apc24x12e_sim_profile.py -v
+          python3 -m unittest discover -s tests -p test_e62_sim_model_profile.py -v
+          python3 -m unittest discover -s tests -p test_e62_guest_adc_phase_coast_audit.py -v
+          python3 - <<'PY'
+          from tools.e62_apc24x12e_static import load,static_torque
+          from tools.native_motor_model_profiles import DATASHEET_PROFILES,APC_STUDY_PROFILES
+          assert DATASHEET_PROFILES==("ecx87-kv147","ecx87-kv210")
+          assert len(APC_STUDY_PROFILES)==3
+          assert load()["motor_rearm_permitted_by_profile"] is False
+          print("PASS_APC_47V_SIM_MODEL_CONTRACT_NOT_P1_QUALIFICATION")
+          PY
+
+  live-original-guest-300ms:
+    needs: independent-apc-model-contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 48
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [ecx87-kv210-apc24x12e-47v-j1, ecx87-kv210-apc24x12e-47v-j2, ecx87-kv210-apc24x12e-47v-j5]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pin unchanged Original Guest and build changed QEMU source
+        run: |
+          set -euo pipefail
+          echo '05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0  baseline/e62-g13b3/firmware/AM13E-rev17.3.elf' | sha256sum -c -
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            libglib2.0-dev libpixman-1-dev libfdt-dev pkg-config meson ninja-build binutils-arm-none-eabi
+          git submodule update --init --depth 1 qemu
+          ./build.sh
+          mkdir -p artifacts/e62-apc24x12e
+          python3 tools/sim_motor_cfg.py --sim-only-opt-in \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --motor-profile "${{ matrix.profile }}" \
+            --output "artifacts/e62-apc24x12e/${{ matrix.profile }}-g13b3-cfg-flash.bin"
+      - name: Run actual 300ms coast with unchanged DShot/ELF and require effective QEMU readback
+        run: |
+          set -euo pipefail
+          root="artifacts/e62-apc24x12e/${{ matrix.profile }}"
+          python3 tests/e62_autonomous_native_motor_probe.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --sim-motor-profile "${{ matrix.profile }}" \
+            --sim-native-adc-bemf \
+            --cfg-flash "$root-g13b3-cfg-flash.bin" \
+            --scenario scenarios/e62-experimental-two-demand-coast-short300.json \
+            --wall-timeout-s 600 \
+            --artifact "$root.json"
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          name="${{ matrix.profile }}"
+          path=Path("artifacts/e62-apc24x12e")/(name+".json")
+          ev=json.loads(path.read_text())
+          prop=ev["effective_sim_profile"]["effective_apc_propeller_source"]
+          expected=int(name[-1])
+          assert prop["apc24x12e_static_enabled"] is True
+          assert prop["inertia_ratio_to_motor"]==expected
+          assert prop["effective_total_inertia_nano_kg_m2"]==round(0.00013*expected*1e9)
+          assert ev["original_elf_sha256"]=="05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0"
+          assert ev["host_guest_register_writes"] is False
+          assert ev["used_guest_wfi_or_gdb"] is False
+          print("PASS_QEMU_APC_PLANT_EFFECTIVE_READBACK_NOT_RESTART",name,prop)
+          PY
+      - name: Preserve actual strict Original P1 no-waiver verdict even when source-backed motor fails
+        if: always()
+        run: |
+          set -uo pipefail
+          root="artifacts/e62-apc24x12e/${{ matrix.profile }}"
+          if [[ -f "$root.json" && -f "$root.p0.events.log" ]]; then
+            python3 tools/native_p1_qualification.py \
+              --scenario scenarios/e62-experimental-two-demand-coast-short300.json \
+              --evidence "$root.json" \
+              --events "$root.p0.events.log" \
+              --output "$root-strict-original-p1.json"
+            status=$?
+            echo "ORIGINAL_P1_EXIT_STATUS=$status (FAIL remains FAIL; no waiver)"
+          fi
+          exit 0
+      - name: Archive raw Original Guest, QEMU and strict P1 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-apc24x12e-${{ matrix.profile }}-SIM-ONLY
+          path: artifacts/e62-apc24x12e/**
+          if-no-files-found: warn
+          retention-days: 30
