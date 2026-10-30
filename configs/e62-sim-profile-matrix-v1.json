@@ -1,0 +1,75 @@
+{
+  "schema": "e62.sim.model-profile-matrix.v1",
+  "scope": "SIM_ONLY_NATIVE_QEMU_NO_PHYSICAL_CALIBRATION",
+  "motor_plant_simulation": {
+    "virtual_bus_v": 24,
+    "tick_ns": 1000,
+    "phase_model": "BALANCED_STAR_SINUSOIDAL",
+    "phase_r_l_from_line_to_line_factor": 0.5,
+    "terminal_kt_to_phase_peak_factor": "1/sqrt(3)",
+    "viscous_friction_nm_per_rad_s": 0.0001,
+    "load_torque_nm": 0
+  },
+  "analog_frontend_simulation": {
+    "adc_bits": 12,
+    "adc_vref_v": 3.3,
+    "bemf_bias_v": 1.65,
+    "bemf_gain_v_per_v": 0.02,
+    "diagnostic_hz": 1000,
+    "diagnostic_is_adc_sampling_clock": false
+  },
+  "current_sensor_simulation": {
+    "adc_code_zero_current": 1000,
+    "adc_codes_per_abs_amp": 4,
+    "overrange_fault_code": 4095,
+    "measures_actual_motor_current": false
+  },
+  "passive_reacquisition_study": {
+    "min_adjacent_phase_delta_codes": 3,
+    "coast_ms": [
+      300,
+      1500,
+      3000
+    ],
+    "rpm_grid": [
+      20,
+      30,
+      60,
+      150,
+      300
+    ],
+    "rank_events_per_electrical_revolution": 6,
+    "diagnostic_samples_per_sector_target": 3,
+    "output_may_authorize_rearm": false
+  },
+  "protection_study": {
+    "oc_sources": [
+      "oc-u",
+      "oc-v",
+      "oc-w"
+    ],
+    "nfault": true,
+    "dshot_loss": true,
+    "trip_latch_retention_required": true,
+    "all_six_gate_off_required": true,
+    "source_fault_not_physical_current": true
+  },
+  "profiles": {
+    "ecx87-kv147": {
+      "kv_rpm_per_v": 147,
+      "terminal_kt_nm_per_a": 0.0649,
+      "line_resistance_ohm": 0.106,
+      "line_inductance_h": 0.000048,
+      "pole_pairs": 21,
+      "rotor_inertia_kg_m2": 0.00013
+    },
+    "ecx87-kv210": {
+      "kv_rpm_per_v": 210,
+      "terminal_kt_nm_per_a": 0.0454,
+      "line_resistance_ohm": 0.0566,
+      "line_inductance_h": 0.0000175,
+      "pole_pairs": 21,
+      "rotor_inertia_kg_m2": 0.00013
+    }
+  }
+}
