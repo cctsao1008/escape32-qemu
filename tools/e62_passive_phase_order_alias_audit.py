@@ -50,6 +50,14 @@ def audit(events,scenario):
              coast_start<=e["vns"]<coast_start+EARLY_WINDOW_NS]
     if not 90<=len(samples)<=105:
         raise ValueError("Missing or duplicated source BEMF early-coast window")
+    # This is the model's 1kHz read-only diagnostic journal, NOT the
+    # Guest ADC clock. Stale/duplicated timestamps cannot be used even
+    # for a diagnostic phase-rank ordering claim.
+    if (samples[0]["vns"]>coast_start+2_000_000 or
+        samples[-1]["vns"]<coast_start+EARLY_WINDOW_NS-3_000_000 or
+        any(not 900_000<=curr["vns"]-prior["vns"]<=1_100_000
+            for prior,curr in zip(samples,samples[1:]))):
+        raise ValueError("Stale, missing or aliased model BEMF diagnostic timestamps")
     seq=[]
     for e in samples:
         volts=e["data"][:3]
