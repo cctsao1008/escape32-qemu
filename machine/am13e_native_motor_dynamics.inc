@@ -149,7 +149,14 @@ static bool am13e_native_motor_current_step(AM13ENativeMotor *m, double dt)
     }
     torque *= AM13E_NATIVE_K_PHASE;
     double previous = m->omega;
-    double omega = (previous+dt*torque/AM13E_NATIVE_J)/
+    /* APC static V=0 analytic propeller load is an OPT-IN product-study
+     * assumption. Do not inject its rotor angle, speed, or torque to Guest. */
+    double prop_torque = AM13E_NATIVE_APC ?
+        am13e_native_apc_prop_torque(previous) : 0.0;
+    if (!isfinite(prop_torque)) {
+        return false; /* No unsupported >6000rpm extrapolation. */
+    }
+    double omega = (previous+dt*(torque-prop_torque)/AM13E_NATIVE_J)/
                    (1.0+dt*AM13E_NATIVE_FRICTION/AM13E_NATIVE_J);
     double theta = remainder(m->theta+AM13E_NATIVE_PP*
                              (previous+omega)*dt/2.0,
@@ -163,6 +170,7 @@ static bool am13e_native_motor_current_step(AM13ENativeMotor *m, double dt)
     m->theta_unwrapped += AM13E_NATIVE_PP*(previous+omega)*dt/2.0;
     m->theta = theta;
     m->last_torque = torque;
+    m->last_prop_torque = prop_torque;
     m->energy_bus_j += bus_j;
     m->energy_diode_j += diode_j;
     m->energy_copper_j += copper_j;

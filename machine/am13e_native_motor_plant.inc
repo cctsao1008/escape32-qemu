@@ -13,7 +13,7 @@
  */
 #include <math.h> /* sin, remainder, isfinite, INFINITY, lround */
 #define AM13E_NATIVE_MOTOR_BASE UINT32_C(0x5ffeb000)
-#define AM13E_NATIVE_MOTOR_SIZE 0xccU
+#define AM13E_NATIVE_MOTOR_SIZE 0xdcU
 #define AM13E_NATIVE_MOTOR_STEP_NS INT64_C(1000)
 #define AM13E_NATIVE_MOTOR_MAGIC UINT32_C(0x4d323645) /* E62M */
 #define AM13E_NATIVE_PP 21.0
@@ -34,12 +34,15 @@
 /* Exactly two bounded source models: default KV147 preserves the
  * historical native QEMU plant; opt-in KV210 uses maxon p.1 R/L/Kt.
  * All expansions occur in functions with the AM13ENativeMotor *m. */
-#define AM13E_NATIVE_KT_TERMINAL (m->model_profile == 210U ? 0.0454 : 0.0649)
+#define AM13E_NATIVE_APC (m->model_profile == 211U || m->model_profile == 212U || m->model_profile == 215U)
+#define AM13E_NATIVE_KV210 (m->model_profile >= 210U)
+#define AM13E_NATIVE_J_RATIO (m->model_profile == 215U ? 5.0 : m->model_profile == 212U ? 2.0 : 1.0)
+#define AM13E_NATIVE_KT_TERMINAL (AM13E_NATIVE_KV210 ? 0.0454 : 0.0649)
 #define AM13E_NATIVE_K_PHASE (AM13E_NATIVE_KT_TERMINAL / 1.7320508075688772935)
-#define AM13E_NATIVE_J 0.00013
-#define AM13E_NATIVE_L (m->model_profile == 210U ? 0.00000875 : 0.000024)
-#define AM13E_NATIVE_R (m->model_profile == 210U ? 0.0283 : 0.053)
-#define AM13E_NATIVE_VBUS 24.0
+#define AM13E_NATIVE_J (0.00013 * AM13E_NATIVE_J_RATIO)
+#define AM13E_NATIVE_L (AM13E_NATIVE_KV210 ? 0.00000875 : 0.000024)
+#define AM13E_NATIVE_R (AM13E_NATIVE_KV210 ? 0.0283 : 0.053)
+#define AM13E_NATIVE_VBUS (AM13E_NATIVE_APC ? 47.0 : 24.0)
 #define AM13E_NATIVE_DIODE 0.7
 #define AM13E_NATIVE_FRICTION 0.0001
 #define AM13E_NATIVE_PI 3.14159265358979323846
@@ -76,6 +79,7 @@ static void am13e_native_motor_reset(AM13ENativeMotor *m)
         AM13E_NATIVE_PI / 180.0;
     m->omega = 0.0;
     m->last_torque = 0.0;
+    m->last_prop_torque = 0.0;
     m->theta_unwrapped = m->theta;
     m->energy_bus_j = m->energy_copper_j = m->energy_diode_j = 0.0;
     m->energy_bemf_j = m->energy_magnetic_j = 0.0;
@@ -107,6 +111,7 @@ static void am13e_native_motor_fault(AM13ENativeMotor *m, uint32_t code)
     error_report("E62_NATIVE_MOTOR_FAIL_CLOSED code=%u", code);
 }
 
+#include "am13e_native_apc_propeller.inc"
 #include "am13e_native_motor_dynamics.inc"
 #include "am13e_native_analog_frontend.inc"
 #include "am13e_native_pwm_coupling.inc"
@@ -233,7 +238,7 @@ static MemTxResult am13e_native_motor_read(void *opaque, hwaddr off,
     /* Non-silicon read-only effective plant, never guest-authored:
      * Kv rpm/V; phase R micro-ohm; phase L nH; terminal Kt micro-Nm/A;
      * virtual DC bus mV. Preserve all prior QTest offsets. */
-    case 0x8c: *v=m->model_profile == 210U ? 210U : 147U; break;
+    case 0x8c: *v=AM13E_NATIVE_KV210 ? 210U : 147U; break;
     case 0x90: *v=(uint32_t)llround(AM13E_NATIVE_R*1e6); break;
     case 0x94: *v=(uint32_t)llround(AM13E_NATIVE_L*1e9); break;
     case 0x98: *v=(uint32_t)llround(AM13E_NATIVE_KT_TERMINAL*1e6); break;
@@ -252,6 +257,12 @@ static MemTxResult am13e_native_motor_read(void *opaque, hwaddr off,
     case 0xc0: *v=m->phase_adc_guest_reads[0]; break;
     case 0xc4: *v=m->phase_adc_guest_reads[1]; break;
     case 0xc8: *v=m->phase_adc_guest_reads[2]; break;
+    /* Host-only effective APC profile readback; never a Guest angle sensor.
+     * Added after historical offsets to preserve every prior QTest ABI. */
+    case 0xcc: *v=AM13E_NATIVE_APC ? 1U : 0U; break;
+    case 0xd0: *v=(uint32_t)llround(AM13E_NATIVE_J*1e9); break;
+    case 0xd4: *v=(uint32_t)(int32_t)llround(m->last_prop_torque*1e6); break;
+    case 0xd8: *v=AM13E_NATIVE_APC ? (m->model_profile-210U) : 0U; break;
     default: return MEMTX_ERROR;
     }
     return MEMTX_OK;

@@ -362,7 +362,8 @@ typedef struct AM13ENativeMotor {
     QEMUTimer *tick_timer;
     struct AM13EMachineState *machine;
     bool enabled, active, faulted, gate;
-    uint32_t model_profile; /* default KV147=0, opt-in KV210=210 */
+    uint32_t model_profile; /* 0=KV147, 210=KV210; 211/212/215=APC J sensitivity */
+    double last_prop_torque; /* Source-only signed aerodynamic drag, N*m */
     uint32_t phase_adc_publications[3]; /* EOC only, read-only observer */
     uint32_t phase_adc_nonmidscale[3]; /* dynamic modeled BEMF EOC */
     uint32_t phase_adc_guest_reads[3]; /* actual Guest ADCRESULT MMIO */
@@ -4441,7 +4442,13 @@ static void am13e_init(MachineState *machine)
 static char *am13e_get_native_motor_profile(Object *obj, Error **errp)
 {
     AM13ENativeMotor *m=&AM13E_MACHINE(obj)->native_motor;
-    return g_strdup(m->model_profile==210U ? "ecx87-kv210" : "ecx87-kv147");
+    switch (m->model_profile) {
+    case 210U: return g_strdup("ecx87-kv210");
+    case 211U: return g_strdup("ecx87-kv210-apc24x12e-47v-j1");
+    case 212U: return g_strdup("ecx87-kv210-apc24x12e-47v-j2");
+    case 215U: return g_strdup("ecx87-kv210-apc24x12e-47v-j5");
+    default: return g_strdup("ecx87-kv147");
+    }
 }
 static void am13e_set_native_motor_profile(Object *obj,
                                             const char *value, Error **errp)
@@ -4451,8 +4458,14 @@ static void am13e_set_native_motor_profile(Object *obj,
         m->model_profile=0U;
     } else if (value && !strcmp(value,"ecx87-kv210")) {
         m->model_profile=210U;
+    } else if (value && !strcmp(value,"ecx87-kv210-apc24x12e-47v-j1")) {
+        m->model_profile=211U;
+    } else if (value && !strcmp(value,"ecx87-kv210-apc24x12e-47v-j2")) {
+        m->model_profile=212U;
+    } else if (value && !strcmp(value,"ecx87-kv210-apc24x12e-47v-j5")) {
+        m->model_profile=215U;
     } else {
-        error_setg(errp,"SIM_ONLY native motor profile must be ecx87-kv147 or ecx87-kv210");
+        error_setg(errp,"SIM_ONLY motor profile: KV147/KV210 or exact APC24x12E-47V J1/J2/J5");
     }
 }
 
@@ -4657,8 +4670,9 @@ static void am13e_class_init(ObjectClass *oc, void *data)
                                   am13e_get_native_motor_profile,
                                   am13e_set_native_motor_profile);
     object_class_property_set_description(oc, "esc-sim-native-motor-profile",
-        "EXPERIMENT ONLY: default ecx87-kv147 or opt-in ecx87-kv210; "
-        "changes source motor R/L/Kt/Ke, never Guest startup policy/P1.");
+        "SIM_ONLY: historical KV147/KV210 or independent 47V KV210 "
+        "APC24x12E static aerodynamic-load J1/J2/J5 sensitivity. "
+        "Never modifies Guest firmware, Original P1 or historical profiles.");
     object_class_property_add_bool(oc, "esc-sim-native-adc-bemf",
                                    am13e_get_native_adc_bemf,
                                    am13e_set_native_adc_bemf);

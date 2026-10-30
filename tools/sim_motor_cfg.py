@@ -15,7 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from tools.native_motor_model_profiles import (
-    DATASHEET_PROFILES, native_motor_parameters, native_motor_model_metadata)
+    QEMU_MOTOR_PROFILES, native_motor_parameters, native_motor_model_metadata)
 from tools.native_sim_cfg_flash import extract_cfgdata, FLASH_CFG
 
 # Verified against original Rel17.3 src/common.h Cfg layout:
@@ -25,7 +25,7 @@ TELEM_POLES_CFG_OFFSET = 57
 
 
 def build_profile_cfg_flash(elf_bytes: bytes, profile: str):
-    if profile not in DATASHEET_PROFILES:
+    if profile not in QEMU_MOTOR_PROFILES:
         raise ValueError("Only documented ECX87 motor profiles may provision Cfg")
     original = extract_cfgdata(elf_bytes)
     poles = native_motor_parameters(profile).pole_pairs * 2
@@ -72,7 +72,7 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--sim-only-opt-in", action="store_true", required=True)
     p.add_argument("--elf", type=Path, required=True)
-    p.add_argument("--motor-profile", choices=DATASHEET_PROFILES, required=True)
+    p.add_argument("--motor-profile", choices=QEMU_MOTOR_PROFILES, required=True)
     p.add_argument("--output", type=Path, required=True)
     a = p.parse_args()
     if ("g13b3" not in a.output.name.lower() or

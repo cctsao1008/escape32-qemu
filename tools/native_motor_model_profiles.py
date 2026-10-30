@@ -14,8 +14,14 @@ import math
 
 from .virtual_bldc import MotorParameters
 
-PROFILES = ("legacy", "reciprocal", "ecx87-kv147", "ecx87-kv210")
+APC_STUDY_PROFILES = (
+    "ecx87-kv210-apc24x12e-47v-j1",
+    "ecx87-kv210-apc24x12e-47v-j2",
+    "ecx87-kv210-apc24x12e-47v-j5",
+)
 DATASHEET_PROFILES = ("ecx87-kv147", "ecx87-kv210")
+QEMU_MOTOR_PROFILES = DATASHEET_PROFILES + APC_STUDY_PROFILES
+PROFILES = ("legacy", "reciprocal") + QEMU_MOTOR_PROFILES
 _ECX87 = {
     "ecx87-kv147": {
         "part_number": "773484",
@@ -39,8 +45,9 @@ ECX87_ROTOR_INERTIA_KG_M2 = 1300.0 * 1e-7  # g*cm^2 -> kg*m^2
 def native_motor_parameters(profile="legacy"):
     if profile not in PROFILES:
         raise ValueError("Unknown explicit SIM_ONLY motor profile: " + str(profile))
-    if profile in DATASHEET_PROFILES:
-        m = _ECX87[profile]
+    if profile in QEMU_MOTOR_PROFILES:
+        apc = profile in APC_STUDY_PROFILES
+        m = _ECX87["ecx87-kv210" if apc else profile]
         pole_pairs = ECX87_POLE_PAIRS
         kt_terminal = m["kt_nm_per_a"]
         # Maxon terminal Kt=60/(2*pi*Kv); the largest sinusoidal
@@ -50,12 +57,13 @@ def native_motor_parameters(profile="legacy"):
         if abs(kt_terminal / (60.0 / (2.0*math.pi*m["kv_rpm_per_v"])) - 1.0) > 0.01:
             raise ValueError("ECX87 terminal Kt and Kv datasheet mismatch")
         return MotorParameters(
-            vbus_v=24.0,
+            vbus_v=47.0 if apc else 24.0,
             phase_resistance_ohm=m["line_resistance_ohm"] / 2.0,
             phase_inductance_h=m["line_inductance_h"] / 2.0,
             bemf_constant_v_per_rad_s=kt_phase / pole_pairs,
             torque_constant_nm_per_a=kt_phase,
-            inertia_kg_m2=ECX87_ROTOR_INERTIA_KG_M2,
+            inertia_kg_m2=ECX87_ROTOR_INERTIA_KG_M2 *
+                (int(profile[-1]) if apc else 1),
             # Uncalibrated simulator assumptions, NOT maxon datasheet.
             viscous_friction_nm_per_rad_s=0.0001,
             load_torque_nm=0.0,
@@ -102,10 +110,11 @@ def native_motor_model_metadata(profile):
                        profile in DATASHEET_PROFILES else
                        "SAMPLED_HOLD_EULER_TWO_TERMINAL_RESET_CURRENT_AT_COMMUTATION"),
         "physical_motor_calibrated": False,
-        "propeller_inertia_and_load_modeled": False,
+        "propeller_inertia_and_load_modeled": profile in APC_STUDY_PROFILES,
     }
-    if profile in DATASHEET_PROFILES:
-        m = _ECX87[profile]
+    if profile in QEMU_MOTOR_PROFILES:
+        apc = profile in APC_STUDY_PROFILES
+        m = _ECX87["ecx87-kv210" if apc else profile]
         meta.update(
             source="MAXON_EC_87_FLAT_UAV_APR_2025_DATASHEET_PAGE_1",
             datasheet_part_number=m["part_number"],
@@ -122,8 +131,20 @@ def native_motor_model_metadata(profile):
             ke_convention_assumption=(
                 "BALANCED_STAR_SINE_PHASE_PEAK_EQUALS_PUBLISHED_TERMINAL_KT_OVER_SQRT3_ASSUMED"),
             frontend_model="UNCHANGED_SIM_ONLY_1P65V_BIAS_0P02_GAIN",
-            caveat="MOTOR_ONLY_UNCALIBRATED_NOT_PROPELLER_OR_HARDWARE",
+            caveat=("APC_ANALYTICAL_STATIC_TORQUE_AND_GUESSED_J_NOT_HARDWARE"
+                    if apc else "MOTOR_ONLY_UNCALIBRATED_NOT_PROPELLER_OR_HARDWARE"),
         )
+        if apc:
+            meta.update(
+                model_source="MAXON_APR2025_AND_APC_PER3_24x12E_v2022_0915",
+                propeller_static_torque_model="APC_V0_MPH_1000_TO_6000RPM",
+                propeller_torque_nm_grid=[0.132,0.494,1.085,1.913,2.996,4.362],
+                propeller_inertia_ratio_to_motor=int(profile[-1]),
+                propeller_inertia_measured=False,
+                propeller_inertia_and_load_modeled=True,
+                static_airflow_assumption=True,
+                product_voltage_assumption_v=47.0,
+            )
     else:
         meta["source"] = "PINNED_LEGACY_SIM_ONLY_TEST_VALUES"
     return meta

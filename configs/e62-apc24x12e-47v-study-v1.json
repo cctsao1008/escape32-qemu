@@ -1,0 +1,37 @@
+{
+  "schema": "e62.sim.apc24x12e-static-47v.v1",
+  "scope": "SIM_ONLY_ANALYTICAL_PROP_NO_FIRMWARE_EDIT",
+  "motor_profile": "ecx87-kv210",
+  "bus_voltage_v": 47,
+  "apc_file": "PER3_24x12E.dat",
+  "apc_version": "v2022-0915",
+  "apc_simulation_date": "2022-09-22",
+  "apc_airspeed_mph": 0,
+  "source_rpm": [
+    1000,
+    2000,
+    3000,
+    4000,
+    5000,
+    6000
+  ],
+  "source_static_torque_nm": [
+    0.132,
+    0.494,
+    1.085,
+    1.913,
+    2.996,
+    4.362
+  ],
+  "motor_rotor_inertia_kg_m2": 0.00013,
+  "effective_total_inertia_ratio_to_motor": [
+    1,
+    2,
+    5
+  ],
+  "propeller_inertia_measured": false,
+  "source_torque_is_hardware_measurement": false,
+  "above_6000rpm_extrapolation": false,
+  "original_rel17_p1_criteria_unchanged": true,
+  "motor_rearm_permitted_by_profile": false
+}
