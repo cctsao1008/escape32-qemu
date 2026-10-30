@@ -82,6 +82,24 @@
       "guest_motor_permission_from_profile": false
     },
     {
+      "id": "CTL-KV210-47V-NOPROP",
+      "qemu_motor_profile": "ecx87-kv210-47v-no-prop",
+      "qualification_class": "VOLTAGE_CONTROL_MOTOR_ONLY",
+      "source_identity": "MAXON_MOTOR_DATASHEET_AND_47V_SIM_CONTROL",
+      "motor": "maxon EC 87 flat UAV",
+      "published_kv_rpm_per_v": 210,
+      "phase_resistance_microohm": 28300,
+      "phase_inductance_nanohenry": 8750,
+      "terminal_kt_micro_nm_per_a": 45400,
+      "dc_bus_millivolts": 47000,
+      "propeller_model": "NO_PROPELLER",
+      "effective_total_inertia_nano_kg_m2": 130000,
+      "effective_inertia_ratio_to_motor": 1,
+      "propeller_inertia_measured": false,
+      "product_hardware_calibrated": false,
+      "guest_motor_permission_from_profile": false
+    },
+    {
       "id": "QB-KV210-47V-APC24X12E-J1",
       "qemu_motor_profile": "ecx87-kv210-apc24x12e-47v-j1",
       "qualification_class": "ANALYTICAL_PROP_SENSITIVITY",
