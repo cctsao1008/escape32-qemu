@@ -58,6 +58,25 @@ class SimModelProfileContract(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"waive"):
             changed_doc(d)
 
+    def test_uv_ov_thermal_are_explicitly_unmodeled_not_pass(self):
+        d=load()
+        expected={"uv":"NOT_MODELED","ov":"NOT_MODELED",
+                  "thermal":"NOT_MODELED"}
+        self.assertEqual(
+            d["protection_study"]["non_oc_virtual_fault_sources"],expected)
+        self.assertEqual(
+            report(d)["protection_source_status"]["thermal"],"NOT_MODELED")
+        self.assertFalse(report(d)["unmodeled_faults_qualified"])
+        for name in expected:
+            forged=load()
+            forged["protection_study"]["non_oc_virtual_fault_sources"][name]="PASS"
+            with self.assertRaisesRegex(ValueError,"waive"):
+                changed_doc(forged)
+        forged=load()
+        forged["protection_study"]["unmodeled_faults_claimed_qualified"]=True
+        with self.assertRaisesRegex(ValueError,"waive"):
+            changed_doc(forged)
+
     def test_rearm_and_scan_grid_mutations_rejected(self):
         d=load()
         d["passive_reacquisition_study"]["output_may_authorize_rearm"]=True
