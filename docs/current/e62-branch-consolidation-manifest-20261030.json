@@ -71,5 +71,27 @@
     "300ms coast second demand",
     "UV/OV and thermal source faults"
   ],
-  "deletion_gate": "integration branch merged to main, live integration CI PASS, archive-only parents reachable from main; no branches deleted by this task"
+  "deletion_gate": "integration branch merged to main, live integration CI PASS, archive-only parents reachable from main; no branches deleted by this task",
+  "post_merge": {
+    "pr": 9,
+    "pr_url": "https://github.com/cctsao1008/escape32-qemu/pull/9",
+    "merged_main_sha": "b160af01c9e334d05d4882b2115c76118be6f615",
+    "archive_history_commit": "c9d5dbfcb5e966254fb7fd4b0a9b53d542735d3a",
+    "all_seven_retirement_tips_ancestor_of_main": true,
+    "old_legacy_branches_deleted": false,
+    "integrated_sim_CI": {
+      "profile_and_6_oc": "SUCCESS:41059442828",
+      "nfault_wwdt": "SUCCESS:41059442821"
+    },
+    "main_regression_CI": {
+      "original_nfault_wwdt": "SUCCESS:41060908950",
+      "model_module_contract": "SUCCESS:41061663708",
+      "host_model_units": "SUCCESS:41061510923",
+      "profile_and_6_oc": "IN_PROGRESS:41060908974",
+      "historical_pin_current_source_mismatch": "FAIL:41060908845",
+      "strict_rotor_reversal": "FAIL:41060908985"
+    },
+    "interpretation": "History-safe branch retirement independent of unresolved software functional red gates. Keep #5/#7 open. Do not label all CI green.",
+    "deletion_authority": "USER_ONLY_SEPARATE_STEP"
+  }
 }

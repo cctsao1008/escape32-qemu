@@ -72,3 +72,26 @@ in `docs/current/e62-branch-consolidation-manifest-20261030.json`.
    check main CI and branch list. Only then mark **READY_TO_DELETE**.
 5. User deletes six old branches plus the temporary integration branch
    in one separate step. This cleanup task does not delete them.
+
+## Verified post-merge status (2026-10-30)
+
+- PR [#9](https://github.com/cctsao1008/escape32-qemu/pull/9)
+  merged to `main` as `b160af01c9e334d05d4882b2115c76118be6f615`.
+- Archive-only parent `c9d5dbfcb5e966254fb7fd4b0a9b53d542735d3a`
+  is an ancestor of `main`; **all seven non-main branches**
+  (six legacy + temporary integration) individually compare
+  `ahead_by=0` against `main`. Their commit histories are safe
+  after remote ref removal.
+- Exact source-run integration CI [#41059442828](https://github.com/cctsao1008/escape32-qemu/actions/runs/41059442828)
+  passed profile contract + KV147/KV210 U/V/W (6/6).
+  Original nFAULT/WWDT CI [#41059442821](https://github.com/cctsao1008/escape32-qemu/actions/runs/41059442821)
+  passed.
+- Post-merge main original nFAULT/WWDT CI [#41060908950](https://github.com/cctsao1008/escape32-qemu/actions/runs/41060908950)
+  passed; main model module contract [#41061663708](https://github.com/cctsao1008/escape32-qemu/actions/runs/41061663708)
+  and host unit tests [#41061510923](https://github.com/cctsao1008/escape32-qemu/actions/runs/41061510923)
+  also passed after updating historical-version source identity tests.
+- **Known red gates are not waived**: pinned G13B3 source pairing with
+  changed current QEMU must not be represented as original paired source,
+  and strict rotor reversal/missing torque remains a genuine SIM functional
+  failure. These do not undo Git-ancestry preservation or qualify #5.
+- **No branches have been deleted by this task.**
