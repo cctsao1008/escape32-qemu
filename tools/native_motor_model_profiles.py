@@ -16,13 +16,14 @@ import math
 
 from .virtual_bldc import MotorParameters
 
+VOLTAGE_CONTROL_PROFILES = ("ecx87-kv210-47v-no-prop",)
 APC_STUDY_PROFILES = (
     "ecx87-kv210-apc24x12e-47v-j1",
     "ecx87-kv210-apc24x12e-47v-j2",
     "ecx87-kv210-apc24x12e-47v-j5",
 )
 DATASHEET_PROFILES = ("ecx87-kv147", "ecx87-kv210")
-QEMU_MOTOR_PROFILES = DATASHEET_PROFILES + APC_STUDY_PROFILES
+QEMU_MOTOR_PROFILES = DATASHEET_PROFILES + VOLTAGE_CONTROL_PROFILES + APC_STUDY_PROFILES
 # Preserve the historical host A/B fixture public API (four entries).
 # APC products are a separate opt-in QEMU study, not old PROFILES.
 PROFILES = ("legacy", "reciprocal") + DATASHEET_PROFILES
@@ -47,11 +48,13 @@ ECX87_ROTOR_INERTIA_KG_M2 = 1300.0 * 1e-7  # g*cm^2 -> kg*m^2
 
 
 def native_motor_parameters(profile="legacy"):
-    if profile not in PROFILES and profile not in APC_STUDY_PROFILES:
+    if (profile not in PROFILES and profile not in APC_STUDY_PROFILES
+            and profile not in VOLTAGE_CONTROL_PROFILES):
         raise ValueError("Unknown explicit SIM_ONLY motor profile: " + str(profile))
     if profile in QEMU_MOTOR_PROFILES:
         apc = profile in APC_STUDY_PROFILES
-        m = _ECX87["ecx87-kv210" if apc else profile]
+        m = _ECX87["ecx87-kv210" if (apc or
+                  profile in VOLTAGE_CONTROL_PROFILES) else profile]
         pole_pairs = ECX87_POLE_PAIRS
         kt_terminal = m["kt_nm_per_a"]
         # Maxon terminal Kt=60/(2*pi*Kv); the largest sinusoidal
@@ -61,7 +64,7 @@ def native_motor_parameters(profile="legacy"):
         if abs(kt_terminal / (60.0 / (2.0*math.pi*m["kv_rpm_per_v"])) - 1.0) > 0.01:
             raise ValueError("ECX87 terminal Kt and Kv datasheet mismatch")
         return MotorParameters(
-            vbus_v=47.0 if apc else 24.0,
+            vbus_v=47.0 if (apc or profile in VOLTAGE_CONTROL_PROFILES) else 24.0,
             phase_resistance_ohm=m["line_resistance_ohm"] / 2.0,
             phase_inductance_h=m["line_inductance_h"] / 2.0,
             bemf_constant_v_per_rad_s=kt_phase / pole_pairs,
@@ -119,7 +122,8 @@ def native_motor_model_metadata(profile):
     }
     if profile in QEMU_MOTOR_PROFILES:
         apc = profile in APC_STUDY_PROFILES
-        m = _ECX87["ecx87-kv210" if apc else profile]
+        m = _ECX87["ecx87-kv210" if (apc or
+                  profile in VOLTAGE_CONTROL_PROFILES) else profile]
         meta.update(
             source="MAXON_EC_87_FLAT_UAV_APR_2025_DATASHEET_PAGE_1",
             datasheet_part_number=m["part_number"],
