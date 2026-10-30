@@ -2,9 +2,12 @@
 """E62 #5 source-owned Original Guest ADC epoch negative tests."""
 import copy
 import unittest
+import json
+import tempfile
+from pathlib import Path
 from tools.e62_guest_adc_phase_coast_audit import (
     correlate_guest_phase_epochs, contrast_in_window, validate_source,
-    rank_motion_diagnostic, RANK_SEQUENCE)
+    rank_motion_diagnostic, RANK_SEQUENCE, load_rank_profile)
 
 def sample(n=5):
     e=[]
@@ -78,6 +81,44 @@ class RealGuestADCSource(unittest.TestCase):
         self.assertEqual(x["distinct_state_observations"],0)
         with self.assertRaisesRegex(ValueError,"Unsafe"):
             rank_motion_diagnostic(ties,separation=1)
+
+    def test_sparse_three_transitions_cannot_fake_direction_confidence(self):
+        # Replicates the genuine KV147 end-of-300ms-coast hazard:
+        # three apparent adjacent rank transitions but 95/100 tied codes.
+        def ranked(state):
+            order=RANK_SEQUENCE[state]
+            out=[0,0,0]
+            for i,p in enumerate(order):
+                out[p]=[2100,2050,2000][i]
+            return out
+        rec=[]
+        ranked_at={0:0,20:5,40:4,60:3,80:2}
+        for i in range(100):
+            rec.append({"vns":i*1_000_000,
+                        "codes":ranked(ranked_at[i]) if i in ranked_at else
+                                 [2048,2049,2048]})
+        result=rank_motion_diagnostic(rec)
+        self.assertEqual(result["rank_samples_with_ambiguous_ties"],95)
+        self.assertGreaterEqual(result["adjacent_other_way_steps"],3)
+        self.assertFalse(result["rank_coverage_sufficient"])
+        self.assertFalse(result["rank_freshness_sufficient"])
+        self.assertFalse(result["diagnostic_consistent_rank_sequence_candidate_only"])
+        self.assertFalse(result["motor_rearm_permitted"])
+
+    def test_versioned_profile_cannot_lower_sparse_or_stale_qualification(self):
+        original=load_rank_profile()
+        self.assertEqual(original["minimum_valid_rank_fraction"],0.75)
+        for key,value in (("minimum_valid_rank_fraction",0.05),
+                          ("maximum_valid_rank_sample_gap_ms",100),
+                          ("minimum_one_way_rank_transitions",1),
+                          ("rearm_permitted",True)):
+            d=dict(original)
+            d[key]=value
+            with tempfile.TemporaryDirectory() as folder:
+                path=Path(folder)/"bad.json"
+                path.write_text(json.dumps(d))
+                with self.assertRaisesRegex(ValueError,"Unsafe"):
+                    load_rank_profile(path)
 
     def test_missing_phase_or_guest_read_fails(self):
         e=sample()
