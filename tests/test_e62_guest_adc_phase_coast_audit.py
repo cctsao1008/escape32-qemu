@@ -3,7 +3,8 @@
 import copy
 import unittest
 from tools.e62_guest_adc_phase_coast_audit import (
-    correlate_guest_phase_epochs, contrast_in_window, validate_source)
+    correlate_guest_phase_epochs, contrast_in_window, validate_source,
+    rank_motion_diagnostic, RANK_SEQUENCE)
 
 def sample(n=5):
     e=[]
@@ -40,6 +41,43 @@ class RealGuestADCSource(unittest.TestCase):
         self.assertEqual(verdict["classification"],
                          "INSUFFICIENT_QUANTIZED_GUEST_ADC_CONTRAST")
         self.assertFalse(verdict["rotor_phase_qualified"])
+
+    def test_rank_motion_only_candidate_never_authorizes_rearm(self):
+        # Construct all six six-permutation phase orderings, then repeat
+        # advancing rank in one direction. Deliberately unlinked to angle.
+        volts=(2100,2050,2000)
+        rec=[]
+        for i in range(9):
+            order=RANK_SEQUENCE[i%6]
+            v=[0,0,0]
+            for p,phase in enumerate(order):
+                v[phase]=volts[p]
+            rec.append({"vns":i*1_000_000,"codes":v})
+        x=rank_motion_diagnostic(rec)
+        self.assertTrue(x["diagnostic_consistent_rank_sequence_candidate_only"])
+        self.assertFalse(x["Guest_windmill_direction_or_angle_qualified"])
+        self.assertFalse(x["motor_rearm_permitted"])
+
+    def test_skips_mixed_direction_and_ties_never_count_as_confidence(self):
+        def values(index):
+            order=RANK_SEQUENCE[index]
+            out=[0,0,0]
+            for i,p in enumerate(order):
+                out[p]=[2100,2050,2000][i]
+            return out
+        for ids in ([0,2,4,0],[0,1,0,1,0]):
+            rec=[{"vns":i*1_000_000,"codes":values(v)}
+                 for i,v in enumerate(ids)]
+            x=rank_motion_diagnostic(rec)
+            self.assertFalse(x["diagnostic_consistent_rank_sequence_candidate_only"])
+            self.assertFalse(x["motor_rearm_permitted"])
+        ties=[{"vns":i*1_000_000,"codes":[2048,2048,2049]}
+              for i in range(60)]
+        x=rank_motion_diagnostic(ties)
+        self.assertEqual(x["rank_samples_with_ambiguous_ties"],60)
+        self.assertEqual(x["distinct_state_observations"],0)
+        with self.assertRaisesRegex(ValueError,"Unsafe"):
+            rank_motion_diagnostic(ties,separation=1)
 
     def test_missing_phase_or_guest_read_fails(self):
         e=sample()
