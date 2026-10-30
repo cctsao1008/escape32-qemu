@@ -56,7 +56,8 @@ def load(path=DEFAULT):
     adc=data["analog_frontend_simulation"]
     if type(adc) is not dict or set(adc)!={
             "adc_bits","adc_vref_v","bemf_bias_v","bemf_gain_v_per_v",
-            "diagnostic_hz","diagnostic_is_adc_sampling_clock"}:
+            "diagnostic_hz","diagnostic_is_adc_sampling_clock",
+            "guest_adc_phase_source"}:
         raise ValueError("Incomplete QEMU analog frontend contract")
     if type(adc["adc_bits"]) is not int or adc["adc_bits"]!=12 or (
             type(adc["diagnostic_hz"]) is not int or adc["diagnostic_hz"]!=1000 or
@@ -65,6 +66,17 @@ def load(path=DEFAULT):
     for key,expected in (("adc_vref_v",3.3),("bemf_bias_v",1.65),
                          ("bemf_gain_v_per_v",.02)):
         near(adc[key],expected,key)
+    phase_source=adc["guest_adc_phase_source"]
+    if phase_source!={
+        "default":"EXTERNAL_FIXED_FIXTURE",
+        "opt_in":"NATIVE_MOTOR_BEMF_ON_REAL_SOC_EOC",
+        "phase_soc_map":[
+            {"adc":0,"soc":1,"channel":12,"phase":"u"},
+            {"adc":1,"soc":2,"channel":2,"phase":"v"},
+            {"adc":2,"soc":1,"channel":5,"phase":"w"}],
+        "guest_rotor_angle_sensor":False,
+        "guest_motor_rearm_authorized":False}:
+        raise ValueError("SIM_ONLY native Guest ADC SOC source/map must match firmware, no rearm")
     oc=data["current_sensor_simulation"]
     if type(oc) is not dict or set(oc)!={
             "adc_code_zero_current","adc_codes_per_abs_amp",
@@ -167,6 +179,8 @@ def report(data):
                 study["initial_electrical_degrees_grid"],
             "initial_phase_is_qemu_model_only_not_guest_sensor":True,
             "computed_points":results,"original_p1_unchanged":True,
+            "guest_adc_bemf_opt_in":"REQUIRES_GENUINE_ADC_SOC_EOC_QEMU_EVIDENCE",
+            "guest_adc_samples_are_rotor_angle_sensor":False,
             "hardware_qualified":False,"rearm_permitted":False,
             "separate_actual_qemu_runtime_verification_required":True,
             "protection_source_status":{

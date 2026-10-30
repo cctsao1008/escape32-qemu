@@ -46,6 +46,24 @@ class SimModelProfileContract(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"model"):
             changed_doc(d)
 
+    def test_native_guest_adc_phase_soc_map_and_forged_rotor_angle_rejected(self):
+        d=load()
+        m=d["analog_frontend_simulation"]["guest_adc_phase_source"]
+        self.assertEqual([(x["adc"],x["soc"],x["channel"],x["phase"])
+                         for x in m["phase_soc_map"]],
+                         [(0,1,12,"u"),(1,2,2,"v"),(2,1,5,"w")])
+        self.assertFalse(m["guest_motor_rearm_authorized"])
+        self.assertFalse(m["guest_rotor_angle_sensor"])
+        for mutation in ("wrong_channel","false_rearm"):
+            d=load()
+            m=d["analog_frontend_simulation"]["guest_adc_phase_source"]
+            if mutation=="wrong_channel":
+                m["phase_soc_map"][1]["channel"]=5
+            else:
+                m["guest_motor_rearm_authorized"]=True
+            with self.assertRaisesRegex(ValueError,"native Guest ADC SOC"):
+                changed_doc(d)
+
     def test_timing_diagnostic_cannot_claim_real_adc(self):
         d=load()
         d["analog_frontend_simulation"]["diagnostic_is_adc_sampling_clock"]=True

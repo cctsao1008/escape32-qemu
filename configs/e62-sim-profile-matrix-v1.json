@@ -16,7 +16,33 @@
     "bemf_bias_v": 1.65,
     "bemf_gain_v_per_v": 0.02,
     "diagnostic_hz": 1000,
-    "diagnostic_is_adc_sampling_clock": false
+    "diagnostic_is_adc_sampling_clock": false,
+    "guest_adc_phase_source": {
+      "default": "EXTERNAL_FIXED_FIXTURE",
+      "opt_in": "NATIVE_MOTOR_BEMF_ON_REAL_SOC_EOC",
+      "phase_soc_map": [
+        {
+          "adc": 0,
+          "soc": 1,
+          "channel": 12,
+          "phase": "u"
+        },
+        {
+          "adc": 1,
+          "soc": 2,
+          "channel": 2,
+          "phase": "v"
+        },
+        {
+          "adc": 2,
+          "soc": 1,
+          "channel": 5,
+          "phase": "w"
+        }
+      ],
+      "guest_rotor_angle_sensor": false,
+      "guest_motor_rearm_authorized": false
+    }
   },
   "current_sensor_simulation": {
     "adc_code_zero_current": 1000,
