@@ -11,9 +11,10 @@ static double am13e_native_apc_prop_torque(double omega)
     static const double rpm_points[6] = {1000.,2000.,3000.,4000.,5000.,6000.};
     static const double tq_points[6] = {0.132,0.494,1.085,1.913,2.996,4.362};
     double rpm = fabs(omega)*60.0/(2.0*AM13E_NATIVE_PI);
-    if (!isfinite(rpm) || rpm>6000.0) {
+    if (!isfinite(rpm) || rpm>6000.0+1e-8) {
         return NAN; /* Domain limit: maxon EC87 published 6000rpm. */
     }
+    rpm=MIN(rpm,6000.0); /* Floating-point epsilon at the documented cap. */
     if (rpm<=rpm_points[0]) {
         double s=rpm/rpm_points[0];
         return copysign(tq_points[0]*s*s,omega);
