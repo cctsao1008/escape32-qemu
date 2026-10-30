@@ -31,6 +31,7 @@ jobs:
           set -euo pipefail
           python3 -m py_compile tools/e62_apc24x12e_static.py tools/native_motor_model_profiles.py tests/e62_autonomous_native_motor_probe.py tools/sim_motor_cfg.py
           python3 -m unittest discover -s tests -p test_e62_apc24x12e_sim_profile.py -v
+          python3 -m unittest discover -s tests -p test_sim_motor_profiles.py -v
           python3 -m unittest discover -s tests -p test_e62_sim_model_profile.py -v
           python3 -m unittest discover -s tests -p test_e62_guest_adc_phase_coast_audit.py -v
           python3 - <<'PY'
