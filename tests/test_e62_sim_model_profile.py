@@ -140,7 +140,7 @@ class SimModelProfileContract(unittest.TestCase):
                       "initial_phase_override"):
             self.assertIn(token,machine)
         for token in ("case 0xa0:", "initial_phase_override",
-                      "-30000", "AM13E_NATIVE_MOTOR_SIZE 0xb4U"):
+                      "-30000", "AM13E_NATIVE_MOTOR_SIZE 0xccU"):
             self.assertIn(token,plant)
         self.assertIn("configured_initial_electrical_mdeg",runner)
         self.assertIn("args.sim_initial_electrical_degrees",runner)
@@ -158,7 +158,10 @@ class SimModelProfileContract(unittest.TestCase):
         self.assertIn('++m->phase_adc_publications[adc->instance]',machine)
         self.assertIn('m->faulted',machine)
         self.assertIn('case 0xb0:',motor)
-        self.assertIn('AM13E_NATIVE_MOTOR_SIZE 0xb4U',motor)
+        self.assertIn('AM13E_NATIVE_MOTOR_SIZE 0xccU',motor)
+        self.assertIn('phase_adc_nonmidscale',machine)
+        self.assertIn('phase_adc_guest_reads',machine)
+        self.assertIn('"guest_adc_phase_result_reads"',runner)
         self.assertIn('"guest_adc_phase_eoc_from_plant"',runner)
         self.assertIn('args.sim_native_adc_bemf',runner)
 

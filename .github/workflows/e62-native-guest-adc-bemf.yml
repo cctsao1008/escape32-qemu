@@ -71,12 +71,17 @@ jobs:
           assert before['sim_native_adc_bemf_enabled'] is True
           assert before['guest_adc_phase_eoc_from_plant']==[0,0,0]
           counts=source['guest_adc_phase_eoc_from_plant']
+          nonmid=source['guest_adc_phase_nonmidscale_eoc']
+          guest_reads=source['guest_adc_phase_result_reads']
           assert len(counts)==3 and all(isinstance(x,int) and x>0 for x in counts),counts
+          assert len(nonmid)==3 and all(isinstance(x,int) and x>0 for x in nonmid),nonmid
+          assert len(guest_reads)==3 and all(isinstance(x,int) and x>0 for x in guest_reads),guest_reads
           assert run['original_elf_sha256']=='05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0'
           assert run['host_guest_register_writes'] is False
           assert run['used_guest_wfi_or_gdb'] is False
           assert run['synthetic_timed_bemf_enabled'] is False
-          print('PASS_SIM_NATIVE_BEMF_TO_GUEST_ADC0_1_2_REAL_SOC_EOC_NOT_REARM',counts)
+          print('PASS_SIM_NATIVE_BEMF_TO_GUEST_ADC0_1_2_REAL_SOC_EOC_NOT_REARM',
+                'eoc',counts,'dynamic',nonmid,'guest_reads',guest_reads)
           PY
       - name: Save authentic QEMU and Guest phase ADC diagnostics even when FAIL
         if: always()

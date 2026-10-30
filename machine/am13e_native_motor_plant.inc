@@ -13,7 +13,7 @@
  */
 #include <math.h> /* sin, remainder, isfinite, INFINITY, lround */
 #define AM13E_NATIVE_MOTOR_BASE UINT32_C(0x5ffeb000)
-#define AM13E_NATIVE_MOTOR_SIZE 0xb4U
+#define AM13E_NATIVE_MOTOR_SIZE 0xccU
 #define AM13E_NATIVE_MOTOR_STEP_NS INT64_C(1000)
 #define AM13E_NATIVE_MOTOR_MAGIC UINT32_C(0x4d323645) /* E62M */
 #define AM13E_NATIVE_PP 21.0
@@ -53,6 +53,8 @@ static void am13e_native_motor_reset(AM13ENativeMotor *m)
     m->fault_code = m->mask = m->ticks = m->switch_events = 0U;
     m->analog_updates = 0U;
     memset(m->phase_adc_publications, 0, sizeof(m->phase_adc_publications));
+    memset(m->phase_adc_nonmidscale, 0, sizeof(m->phase_adc_nonmidscale));
+    memset(m->phase_adc_guest_reads, 0, sizeof(m->phase_adc_guest_reads));
     /* Retain machine-property stress amplitude across QEMU resets;
      * clear only epoch/counters. Default off changes no prior behavior. */
     m->bemf_stress_last_switch_ns = -1;
@@ -244,6 +246,12 @@ static MemTxResult am13e_native_motor_read(void *opaque, hwaddr off,
     case 0xa8: *v=m->phase_adc_publications[0]; break;
     case 0xac: *v=m->phase_adc_publications[1]; break;
     case 0xb0: *v=m->phase_adc_publications[2]; break;
+    case 0xb4: *v=m->phase_adc_nonmidscale[0]; break;
+    case 0xb8: *v=m->phase_adc_nonmidscale[1]; break;
+    case 0xbc: *v=m->phase_adc_nonmidscale[2]; break;
+    case 0xc0: *v=m->phase_adc_guest_reads[0]; break;
+    case 0xc4: *v=m->phase_adc_guest_reads[1]; break;
+    case 0xc8: *v=m->phase_adc_guest_reads[2]; break;
     default: return MEMTX_ERROR;
     }
     return MEMTX_OK;

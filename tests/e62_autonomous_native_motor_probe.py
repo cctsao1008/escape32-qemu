@@ -271,6 +271,8 @@ def _motor_snapshot(qtest):
         },
         "sim_native_adc_bemf_enabled": bool(get(0xa4)),
         "guest_adc_phase_eoc_from_plant": [get(0xa8),get(0xac),get(0xb0)],
+        "guest_adc_phase_nonmidscale_eoc": [get(0xb4),get(0xb8),get(0xbc)],
+        "guest_adc_phase_result_reads": [get(0xc0),get(0xc4),get(0xc8)],
         "status_flags": get(0x04),
         "native_1us_physics_ticks": get(0x08),
         "actual_pwm_event_notifications": get(0x0c),

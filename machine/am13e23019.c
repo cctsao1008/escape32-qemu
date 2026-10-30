@@ -364,6 +364,8 @@ typedef struct AM13ENativeMotor {
     bool enabled, active, faulted, gate;
     uint32_t model_profile; /* default KV147=0, opt-in KV210=210 */
     uint32_t phase_adc_publications[3]; /* EOC only, read-only observer */
+    uint32_t phase_adc_nonmidscale[3]; /* dynamic modeled BEMF EOC */
+    uint32_t phase_adc_guest_reads[3]; /* actual Guest ADCRESULT MMIO */
     /* SIM_ONLY rotor initial pose: default -30 electrical degrees.
      * Profile is host machine property, not available to Guest firmware. */
     bool initial_phase_override;
@@ -3153,6 +3155,9 @@ static void am13e_sim_adc_complete(void *opaque)
             adc->results[i] = (m->active ? m->bemf_codes[adc->instance] :
                               2048U); /* Model zero-speed bias midpoint. */
             ++m->phase_adc_publications[adc->instance];
+            if (m->active && adc->results[i] != 2048U) {
+                ++m->phase_adc_nonmidscale[adc->instance];
+            }
         } else {
             adc->results[i] = adc->channel_samples[channel];
         }
@@ -3303,6 +3308,12 @@ static MemTxResult am13e_adc_results_read(void *opaque, hwaddr offset,
     *value = adc->results[idx];
     if (size == 4) {
         *value |= (uint64_t)adc->results[idx + 1U] << 16U;
+    }
+    if (adc->machine->esc_sim_native_adc_bemf) {
+        const unsigned phase_soc=adc->instance == 1U ? 2U : 1U;
+        if (idx <= phase_soc && phase_soc < idx + size / 2U) {
+            ++adc->machine->native_motor.phase_adc_guest_reads[adc->instance];
+        }
     }
     return MEMTX_OK;
 }
