@@ -53,3 +53,88 @@ jobs:
           path: artifacts/sim-profile/*
           if-no-files-found: warn
           retention-days: 21
+
+  real-qemu-profile-and-running-oc:
+    needs: strict-profile-contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pin the immutable Original Guest and build actual QEMU source
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0  baseline/e62-g13b3/firmware/AM13E-rev17.3.elf' | sha256sum -c -
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            libglib2.0-dev libpixman-1-dev libfdt-dev pkg-config meson ninja-build binutils-arm-none-eabi
+          git submodule update --init --depth 1 qemu
+          ./build.sh
+          mkdir -p artifacts/e62-profile-live
+      - name: Run original Guest in both effective QEMU motor profiles with source OC-U
+        shell: bash
+        run: |
+          set -euo pipefail
+          for profile in ecx87-kv147 ecx87-kv210; do
+            prefix="artifacts/e62-profile-live/$profile"
+            python3 tools/sim_motor_cfg.py --sim-only-opt-in \
+              --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+              --motor-profile "$profile" \
+              --output "$prefix-g13b3-cfg-flash.bin"
+            python3 tests/e62_autonomous_native_motor_probe.py \
+              --qemu .build/qemu-src/build/qemu-system-arm \
+              --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+              --sim-motor-profile "$profile" \
+              --cfg-flash "$prefix-g13b3-cfg-flash.bin" \
+              --scenario scenarios/e62-native-p0-smoke.json \
+              --oc-fault-scenario scenarios/e62-native-p1-running-oc-u.json \
+              --wall-timeout-s 300 \
+              --artifact "$prefix.json"
+            python3 tools/native_p1_running_oc_audit.py \
+              --scenario scenarios/e62-native-p0-smoke.json \
+              --oc-fault-scenario scenarios/e62-native-p1-running-oc-u.json \
+              --evidence "$prefix.json" \
+              --events "$prefix.p0.events.log" \
+              --qemu-log "$prefix.qemu.log" \
+              --output "$prefix-oc-u-strict.json"
+          done
+      - name: Require actual source-model readback, guest-origin fault safety and no waivers
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          for name,kv,r,l,kt in [
+              ('ecx87-kv147',147,53000,24000,64900),
+              ('ecx87-kv210',210,28300,8750,45400)]:
+              root=Path('artifacts/e62-profile-live')/name
+              run=json.loads(root.with_suffix('.json').read_text())
+              strict=json.loads(Path(str(root)+'-oc-u-strict.json').read_text())
+              profile=run['effective_sim_profile']
+              measured=profile['effective_parameters']
+              expected=dict(kv_rpm_per_v=kv,
+                            phase_resistance_microohm=r,
+                            phase_inductance_nanohenry=l,
+                            terminal_kt_micro_nm_per_a=kt,
+                            bus_millivolts=24000)
+              assert measured==expected,(name,measured)
+              assert profile['checked_against_named_model'] is True
+              assert run['host_guest_register_writes'] is False
+              assert run['used_guest_wfi_or_gdb'] is False
+              assert run['original_elf_sha256']=='05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0'
+              assert strict['qualified'] is True,(name,strict['failures'])
+              assert strict['final_ost3_latched'] is True
+              assert strict['six_gate_outputs_off'] is True
+              assert strict['automatic_rearm_qualified'] is False
+              assert strict['real_board_protection_qualified'] is False
+              print('PASS_SIM_NATIVE_QEMU_EFFECTIVE_PROFILE_OC_U',name,measured)
+          PY
+      - name: Retain both measured QEMU simulation profile diagnostics and failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-native-qemu-kv147-kv210-oc-u-NOT-HARDWARE
+          path: artifacts/e62-profile-live/**
+          if-no-files-found: warn
+          retention-days: 21
