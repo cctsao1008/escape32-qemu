@@ -62,8 +62,53 @@ Artifacts (guest/source/QEMU JSON/events) are preserved even on FAIL.
   first workflow run compiled QEMU but did not execute the motor due to
   a strict Flash Cfg filename provenance guard. This is an **INFRA FAIL**.
 - [CI #41085796419](https://github.com/cctsao1008/escape32-qemu/actions/runs/41085796419):
-  filename fixed with required `g13b3` token; check real Guest
-  startup result before claiming a tested motor verdict.
+  **REAL MOTOR FAILURE** under both genuine Original Rel17.3 / 5100-frame
+  300ms-coast trajectories after fixing Flash Cfg provenance. No
+  source/threshold waivers; independent original P1 and second-demand
+  oracles both reject significant reversal.
+  
+| 300ms second-demand QEMU source metric | Initial −30° | Initial +90° |
+|---|---:|---:|
+| Rotor before demand (RPM) | +34.557 | +20.786 |
+| Internal electrical angle before demand | 133.911° | 266.733° |
+| First new CAP1 delay | 7.141ms | 7.305ms |
+| First new model torque | **−0.73472 Nm** | 0 Nm |
+| Rotor samples ≤−50 RPM in first 20ms | **10** | **5** |
+| First powered demand sustained forward / zero reverse | FAIL | FAIL |
+| Second powered demand sustained forward / zero reverse | FAIL | FAIL |
+| Immutable Original P1 strict mechanical | FAIL | FAIL |
+
+Crucially, *first-start* also fails the new independently sustained
+positive-motion criteria for both initial poses: do not claim that
+only the remembered oldstep across the coast caused the failure.
+These are modeled torque/RPM, not Guest rotor sensors.
+
+### Additional actual firmware ADC path limitation and simulation fix
+
+Before the new opt-in model, native QEMU BEMF drove CMPSS but ADC0/1/2
+sequencer results still came from fixed/external `channel_samples`.
+The Firmware source at `ESCape32@b020467` actually maps three-phase
+monitoring through ADC0 SOC1 CH12 (U), ADC1 SOC2 CH2 (V), and ADC2 SOC1
+CH5 (W); these original Guest raw ADC samples had not been connected to
+the same native motor rotor plant.
+
+`esc-sim-native-adc-bemf=on` (default **off**) now selects native
+motor BEMF codes ONLY for these three correctly programmed ADC SOCs
+upon real source-triggered EOC/IRQ. All other ADC channels preserve
+their existing fixture and signal flow. Invalid channel or plant-fault
+state refuses to manufacture a valid phase conversion. QTest provides
+individual ADC phase EOC publication counts at the append-only model
+observer offsets `0xA8/0xAC/0xB0`. This is simulated raw phase voltage,
+**not rotor angle**, direction, trusted rearm status, or calibrated board
+sensing. Phase mapping is pinned to the versioned JSON profile, with
+negative tests rejecting unsupported mapping/rearm.
+
+[CI #41087374861](https://github.com/cctsao1008/escape32-qemu/actions/runs/41087374861)
+runs a real Original Guest with the opt-in ADC bridge, requiring
+positive EOC publications for all three phases. The strict host profile
+job passed; the true QEMU EOC job must also pass before calling the
+source-to-Guest ADC bridge verified.
+
 - Existing dual-motor OC source-protection regression is preserved
   separately and must remain PASS after the append-only observer change.
 
