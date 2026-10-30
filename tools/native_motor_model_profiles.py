@@ -8,7 +8,9 @@ Published terminal-equivalent Kt matches 60/(2*pi*Kv). For the explicit
 balanced-sine star model use K_phase=Kt_terminal/sqrt(3), and both
 phase-peak BEMF and torque share K_phase for power reciprocity.
 The actual phase waveform, driver and propeller are NOT calibrated.
-No propeller inertia, propeller torque curve or silicon analog frontend.
+Historical profiles omit prop load. Separate APC experiment adds an
+analytical static curve and unknown-inertia sensitivity, NOT calibrated
+prop inertia, windmill aerodynamics or silicon analog front end.
 """
 import math
 
@@ -103,13 +105,14 @@ def native_motor_model_metadata(profile):
         "vbus_v": p.vbus_v,
         "phase_resistance_ohm": p.phase_resistance_ohm,
         "phase_inductance_h": p.phase_inductance_h,
-        "rotor_inertia_kg_m2": p.inertia_kg_m2,
+        "rotor_inertia_kg_m2": (ECX87_ROTOR_INERTIA_KG_M2
+                                if profile in APC_STUDY_PROFILES else p.inertia_kg_m2),
         "viscous_friction_nm_per_rad_s": p.viscous_friction_nm_per_rad_s,
         "load_torque_nm": p.load_torque_nm,
         "electromagnetic_power_ratio_pe_over_pm": ratio,
         "electromagnetic_reciprocal": abs(ratio - 1.0) < 1e-12,
         "integrator": ("EVENT_HISTORY_CURRENT_CONTINUOUS" if
-                       profile in DATASHEET_PROFILES else
+                       profile in QEMU_MOTOR_PROFILES else
                        "SAMPLED_HOLD_EULER_TWO_TERMINAL_RESET_CURRENT_AT_COMMUTATION"),
         "physical_motor_calibrated": False,
         "propeller_inertia_and_load_modeled": profile in APC_STUDY_PROFILES,
@@ -142,6 +145,7 @@ def native_motor_model_metadata(profile):
                 propeller_static_torque_model="APC_V0_MPH_1000_TO_6000RPM",
                 propeller_torque_nm_grid=[0.132,0.494,1.085,1.913,2.996,4.362],
                 propeller_inertia_ratio_to_motor=int(profile[-1]),
+                effective_total_inertia_kg_m2=p.inertia_kg_m2,
                 propeller_inertia_measured=False,
                 propeller_inertia_and_load_modeled=True,
                 static_airflow_assumption=True,
