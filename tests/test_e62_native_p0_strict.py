@@ -40,6 +40,23 @@ class P0SourceAuditTest(unittest.TestCase):
             with self.assertRaises(TraceError):
                 parse_events(bad)
 
+    def test_real_adc_phase_events_are_parseable_not_a_p1_waiver(self):
+        # Actual native QEMU emits these on Guest software ADC SOC/EOC
+        # and ADCRESULT MMIO read. They are not synthetic rotor sensors.
+        records=[line(1,10,"ADC_PHASE_EOC",0,1,12,2048,0,0),
+                 line(2,12,"ADC_PHASE_READ",0,1,12,2048,0,0)]
+        ev=parse_events(records)
+        self.assertEqual([v["kind"] for v in ev],
+                         ["ADC_PHASE_EOC","ADC_PHASE_READ"])
+        result=audit(ev,evidence())
+        self.assertFalse(result["qualified"])
+        self.assertIn("NO_12_SOURCE_ORDERED_CAUSAL_CHAINS",
+                      result["unwaived_failure_reasons"])
+        with self.assertRaises(TraceError):
+            parse_events([records[0],line(3,12,"ADC_PHASE_READ",0,1,12,2048,0,0)])
+        with self.assertRaises(TraceError):
+            parse_events([line(1,10,"ADC_FORGED_ROTOR_ANGLE",0,1,12,2048,0,0)])
+
     def test_manual_live_override_rejects_p0_json_certificate(self):
         events=parse_events([
             line(1,1,"THROT_SET",10,1,100,1,0,0),
