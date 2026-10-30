@@ -140,7 +140,7 @@ class SimModelProfileContract(unittest.TestCase):
                       "initial_phase_override"):
             self.assertIn(token,machine)
         for token in ("case 0xa0:", "initial_phase_override",
-                      "-30000", "AM13E_NATIVE_MOTOR_SIZE 0xccU"):
+                      "-30000", "AM13E_NATIVE_MOTOR_SIZE 0xdcU"):
             self.assertIn(token,plant)
         self.assertIn("configured_initial_electrical_mdeg",runner)
         self.assertIn("args.sim_initial_electrical_degrees",runner)
@@ -158,7 +158,7 @@ class SimModelProfileContract(unittest.TestCase):
         self.assertIn('++m->phase_adc_publications[adc->instance]',machine)
         self.assertIn('m->faulted',machine)
         self.assertIn('case 0xb0:',motor)
-        self.assertIn('AM13E_NATIVE_MOTOR_SIZE 0xccU',motor)
+        self.assertIn('AM13E_NATIVE_MOTOR_SIZE 0xdcU',motor)
         self.assertIn('phase_adc_nonmidscale',machine)
         self.assertIn('phase_adc_guest_reads',machine)
         self.assertIn('"ADC_PHASE_EOC"',machine)
@@ -173,7 +173,7 @@ class SimModelProfileContract(unittest.TestCase):
         plant=(ROOT/"machine/am13e_native_motor_plant.inc").read_text()
         runner=(ROOT/"tests/e62_autonomous_native_motor_probe.py").read_text()
         for token in ('"ecx87-kv147"','"ecx87-kv210"',
-                      'esc-sim-native-motor-profile','model_profile==210U'):
+                      'esc-sim-native-motor-profile','m->model_profile=210U'):
             self.assertIn(token,machine)
         for token in ('0.0454 : 0.0649','0.00000875 : 0.000024',
                       '0.0283 : 0.053','case 0x8c:', 'case 0x90:',
