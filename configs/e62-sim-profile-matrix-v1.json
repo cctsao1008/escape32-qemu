@@ -52,7 +52,13 @@
     "dshot_loss": true,
     "trip_latch_retention_required": true,
     "all_six_gate_off_required": true,
-    "source_fault_not_physical_current": true
+    "source_fault_not_physical_current": true,
+    "non_oc_virtual_fault_sources": {
+      "uv": "NOT_MODELED",
+      "ov": "NOT_MODELED",
+      "thermal": "NOT_MODELED"
+    },
+    "unmodeled_faults_claimed_qualified": false
   },
   "profiles": {
     "ecx87-kv147": {
