@@ -63,7 +63,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        profile_id: [QB-KV210-47V-APC24X12E-J1, QB-KV210-47V-APC24X12E-J2, QB-KV210-47V-APC24X12E-J5]
+        profile_id: [CTL-KV210-47V-NOPROP, QB-KV210-47V-APC24X12E-J1, QB-KV210-47V-APC24X12E-J2, QB-KV210-47V-APC24X12E-J5]
     steps:
       - uses: actions/checkout@v4
       - name: Pin unchanged Original Guest and build changed QEMU source
