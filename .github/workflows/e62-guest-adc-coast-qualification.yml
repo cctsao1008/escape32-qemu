@@ -1,0 +1,93 @@
+name: "E62 #5 REAL Guest ADC phase-coast freshness and refusal"
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'machine/am13e23019.c'
+      - 'machine/am13e_native_motor_plant.inc'
+      - 'tools/e62_guest_adc_phase_coast_audit.py'
+      - 'tests/test_e62_guest_adc_phase_coast_audit.py'
+      - '.github/workflows/e62-guest-adc-coast-qualification.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  negative-adc-epochs:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require authentic EOC/read triplet and fail-closed 1-LSB direction rejection
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p test_e62_guest_adc_phase_coast_audit.py -v
+          python3 -m py_compile tools/e62_guest_adc_phase_coast_audit.py
+
+  original-guest-real-adc-coast:
+    needs: negative-adc-epochs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        motor: [ecx87-kv147, ecx87-kv210]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build actual QEMU and original Rel17.3 Guest immutable image
+        run: |
+          set -euo pipefail
+          echo '05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0  baseline/e62-g13b3/firmware/AM13E-rev17.3.elf' | sha256sum -c -
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            libglib2.0-dev libpixman-1-dev libfdt-dev pkg-config meson ninja-build binutils-arm-none-eabi
+          git submodule update --init --depth 1 qemu
+          ./build.sh
+          mkdir -p artifacts/e62-guest-adc-coast
+          python3 tools/sim_motor_cfg.py --sim-only-opt-in \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --motor-profile "${{ matrix.motor }}" \
+            --output "artifacts/e62-guest-adc-coast/${{ matrix.motor }}-g13b3-cfg-flash.bin"
+      - name: Run actual Guest first-demand/coast/second-demand with real ADC EOC/read
+        run: |
+          set -euo pipefail
+          root="artifacts/e62-guest-adc-coast/${{ matrix.motor }}"
+          python3 tests/e62_autonomous_native_motor_probe.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --sim-motor-profile "${{ matrix.motor }}" \
+            --sim-native-adc-bemf \
+            --cfg-flash "$root-g13b3-cfg-flash.bin" \
+            --scenario scenarios/e62-experimental-two-demand-coast-short300.json \
+            --wall-timeout-s 600 \
+            --artifact "$root.json"
+          python3 tools/e62_guest_adc_phase_coast_audit.py \
+            --events "$root.p0.events.log" \
+            --scenario scenarios/e62-experimental-two-demand-coast-short300.json \
+            --output "$root-coast-adc-verdict.json"
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          label="${{ matrix.motor }}"
+          path=Path("artifacts/e62-guest-adc-coast")/(label+"-coast-adc-verdict.json")
+          x=json.loads(path.read_text())
+          assert x["source_epoch_integrity_pass"] is True
+          assert x["safe_observer_refusal_gate_pass"] is True
+          assert x["motor_rearm_permitted"] is False
+          assert x["passive_rotor_direction_qualified"] is False
+          assert x["original_P1_reacquisition_qualified"] is False
+          early=x["early_coast_100ms"]
+          late=x["pre_restart_100ms"]
+          print("PASS_GUEST_ADC_COHERENT_SOURCE_REFUSAL_NOT_RESTART",
+                label,early,late)
+          PY
+      - name: Preserve real Guest EOC, reads, coast BEMF and counterexamples
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-guest-adc-coast-${{ matrix.motor }}-SIM_ONLY
+          path: artifacts/e62-guest-adc-coast/**
+          if-no-files-found: warn
+          retention-days: 21
