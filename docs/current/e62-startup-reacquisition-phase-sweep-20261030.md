@@ -143,3 +143,46 @@ qualified only to the explicit tested profile/stages; **no physical
 hardware measurements block these SIM_ONLY software tests**.
 
 **Issue #5 remains OPEN.**
+
+## 2026-10-31 — Real Guest ADC epoch-and-phase-rank acquisition gate
+
+The first [real Original-Guest ADC source CI #41088019547](https://github.com/cctsao1008/escape32-qemu/actions/runs/41088019547) completed **SUCCESS** with independently measured:
+- Each ADC0/1/2: **2,988 true hardware-modeled SOC/EOC publications**, and **2,988 actual Guest ADCRESULT reads**.
+- Dynamic (non-2048) BEMF-derived EOC codes: ADC0/U 1,053; ADC1/V 1,056; ADC2/W 1,269.
+- No Guest register injection or self-rearm. The original unchanged protection profile matrix [#41088020827](https://github.com/cctsao1008/escape32-qemu/actions/runs/41088020827) also completed **SUCCESS 6/6** for KV147/KV210 OC-U/V/W.
+
+These counts establish a *data path*, not positive motor direction.
+
+Source [commit `8dc27daf`](https://github.com/cctsao1008/escape32-qemu/commit/8dc27daf83c5e4d308d57fdf4772380dfea40796)
+adds **opt-in, source-only** `ADC_PHASE_EOC` and `ADC_PHASE_READ`
+events from actual QEMU ADC sequencer completion and actual Guest
+ADCRESULT accesses; each is timestamped, contains the source read
+code and ADC/SOC/channel/epoch, and **does not expose motor model
+theta/omega/torque**. Default mode, Original P1, motor physics and
+production policy are unchanged.
+
+[`tools/e62_guest_adc_phase_coast_audit.py`](https://github.com/cctsao1008/escape32-qemu/blob/main/tools/e62_guest_adc_phase_coast_audit.py)
+requires exact independent DShot frames; three coherent fresh Guest
+phase read epochs; EOC→Guest read equivalence; read timestamps and
+SOC/channel provenance; plus no Guest motor commutation 200ms into
+coast. It separately evaluates **the first and last 100ms of coast**,
+using Guest-visible code contrast and six-phase-code ordering.
+Ambiguous ties, skipped ranked-sector transitions, mixed order,
+invalid samples, missing/duplicated EOCs, wrong channel and stale
+Guest reads are negative controls. A candidate rank order is
+*diagnostic only*: `motor_rearm_permitted=false`,
+`passive_rotor_direction_qualified=false` and
+`original_P1_reacquisition_qualified=false` ALWAYS.
+
+All 11 host negative tests in
+[`tests/test_e62_guest_adc_phase_coast_audit.py`](https://github.com/cctsao1008/escape32-qemu/blob/main/tests/test_e62_guest_adc_phase_coast_audit.py)
+run in [new dual-motor real QEMU coast CI #41095093474](https://github.com/cctsao1008/escape32-qemu/actions/runs/41095093474).
+The negative host CI is **PASS**; do not claim the actual motor source
+coast qualification PASS until those jobs complete. The earlier
+source-only failure [300ms initial-phase CI #41085796419](https://github.com/cctsao1008/escape32-qemu/actions/runs/41085796419)
+continues to **FAIL** for genuine rotor reversal and must remain red.
+
+This is **SIM_ONLY** work; no physical hardware checks are required.
+The remaining feature gap is firmware-owned, source-observable
+windmill direction/phase qualification and a safely bounded
+low-observability startup/restart handoff, not the ADC wiring.
