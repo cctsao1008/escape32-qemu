@@ -54,6 +54,16 @@ class APCProfileTest(unittest.TestCase):
             self.assertFalse(meta["propeller_inertia_measured"])
             self.assertTrue(meta["propeller_inertia_and_load_modeled"])
             self.assertEqual(meta["propeller_static_torque_model"],"APC_V0_MPH_1000_TO_6000RPM")
+    def test_qemu_build_stages_every_apc_include(self):
+        root=Path(__file__).resolve().parents[1]
+        coordinator=(root/"machine/am13e_native_motor_plant.inc").read_text()
+        staging=(root/"build.sh").read_text()
+        module="am13e_native_apc_propeller.inc"
+        self.assertIn('#include "'+module+'"',coordinator)
+        self.assertIn("'"+module+"'",staging)
+        self.assertIn('module_target.write_bytes(module_source.read_bytes())',staging)
+        self.assertIn("module_target.is_symlink()",staging)
+
     def test_qemu_c_coefficients_match_independent_python_table(self):
         text=(Path(__file__).resolve().parents[1]/
               "machine/am13e_native_apc_propeller.inc").read_text()
