@@ -23,6 +23,7 @@ DEFAULT = ROOT / "configs/e62-sim-case-profiles-v1.json"
 _PROFILE_MAP = {
     "BASE-KV147-24V-NOPROP": ("ecx87-kv147",147,53000,24000,64900,24000,1,False),
     "BASE-KV210-24V-NOPROP": ("ecx87-kv210",210,28300,8750,45400,24000,1,False),
+    "CTL-KV210-47V-NOPROP": ("ecx87-kv210-47v-no-prop",210,28300,8750,45400,47000,1,False),
     "QB-KV210-47V-APC24X12E-J1": ("ecx87-kv210-apc24x12e-47v-j1",210,28300,8750,45400,47000,1,True),
     "QB-KV210-47V-APC24X12E-J2": ("ecx87-kv210-apc24x12e-47v-j2",210,28300,8750,45400,47000,2,True),
     "QB-KV210-47V-APC24X12E-J5": ("ecx87-kv210-apc24x12e-47v-j5",210,28300,8750,45400,47000,5,True),
@@ -72,16 +73,20 @@ def load(path=DEFAULT):
         raise ValueError("Unsupported/unproven simulator source provenance")
     load_apc_source()
     cases=data["profiles"]
-    if (type(cases) is not list or len(cases)!=5 or
+    if (type(cases) is not list or len(cases)!=6 or
         [x.get("id") if type(x) is dict else None for x in cases]!=list(_PROFILE_MAP)):
         raise ValueError("Missing, reordered, duplicated or unknown case profile")
     for case in cases:
         name,kv,r,l,kt,bus,j,apc=_PROFILE_MAP[case["id"]]
         expected={
             "id":case["id"],"qemu_motor_profile":name,
-            "qualification_class":("ANALYTICAL_PROP_SENSITIVITY" if apc else "HISTORICAL_MOTOR_ONLY"),
-            "source_identity":("MAXON_MOTOR_AND_APC_ANALYTICAL_STATIC"
-                               if apc else "MAXON_MOTOR_DATASHEET_AND_HISTORICAL_SIM"),
+            "qualification_class":("ANALYTICAL_PROP_SENSITIVITY" if apc else
+                                   "VOLTAGE_CONTROL_MOTOR_ONLY" if case["id"].startswith("CTL-")
+                                   else "HISTORICAL_MOTOR_ONLY"),
+            "source_identity":("MAXON_MOTOR_AND_APC_ANALYTICAL_STATIC" if apc else
+                               "MAXON_MOTOR_DATASHEET_AND_47V_SIM_CONTROL" if
+                               case["id"].startswith("CTL-") else
+                               "MAXON_MOTOR_DATASHEET_AND_HISTORICAL_SIM"),
             "motor":"maxon EC 87 flat UAV",
             "published_kv_rpm_per_v":kv,
             "phase_resistance_microohm":r,
