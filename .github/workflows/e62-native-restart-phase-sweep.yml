@@ -1,0 +1,99 @@
+name: "E62 #5 SIM_ONLY Native Initial-Phase Restart Sweep (FAIL is FAIL)"
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'machine/am13e23019.c'
+      - 'machine/am13e_native_motor_plant.inc'
+      - 'tests/e62_autonomous_native_motor_probe.py'
+      - 'tools/e62_restart_phase_sweep_verdict.py'
+      - 'tests/test_e62_restart_phase_sweep_verdict.py'
+      - 'configs/e62-sim-profile-matrix-v1.json'
+      - 'scenarios/e62-experimental-two-demand-coast-short300.json'
+      - '.github/workflows/e62-native-restart-phase-sweep.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  strict-source-profile-negative:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject forged initial pose and unproven Guest startup
+        run: |
+          set -euo pipefail
+          python3 -m py_compile tools/e62_restart_phase_sweep_verdict.py tests/test_e62_restart_phase_sweep_verdict.py
+          python3 -m unittest discover -s tests -p test_e62_restart_phase_sweep_verdict.py -v
+          python3 -m unittest discover -s tests -p test_e62_sim_model_profile.py -v
+
+  actual-original-guest-300ms-phase-control:
+    needs: strict-source-profile-negative
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pin Original Rel17.3 and compile source QEMU motor
+        run: |
+          set -euo pipefail
+          echo '05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0  baseline/e62-g13b3/firmware/AM13E-rev17.3.elf' | sha256sum -c -
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            libglib2.0-dev libpixman-1-dev libfdt-dev pkg-config meson ninja-build binutils-arm-none-eabi
+          git submodule update --init --depth 1 qemu
+          ./build.sh
+          mkdir -p artifacts/e62-restart-phase
+          python3 tools/sim_motor_cfg.py --sim-only-opt-in \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --motor-profile ecx87-kv147 \
+            --output artifacts/e62-restart-phase/kv147-cfg-flash.bin
+      - name: Run actual source-owned 300ms second demand with independent initial poses
+        shell: bash
+        run: |
+          set -uo pipefail
+          failed=0
+          for initial in -30 90; do
+            prefix="artifacts/e62-restart-phase/kv147-phase-$initial"
+            echo "RUN Original Rel17.3 / KV147 / initial electrical pose $initial / 300ms coast"
+            if ! python3 tests/e62_autonomous_native_motor_probe.py \
+              --qemu .build/qemu-src/build/qemu-system-arm \
+              --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+              --sim-motor-profile ecx87-kv147 \
+              --sim-initial-electrical-degrees "$initial" \
+              --cfg-flash artifacts/e62-restart-phase/kv147-cfg-flash.bin \
+              --scenario scenarios/e62-experimental-two-demand-coast-short300.json \
+              --wall-timeout-s 600 \
+              --artifact "$prefix.json"; then
+              echo "FAIL_QEMU_NATIVE_EXECUTION phase=$initial"
+              failed=1
+              continue
+            fi
+            if ! python3 tools/e62_restart_phase_sweep_verdict.py \
+              --scenario scenarios/e62-experimental-two-demand-coast-short300.json \
+              --evidence "$prefix.json" \
+              --events "$prefix.p0.events.log" \
+              --motor-profile ecx87-kv147 \
+              --initial-electrical-degrees "$initial" \
+              --output "$prefix-verdict.json"; then
+              echo "FAIL_SIM_ONLY_RESTART phase=$initial (recorded; NOT waived)"
+              failed=1
+            else
+              echo "PASS_SIM_ONLY_RESTART phase=$initial"
+            fi
+          done
+          if (( failed )); then
+            echo "E62_RESTART_PHASE_300MS_GENUINE_FAIL_DO_NOT_WAIVE"
+            exit 1
+          fi
+          echo "PASS_E62_SIM_ONLY_300MS_BOTH_INITIAL_PHASES"
+      - name: Preserve raw independent source, model and fail-closed Guest evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-sim-original-guest-300ms-initial-pose-NO-WAIVER
+          path: artifacts/e62-restart-phase/**
+          if-no-files-found: warn
+          retention-days: 30
