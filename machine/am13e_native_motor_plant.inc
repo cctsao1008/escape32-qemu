@@ -35,6 +35,7 @@
  * historical native QEMU plant; opt-in KV210 uses maxon p.1 R/L/Kt.
  * All expansions occur in functions with the AM13ENativeMotor *m. */
 #define AM13E_NATIVE_APC (m->model_profile == 211U || m->model_profile == 212U || m->model_profile == 215U)
+#define AM13E_NATIVE_47V (AM13E_NATIVE_APC || m->model_profile == 213U)
 #define AM13E_NATIVE_KV210 (m->model_profile >= 210U)
 #define AM13E_NATIVE_J_RATIO (m->model_profile == 215U ? 5.0 : m->model_profile == 212U ? 2.0 : 1.0)
 #define AM13E_NATIVE_KT_TERMINAL (AM13E_NATIVE_KV210 ? 0.0454 : 0.0649)
@@ -42,7 +43,7 @@
 #define AM13E_NATIVE_J (0.00013 * AM13E_NATIVE_J_RATIO)
 #define AM13E_NATIVE_L (AM13E_NATIVE_KV210 ? 0.00000875 : 0.000024)
 #define AM13E_NATIVE_R (AM13E_NATIVE_KV210 ? 0.0283 : 0.053)
-#define AM13E_NATIVE_VBUS (AM13E_NATIVE_APC ? 47.0 : 24.0)
+#define AM13E_NATIVE_VBUS (AM13E_NATIVE_47V ? 47.0 : 24.0)
 #define AM13E_NATIVE_DIODE 0.7
 #define AM13E_NATIVE_FRICTION 0.0001
 #define AM13E_NATIVE_PI 3.14159265358979323846
