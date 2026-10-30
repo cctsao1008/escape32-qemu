@@ -140,6 +140,7 @@ if not motor_target.exists() or motor_target.read_bytes() != motor_source.read_b
 # worktree. No Guest state write; refuse symlinks and missing files.
 for module_name in (
     'am13e_native_motor_dynamics.inc',
+    'am13e_native_apc_propeller.inc',
     'am13e_native_analog_frontend.inc',
     'am13e_native_pwm_coupling.inc',
 ):
