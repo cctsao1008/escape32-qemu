@@ -19,6 +19,8 @@ on:
       - 'tools/sim_motor_cfg.py'
       - 'tests/e62_autonomous_native_motor_probe.py'
       - 'tests/test_e62_apc24x12e_sim_profile.py'
+      - 'tools/native_p0_strict.py'
+      - 'tests/test_e62_native_p0_strict.py'
       - '.github/workflows/e62-apc24x12e-47v-sim-only.yml'
   workflow_dispatch:
     inputs:
@@ -47,6 +49,7 @@ jobs:
           python3 tools/e62_sim_case_profiles.py
           python3 -m unittest discover -s tests -p test_sim_motor_profiles.py -v
           python3 -m unittest discover -s tests -p test_e62_sim_model_profile.py -v
+          python3 -m unittest discover -s tests -p test_e62_native_p0_strict.py -v
           python3 -m unittest discover -s tests -p test_e62_guest_adc_phase_coast_audit.py -v
           python3 - <<'PY'
           from tools.e62_apc24x12e_static import load,static_torque
