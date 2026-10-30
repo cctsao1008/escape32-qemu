@@ -20,6 +20,7 @@ on:
       - 'tools/e62_sim_profile_contract.py'
       - 'tools/native_motor_model_profiles.py'
       - 'tests/test_e62_sim_model_profile.py'
+      - 'configs/e62-startup-second-demand-oracle-v1.json'
       - 'tests/test_e62_native_running_oc_sense.py'
       - 'tests/test_e62_second_demand_oracle.py'
       - 'tests/test_e62_restart_phase_torque_audit.py'
@@ -145,7 +146,9 @@ jobs:
                   strict=json.loads(Path(str(root)+'-strict.json').read_text())
                   effective=run['effective_sim_profile']
                   assert effective['name']==name
-                  assert effective['effective_parameters']==expected,(name,phase,effective)
+                  assert effective['effective_parameters']=={
+                      **expected,"configured_initial_electrical_mdeg":-30000
+                  },(name,phase,effective)
                   assert effective['checked_against_named_model'] is True
                   assert run['host_guest_register_writes'] is False
                   assert run['used_guest_wfi_or_gdb'] is False

@@ -23,6 +23,10 @@ class SimModelProfileContract(unittest.TestCase):
         self.assertEqual(d["motor_plant_simulation"]["tick_ns"],1000)
         r=report(d)
         self.assertEqual(len(r["computed_points"]),10)
+        self.assertEqual(
+            r["independent_initial_electrical_phase_grid_deg"],
+            [-150,-90,-30,30,90,150])
+        self.assertTrue(r["initial_phase_is_qemu_model_only_not_guest_sensor"])
         self.assertFalse(r["rearm_permitted"])
         self.assertFalse(r["hardware_qualified"])
 
@@ -85,6 +89,18 @@ class SimModelProfileContract(unittest.TestCase):
         d=load()
         d["passive_reacquisition_study"]["rpm_grid"]=[300,20]
         with self.assertRaisesRegex(ValueError,"Unsafe"):
+            changed_doc(d)
+
+    def test_unsafe_or_duplicate_initial_phase_profiles_rejected(self):
+        d=load()
+        d["passive_reacquisition_study"]["initial_electrical_degrees_grid"]=[
+            -181,-30,90]
+        with self.assertRaisesRegex(ValueError,"Unsafe passive"):
+            changed_doc(d)
+        d=load()
+        d["passive_reacquisition_study"]["initial_electrical_degrees_grid"]=[
+            -30,-30,90]
+        with self.assertRaisesRegex(ValueError,"Unsafe passive"):
             changed_doc(d)
 
     def test_unknown_profile_and_schema_fields_rejected(self):

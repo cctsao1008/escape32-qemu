@@ -40,7 +40,15 @@
     ],
     "rank_events_per_electrical_revolution": 6,
     "diagnostic_samples_per_sector_target": 3,
-    "output_may_authorize_rearm": false
+    "output_may_authorize_rearm": false,
+    "initial_electrical_degrees_grid": [
+      -150,
+      -90,
+      -30,
+      30,
+      90,
+      150
+    ]
   },
   "protection_study": {
     "oc_sources": [

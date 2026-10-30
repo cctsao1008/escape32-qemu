@@ -79,12 +79,20 @@ def load(path=DEFAULT):
     study=data["passive_reacquisition_study"]
     if type(study) is not dict or set(study)!={
             "min_adjacent_phase_delta_codes","coast_ms","rpm_grid",
+            "initial_electrical_degrees_grid",
             "rank_events_per_electrical_revolution",
             "diagnostic_samples_per_sector_target","output_may_authorize_rearm"}:
         raise ValueError("Incomplete passive observer simulation study")
     if (type(study["min_adjacent_phase_delta_codes"]) is not int or
         not 1<=study["min_adjacent_phase_delta_codes"]<=4095 or
         study["coast_ms"]!=[300,1500,3000] or
+        type(study["initial_electrical_degrees_grid"]) is not list or
+        not study["initial_electrical_degrees_grid"] or
+        any(type(angle) is not int or not -180<=angle<=180
+            for angle in study["initial_electrical_degrees_grid"]) or
+        -30 not in study["initial_electrical_degrees_grid"] or
+        study["initial_electrical_degrees_grid"]!=sorted(
+            set(study["initial_electrical_degrees_grid"])) or
         study["rank_events_per_electrical_revolution"]!=6 or
         type(study["diagnostic_samples_per_sector_target"]) is not int or
         not 2<=study["diagnostic_samples_per_sector_target"]<=20 or
@@ -155,6 +163,9 @@ def report(data):
     return {"schema":"e62.sim.profile-parameter-feasibility.v1",
             "classification":"SIM_ONLY_DIAGNOSTIC_NOT_END_TO_END_RECOVERY",
             "selected_motor_profiles":list(DATASHEET_PROFILES),
+            "independent_initial_electrical_phase_grid_deg":
+                study["initial_electrical_degrees_grid"],
+            "initial_phase_is_qemu_model_only_not_guest_sensor":True,
             "computed_points":results,"original_p1_unchanged":True,
             "hardware_qualified":False,"rearm_permitted":False,
             "separate_actual_qemu_runtime_verification_required":True,
