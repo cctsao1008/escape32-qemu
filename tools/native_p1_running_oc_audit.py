@@ -20,13 +20,31 @@ EDGE=re.compile(r"E62_NATIVE_EXTERNAL_OC_EDGE vns=(\d+) frame=(\d+) "
                 r"channel=(\d+) asserted=(\d+) code=(\d+) "
                 r"trip=0x([0-9a-f]+) irq=0x([0-9a-f]+)")
 
-def audit(events,run,plan,log):
+def audit(events,run,plan,log,stages=None):
+    """Independent SIM_ONLY OC verdict. Actual source stage verification is
+    mandatory in CLI/CI; unit fixtures may explicitly omit `stages`.
+    Missing/forged source edges, timestamps and guest-safe-state fail CLOSED.
+    """
     errors=[]
     edges=[tuple(int(x,16 if i>=5 else 10)
                  for i,x in enumerate(m.groups()))
            for m in EDGE.finditer(log)]
     cmds=[e for e in events if e["kind"]=="DSHOT"]
     scenario_count=run.get("configured_dshot_frames")
+    if stages is not None:
+        expected=list(commands_for_scenario(stages))
+        if len(expected)!=3000 or len(cmds)!=len(expected) or any(
+            len(frame.get("data",()))<5 or
+            tuple(frame["data"][:5])!=(idx,st,command,0,0)
+            for idx,(frame,(st,command)) in enumerate(zip(cmds,expected))
+        ):
+            errors.append("OC_SOURCE_DSHOT_FRAMES_OR_COMMANDS_CHANGED")
+    if len(cmds)==3000 and any(
+        cmds[i]["vns"]<=cmds[i-1]["vns"] or
+        (i>=2 and abs(cmds[i]["vns"]-cmds[i-1]["vns"]-1_000_000)>100)
+        for i in range(1,len(cmds))
+    ):
+        errors.append("OC_SOURCE_DSHOT_TIMESTAMP_STALE_OR_DRIFT")
     if len(edges)!=2 or len(cmds)!=scenario_count or scenario_count!=3000:
         errors.append("OC_SOURCE_EDGES_OR_INDEPENDENT_DSHOT_COUNT_MISSING")
     else:
@@ -41,8 +59,10 @@ def audit(events,run,plan,log):
             errors.append("OC_SOURCE_4095_NOT_ACTUALLY_PUBLISHED")
         if not (edges[0][5]&0x40000 and edges[0][6]&4):
             errors.append("OC_SOURCE_COMPARATOR_OST3_AND_MCPWM_IRQ_NOT_REAL")
-        if edges[1][3]!=0:
+        if edges[1][3]!=0 or edges[1][4]>=4095:
             errors.append("OC_SOURCE_NOT_RELEASED")
+        if edges[0][0]>=edges[1][0]:
+            errors.append("OC_SOURCE_FAULT_TIMESTAMP_ORDER_INVALID")
         if not any(e["kind"]=="PWM_PAIR" and
                    cmds[1500]["vns"]<=e["vns"]<edges[0][0] for e in events):
             errors.append("NO_ORIGINAL_MOTOR_RUNNING_BEFORE_OC_FAULT")
@@ -107,7 +127,7 @@ def main():
         with a.events.open(errors="replace") as stream:
             ev=parse_events(stream)
         run=json.loads(a.evidence.read_text())
-        result=audit(ev,run,plan,a.qemu_log.read_text(errors="replace"))
+        result=audit(ev,run,plan,a.qemu_log.read_text(errors="replace"),stages=stages)
     except (OSError,ValueError,TypeError,KeyError,TraceError) as err:
         result={"status":"FAIL_P1_NATIVE_RUNNING_OC_SENSE",
                 "qualified":False,"failures":[type(err).__name__+": "+str(err)],
