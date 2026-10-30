@@ -186,3 +186,41 @@ This is **SIM_ONLY** work; no physical hardware checks are required.
 The remaining feature gap is firmware-owned, source-observable
 windmill direction/phase qualification and a safely bounded
 low-observability startup/restart handoff, not the ADC wiring.
+
+### 300ms Guest-ADC phase-rank source results (2026-10-31)
+
+The first complete [dual-motor real-Guest coast CI #41095093474](https://github.com/cctsao1008/escape32-qemu/actions/runs/41095093474)
+**SUCCESS** attests a valid and safely refused *read-observer path*, NOT a
+successful second powered demand. Direct Original Guest ADCRESULTs after
+genuine ADC SOC EOC contain:
+
+| 100ms window | KV147 start | KV147 last | KV210 start | KV210 last |
+|---|---:|---:|---:|---:|
+| Coherent three-phase samples | 100 | 100 | 100 | 100 |
+| Max U/V/W code contrast | 39 | 7 | 22 | 5 |
+| Three-code adjacent-rank ambiguous samples | 57 | **95** | 87 | **100** |
+| Apparent adjacent rank steps | 11 | 3 | 5 | 0 |
+| Independently valid rotor phase/angle | NO | NO | NO | NO |
+| Motor rearm | NO | NO | NO | NO |
+
+Values vary between source builds and modeled initial rotor
+trajectories; *do not* mix these actual Guest ADCRESULT readings with
+earlier model `BEMF_FRONTEND` 1kHz debug journal or prior candidate
+Guest traces.
+
+The original candidate-only rank diagnostic would have reported a
+candidate for the last 100ms KV147 **despite only 5/100 usable
+samples**. It never granted rearm, but this was a hazardous future
+qualification false-positive. [Fix `8abfb7f`](https://github.com/cctsao1008/escape32-qemu/commit/8abfb7f451d46ec7e0fa81319f1fd72635d4cce8)
+now requires every one of: `minimum_valid_rank_fraction=0.75`,
+`maximum_valid_rank_sample_gap_ms=5`,
+`minimum_one_way_rank_transitions=3`,
+`minimum_adjacent_phase_code_separation=3`, no skipped states or
+mixed rank traversal direction. The exact versioned profile
+`configs/e62-guest-adc-phase-rank-v1.json` rejects any weakening,
+unknown field, or guessed motor permission. The 95%-ties/three-rank
+counterexample and profile weakening negatives are tested in
+`tests/test_e62_guest_adc_phase_coast_audit.py`.
+Latest [CI #41096140282](https://github.com/cctsao1008/escape32-qemu/actions/runs/41096140282)
+has passed negative/unit gates; both new actual QEMU motor profiles must
+finish before claiming the revised real-source verdict.
