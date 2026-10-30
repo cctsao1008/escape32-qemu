@@ -29,43 +29,90 @@ DIAGNOSTIC_CODE_CONTRAST_FLOOR=3
 # series cannot prove actual electrical angle or authorize Guest rearm.
 RANK_SEQUENCE=((0,1,2),(0,2,1),(2,0,1),(2,1,0),(1,2,0),(1,0,2))
 
-def rank_motion_diagnostic(triplets, separation=3):
-    if type(separation) is not int or not 3<=separation<=16:
-        raise ValueError("Unsafe uncalibrated phase rank separation")
+RANK_PROFILE_PATH=Path(__file__).resolve().parents[1]/"configs/e62-guest-adc-phase-rank-v1.json"
+
+def load_rank_profile(path=RANK_PROFILE_PATH):
+    d=json.loads(Path(path).read_text())
+    expected={
+        "schema":"e62.sim.guest-adc-phase-rank-confidence.v1",
+        "scope":"SIM_ONLY_GUEST_ADC_DIAGNOSTIC_NEVER_REARM",
+        "minimum_adjacent_phase_code_separation":3,
+        "minimum_valid_rank_fraction":0.75,
+        "maximum_valid_rank_sample_gap_ms":5,
+        "minimum_one_way_rank_transitions":3,
+        "rearm_permitted":False,
+        "rotor_angle_qualified":False
+    }
+    if (type(d) is not dict or d!=expected or
+        any(type(d[k]) is not type(v) for k,v in expected.items())):
+        raise ValueError("Unsafe or unversioned Guest ADC phase-rank profile")
+    return d
+
+def rank_motion_diagnostic(triplets, separation=3,
+                           minimum_valid_fraction=0.75,
+                           maximum_valid_gap_ns=5_000_000,
+                           minimum_one_way_transitions=3):
+    if (type(separation) is not int or not 3<=separation<=16 or
+        type(minimum_valid_fraction) not in (int,float) or
+        not 0.75<=minimum_valid_fraction<=1.0 or
+        type(maximum_valid_gap_ns) is not int or
+        not 1_000_000<=maximum_valid_gap_ns<=5_000_000 or
+        type(minimum_one_way_transitions) is not int or
+        minimum_one_way_transitions<3):
+        raise ValueError("Unsafe uncalibrated Guest phase rank confidence floor")
     states=[]
+    usable=[]
     rejected_ties=0
+    previous_ns=-1
     for item in triplets:
+        when=item["vns"]
         volts=item["codes"]
-        if len(volts)!=3 or any(type(x) is not int or not 0<=x<=4095
-                               for x in volts):
-            raise ValueError("Unknown or invalid Guest phase code")
+        if (type(when) is not int or when<=previous_ns or
+            len(volts)!=3 or any(type(x) is not int or not 0<=x<=4095
+                                 for x in volts)):
+            raise ValueError("Invalid or stale Guest ADC triplet")
+        previous_ns=when
         order=tuple(sorted(range(3),key=lambda i:-volts[i]))
         if (volts[order[0]]-volts[order[1]]<separation or
             volts[order[1]]-volts[order[2]]<separation):
             rejected_ties+=1
             continue
+        usable.append(when)
         state=RANK_SEQUENCE.index(order)
         if not states or states[-1][1]!=state:
-            states.append((item["vns"],state))
-    diff=[(curr[1]-last[1])%6
-          for last,curr in zip(states,states[1:])]
-    skipped=sum(d not in (1,5) for d in diff)
-    reversed_indicator=min(diff.count(1),diff.count(5))
-    coherent=(len(diff)>=3 and skipped==0 and reversed_indicator==0)
+            states.append((when,state))
+    diffs=[(curr[1]-last[1])%6
+           for last,curr in zip(states,states[1:])]
+    skipped=sum(d not in (1,5) for d in diffs)
+    mixed=min(diffs.count(1),diffs.count(5))
+    valid_fraction=len(usable)/len(triplets) if triplets else 0.0
+    max_gap=max((later-earlier for earlier,later in
+                 zip(usable,usable[1:])),default=0)
+    enough=valid_fraction>=minimum_valid_fraction
+    fresh=len(usable)>1 and max_gap<=maximum_valid_gap_ns
+    coherent=(len(diffs)>=minimum_one_way_transitions and
+              skipped==0 and mixed==0 and enough and fresh)
     return {
         "rank_separation_codes":separation,
+        "rank_samples_total":len(triplets),
+        "valid_rank_samples":len(usable),
+        "valid_rank_fraction":round(valid_fraction,6),
+        "minimum_valid_rank_fraction":minimum_valid_fraction,
         "rank_samples_with_ambiguous_ties":rejected_ties,
+        "max_valid_rank_sample_gap_ms":round(max_gap/1e6,6),
+        "allowed_max_valid_rank_sample_gap_ms":
+            maximum_valid_gap_ns/1e6,
+        "rank_coverage_sufficient":enough,
+        "rank_freshness_sufficient":fresh,
         "distinct_state_observations":len(states),
-        "adjacent_one_way_steps":diff.count(1),
-        "adjacent_other_way_steps":diff.count(5),
+        "adjacent_one_way_steps":diffs.count(1),
+        "adjacent_other_way_steps":diffs.count(5),
         "skipped_nonadjacent_steps":skipped,
-        "mixed_order_direction_indicators":reversed_indicator,
+        "mixed_order_direction_indicators":mixed,
         "diagnostic_consistent_rank_sequence_candidate_only":coherent,
         "Guest_windmill_direction_or_angle_qualified":False,
         "motor_rearm_permitted":False
     }
-
-
 
 def validate_source(events, stages):
     if (len(stages)!=5 or [s[1] for s in stages]!=[0,200,0,200,0]
@@ -155,7 +202,7 @@ def correlate_guest_phase_epochs(events):
     return joined,counts
 
 
-def contrast_in_window(triplets,start,stop):
+def contrast_in_window(triplets,start,stop,profile=None):
     data=[r for r in triplets if start<=r["vns"]<stop]
     if len(data)<MIN_WINDOW_EPOCHS:
         return {
@@ -166,7 +213,14 @@ def contrast_in_window(triplets,start,stop):
             "direction_qualified":False,"rotor_phase_qualified":False
         }
     contrasts=[max(r["codes"])-min(r["codes"]) for r in data]
-    rank=rank_motion_diagnostic(data)
+    profile=profile if profile is not None else load_rank_profile()
+    rank=rank_motion_diagnostic(
+        data,
+        separation=profile["minimum_adjacent_phase_code_separation"],
+        minimum_valid_fraction=profile["minimum_valid_rank_fraction"],
+        maximum_valid_gap_ns=profile["maximum_valid_rank_sample_gap_ms"]*
+                            1_000_000,
+        minimum_one_way_transitions=profile["minimum_one_way_rank_transitions"])
     return {
         "samples":len(data),
         "max_phase_code_contrast":max(contrasts),
@@ -180,13 +234,13 @@ def contrast_in_window(triplets,start,stop):
     }
 
 
-def evaluate(events,stages):
+def evaluate(events,stages,profile=None):
     coast_start,restart=validate_source(events,stages)
     triplets,counts=correlate_guest_phase_epochs(events)
     # The first 100ms can have substantial BEMF. The last 100ms is the
     # actual pre-restart decision window, not arbitrary later snapshots.
-    early=contrast_in_window(triplets,coast_start,coast_start+EARLY_NS)
-    late=contrast_in_window(triplets,restart-LAST_NS,restart)
+    early=contrast_in_window(triplets,coast_start,coast_start+EARLY_NS,profile)
+    late=contrast_in_window(triplets,restart-LAST_NS,restart,profile)
     neutral=[r for r in triplets if coast_start+200_000_000<=r["vns"]<restart]
     late_motion=[e for e in events if
         coast_start+200_000_000<=e["vns"]<restart and
@@ -221,10 +275,12 @@ def main():
     p.add_argument("--events",type=Path,required=True)
     p.add_argument("--scenario",type=Path,required=True)
     p.add_argument("--output",type=Path,required=True)
+    p.add_argument("--rank-profile",type=Path,default=RANK_PROFILE_PATH)
     args=p.parse_args()
     try:
         stages,_=load_native_scenario(args.scenario)
-        result=evaluate(read_events(args.events),stages)
+        result=evaluate(read_events(args.events),stages,
+                        load_rank_profile(args.rank_profile))
     except (ValueError,TypeError,KeyError,IndexError,OSError) as e:
         result={
             "schema":"e62.sim.guest-phase-adc-coast-observability.v1",

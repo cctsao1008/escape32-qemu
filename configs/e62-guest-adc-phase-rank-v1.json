@@ -1,0 +1,10 @@
+{
+  "schema": "e62.sim.guest-adc-phase-rank-confidence.v1",
+  "scope": "SIM_ONLY_GUEST_ADC_DIAGNOSTIC_NEVER_REARM",
+  "minimum_adjacent_phase_code_separation": 3,
+  "minimum_valid_rank_fraction": 0.75,
+  "maximum_valid_rank_sample_gap_ms": 5,
+  "minimum_one_way_rank_transitions": 3,
+  "rearm_permitted": false,
+  "rotor_angle_qualified": false
+}
