@@ -21,7 +21,9 @@ APC_STUDY_PROFILES = (
 )
 DATASHEET_PROFILES = ("ecx87-kv147", "ecx87-kv210")
 QEMU_MOTOR_PROFILES = DATASHEET_PROFILES + APC_STUDY_PROFILES
-PROFILES = ("legacy", "reciprocal") + QEMU_MOTOR_PROFILES
+# Preserve the historical host A/B fixture public API (four entries).
+# APC products are a separate opt-in QEMU study, not old PROFILES.
+PROFILES = ("legacy", "reciprocal") + DATASHEET_PROFILES
 _ECX87 = {
     "ecx87-kv147": {
         "part_number": "773484",
@@ -43,7 +45,7 @@ ECX87_ROTOR_INERTIA_KG_M2 = 1300.0 * 1e-7  # g*cm^2 -> kg*m^2
 
 
 def native_motor_parameters(profile="legacy"):
-    if profile not in PROFILES:
+    if profile not in PROFILES and profile not in APC_STUDY_PROFILES:
         raise ValueError("Unknown explicit SIM_ONLY motor profile: " + str(profile))
     if profile in QEMU_MOTOR_PROFILES:
         apc = profile in APC_STUDY_PROFILES
