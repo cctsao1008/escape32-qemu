@@ -122,11 +122,27 @@ class SimModelProfileContract(unittest.TestCase):
                       "initial_phase_override"):
             self.assertIn(token,machine)
         for token in ("case 0xa0:", "initial_phase_override",
-                      "-30000", "AM13E_NATIVE_MOTOR_SIZE 0xa4U"):
+                      "-30000", "AM13E_NATIVE_MOTOR_SIZE 0xb4U"):
             self.assertIn(token,plant)
         self.assertIn("configured_initial_electrical_mdeg",runner)
         self.assertIn("args.sim_initial_electrical_degrees",runner)
         self.assertIn("initial_degrees*1000",runner)
+
+    def test_native_adc_opt_in_maps_actual_firmware_phase_socs(self):
+        machine=(ROOT/"machine/am13e23019.c").read_text()
+        motor=(ROOT/"machine/am13e_native_motor_plant.inc").read_text()
+        runner=(ROOT/"tests/e62_autonomous_native_motor_probe.py").read_text()
+        self.assertIn('"esc-sim-native-adc-bemf"',machine)
+        self.assertIn('adc->instance == 0U ? 12U',machine)
+        self.assertIn('adc->instance == 1U ? 2U : 5U',machine)
+        self.assertIn('adc->instance == 1U ? 2U : 1U',machine)
+        self.assertIn('adc->machine->esc_sim_native_adc_bemf && i == phase_soc',machine)
+        self.assertIn('++m->phase_adc_publications[adc->instance]',machine)
+        self.assertIn('m->faulted',machine)
+        self.assertIn('case 0xb0:',motor)
+        self.assertIn('AM13E_NATIVE_MOTOR_SIZE 0xb4U',motor)
+        self.assertIn('"guest_adc_phase_eoc_from_plant"',runner)
+        self.assertIn('args.sim_native_adc_bemf',runner)
 
     def test_qemu_source_has_both_effective_parameter_branches(self):
         machine=(ROOT/"machine/am13e23019.c").read_text()

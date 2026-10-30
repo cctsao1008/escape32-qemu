@@ -22,7 +22,7 @@ class NativeFirstTripLatchContract(unittest.TestCase):
 
     def test_plant_instrumentation_is_read_only_and_reset_at_boot(self):
         src=(ROOT/"machine/am13e_native_motor_plant.inc").read_text()
-        self.assertIn("#define AM13E_NATIVE_MOTOR_SIZE 0xa4U",src)
+        self.assertIn("#define AM13E_NATIVE_MOTOR_SIZE 0xb4U",src)
         self.assertIn("case 0xa0:",src)
         self.assertIn("configured_initial_electrical_mdeg",
                       (ROOT/"tests/e62_autonomous_native_motor_probe.py").read_text())

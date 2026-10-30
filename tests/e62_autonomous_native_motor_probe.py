@@ -269,6 +269,8 @@ def _motor_snapshot(qtest):
             "bus_millivolts":get(0x9c),
             "configured_initial_electrical_mdeg":signed(get(0xa0)),
         },
+        "sim_native_adc_bemf_enabled": bool(get(0xa4)),
+        "guest_adc_phase_eoc_from_plant": [get(0xa8),get(0xac),get(0xb0)],
         "status_flags": get(0x04),
         "native_1us_physics_ticks": get(0x08),
         "actual_pwm_event_notifications": get(0x0c),
@@ -564,7 +566,9 @@ def run(args):
                  if getattr(args,"experimental_bemf_robustness",None) else "") +
                 ",esc-sim-native-motor-profile="+args.sim_motor_profile+
                 ",esc-sim-native-initial-electrical-deg="+
-                str(args.sim_initial_electrical_degrees),
+                str(args.sim_initial_electrical_degrees)+
+                (",esc-sim-native-adc-bemf=on"
+                 if args.sim_native_adc_bemf else ""),
                 *(["-S","-qmp",f"unix:{qmp_sockpath},server=on,wait=off"]
                   if args.differential_sync_start else []),
                 "-kernel", str(args.elf.resolve()),
@@ -628,6 +632,10 @@ def run(args):
                     evidence["effective_sim_profile"] = _assert_effective_sim_model(
                         evidence["motor_before"],args.sim_motor_profile,
                         args.sim_initial_electrical_degrees)
+                    if (evidence["motor_before"]["sim_native_adc_bemf_enabled"]
+                            != bool(args.sim_native_adc_bemf)):
+                        raise RuntimeError("QEMU actual native ADC-BEMF enable "
+                                           "does not match SIM_ONLY profile")
                     evidence["pwm_source_before"] = _pwm_source_snapshot(qtest)
                     evidence["original_guest_before"] = _read_original_guest_telemetry(qtest,symbol_addrs)
                     evidence["receiver_before"] = _receiver_snapshot(qtest.read)
@@ -928,6 +936,10 @@ def main():
                         default=-30,
                         help="SIM_ONLY QEMU plant initial electrical pose; "
                              "not rotor sensor / Guest startup angle")
+    parser.add_argument("--sim-native-adc-bemf",action="store_true",
+                        help="SIM_ONLY opt-in: source model BEMF at actual "
+                             "ADC0/1/2 SOC EOC; never writes Guest registers "
+                             "or authorizes motor restart")
     parser.add_argument("--cfg-flash", type=Path, required=True)
     parser.add_argument("--artifact", type=Path, default=Path(
         "artifacts/e62-autonomous-native-motor-smoke.json"))

@@ -285,6 +285,8 @@ struct AM13ESimADC {
     QEMUTimer *timer;
     qemu_irq irq;
     AM13EPeripheralGPRCM *gprcm;
+    struct AM13EMachineState *machine; /* QEMU source, no Guest data write */
+    uint32_t instance;
     uint32_t base;
     const char *name;
     bool esc_sim;
@@ -361,6 +363,7 @@ typedef struct AM13ENativeMotor {
     struct AM13EMachineState *machine;
     bool enabled, active, faulted, gate;
     uint32_t model_profile; /* default KV147=0, opt-in KV210=210 */
+    uint32_t phase_adc_publications[3]; /* EOC only, read-only observer */
     /* SIM_ONLY rotor initial pose: default -30 electrical degrees.
      * Profile is host machine property, not available to Guest firmware. */
     bool initial_phase_override;
@@ -637,6 +640,7 @@ struct AM13EMachineState {
     uint32_t factory_pll1;
     bool factory_unmodeled_reported;
     AM13ESimADC adc[AM13E_SIM_ADC_COUNT];
+    bool esc_sim_native_adc_bemf; /* opt-in native plant -> real ADC SOC */
     char *esc_sim_adc_fixture_file;
     AM13EPeripheralGPRCM peripheral_gprcm[AM13E_SIM_GPRCM_COUNT];
     AM13EGpioPort gpio[AM13E_GPIO_COUNT];
@@ -3127,7 +3131,31 @@ static void am13e_sim_adc_complete(void *opaque)
     for (unsigned i = 0U; i <= end && i < 16U; ++i) {
         uint32_t ctl = adc->registers[(0x04cU + i * 4U) / 4U];
         uint32_t channel = (ctl >> 15U) & 31U;
-        adc->results[i] = adc->channel_samples[channel];
+        /* Firmware Option-1 raw scan: ADC0 SOC1=U CH12;
+         * ADC1 SOC2=V CH2; ADC2 SOC1=W CH5.
+         * Optional SIM_ONLY physical BEMF plant drives ONLY these EOC
+         * samples, preserving all other fixture-owned ADC channels.
+         * SOC EOC and ISR are genuine Guest-triggered QEMU hardware.
+         * No model theta/rotor speed or synthetic Guest CAP1 is exposed.
+         */
+        const unsigned phase_soc = adc->instance == 1U ? 2U : 1U;
+        const unsigned phase_channel = adc->instance == 0U ? 12U :
+                                       adc->instance == 1U ? 2U : 5U;
+        if (adc->machine->esc_sim_native_adc_bemf && i == phase_soc) {
+            AM13ENativeMotor *m = &adc->machine->native_motor;
+            if (channel != phase_channel || m->faulted) {
+                error_report("E62_SIM_NATIVE_ADC_BEMF_FAIL_CLOSED "
+                             "adc=%u soc=%u channel=%u expected=%u fault=%u",
+                             adc->instance, i, channel, phase_channel,
+                             m->faulted ? 1U : 0U);
+                return; /* Do not manufacture EOC/sample on mismatch. */
+            }
+            adc->results[i] = (m->active ? m->bemf_codes[adc->instance] :
+                              2048U); /* Model zero-speed bias midpoint. */
+            ++m->phase_adc_publications[adc->instance];
+        } else {
+            adc->results[i] = adc->channel_samples[channel];
+        }
     }
     adc->busy = false;
     adc->registers[0] &= ~AM13E_SIM_ADC_CTL1_BUSY;
@@ -3977,6 +4005,13 @@ static void am13e_init(MachineState *machine)
         error_report("esc-sim-reset-cause requires esc-sim=on");
         exit(EXIT_FAILURE);
     }
+    if (s->esc_sim_native_adc_bemf &&
+        (!s->esc_sim || !s->native_motor.enabled ||
+         s->esc_sim_adc_fixture_file)) {
+        error_report("Native ADC-BEMF requires esc-sim, native motor "
+                     "and no competing raw ADC fixture");
+        exit(EXIT_FAILURE);
+    }
     if ((s->esc_sim_experimental_fc_direct20 ||
          s->esc_sim_experimental_fc_profile) &&
         (s->esc_sim_differential_fc_smoke || !s->esc_sim ||
@@ -4290,6 +4325,8 @@ static void am13e_init(MachineState *machine)
         AM13ESimADC *a = &s->adc[i];
 
         a->base = gprcm_devices[i].base;
+        a->machine = s;
+        a->instance = i;
         a->name = adc_names[i];
         a->esc_sim = s->esc_sim;
         a->gprcm = &s->peripheral_gprcm[i];
@@ -4388,6 +4425,15 @@ static void am13e_set_native_motor_profile(Object *obj,
     } else {
         error_setg(errp,"SIM_ONLY native motor profile must be ecx87-kv147 or ecx87-kv210");
     }
+}
+
+static bool am13e_get_native_adc_bemf(Object *obj, Error **errp)
+{
+    return AM13E_MACHINE(obj)->esc_sim_native_adc_bemf;
+}
+static void am13e_set_native_adc_bemf(Object *obj, bool enabled, Error **errp)
+{
+    AM13E_MACHINE(obj)->esc_sim_native_adc_bemf=enabled;
 }
 
 static char *am13e_get_native_initial_phase(Object *obj, Error **errp)
@@ -4584,6 +4630,14 @@ static void am13e_class_init(ObjectClass *oc, void *data)
     object_class_property_set_description(oc, "esc-sim-native-motor-profile",
         "EXPERIMENT ONLY: default ecx87-kv147 or opt-in ecx87-kv210; "
         "changes source motor R/L/Kt/Ke, never Guest startup policy/P1.");
+    object_class_property_add_bool(oc, "esc-sim-native-adc-bemf",
+                                   am13e_get_native_adc_bemf,
+                                   am13e_set_native_adc_bemf);
+    object_class_property_set_description(oc, "esc-sim-native-adc-bemf",
+        "SIM_ONLY opt-in: source native BEMF codes -> Guest software-triggered "
+        "ADC0 SOC1 CH12(U), ADC1 SOC2 CH2(V), ADC2 SOC1 CH5(W); "
+        "true EOC/IRQ only; NOT a sensorless direction/angle estimate; "
+        "default off, incompatible with external ADC fixture.");
     object_class_property_add_str(oc, "esc-sim-native-initial-electrical-deg",
                                   am13e_get_native_initial_phase,
                                   am13e_set_native_initial_phase);

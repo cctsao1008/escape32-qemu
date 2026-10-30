@@ -13,7 +13,7 @@
  */
 #include <math.h> /* sin, remainder, isfinite, INFINITY, lround */
 #define AM13E_NATIVE_MOTOR_BASE UINT32_C(0x5ffeb000)
-#define AM13E_NATIVE_MOTOR_SIZE 0xa4U
+#define AM13E_NATIVE_MOTOR_SIZE 0xb4U
 #define AM13E_NATIVE_MOTOR_STEP_NS INT64_C(1000)
 #define AM13E_NATIVE_MOTOR_MAGIC UINT32_C(0x4d323645) /* E62M */
 #define AM13E_NATIVE_PP 21.0
@@ -52,6 +52,7 @@ static void am13e_native_motor_reset(AM13ENativeMotor *m)
     m->active = m->faulted = m->gate = false;
     m->fault_code = m->mask = m->ticks = m->switch_events = 0U;
     m->analog_updates = 0U;
+    memset(m->phase_adc_publications, 0, sizeof(m->phase_adc_publications));
     /* Retain machine-property stress amplitude across QEMU resets;
      * clear only epoch/counters. Default off changes no prior behavior. */
     m->bemf_stress_last_switch_ns = -1;
@@ -239,6 +240,10 @@ static MemTxResult am13e_native_motor_read(void *opaque, hwaddr off,
      * Read-only provenance; NOT instantaneous theta or a rotor sensor. */
     case 0xa0: *v=(uint32_t)(m->initial_phase_override ?
                              m->initial_phase_mdeg : -30000); break;
+    case 0xa4: *v=m->machine->esc_sim_native_adc_bemf ? 1U : 0U; break;
+    case 0xa8: *v=m->phase_adc_publications[0]; break;
+    case 0xac: *v=m->phase_adc_publications[1]; break;
+    case 0xb0: *v=m->phase_adc_publications[2]; break;
     default: return MEMTX_ERROR;
     }
     return MEMTX_OK;
