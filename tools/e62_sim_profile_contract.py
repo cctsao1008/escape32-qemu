@@ -98,7 +98,10 @@ def load(path=DEFAULT):
         "oc_sources":["oc-u","oc-v","oc-w"],"nfault":True,
         "dshot_loss":True,"trip_latch_retention_required":True,
         "all_six_gate_off_required":True,
-        "source_fault_not_physical_current":True}:
+        "source_fault_not_physical_current":True,
+        "non_oc_virtual_fault_sources":{
+            "uv":"NOT_MODELED","ov":"NOT_MODELED","thermal":"NOT_MODELED"},
+        "unmodeled_faults_claimed_qualified":False}:
         raise ValueError("Protection fault suite must not waive safety")
     if type(data["profiles"]) is not dict or set(data["profiles"])!=set(DATASHEET_PROFILES):
         raise ValueError("Missing or unexpected motor model")
@@ -154,7 +157,13 @@ def report(data):
             "selected_motor_profiles":list(DATASHEET_PROFILES),
             "computed_points":results,"original_p1_unchanged":True,
             "hardware_qualified":False,"rearm_permitted":False,
-            "separate_actual_qemu_runtime_verification_required":True}
+            "separate_actual_qemu_runtime_verification_required":True,
+            "protection_source_status":{
+                "oc_u_v_w":"REQUIRES_QEMU_SOURCE_FAULT_EVIDENCE",
+                "nfault":"REQUIRES_QEMU_SOURCE_FAULT_EVIDENCE",
+                "dshot_loss_wwdt":"REQUIRES_QEMU_SOURCE_FAULT_EVIDENCE",
+                **data["protection_study"]["non_oc_virtual_fault_sources"]},
+            "unmodeled_faults_qualified":False}
 
 def main():
     ap=argparse.ArgumentParser()
