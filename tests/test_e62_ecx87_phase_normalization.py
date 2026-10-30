@@ -84,9 +84,19 @@ class ECX87PhaseNormalizationTests(unittest.TestCase):
         dynamics = (ROOT/"machine/am13e_native_motor_dynamics.inc").read_text()
         frontend = (ROOT/"machine/am13e_native_analog_frontend.inc").read_text()
         terminal = re.search(
-            r"#define AM13E_NATIVE_KT_TERMINAL ([0-9.]+)", plant)
+            r"#define AM13E_NATIVE_KT_TERMINAL \\(m->model_profile == 210U "
+            r"\\? ([0-9.]+) : ([0-9.]+)\\)", plant)
         self.assertIsNotNone(terminal)
-        self.assertEqual(float(terminal.group(1)), 0.0649)
+        self.assertEqual(float(terminal.group(1)), 0.0454)
+        self.assertEqual(float(terminal.group(2)), 0.0649)
+        for profile,expected in (("ecx87-kv147",0.0649),
+                                 ("ecx87-kv210",0.0454)):
+            p=native_motor_parameters(profile)
+            self.assertAlmostEqual(
+                p.torque_constant_nm_per_a*math.sqrt(3.0),expected,places=12)
+            self.assertAlmostEqual(
+                p.bemf_constant_v_per_rad_s*p.pole_pairs,
+                p.torque_constant_nm_per_a,places=12)
         self.assertIn(
             "AM13E_NATIVE_K_PHASE (AM13E_NATIVE_KT_TERMINAL / 1.7320508075688772935)",
             plant)

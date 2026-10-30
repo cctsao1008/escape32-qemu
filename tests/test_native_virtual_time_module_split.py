@@ -15,6 +15,9 @@ import unittest
 
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 OLD_HEAD="ed29fc304c45465d9144343ef8a9264ddad8b067"
+PRE_PROFILE_HEAD="0b6ffa3397c6ece17ffd115df62ea2bf6abc72b8"
+# Immutable pre-profile main tree. Its refactor was an exact source split;
+# current main has intentional opt-in motor profile changes.
 MACHINE=ROOT/"machine"
 ORIGINAL="am13e_native_motor_plant.inc"
 MODULES=(
@@ -32,20 +35,46 @@ def historical_source():
                              proc.stderr[-500:])
     return proc.stdout
 
-def recomposed_source():
-    document=(MACHINE/ORIGINAL).read_text()
+def _git_content(commit, path):
+    proc=subprocess.run(["git","show",f"{commit}:{path}"],
+                        cwd=ROOT,text=True,capture_output=True,check=False)
+    if proc.returncode:
+        raise AssertionError("Historical source unavailable: "+path+
+                             "\\n"+proc.stderr[-500:])
+    return proc.stdout
+
+def recomposed_source(commit=None):
+    document=(_git_content(commit,f"machine/{ORIGINAL}") if commit else
+              (MACHINE/ORIGINAL).read_text())
     for name in MODULES:
-        marker=f'#include "{name}"\n'
+        marker=f'#include "{name}"\\n'
         if document.count(marker)!=1:
             raise AssertionError("Missing or duplicated module include: "+name)
-        document=document.replace(marker,(MACHINE/name).read_text(),1)
+        module=(_git_content(commit,f"machine/{name}") if commit else
+                (MACHINE/name).read_text())
+        document=document.replace(marker,module,1)
     return document
 
 class OriginalVirtualClockModuleContract(unittest.TestCase):
-    def test_exact_source_equivalence(self):
-        self.assertEqual(recomposed_source(),historical_source(),
-                         "Refactoring must preserve original C function bodies "
-                         "byte-for-byte, including callback ordering")
+    def test_exact_pre_profile_refactor_equivalence(self):
+        # Preserve the original *historical* exact-byte refactor contract.
+        # It cannot legitimately compare expanded, opt-in new model source
+        # to an immutable 2026 pre-refactor source and claim no drift.
+        self.assertEqual(recomposed_source(PRE_PROFILE_HEAD),historical_source(),
+                         "Frozen original module split must remain byte-identical")
+
+    def test_current_opt_in_profile_does_not_claim_historical_source_identity(self):
+        source=recomposed_source()
+        self.assertNotEqual(source,historical_source(),
+                            "Current QEMU profile extension must not be labeled "
+                            "byte-identical historical motor source")
+        body=(MACHINE/ORIGINAL).read_text()
+        self.assertIn('case 0x8c:',body)
+        self.assertIn('case 0x98:',body)
+        self.assertIn('case 0x9c:',body)
+        self.assertIn('am13e_native_motor_tick',body)
+        self.assertIn('AM13E_NATIVE_K_PHASE',source)
+        self.assertIn('m->model_profile == 210U',source)
 
     def test_module_order_and_no_host_threads(self):
         body=(MACHINE/ORIGINAL).read_text()
