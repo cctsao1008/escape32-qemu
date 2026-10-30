@@ -25,6 +25,46 @@ MAX_EOC_READ_NS=5_000_000
 MAX_THREE_PHASE_SKEW_NS=5_000_000
 MIN_WINDOW_EPOCHS=40
 DIAGNOSTIC_CODE_CONTRAST_FLOOR=3
+# Rank traversal is a waveform diagnostic. Even an apparently clean
+# series cannot prove actual electrical angle or authorize Guest rearm.
+RANK_SEQUENCE=((0,1,2),(0,2,1),(2,0,1),(2,1,0),(1,2,0),(1,0,2))
+
+def rank_motion_diagnostic(triplets, separation=3):
+    if type(separation) is not int or not 3<=separation<=16:
+        raise ValueError("Unsafe uncalibrated phase rank separation")
+    states=[]
+    rejected_ties=0
+    for item in triplets:
+        volts=item["codes"]
+        if len(volts)!=3 or any(type(x) is not int or not 0<=x<=4095
+                               for x in volts):
+            raise ValueError("Unknown or invalid Guest phase code")
+        order=tuple(sorted(range(3),key=lambda i:-volts[i]))
+        if (volts[order[0]]-volts[order[1]]<separation or
+            volts[order[1]]-volts[order[2]]<separation):
+            rejected_ties+=1
+            continue
+        state=RANK_SEQUENCE.index(order)
+        if not states or states[-1][1]!=state:
+            states.append((item["vns"],state))
+    diff=[(curr[1]-last[1])%6
+          for last,curr in zip(states,states[1:])]
+    skipped=sum(d not in (1,5) for d in diff)
+    reversed_indicator=min(diff.count(1),diff.count(5))
+    coherent=(len(diff)>=3 and skipped==0 and reversed_indicator==0)
+    return {
+        "rank_separation_codes":separation,
+        "rank_samples_with_ambiguous_ties":rejected_ties,
+        "distinct_state_observations":len(states),
+        "adjacent_one_way_steps":diff.count(1),
+        "adjacent_other_way_steps":diff.count(5),
+        "skipped_nonadjacent_steps":skipped,
+        "mixed_order_direction_indicators":reversed_indicator,
+        "diagnostic_consistent_rank_sequence_candidate_only":coherent,
+        "Guest_windmill_direction_or_angle_qualified":False,
+        "motor_rearm_permitted":False
+    }
+
 
 
 def validate_source(events, stages):
@@ -126,6 +166,7 @@ def contrast_in_window(triplets,start,stop):
             "direction_qualified":False,"rotor_phase_qualified":False
         }
     contrasts=[max(r["codes"])-min(r["codes"]) for r in data]
+    rank=rank_motion_diagnostic(data)
     return {
         "samples":len(data),
         "max_phase_code_contrast":max(contrasts),
@@ -135,6 +176,7 @@ def contrast_in_window(triplets,start,stop):
                           if max(contrasts)<DIAGNOSTIC_CODE_CONTRAST_FLOOR
                           else "GUEST_ADC_PHASE_CONTRAST_PRESENT_DIRECTION_UNPROVEN"),
         "direction_qualified":False,"rotor_phase_qualified":False,
+        "rank_motion_diagnostic":rank
     }
 
 
