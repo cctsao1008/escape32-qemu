@@ -4,7 +4,7 @@ import math, unittest, tempfile, json
 from pathlib import Path
 from tools.e62_apc24x12e_static import (load,static_torque,RPM,TORQUE_NM,MOTOR_ROTOR_J)
 from tools.native_motor_model_profiles import (native_motor_parameters,
-    APC_STUDY_PROFILES,DATASHEET_PROFILES,native_motor_model_metadata)
+    APC_STUDY_PROFILES,VOLTAGE_CONTROL_PROFILES,DATASHEET_PROFILES,native_motor_model_metadata)
 
 class APCProfileTest(unittest.TestCase):
     def test_maker_grid_exact_and_reverse_dissipation(self):
@@ -41,6 +41,11 @@ class APCProfileTest(unittest.TestCase):
             self.assertEqual(p.vbus_v,24)
             self.assertEqual(p.inertia_kg_m2,MOTOR_ROTOR_J)
             self.assertFalse(native_motor_model_metadata(name)["propeller_inertia_and_load_modeled"])
+        control=native_motor_parameters(VOLTAGE_CONTROL_PROFILES[0])
+        self.assertEqual(control.vbus_v,47)
+        self.assertEqual(control.inertia_kg_m2,MOTOR_ROTOR_J)
+        self.assertFalse(native_motor_model_metadata(
+            VOLTAGE_CONTROL_PROFILES[0])["propeller_inertia_and_load_modeled"])
         for name,ratio in zip(APC_STUDY_PROFILES,[1,2,5]):
             p=native_motor_parameters(name)
             self.assertEqual(p.vbus_v,47)
