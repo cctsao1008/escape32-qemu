@@ -2,7 +2,7 @@ name: E62 SIM_ONLY Effective Motor Profile Contract (NO Hardware Signoff)
 
 on:
   push:
-    branches: [main, integration/e62-main-sim-consolidation-20261030]
+    branches: [main]
     paths:
       - 'machine/am13e23019.c'
       - 'machine/am13e_autonomous_sitl.inc'
@@ -10,6 +10,9 @@ on:
       - 'scenarios/e62-native-p1-running-oc-*.json'
       - 'tools/native_p1_oc_fault_plan.py'
       - 'tools/native_p1_running_oc_audit.py'
+      - 'tools/e62_experimental_second_demand_oracle.py'
+      - 'tools/e62_passive_phase_order_alias_audit.py'
+      - 'configs/e62-startup-second-demand-oracle-v1.json'
       - 'machine/am13e_native_motor_plant.inc'
       - 'machine/am13e_native_motor_dynamics.inc'
       - 'machine/am13e_native_analog_frontend.inc'
@@ -39,7 +42,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m py_compile tools/e62_sim_profile_contract.py tests/test_e62_sim_model_profile.py tests/e62_autonomous_native_motor_probe.py
+          python3 -m py_compile tools/e62_sim_profile_contract.py tests/test_e62_sim_model_profile.py tests/e62_autonomous_native_motor_probe.py tools/e62_experimental_second_demand_oracle.py tools/e62_passive_phase_order_alias_audit.py
           python3 -m unittest discover -s tests -p test_e62_sim_model_profile.py -v
           python3 -m unittest discover -s tests -p test_e62_native_running_oc_sense.py -v
           python3 -m unittest discover -s tests -p test_e62_second_demand_oracle.py -v
