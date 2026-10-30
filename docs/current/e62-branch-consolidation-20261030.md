@@ -95,3 +95,7 @@ in `docs/current/e62-branch-consolidation-manifest-20261030.json`.
   and strict rotor reversal/missing torque remains a genuine SIM functional
   failure. These do not undo Git-ancestry preservation or qualify #5.
 - **No branches have been deleted by this task.**
+
+### Post-merge source motor profile result
+
+The direct `main` native model/profile workflow [#41060908974](https://github.com/cctsao1008/escape32-qemu/actions/runs/41060908974) completed **SUCCESS**: both effective QEMU model profiles, source OC U/V/W (6/6), and strict fail-closed protection evidence. This does **not** change the archived pinned-source mismatch or failed strict rotor trajectory gates; their coverage remains explicitly open. Deleting old remote branch refs has **not** occurred.

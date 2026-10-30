@@ -87,11 +87,18 @@
       "original_nfault_wwdt": "SUCCESS:41060908950",
       "model_module_contract": "SUCCESS:41061663708",
       "host_model_units": "SUCCESS:41061510923",
-      "profile_and_6_oc": "IN_PROGRESS:41060908974",
+      "profile_and_6_oc": "SUCCESS:41060908974",
       "historical_pin_current_source_mismatch": "FAIL:41060908845",
       "strict_rotor_reversal": "FAIL:41060908985"
     },
     "interpretation": "History-safe branch retirement independent of unresolved software functional red gates. Keep #5/#7 open. Do not label all CI green.",
-    "deletion_authority": "USER_ONLY_SEPARATE_STEP"
+    "deletion_authority": "USER_ONLY_SEPARATE_STEP",
+    "simulation_profile_qualification": {
+      "contract": true,
+      "actual_running_oc_u_v_w_six_of_six": true,
+      "original_nfault_wwdt": true,
+      "strict_rotor_reversal_qualified": false,
+      "original_historical_pinned_source_pairing_current_head": false
+    }
   }
 }
