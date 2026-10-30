@@ -104,10 +104,19 @@ sensing. Phase mapping is pinned to the versioned JSON profile, with
 negative tests rejecting unsupported mapping/rearm.
 
 [CI #41087374861](https://github.com/cctsao1008/escape32-qemu/actions/runs/41087374861)
-runs a real Original Guest with the opt-in ADC bridge, requiring
-positive EOC publications for all three phases. The strict host profile
-job passed; the true QEMU EOC job must also pass before calling the
-source-to-Guest ADC bridge verified.
+**SUCCESS** on exact source-built QEMU and immutable Original Rel17.3
+Guest, with **2,994 / 2,994 / 2,994 actual source-owned ADC0/1/2
+SOC/EOC phase publications**, true EOC/IRQ in Guest-driven scan. The
+no-angle/no-rearm profile/unit job also passed.
+
+To distinguish changing model samples from constant 2048 dummy reads,
+the follow-on `266770e9385c7c74be920ac37eb09bdd00014e98` additionally
+counts (a) **non-midscale** BEMF EOC codes separately for each phase,
+and (b) **actual Guest ADCRESULT MMIO reads**. Strict CI
+[#41088019547](https://github.com/cctsao1008/escape32-qemu/actions/runs/41088019547)
+requires all six additional counters >0; **pending final live QEMU
+verification** at time of writing. These counters cannot qualify rotor
+direction/phase confidence or the guest's automatic rearm.
 
 - Existing dual-motor OC source-protection regression is preserved
   separately and must remain PASS after the append-only observer change.
