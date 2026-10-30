@@ -13,7 +13,7 @@
  */
 #include <math.h> /* sin, remainder, isfinite, INFINITY, lround */
 #define AM13E_NATIVE_MOTOR_BASE UINT32_C(0x5ffeb000)
-#define AM13E_NATIVE_MOTOR_SIZE 0xa0U
+#define AM13E_NATIVE_MOTOR_SIZE 0xa4U
 #define AM13E_NATIVE_MOTOR_STEP_NS INT64_C(1000)
 #define AM13E_NATIVE_MOTOR_MAGIC UINT32_C(0x4d323645) /* E62M */
 #define AM13E_NATIVE_PP 21.0
@@ -68,7 +68,9 @@ static void am13e_native_motor_reset(AM13ENativeMotor *m)
     m->last_ns = 0;
     memset(m->currents, 0, sizeof(m->currents));
     memset(m->bemf_codes, 0, sizeof(m->bemf_codes));
-    m->theta = -30.0 * AM13E_NATIVE_PI / 180.0;
+    m->theta = (m->initial_phase_override ?
+        (double)m->initial_phase_mdeg / 1000.0 : -30.0) *
+        AM13E_NATIVE_PI / 180.0;
     m->omega = 0.0;
     m->last_torque = 0.0;
     m->theta_unwrapped = m->theta;
@@ -233,6 +235,10 @@ static MemTxResult am13e_native_motor_read(void *opaque, hwaddr off,
     case 0x94: *v=(uint32_t)llround(AM13E_NATIVE_L*1e9); break;
     case 0x98: *v=(uint32_t)llround(AM13E_NATIVE_KT_TERMINAL*1e6); break;
     case 0x9c: *v=(uint32_t)llround(AM13E_NATIVE_VBUS*1e3); break;
+    /* Configured initial electrical angle, signed millidegrees.
+     * Read-only provenance; NOT instantaneous theta or a rotor sensor. */
+    case 0xa0: *v=(uint32_t)(m->initial_phase_override ?
+                             m->initial_phase_mdeg : -30000); break;
     default: return MEMTX_ERROR;
     }
     return MEMTX_OK;

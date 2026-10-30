@@ -361,6 +361,10 @@ typedef struct AM13ENativeMotor {
     struct AM13EMachineState *machine;
     bool enabled, active, faulted, gate;
     uint32_t model_profile; /* default KV147=0, opt-in KV210=210 */
+    /* SIM_ONLY rotor initial pose: default -30 electrical degrees.
+     * Profile is host machine property, not available to Guest firmware. */
+    bool initial_phase_override;
+    int32_t initial_phase_mdeg;
     uint32_t fault_code, mask, ticks, switch_events, analog_updates;
     int64_t last_ns;
     double currents[3], theta, omega, last_torque;
@@ -4386,6 +4390,28 @@ static void am13e_set_native_motor_profile(Object *obj,
     }
 }
 
+static char *am13e_get_native_initial_phase(Object *obj, Error **errp)
+{
+    AM13ENativeMotor *m=&AM13E_MACHINE(obj)->native_motor;
+    return g_strdup_printf("%d",m->initial_phase_override ?
+                           m->initial_phase_mdeg/1000 : -30);
+}
+static void am13e_set_native_initial_phase(Object *obj,
+                                           const char *value, Error **errp)
+{
+    AM13ENativeMotor *m=&AM13E_MACHINE(obj)->native_motor;
+    int degrees;
+    char trailing;
+    if (!value || sscanf(value,"%d%c",&degrees,&trailing)!=1 ||
+        degrees < -180 || degrees > 180) {
+        error_setg(errp,"SIM_ONLY initial electrical degrees must be "
+                        "an integer between -180 and 180");
+        return;
+    }
+    m->initial_phase_mdeg=degrees*1000;
+    m->initial_phase_override=true;
+}
+
 static bool am13e_get_native_motor(Object *obj, Error **errp)
 {
     return AM13E_MACHINE(obj)->native_motor.enabled;
@@ -4558,6 +4584,14 @@ static void am13e_class_init(ObjectClass *oc, void *data)
     object_class_property_set_description(oc, "esc-sim-native-motor-profile",
         "EXPERIMENT ONLY: default ecx87-kv147 or opt-in ecx87-kv210; "
         "changes source motor R/L/Kt/Ke, never Guest startup policy/P1.");
+    object_class_property_add_str(oc, "esc-sim-native-initial-electrical-deg",
+                                  am13e_get_native_initial_phase,
+                                  am13e_set_native_initial_phase);
+    object_class_property_set_description(oc,
+        "esc-sim-native-initial-electrical-deg",
+        "SIM_ONLY initial plant electrical pose [-180,180] whole degrees; "
+        "default -30; read-only QTest provenance, NOT a Guest angle sensor, "
+        "no automatic rearm or Original P1 acceptance waiver.");
     object_class_property_add_str(oc, "esc-sim-bemf-robustness",
                                   am13e_get_bemf_stress,
                                   am13e_set_bemf_stress);

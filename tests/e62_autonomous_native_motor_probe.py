@@ -267,6 +267,7 @@ def _motor_snapshot(qtest):
             "phase_inductance_nanohenry":get(0x94),
             "terminal_kt_micro_nm_per_a":get(0x98),
             "bus_millivolts":get(0x9c),
+            "configured_initial_electrical_mdeg":signed(get(0xa0)),
         },
         "status_flags": get(0x04),
         "native_1us_physics_ticks": get(0x08),
@@ -297,7 +298,7 @@ def _motor_snapshot(qtest):
     }
 
 
-def _assert_effective_sim_model(snapshot, profile):
+def _assert_effective_sim_model(snapshot, profile, initial_degrees=-30):
     """Fail if the QEMU numeric model differs from its named profile."""
     p=native_motor_parameters(profile)
     meta=native_motor_model_metadata(profile)
@@ -307,6 +308,7 @@ def _assert_effective_sim_model(snapshot, profile):
         "phase_inductance_nanohenry":round(p.phase_inductance_h*1e9),
         "terminal_kt_micro_nm_per_a":round(meta["published_kt_nm_per_a"]*1e6),
         "bus_millivolts":round(p.vbus_v*1000),
+        "configured_initial_electrical_mdeg":initial_degrees*1000,
     }
     observed=snapshot["effective_sim_motor_model"]
     if observed!=expected:
@@ -560,7 +562,9 @@ def run(args):
                  if getattr(args,"switch_focus_window_ms",None) else "") +
                 (",esc-sim-bemf-robustness="+args.experimental_bemf_robustness
                  if getattr(args,"experimental_bemf_robustness",None) else "") +
-                ",esc-sim-native-motor-profile="+args.sim_motor_profile,
+                ",esc-sim-native-motor-profile="+args.sim_motor_profile+
+                ",esc-sim-native-initial-electrical-deg="+
+                str(args.sim_initial_electrical_degrees),
                 *(["-S","-qmp",f"unix:{qmp_sockpath},server=on,wait=off"]
                   if args.differential_sync_start else []),
                 "-kernel", str(args.elf.resolve()),
@@ -622,7 +626,8 @@ def run(args):
                         conn, response_timeout_s=args.qtest_response_timeout_s)
                     evidence["motor_before"] = _motor_snapshot(qtest)
                     evidence["effective_sim_profile"] = _assert_effective_sim_model(
-                        evidence["motor_before"],args.sim_motor_profile)
+                        evidence["motor_before"],args.sim_motor_profile,
+                        args.sim_initial_electrical_degrees)
                     evidence["pwm_source_before"] = _pwm_source_snapshot(qtest)
                     evidence["original_guest_before"] = _read_original_guest_telemetry(qtest,symbol_addrs)
                     evidence["receiver_before"] = _receiver_snapshot(qtest.read)
@@ -919,6 +924,10 @@ def main():
                         default="ecx87-kv147",
                         help="SIM_ONLY QEMU native motor parameter set; "
                              "verify effective model by read-only QTest")
+    parser.add_argument("--sim-initial-electrical-degrees",type=int,
+                        default=-30,
+                        help="SIM_ONLY QEMU plant initial electrical pose; "
+                             "not rotor sensor / Guest startup angle")
     parser.add_argument("--cfg-flash", type=Path, required=True)
     parser.add_argument("--artifact", type=Path, default=Path(
         "artifacts/e62-autonomous-native-motor-smoke.json"))
@@ -980,6 +989,8 @@ def main():
         not 5 <= args.qtest_response_timeout_s <= 60 or
         not 5 <= args.stall_wall_timeout_s <= 120):
         parser.error("Explicit bounded wall/QTest/progress timeouts required")
+    if not -180 <= args.sim_initial_electrical_degrees <= 180:
+        parser.error("SIM_ONLY initial electrical degrees outside [-180,180]")
     if args.experimental_bemf_robustness is not None:
         import re
         if args.experimental_candidate_sha256 is None:

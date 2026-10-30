@@ -97,6 +97,21 @@ class SimModelProfileContract(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"schema"):
             changed_doc(d)
 
+    def test_native_initial_electrical_pose_is_bounded_and_read_back(self):
+        machine=(ROOT/"machine/am13e23019.c").read_text()
+        plant=(ROOT/"machine/am13e_native_motor_plant.inc").read_text()
+        runner=(ROOT/"tests/e62_autonomous_native_motor_probe.py").read_text()
+        for token in ("esc-sim-native-initial-electrical-deg",
+                      "degrees < -180 || degrees > 180",
+                      "initial_phase_override"):
+            self.assertIn(token,machine)
+        for token in ("case 0xa0:", "initial_phase_override",
+                      "-30000", "AM13E_NATIVE_MOTOR_SIZE 0xa4U"):
+            self.assertIn(token,plant)
+        self.assertIn("configured_initial_electrical_mdeg",runner)
+        self.assertIn("args.sim_initial_electrical_degrees",runner)
+        self.assertIn("initial_degrees*1000",runner)
+
     def test_qemu_source_has_both_effective_parameter_branches(self):
         machine=(ROOT/"machine/am13e23019.c").read_text()
         plant=(ROOT/"machine/am13e_native_motor_plant.inc").read_text()
