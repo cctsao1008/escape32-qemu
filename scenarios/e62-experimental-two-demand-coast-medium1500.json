@@ -1,0 +1,35 @@
+{
+  "schema": "e62.native.dshot.v1",
+  "name": "E62 EXPERIMENT 2x20pct source demand, 1500ms coast; SIM_ONLY APC sensitivity",
+  "target_elf_sha256": "05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0",
+  "protocol": "DSHOT600",
+  "frame_period_ns": 1000000,
+  "guest_ready_gating": false,
+  "stages": [
+    {
+      "kind": "hold",
+      "duration_ms": 1500,
+      "permille": 0
+    },
+    {
+      "kind": "hold",
+      "duration_ms": 1500,
+      "permille": 200
+    },
+    {
+      "kind": "hold",
+      "duration_ms": 1500,
+      "permille": 0
+    },
+    {
+      "kind": "hold",
+      "duration_ms": 1500,
+      "permille": 200
+    },
+    {
+      "kind": "hold",
+      "duration_ms": 300,
+      "permille": 0
+    }
+  ]
+}
