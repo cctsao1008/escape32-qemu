@@ -232,7 +232,7 @@ def main():
         else:
             if args.output:
                 args.output.parent.mkdir(parents=True,exist_ok=True)
-                args.output.write_text(json.dumps(obj,indent=2,sort_keys=True)+"\\n")
+                args.output.write_text(json.dumps(obj,indent=2,sort_keys=True)+"\n")
             print(json.dumps(obj,sort_keys=True))
         return 0 if obj.get("source_profile_readback_pass",True) else 1
     except (ValueError,TypeError,KeyError,IndexError,OSError) as exc:
