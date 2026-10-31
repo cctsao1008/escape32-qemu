@@ -18,9 +18,9 @@ jobs:
       - name: Pin experimental firmware source and TI SDK
         run: |
           set -euo pipefail
-          git clone -q --depth 1 -b experiment/e62-issue5-first-geometric-cross-handoff-20261101 \
+          git clone -q --depth 1 -b experiment/e62-issue5-pinned-first-cross-20261101 \
             https://github.com/cctsao1008/ESCape32.git candidate-escape32
-          test "$(git -C candidate-escape32 rev-parse HEAD)" = "f138568c2c1c8a0c9e6777e1d09208c0fa5f7aa1"
+          test "$(git -C candidate-escape32 rev-parse HEAD)" = "febd24f95467b8825034df9f397e82e903a4bdb0"
           git clone -q --depth 1 https://github.com/TexasInstruments/am13e2x_sdk.git /tmp/am13e-sdk
           git -C /tmp/am13e-sdk fetch -q --depth 1 origin b872469ceef18de5e39a1d3acb0821ec158b44c7
           git -C /tmp/am13e-sdk checkout -q --detach b872469ceef18de5e39a1d3acb0821ec158b44c7
@@ -29,7 +29,8 @@ jobs:
           set -euo pipefail
           cmake -S candidate-escape32 -B candidate-build \
             -DESCAPE32_BUILD_AM13E=ON -DAM13E_SDK_ROOT=/tmp/am13e-sdk \
-            -DAM13E_BOOT_LINKER_SCRIPT="$PWD/candidate-escape32/boot/mcu/AM13E/config.ld"
+            -DAM13E_BOOT_LINKER_SCRIPT="$PWD/candidate-escape32/boot/mcu/AM13E/config.ld" \
+            -DAM13E_BOARD_BOARD_PROFILE_FILE="$PWD/tests/fixtures/g13b3l_sim_only_ramp.cmake"
           cmake --build candidate-build --target AM13E-rev17.3.elf -j 3
           test -s candidate-build/AM13E-rev17.3.elf
           arm-none-eabi-size candidate-build/AM13E-rev17.3.elf
