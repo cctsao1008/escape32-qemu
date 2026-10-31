@@ -47,3 +47,25 @@ Observed repeat sequence: `8 -> 2 -> 3 -> 6 -> 4 -> 7 -> 8`, where `pair=1+3*hig
 - Original 24 V control CI: [24V baseline workflow](https://github.com/cctsao1008/escape32-qemu/actions/workflows/e62-24v-baseline-sim-only.yml), independently source-built.
 - The next root-cause decision requires source-verified audio/drive time separation, six-pad phase-mask versus rotor torque at the same virtual timestamps, and BEMF comparator/ECAP1/TIMG12 timing; no software-only retroactive P1 acceptance.
 - No ESCape32 Firmware edits for QEMU compatibility. A firmware change may only be considered if a separately proven genuine bug is documented and reviewed.
+
+
+## Independent source-only torque identity cross-check on prior #411092 artifacts
+
+The same authentic 47V source log `ROTOR` samples were independently replayed in a host calculation of the published QEMU motor torque identity, **without modifying QEMU or the Guest**:
+
+```text
+T_expected = (0.0454 / sqrt(3)) *
+   [ I_U sin(theta_e) + I_V sin(theta_e - 2pi/3)
+                     + I_W sin(theta_e + 2pi/3) ]
+```
+
+Each `ROTOR` event exposes three source model currents in mA, unwrapped electrical angle in mrad and torque in micro-N·m. The 1500 sampled points in the **first positive 20% demand** yield:
+
+| Profile | Samples | Mean absolute torque identity residual | Maximum |
+|---|---:|---:|---:|
+| 47V no-prop | 1500 | 0.00421 N·m | 0.01188 N·m |
+| APC J1 | 1500 | 0.00416 N·m | 0.01184 N·m |
+| APC J2 | 1500 | 0.00321 N·m | 0.01015 N·m |
+| APC J5 | 1500 | 0.00222 N·m | 0.00832 N·m |
+
+No residual exceeded 0.05 N·m; differences reflect mainly integer-serialized rotor angle/current rounding. This tests **internal torque equation consistency** only. It neither validates the modeled current against hardware measurements nor proves the QEMU/BEMF angular convention correct. Given correct six-pad digital progression *and* internal torque reciprocity, next prioritize actual comparator mux/threshold polarity, the phase of CAP1 zero crossings relative to rotor electrical angle, and whether/when firmware audio clock /32 is active. A change to any QEMU physical assumption still requires independent source justification and must preserve historical baseline regression results.
