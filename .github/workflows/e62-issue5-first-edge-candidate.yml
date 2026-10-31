@@ -1,0 +1,82 @@
+name: "E62 #5 FIX ATTEMPT 1 — non-original first BEMF edge firmware actual QEMU"
+
+on:
+  push:
+    branches: [experiment/e62-issue5-first-edge-firmware-candidate-ci-20261101]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-non-original-and-run-24v:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: carlosperate/arm-none-eabi-gcc-action@v1
+      - name: Pin experimental firmware source and TI SDK
+        run: |
+          set -euo pipefail
+          git clone -q --depth 1 -b experiment/e62-issue5-first-geometric-cross-handoff-20261101 \
+            https://github.com/cctsao1008/ESCape32.git candidate-escape32
+          test "$(git -C candidate-escape32 rev-parse HEAD)" = "24ba5c03963f907768bf5e872f2d98222e719224"
+          git clone -q --depth 1 https://github.com/TexasInstruments/am13e2x_sdk.git /tmp/am13e-sdk
+          git -C /tmp/am13e-sdk fetch -q --depth 1 origin b872469ceef18de5e39a1d3acb0821ec158b44c7
+          git -C /tmp/am13e-sdk checkout -q --detach b872469ceef18de5e39a1d3acb0821ec158b44c7
+      - name: Strictly build linked experimental AM13E firmware (never flash)
+        run: |
+          set -euo pipefail
+          cmake -S candidate-escape32 -B candidate-build \
+            -DESCAPE32_BUILD_AM13E=ON -DAM13E_SDK_ROOT=/tmp/am13e-sdk \
+            -DAM13E_BOOT_LINKER_SCRIPT="$PWD/candidate-escape32/boot/mcu/AM13E/config.ld"
+          cmake --build candidate-build --target AM13E-rev17.3.elf -j 3
+          test -s candidate-build/AM13E-rev17.3.elf
+          arm-none-eabi-size candidate-build/AM13E-rev17.3.elf
+          sha256sum candidate-build/AM13E-rev17.3.elf
+          python3 - <<'PY'
+          import hashlib,pathlib
+          p=pathlib.Path("candidate-build/AM13E-rev17.3.elf")
+          v=hashlib.sha256(p.read_bytes()).hexdigest()
+          assert v!="05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0"
+          print("NON_ORIGINAL_CANDIDATE_SHA",v)
+          PY
+      - name: Build independent QEMU native source and pin model
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            libglib2.0-dev libpixman-1-dev libfdt-dev pkg-config meson ninja-build binutils-arm-none-eabi
+          git submodule update --init --depth 1 qemu
+          ./build.sh
+          mkdir -p artifacts/e62-issue5-firstedge
+      - name: Real original-source DShot600 to experimental Guest, no rotor writes
+        run: |
+          set -euo pipefail
+          elf="candidate-build/AM13E-rev17.3.elf"
+          sha="$(sha256sum "$elf" | cut -d' ' -f1)"
+          root="artifacts/e62-issue5-firstedge/kv210-24v-firstedge"
+          python3 tools/sim_motor_cfg.py --sim-only-opt-in --elf "$elf" \
+            --motor-profile ecx87-kv210 --output "$root-g13b3-cfg-flash.bin"
+          python3 tests/e62_autonomous_native_motor_probe.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf "$elf" --experimental-candidate-sha256 "$sha" \
+            --sim-mcpwm-root-clock-hz 200000000 \
+            --sim-bemf-waveform historical_sine \
+            --sim-motor-profile ecx87-kv210 --sim-native-adc-bemf \
+            --cfg-flash "$root-g13b3-cfg-flash.bin" \
+            --scenario scenarios/e62-experimental-two-demand-coast-short300.json \
+            --wall-timeout-s 600 --artifact "$root.json"
+          python3 tools/e62_issue5_candidate_metrics.py \
+            --evidence "$root.json" --events "$root.p0.events.log" \
+            --output "$root-candidate-metrics.json"
+      - name: Upload genuine candidate ELF, source trace and exact metric
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-issue5-first-edge-nonoriginal-candidate-24v
+          path: |
+            candidate-build/AM13E-rev17.3.elf
+            artifacts/e62-issue5-firstedge/**
+          if-no-files-found: warn
+          retention-days: 21
