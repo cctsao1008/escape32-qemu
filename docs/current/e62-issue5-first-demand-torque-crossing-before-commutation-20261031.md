@@ -33,6 +33,25 @@
 
 **Model-limited mechanism:** A fixed stator field, strong simulated phase current/torque, an assumed rotor-only inertia `J=0.00013kg·m²`, modeled BEMF and zero-cross timing are enough to produce angle/torque oscillation in the simulation. It does not prove that a real motor with a 24×12E propeller behaves this way. Comparator source codes at the zero-cross edge are 2048→2049 (just one 12-bit ADC count at the ideal 2048 threshold), and the synthetic analog gain/reference have not been calibrated against real hardware.
 
+## Clock A/B completed: the same **first-sector torque inversion** persists at 200MHz
+
+With **the same Original Rel17.3**, source DShot stages, initial electrical angle -30°, KV210 parameters and original P1, [MCPWM source-clock experiment run #41178746233](https://github.com/cctsao1008/escape32-qemu/actions/runs/41178746233) completed **both** 200MHz QEMU root-clock source-backed jobs. Effective read-only QEMU clock = 200MHz as requested in both, QEMU build and 5100 DShot frames PASS; **Original P1 FAIL** significant direction reversal in both.
+
+Fresh source artifacts downloaded from that run and compared with the previous original 100MHz source artifacts. For each case, "first sector" means from the first authentic `PWM_PAIR=8` to the next `PWM_PAIR=2`; rotor angle delta uses `PWM_PAIR.d` (source native electrical angle) and `ROTOR.b` (unwrapped model electrical angle), not a Guest angle sensor.
+
+| KV210 motor-only / MCPWM root | First valid pair after +20% input | Time to *next* pair | CAP1 source captures before next pair | First **negative** model torque sample | First RPM below -50 | Electrical displacement from pair start to negative torque | Electrical displacement to RPM below -50 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 24V / historical 100MHz | +0.284ms | **14.834ms** | 2 | +5.209ms | +8.209ms | **154.0°** | 181.5° |
+| 24V / source-corrected 200MHz | +0.220ms | **14.835ms** | 2 | +4.659ms | +7.659ms | **127.2°** | 193.0° |
+| 47V / historical 100MHz | +0.284ms | **11.417ms** | 2 | +4.209ms | +6.209ms | **178.0°** | 184.3° |
+| 47V / source-corrected 200MHz | +0.241ms | **11.376ms** | 2 | +3.804ms | +5.804ms | **151.9°** | 198.8° |
+
+Times are milliseconds relative to each run's **first +20% source DShot event**, and "first negative torque" is the first sampled `ROTOR.f < -0.1 N·m`; "first RPM below -50" is the existing strict P1 significant speed sign threshold. The angle is an internal physical-*model* state and MUST NOT be used as an artificial Guest rotor signal. The first modeled electrical rotor excursion exceeds **120° before first negative torque**, versus the 60° spacing of conventional six-step sector transitions, but it is **not evidence of 120° physical hardware motion**.
+
+**Narrow causal statement supported by actual source events:** in all four models, the first PWM power pair is held while the model electromagnetic torque changes sign and then the rotor speed reverses. The first motor source CAP1 occurs early, yet the next source PWM_PAIR is not emitted until >11ms (47V) or >14ms (24V) after the first pair. Two CAP1 events can occur in that same first sector because the rotor oscillates across the modeled comparator threshold. Merely correcting QEMU MCPWM clock from 100MHz to firmware-intended 200MHz does **not** resolve this first-sector behavior or unchanged P1 FAIL.
+
+**Remaining unknowns:** why the Guest's first CAP1 is or is not accepted for commutation scheduling; exact comparator polarity/threshold/hysteresis, BEMF blanking, physical phase-to-sense wiring, source model current transient accuracy, blade inertia, and driver freewheel path. The result warrants *read-only* `CMP_FILTER→CAP1→CAP1_ACK→T12_LOAD→TIMG12→PWM_PAIR` and rotor-model angle alignment before changing either QEMU physics or firmware. Firmware behavior remains the immutable reference, not a debug target to patch for SITL. **Issue #5 OPEN.**
+
 ## Hypotheses to distinguish before considering firmware
 
 1. QEMU **100MHz MCPWM source clock**, versus 200MHz MCLK-derived clock in original firmware: independently verified discrepancy, with separate opt-in A/B source-clock trial; retain QEMU old default.
