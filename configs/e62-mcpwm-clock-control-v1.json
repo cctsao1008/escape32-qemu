@@ -1,0 +1,22 @@
+{
+  "schema": "e62.sim.mcpwm-clock-control.v1",
+  "scope": "SIM_ONLY_NO_FIRMWARE_OR_ORIGINAL_P1_EDIT",
+  "guest_elf_sha256": "05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0",
+  "mcpwm_root_hz_supported": [
+    100000000,
+    200000000
+  ],
+  "historical_root_hz": 100000000,
+  "ti_mclk_root_hz": 200000000,
+  "clock_domain": "MCPWM_CLK_SOURCE_FROM_MCLK_NOT_BUSCLK",
+  "source_url": "https://software-dl.ti.com/mcu-sdk/esd/AM13E2X-SDK/26_01_00_03/exports/docs/docs/am13e230x/user_guide/chapters/examples/am13e230x/generated_files/mcpwm_basic_pwm_generation/README.html",
+  "motor_cases": [
+    "BASE-KV210-24V-NOPROP",
+    "CTL-KV210-47V-NOPROP"
+  ],
+  "coast_ms": 300,
+  "dshot_frame_count": 5100,
+  "qemu_default_legacy_unchanged": true,
+  "hardware_qualified": false,
+  "p1_waiver": false
+}

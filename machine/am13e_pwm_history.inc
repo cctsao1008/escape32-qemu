@@ -206,7 +206,8 @@ static void am13e_pwm4_hist_gate(AM13ESimPWM *p)
  * 14 total lo, 18 total hi, 1c dropped lo, 20 dropped hi
  * 24 active internal mask, 28 zero events, 2c counter,
  * 30 last record ns low, 34 last record ns high,
- * 38 hz, 3c record width in dwords, 40 invalid count
+ * 38 hz, 3c record width in dwords, 40 invalid count,
+ * 44 ACTUAL QEMU MCPWM source clock (100MHz historical/200MHz opt-in)
  * Records 0x80 + index*32, oldest retained first:
  * 00 t ns low,04 t ns high,08 event type,0c old mask,
  * 10 new mask,14 native counter,18 zero-event count,1c aux.
@@ -248,6 +249,9 @@ static MemTxResult am13e_pwm4_hist_read(void *opaque,hwaddr off,
     case 0x38U:*val=am13e_pwm4_hz(p);return MEMTX_OK;
     case 0x3cU:*val=AM13E_H_REC_WORDS;return MEMTX_OK;
     case 0x40U:*val=p->hist_invalid_count;return MEMTX_OK;
+    case 0x44U:*val=p->machine->esc_sim_mcpwm_root_200mhz ?
+                     AM13E_SIM_PWM_MCLK_200 : AM13E_SIM_PWM_CLK;
+                return MEMTX_OK;
     default:
         if (off<0x80U) {
             return MEMTX_ERROR;

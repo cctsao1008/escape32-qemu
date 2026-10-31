@@ -231,7 +231,8 @@ enum {
 /* G11 read-only non-silicon CPU/exception probe. Not guest firmware MMIO. */
 #define AM13E_G11_ARCH_OBS_BASE 0x5ffe3000U
 #define AM13E_G11_ARCH_OBS_SIZE 0x40U
-#define AM13E_SIM_PWM_CLK 100000000U
+#define AM13E_SIM_PWM_CLK 100000000U /* Legacy, default; preserving prior QEMU CI */
+#define AM13E_SIM_PWM_MCLK_200 200000000U /* TI 200MHz MCLK, independent source A/B */
 #define AM13E_SIM_PWM_POWER_BIT (1U << 9)
 #define AM13E_SIM_PA26_INJECT_BASE 0x5ffe0000U
 #define AM13E_SIM_PA26_INJECT_SIZE 0x10U
@@ -644,6 +645,7 @@ struct AM13EMachineState {
     bool factory_unmodeled_reported;
     AM13ESimADC adc[AM13E_SIM_ADC_COUNT];
     bool esc_sim_native_adc_bemf; /* opt-in native plant -> real ADC SOC */
+    bool esc_sim_mcpwm_root_200mhz; /* SIM_ONLY MCLK200 vs legacy100 clock A/B */
     char *esc_sim_adc_fixture_file;
     AM13EPeripheralGPRCM peripheral_gprcm[AM13E_SIM_GPRCM_COUNT];
     AM13EGpioPort gpio[AM13E_GPIO_COUNT];
@@ -1790,7 +1792,9 @@ static uint32_t am13e_pwm4_hz(const AM13ESimPWM *p)
         return 0U;
     }
     /* TI DL_MCPWM predivider: /1, /2, /4, ... /128. */
-    return AM13E_SIM_PWM_CLK >> divider;
+    uint32_t source_hz = p->machine->esc_sim_mcpwm_root_200mhz ?
+        AM13E_SIM_PWM_MCLK_200 : AM13E_SIM_PWM_CLK;
+    return source_hz >> divider;
 }
 
 static uint32_t am13e_pwm4_count(AM13ESimPWM *p)
@@ -4465,6 +4469,21 @@ static void am13e_init(MachineState *machine)
     qemu_register_reset(am13e_handoff_reset, s);
 }
 
+/* Opt-in SIM_ONLY MCLK200 versus historical 100MHz MCPWM root-clock
+ * study. TI's AM13E MCPWM uses MCLK=200MHz on the pinned guest clock
+ * setup; the legacy QEMU incorrectly treated MCPWM root as 100MHz.
+ * Keep the old model as explicit default for historical regression.
+ * Neither value writes or influences the Guest clock registers. */
+static bool am13e_get_mcpwm_root_200(Object *obj, Error **errp)
+{
+    return AM13E_MACHINE(obj)->esc_sim_mcpwm_root_200mhz;
+}
+static void am13e_set_mcpwm_root_200(Object *obj, bool enable,
+                                     Error **errp)
+{
+    AM13E_MACHINE(obj)->esc_sim_mcpwm_root_200mhz=enable;
+}
+
 /* Host QEMU machine property only, never a Guest firmware knob. */
 static char *am13e_get_native_motor_profile(Object *obj, Error **errp)
 {
@@ -4691,6 +4710,13 @@ static void am13e_class_init(ObjectClass *oc, void *data)
         "Optional explicit TI RSTCAUSE.ID reset history fixture, "
         "read-to-clear at native 0x400B0220. Default NORST=0 "
         "(no POR/WWDT fault synthesized).");
+    object_class_property_add_bool(oc,"esc-sim-mcpwm-root-200mhz",
+                                   am13e_get_mcpwm_root_200,
+                                   am13e_set_mcpwm_root_200);
+    object_class_property_set_description(oc,"esc-sim-mcpwm-root-200mhz",
+        "SIM_ONLY source-backed TI 200MHz MCPWM MCLK root clock instead "
+        "of historical QEMU 100MHz. Default OFF; opt-in A/B only. "
+        "Preserves original Guest/P1; never asserts restart qualification.");
     object_class_property_add_bool(oc, "esc-sim-native-motor",
                                    am13e_get_native_motor,
                                    am13e_set_native_motor);

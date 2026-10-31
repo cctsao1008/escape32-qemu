@@ -358,6 +358,7 @@ def _pwm_source_snapshot(qtest):
         "instantaneous_six_pad_mask": get(0x24),
         "native_pwm_zero_callbacks": get(0x28),
         "native_pwm_invalid_level_events": get(0x40),
+        "effective_mcpwm_root_clock_hz": get(0x44),
     }
     if records:
         aux = get(0x80+(records-1)*32+0x1c)
@@ -583,6 +584,8 @@ def run(args):
                 (",esc-sim-bemf-robustness="+args.experimental_bemf_robustness
                  if getattr(args,"experimental_bemf_robustness",None) else "") +
                 ",esc-sim-native-motor-profile="+args.sim_motor_profile+
+                (",esc-sim-mcpwm-root-200mhz=on"
+                 if args.sim_mcpwm_root_clock_hz==200000000 else "")+
                 ",esc-sim-native-initial-electrical-deg="+
                 str(args.sim_initial_electrical_degrees)+
                 (",esc-sim-native-adc-bemf=on"
@@ -631,6 +634,8 @@ def run(args):
                 "source_focus_window_ms":getattr(
                     args,"switch_focus_window_ms",None),
                 "source_focus_guest_or_motor_control":False,
+                "mcpwm_clock_source_study_sim_only":True,
+                "requested_mcpwm_root_clock_hz":args.sim_mcpwm_root_clock_hz,
                 "differential_sync_start":bool(args.differential_sync_start),
                 "differential_rr_mode":rr_mode,
                 "initial_vm_paused_before_first_guest_instruction":bool(
@@ -655,6 +660,10 @@ def run(args):
                         raise RuntimeError("QEMU actual native ADC-BEMF enable "
                                            "does not match SIM_ONLY profile")
                     evidence["pwm_source_before"] = _pwm_source_snapshot(qtest)
+                    if (evidence["pwm_source_before"]["effective_mcpwm_root_clock_hz"]
+                            != args.sim_mcpwm_root_clock_hz):
+                        raise RuntimeError("QEMU source MCPWM root clock does not "
+                                           "match explicit 100M/200M A/B profile")
                     evidence["original_guest_before"] = _read_original_guest_telemetry(qtest,symbol_addrs)
                     evidence["receiver_before"] = _receiver_snapshot(qtest.read)
                     evidence["runtime_diagnostics_by_stage"] = []
@@ -1008,6 +1017,11 @@ def main():
                              "event record/replay; requires sync start")
     parser.add_argument("--differential-rr-file",type=Path,default=None,
                         help="Persistent QEMU RR file shared by the 3 CI runs")
+    parser.add_argument("--sim-mcpwm-root-clock-hz",type=int,
+                        choices=(100000000,200000000),default=100000000,
+                        help="SIM_ONLY source-backed 200MHz TI MCLK A/B; "
+                             "100MHz preserves original QEMU legacy behavior. "
+                             "Original Guest/P1 frozen.")
     parser.add_argument("--wall-timeout-s",type=int,default=180)
     parser.add_argument("--qtest-response-timeout-s",type=int,default=20,
                         help="Individual QTest readl deadline, not a CPU halt")
