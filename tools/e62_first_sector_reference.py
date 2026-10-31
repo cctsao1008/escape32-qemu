@@ -63,6 +63,7 @@ def line_voltage_for_mask(mask,current_a,vbus):
     floating legs is invalid: refuse to make up a drive voltage.
     """
     if mask&~63:raise ValueError("invalid six-output mask")
+    if mask & 3:raise ValueError("two-phase reference requires U disconnected")
     def terminal(hi_bit,lo_bit,phase_current):
         hi=bool(mask&(1<<hi_bit));lo=bool(mask&(1<<lo_bit))
         if hi and lo:raise ValueError("same-leg cross conduction")
