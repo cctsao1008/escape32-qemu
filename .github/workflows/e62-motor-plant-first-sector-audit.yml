@@ -1,0 +1,114 @@
+name: "E62 #5 Motor Plant Independent First-Sector Source Audit"
+
+on:
+  push:
+    branches: [experiment/e62-motor-plant-independent-validation-20261031]
+    paths:
+      - '.github/workflows/e62-motor-plant-first-sector-audit.yml'
+      - 'tests/e62_autonomous_native_motor_probe.py'
+      - 'machine/am13e_native_motor*.inc'
+      - 'machine/am13e23019.c'
+      - 'tools/e62_first_sector_reference.py'
+      - 'tests/test_e62_first_sector_reference.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-trace-independent-physics:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Independent physics verifier contract
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p test_e62_bemf_waveform_ab.py -v
+          python3 -m unittest discover -s tests -p test_e62_first_sector_reference.py -v
+          python3 -m py_compile tools/e62_first_sector_reference.py
+
+  live-original-first-sector:
+    needs: native-trace-independent-physics
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: kv210-24v-sine-phase-minus60
+            wave: historical_sine
+            initial_angle: -60
+          - id: kv210-24v-sine-phase-minus30
+            wave: historical_sine
+            initial_angle: -30
+          - id: kv210-24v-sine-phase-plus30
+            wave: historical_sine
+            initial_angle: 30
+          - id: kv210-24v-trap-phase-minus30
+            wave: ideal_trapezoid
+            initial_angle: -30
+    runs-on: ubuntu-24.04
+    timeout-minutes: 48
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pin original Rel17.3 Guest, compile QEMU source
+        run: |
+          set -euo pipefail
+          echo '05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0  baseline/e62-g13b3/firmware/AM13E-rev17.3.elf' | sha256sum -c -
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            libglib2.0-dev libpixman-1-dev libfdt-dev pkg-config meson ninja-build binutils-arm-none-eabi
+          git submodule update --init --depth 1 qemu
+          ./build.sh
+          mkdir -p artifacts/e62-plant-check
+      - name: Run real guest + full first demand six-pad PWM history observer
+        run: |
+          set -euo pipefail
+          root="artifacts/e62-plant-check/${{ matrix.id }}"
+          scenario="scenarios/e62-experimental-two-demand-coast-short300.json"
+          python3 tools/sim_motor_cfg.py --sim-only-opt-in \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --motor-profile ecx87-kv210 --output "$root-cfg-flash.bin"
+          python3 tests/e62_autonomous_native_motor_probe.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --sim-mcpwm-root-clock-hz 200000000 \
+            --sim-bemf-waveform "${{ matrix.wave }}" \
+            --sim-initial-electrical-degrees ${{ matrix.initial_angle }} \
+            --switch-focus-window-ms 1498:1520 \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --sim-motor-profile ecx87-kv210 --sim-native-adc-bemf \
+            --cfg-flash "$root-cfg-flash.bin" --scenario "$scenario" \
+            --wall-timeout-s 600 --artifact "$root.json"
+          python3 tools/e62_first_sector_reference.py \
+            --evidence "$root.json" --events "$root.p0.events.log" \
+            --output "$root-independent-reference.json"
+      - name: Always preserve the actual unchanged Original P1 verdict
+        if: always()
+        run: |
+          set -uo pipefail
+          root="artifacts/e62-plant-check/${{ matrix.id }}"
+          if [[ ! -f "$root.json" || ! -f "$root.p0.events.log" ]]; then
+            echo "MISSING_QEMU_ORIGINAL_GUEST_SOURCE"; exit 1
+          fi
+          python3 tools/native_p1_qualification.py \
+            --scenario scenarios/e62-experimental-two-demand-coast-short300.json \
+            --evidence "$root.json" --events "$root.p0.events.log" \
+            --output "$root-original-p1.json"
+          status=$?
+          echo "STRICT_ORIGINAL_P1_EXIT=$status"
+          if [[ ! -f "$root-original-p1.json" ]]; then
+            echo "NO_P1_VERDICT"; exit 1
+          fi
+          python3 - "$root-original-p1.json" <<'PY'
+          import json,sys
+          d=json.load(open(sys.argv[1]))
+          print("UNMODIFIED_P1_ACTUAL",json.dumps(d)[:3500])
+          PY
+          echo "CAUTION_RUNNER_JOB_SUCCESS_IS_NEVER_P1_SUCCESS"
+      - name: Archive Original Guest, native PWM and physics evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-plant-independent-${{ matrix.id }}
+          path: artifacts/e62-plant-check/**
+          if-no-files-found: warn
+          retention-days: 30
