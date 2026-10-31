@@ -271,6 +271,7 @@ def _motor_snapshot(qtest):
             "configured_initial_electrical_mdeg":signed(get(0xa0)),
         },
         "sim_native_adc_bemf_enabled": bool(get(0xa4)),
+        "sim_bemf_waveform": "ideal_trapezoid" if get(0xdc) else "historical_sine",
         "sim_propeller_source": {
             "apc24x12e_static_enabled":bool(get(0xcc)),
             "effective_total_inertia_nano_kg_m2":get(0xd0),
@@ -584,6 +585,8 @@ def run(args):
                 (",esc-sim-bemf-robustness="+args.experimental_bemf_robustness
                  if getattr(args,"experimental_bemf_robustness",None) else "") +
                 ",esc-sim-native-motor-profile="+args.sim_motor_profile+
+                (",esc-sim-native-trapezoid-bemf=on"
+                 if args.sim_bemf_waveform=="ideal_trapezoid" else "")+
                 (",esc-sim-mcpwm-root-200mhz=on"
                  if args.sim_mcpwm_root_clock_hz==200000000 else "")+
                 ",esc-sim-native-initial-electrical-deg="+
@@ -652,6 +655,9 @@ def run(args):
                     qtest = TimedAutonomousQTest(
                         conn, response_timeout_s=args.qtest_response_timeout_s)
                     evidence["motor_before"] = _motor_snapshot(qtest)
+                    if evidence["motor_before"]["sim_bemf_waveform"] != args.sim_bemf_waveform:
+                        raise RuntimeError("QEMU source BEMF waveform readback mismatch")
+                    evidence["requested_sim_bemf_waveform"] = args.sim_bemf_waveform
                     evidence["effective_sim_profile"] = _assert_effective_sim_model(
                         evidence["motor_before"],args.sim_motor_profile,
                         args.sim_initial_electrical_degrees)
@@ -955,6 +961,11 @@ def main():
                         help="EXPERIMENT ONLY: bounded QEMU analog "
                              "OFFSET:SWITCH_CODE; no Guest writes; "
                              "requires separate non-original candidate SHA")
+    parser.add_argument("--sim-bemf-waveform",
+                        choices=("historical_sine","ideal_trapezoid"),
+                        default="historical_sine",
+                        help="SIM_ONLY ideal waveform A/B; source QEMU readback; "
+                             "unchanged physical silicon and Original P1")
     parser.add_argument("--sim-motor-profile",choices=QEMU_MOTOR_PROFILES,
                         default="ecx87-kv147",
                         help="SIM_ONLY QEMU native motor parameter set; "
