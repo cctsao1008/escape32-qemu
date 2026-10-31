@@ -17,6 +17,7 @@
 #define AM13E_NATIVE_MOTOR_STEP_NS INT64_C(1000)
 #define AM13E_NATIVE_MOTOR_MAGIC UINT32_C(0x4d323645) /* E62M */
 #define AM13E_NATIVE_PP 21.0
+#define AM13E_NATIVE_PI 3.14159265358979323846
 /* maxon EC 87 flat UAV KV147 (April 2025), terminal Kt=64.9 mNm/A,
  * Kn=147 rpm/V. These are terminal-equivalent constants, NOT the
  * peak amplitude of one sinusoidal phase BEMF.
@@ -71,7 +72,6 @@ static double am13e_native_flux_basis(AM13ENativeMotor *m, double radians)
 #define AM13E_NATIVE_VBUS (AM13E_NATIVE_47V ? 47.0 : 24.0)
 #define AM13E_NATIVE_DIODE 0.7
 #define AM13E_NATIVE_FRICTION 0.0001
-#define AM13E_NATIVE_PI 3.14159265358979323846
 
 static void am13e_native_motor_reset(AM13ENativeMotor *m)
 {
