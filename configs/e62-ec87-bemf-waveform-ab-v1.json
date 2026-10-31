@@ -1,0 +1,44 @@
+{
+  "schema": "e62.ec87.bemf-waveform-ab.v1",
+  "scope": "SIM_ONLY_PHYSICS_HYPOTHESIS_NOT_HARDWARE_FIT",
+  "source": "Maxon EC87 flat UAV April 2025 datasheet p.1; MathWorks BLDC flux reference",
+  "waveforms": [
+    "historical_sine",
+    "ideal_trapezoid"
+  ],
+  "original_elf_sha256": "05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0",
+  "original_firmware_modified": false,
+  "original_p1_unchanged": true,
+  "first_scenario": "scenarios/e62-experimental-two-demand-coast-short300.json",
+  "expected_dshot_frames": 5100,
+  "mcpwm_root_hz": 200000000,
+  "motor": "ecx87-kv210",
+  "vbus": [
+    24,
+    47
+  ],
+  "pole_pairs": 21,
+  "phase_resistance_ohm": 0.0283,
+  "phase_inductance_h": 0.00000875,
+  "rotor_j_kg_m2": 0.00013,
+  "catalog_terminal_kt_nm_per_a": 0.0454,
+  "constant_convention": "peak LL BEMF coefficient matches catalog Kt for both ideal shapes; not a measured phase waveform",
+  "sine_phase_coefficient_nm_per_a": 0.026211702221209013,
+  "trapezoid_phase_coefficient_nm_per_a": 0.0227,
+  "trapezoid_ideal": "positive/negative flat 120 electrical deg, two linear transition zones of 60 electrical deg centered 0/180",
+  "model_bemf_eq": "e_phase=K_flux*omega_mechanical*shape(theta_e+phase_offset)",
+  "model_torque_eq": "T=K_flux*sum(I_phase*shape(theta_e+phase_offset))",
+  "power_identity": "sum(e_phase*I_phase)=T*omega_mechanical",
+  "unaltered": [
+    "inverter switch event source",
+    "current active-set backward Euler solver",
+    "motor load/friction",
+    "analog ADC BEMF scale/bias/filter",
+    "CMPSS CAP1",
+    "TIMG12",
+    "Original Guest firmware",
+    "strict P1 gates"
+  ],
+  "physical_maxon_ec87_waveform_measured": false,
+  "physical_qualification": false
+}
