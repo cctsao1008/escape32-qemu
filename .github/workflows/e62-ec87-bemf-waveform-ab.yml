@@ -1,0 +1,161 @@
+name: "E62 #5 EC87 sine vs ideal trapezoid Original Guest SIM_ONLY A/B"
+
+on:
+  push:
+    branches: [experiment/e62-ec87-bemf-sine-vs-trapezoid-20261031]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  static-contract-and-reciprocity:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Independent flux, LL Ke, block-Kt and energy reciprocity guards
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p test_e62_bemf_waveform_ab.py -v
+          python3 -m unittest discover -s tests -p test_e62_mcpwm_clock_control.py -v
+          python3 -m py_compile tests/e62_autonomous_native_motor_probe.py tools/e62_bemf_waveform_ab_audit.py
+          python3 - <<'PY'
+          import json
+          c=json.load(open("configs/e62-ec87-bemf-waveform-ab-v1.json"))
+          assert c["original_p1_unchanged"] and not c["original_firmware_modified"]
+          assert c["waveforms"]==["historical_sine","ideal_trapezoid"]
+          assert c["expected_dshot_frames"]==5100
+          assert not c["physical_maxon_ec87_waveform_measured"]
+          print("PASS_SIM_ONLY_WAVEFORM_MATH_NOT_HARDWARE_CALIBRATION")
+          PY
+
+  four-way-original-guest:
+    needs: static-contract-and-reciprocity
+    runs-on: ubuntu-24.04
+    timeout-minutes: 48
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: kv210-24v-sine
+            profile: ecx87-kv210
+            waveform: historical_sine
+          - id: kv210-24v-trapezoid
+            profile: ecx87-kv210
+            waveform: ideal_trapezoid
+          - id: kv210-47v-sine
+            profile: ecx87-kv210-47v-no-prop
+            waveform: historical_sine
+          - id: kv210-47v-trapezoid
+            profile: ecx87-kv210-47v-no-prop
+            waveform: ideal_trapezoid
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify immutable Original Guest and build native QEMU from source
+        run: |
+          set -euo pipefail
+          echo '05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0  baseline/e62-g13b3/firmware/AM13E-rev17.3.elf' | sha256sum -c -
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            libglib2.0-dev libpixman-1-dev libfdt-dev pkg-config meson ninja-build binutils-arm-none-eabi
+          git submodule update --init --depth 1 qemu
+          ./build.sh
+          mkdir -p artifacts/e62-bemf-ab
+      - name: Run original DShot600 source and SIM_ONLY waveform A/B (same physical source)
+        run: |
+          set -euo pipefail
+          id="${{ matrix.id }}"
+          profile="${{ matrix.profile }}"
+          wave="${{ matrix.waveform }}"
+          root="artifacts/e62-bemf-ab/$id"
+          scenario="scenarios/e62-experimental-two-demand-coast-short300.json"
+          python3 tools/sim_motor_cfg.py --sim-only-opt-in \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --motor-profile "$profile" \
+            --output "$root-g13b3-cfg-flash.bin"
+          python3 tests/e62_autonomous_native_motor_probe.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --sim-mcpwm-root-clock-hz 200000000 \
+            --sim-bemf-waveform "$wave" \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --sim-motor-profile "$profile" \
+            --sim-native-adc-bemf \
+            --cfg-flash "$root-g13b3-cfg-flash.bin" \
+            --scenario "$scenario" \
+            --wall-timeout-s 600 \
+            --artifact "$root.json"
+          python3 tools/e62_bemf_waveform_ab_audit.py \
+            --evidence "$root.json" --events "$root.p0.events.log" \
+            --output "$root-bemf-ab-audit.json"
+      - name: Strict Original P1 is recorded unmodified; FAIL remains FAIL
+        if: always()
+        run: |
+          set -uo pipefail
+          id="${{ matrix.id }}"
+          root="artifacts/e62-bemf-ab/$id"
+          scenario="scenarios/e62-experimental-two-demand-coast-short300.json"
+          if [[ ! -f "$root.json" || ! -f "$root.p0.events.log" ]]; then
+            echo "MISSING_GUEST_SOURCE_ARTIFACT"; exit 1
+          fi
+          python3 tools/native_p1_qualification.py \
+            --scenario "$scenario" --evidence "$root.json" \
+            --events "$root.p0.events.log" \
+            --output "$root-strict-original-p1.json"
+          status=$?
+          echo "STRICT_ORIGINAL_P1_EXIT=$status (nonzero=FAIL, do not waive)"
+          if [[ ! -f "$root-strict-original-p1.json" ]]; then
+            echo "MISSING_STRICT_ORIGINAL_P1_VERDICT"; exit 1
+          fi
+          python3 - "$root-strict-original-p1.json" <<'PY'
+          import json,sys
+          d=json.load(open(sys.argv[1]))
+          print("STRICT_ORIGINAL_P1_VERDICT_NOT_OVERRIDDEN",json.dumps(d)[:3000])
+          PY
+          # The job can succeed as an A/B evidence collection, but this
+          # absolutely must not convert strict Original P1 FAIL to PASS.
+          echo "SIM_ONLY_MODEL_SENSITIVITY_JOB_NOT_P1_QUALIFICATION"
+      - name: Upload complete original source/strict P1 A/B evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-ec87-bemf-ab-${{ matrix.id }}-SIM_ONLY
+          path: artifacts/e62-bemf-ab/**
+          retention-days: 30
+          if-no-files-found: warn
+
+  summarize:
+    needs: four-way-original-guest
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: e62-ec87-bemf-ab-*-SIM_ONLY
+          merge-multiple: true
+          path: artifacts/e62-bemf-ab
+      - name: Source-only A/B summary; never equate a CI pass with Original P1
+        run: |
+          python3 - <<'PY'
+          import json, pathlib
+          root=pathlib.Path("artifacts/e62-bemf-ab")
+          for v in ("24v","47v"):
+            for w in ("sine","trapezoid"):
+              prefix=f"kv210-{v}-{w}"
+              f=root/(prefix+"-bemf-ab-audit.json")
+              g=root/(prefix+"-strict-original-p1.json")
+              if not f.is_file() or not g.is_file():
+                print("NOT_RUN_OR_INCOMPLETE",prefix)
+                continue
+              d=json.loads(f.read_text());p=json.loads(g.read_text())
+              print("SOURCE_A_B",prefix,"flux",d["waveform"],
+                    "firstCAP",d["first_cap1_ms"],
+                    "secondCAP",d["second_cap1_ms"],
+                    "pair_duration",d["first_pair_duration_ms"],
+                    "negative_torque",d["first_negative_torque_ms"],
+                    "negative_rpm",d["first_negative_rpm_ms"],
+                    "max_A",d["max_abs_phase_current_a"],
+                    "P1_json_grounded",repr(p.get("qualified",p.get("passed",p.get("result","UNKNOWN")))))
+          print("NOT_A_HARDWARE_WAVEFORM_IDENTIFICATION")
+          PY
