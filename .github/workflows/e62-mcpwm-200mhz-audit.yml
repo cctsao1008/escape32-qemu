@@ -1,0 +1,162 @@
+name: "E62 #5 MCPWM 200MHz MCLK Source A/B - SIM_ONLY"
+
+on:
+  push:
+    branches: [experiment/e62-mcpwm-200mhz-source-clock-20261031]
+    paths:
+      - 'build.sh'
+      - 'machine/am13e23019.c'
+      - 'machine/am13e_pwm_history.inc'
+      - 'configs/e62-mcpwm-clock-control-v1.json'
+      - 'tests/test_e62_mcpwm_clock_control.py'
+      - 'machine/am13e_native_motor_plant.inc'
+      - 'machine/am13e_native_motor_dynamics.inc'
+      - 'machine/am13e_native_apc_propeller.inc'
+      - 'tools/native_motor_model_profiles.py'
+      - 'tools/e62_apc24x12e_static.py'
+      - 'configs/e62-apc24x12e-47v-study-v1.json'
+      - 'configs/e62-sim-case-profiles-v1.json'
+      - 'tools/e62_sim_case_profiles.py'
+      - 'tests/test_e62_sim_case_profiles.py'
+      - 'scenarios/e62-experimental-two-demand-coast-medium1500.json'
+      - 'tools/sim_motor_cfg.py'
+      - 'tests/e62_autonomous_native_motor_probe.py'
+      - 'tests/test_e62_apc24x12e_sim_profile.py'
+      - 'tools/native_p0_strict.py'
+      - 'tests/test_e62_native_p0_strict.py'
+      - 'tools/e62_audio_motor_timeline.py'
+      - 'tests/test_e62_audio_motor_timeline.py'
+      - '.github/workflows/e62-mcpwm-200mhz-audit.yml'
+  workflow_dispatch:
+    inputs:
+      coast_ms:
+        description: 'Source-owned DShot neutral coast duration (ms)'
+        type: choice
+        options: ['300', '1500', '3000']
+        default: '300'
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  independent-apc-model-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate official static torque grid, explicit inertia sensitivity and no policy waiver
+        run: |
+          set -euo pipefail
+          python3 -m py_compile tools/e62_apc24x12e_static.py tools/native_motor_model_profiles.py tests/e62_autonomous_native_motor_probe.py tools/sim_motor_cfg.py tools/e62_sim_case_profiles.py
+          python3 -m unittest discover -s tests -p test_e62_apc24x12e_sim_profile.py -v
+          python3 -m unittest discover -s tests -p test_e62_sim_case_profiles.py -v
+          python3 -m unittest discover -s tests -p test_e62_mcpwm_clock_control.py -v
+          python3 tools/e62_sim_case_profiles.py
+          python3 -m unittest discover -s tests -p test_sim_motor_profiles.py -v
+          python3 -m unittest discover -s tests -p test_e62_sim_model_profile.py -v
+          python3 -m unittest discover -s tests -p test_e62_native_p0_strict.py -v
+          python3 -m unittest discover -s tests -p test_e62_audio_motor_timeline.py -v
+          python3 -m unittest discover -s tests -p test_e62_guest_adc_phase_coast_audit.py -v
+          python3 - <<'PY'
+          from tools.e62_apc24x12e_static import load,static_torque
+          from tools.native_motor_model_profiles import DATASHEET_PROFILES,APC_STUDY_PROFILES
+          assert DATASHEET_PROFILES==("ecx87-kv147","ecx87-kv210")
+          assert len(APC_STUDY_PROFILES)==3
+          assert load()["motor_rearm_permitted_by_profile"] is False
+          print("PASS_APC_47V_SIM_MODEL_CONTRACT_NOT_P1_QUALIFICATION")
+          PY
+
+  live-original-guest-24v-baseline:
+    needs: independent-apc-model-contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 48
+    strategy:
+      fail-fast: false
+      matrix:
+        profile_id: [BASE-KV210-24V-NOPROP, CTL-KV210-47V-NOPROP]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pin unchanged Original Guest and build changed QEMU source
+        run: |
+          set -euo pipefail
+          echo '05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0  baseline/e62-g13b3/firmware/AM13E-rev17.3.elf' | sha256sum -c -
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            libglib2.0-dev libpixman-1-dev libfdt-dev pkg-config meson ninja-build binutils-arm-none-eabi
+          git submodule update --init --depth 1 qemu
+          ./build.sh
+          mkdir -p artifacts/e62-mcpwm200
+          coast="${{ inputs.coast_ms || '300' }}"
+          id="${{ matrix.profile_id }}"
+          motor="$(python3 tools/e62_sim_case_profiles.py --profile-id "$id" --coast-ms "$coast" --field qemu_motor_profile)"
+          root="artifacts/e62-mcpwm200/${id}-${coast}"
+          python3 tools/sim_motor_cfg.py --sim-only-opt-in \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --motor-profile "$motor" \
+            --output "$root-g13b3-cfg-flash.bin"
+      - name: Run actual selected coast with immutable Rel17.3 and profile-selected effective QEMU readback
+        run: |
+          set -euo pipefail
+          coast="${{ inputs.coast_ms || '300' }}"
+          id="${{ matrix.profile_id }}"
+          motor="$(python3 tools/e62_sim_case_profiles.py --profile-id "$id" --coast-ms "$coast" --field qemu_motor_profile)"
+          scenario="$(python3 tools/e62_sim_case_profiles.py --profile-id "$id" --coast-ms "$coast" --field scenario_path)"
+          root="artifacts/e62-mcpwm200/${id}-${coast}"
+          python3 tests/e62_autonomous_native_motor_probe.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --sim-mcpwm-root-clock-hz 200000000 \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --sim-motor-profile "$motor" \
+            --sim-native-adc-bemf \
+            --cfg-flash "$root-g13b3-cfg-flash.bin" \
+            --scenario "$scenario" \
+            --wall-timeout-s 600 \
+            --artifact "$root.json"
+          python3 tools/e62_sim_case_profiles.py \
+            --profile-id "$id" --coast-ms "$coast" \
+            --evidence "$root.json" --output "$root-profile-readback.json"
+          python3 tools/e62_audio_motor_timeline.py \
+            --events "$root.p0.events.log" --evidence "$root.json" \
+            --scenario "$scenario" --output "$root-audio-motor-timeline.json"
+          python3 - "$root.json" <<'PY'
+          import json,sys
+          d=json.load(open(sys.argv[1]))
+          root=d["pwm_source_before"]["effective_mcpwm_root_clock_hz"]
+          assert root==200000000, ("QEMU source root-clock mismatch",root)
+          assert d["requested_mcpwm_root_clock_hz"]==200000000
+          assert d["original_elf_sha256"]=="05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0"
+          assert d["host_guest_register_writes"] is False
+          assert d["used_guest_wfi_or_gdb"] is False
+          print("PASS_SIM_ONLY_200MHZ_QEMU_EFFECTIVE_SOURCE_CLOCK_NOT_P1")
+          PY
+          echo "SIM_ONLY_AUDIO_CLOCK_MODE_DIAGNOSTIC_NOT_ORIGINAL_P1_PASS"
+          echo "PASS_PROFILE_QEMU_SOURCE_READBACK_ONLY_NOT_REACQUISITION"
+      - name: Preserve actual strict Original P1 no-waiver verdict even when source-backed motor fails
+        if: always()
+        run: |
+          set -uo pipefail
+          coast="${{ inputs.coast_ms || '300' }}"
+          id="${{ matrix.profile_id }}"
+          root="artifacts/e62-mcpwm200/${id}-${coast}"
+          scenario="$(python3 tools/e62_sim_case_profiles.py --profile-id "$id" --coast-ms "$coast" --field scenario_path)"
+          if [[ -f "$root.json" && -f "$root.p0.events.log" ]]; then
+            python3 tools/native_p1_qualification.py \
+              --scenario "$scenario" \
+              --evidence "$root.json" \
+              --events "$root.p0.events.log" \
+              --output "$root-strict-original-p1.json"
+            status=$?
+            echo "ORIGINAL_P1_EXIT_STATUS=$status (FAIL remains FAIL; no waiver)"
+            exit "$status"
+          fi
+          echo "FAIL_MISSING_SOURCE_EVIDENCE_OR_ORIGINAL_GUEST_P1_INPUT"
+          exit 1
+      - name: Archive raw Original Guest, QEMU and strict P1 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-mcpwm200-${{ matrix.profile_id }}-${{ inputs.coast_ms || '300' }}-SIM-ONLY
+          path: artifacts/e62-mcpwm200/**
+          if-no-files-found: warn
+          retention-days: 30
