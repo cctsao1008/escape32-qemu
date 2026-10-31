@@ -13,7 +13,7 @@
  */
 #include <math.h> /* sin, remainder, isfinite, INFINITY, lround */
 #define AM13E_NATIVE_MOTOR_BASE UINT32_C(0x5ffeb000)
-#define AM13E_NATIVE_MOTOR_SIZE 0xdcU
+#define AM13E_NATIVE_MOTOR_SIZE 0xe0U
 #define AM13E_NATIVE_MOTOR_STEP_NS INT64_C(1000)
 #define AM13E_NATIVE_MOTOR_MAGIC UINT32_C(0x4d323645) /* E62M */
 #define AM13E_NATIVE_PP 21.0
@@ -40,6 +40,31 @@
 #define AM13E_NATIVE_J_RATIO (m->model_profile == 215U ? 5.0 : m->model_profile == 212U ? 2.0 : 1.0)
 #define AM13E_NATIVE_KT_TERMINAL (AM13E_NATIVE_KV210 ? 0.0454 : 0.0649)
 #define AM13E_NATIVE_K_PHASE (AM13E_NATIVE_KT_TERMINAL / 1.7320508075688772935)
+/* Same catalog terminal peak Ke for both ideal waveforms: sine has
+ * sqrt(3)*K_phase LL peak, trapezoid has 2*K_phase LL plateau.
+ * Catalog Kt refers to block commutation; actual EC87 flux curve unknown.
+ * Each shape uses the SAME coefficient for e and T, so e.i=T*omega.
+ * Do not rescale the historical sine model (backward compatibility). */
+#define AM13E_NATIVE_K_FLUX (m->trapezoid_bemf ? \
+                             AM13E_NATIVE_KT_TERMINAL/2.0 : AM13E_NATIVE_K_PHASE)
+/* Odd, continuous, 120-electrical-degree +1/-1 plateaus and 60-degree
+ * LINEAR transitions centered at 0 and pi. No rotor- or Guest-driven
+ * angle reconstruction. It is a hypothetical ideal trapezoid, NOT a
+ * datasheet-measured Maxon EC87 BEMF. */
+static double am13e_native_flux_basis(AM13ENativeMotor *m, double radians)
+{
+    if (!m->trapezoid_bemf) {
+        return sin(radians); /* existing historical sine exactly unchanged */
+    }
+    double a=remainder(radians,2.0*AM13E_NATIVE_PI);
+    double sign=1.0;
+    if (a<0.0) { a=-a; sign=-1.0; }
+    if (a<=AM13E_NATIVE_PI/6.0)
+        return sign*(6.0*a/AM13E_NATIVE_PI);
+    if (a<=5.0*AM13E_NATIVE_PI/6.0)
+        return sign;
+    return sign*(6.0*(AM13E_NATIVE_PI-a)/AM13E_NATIVE_PI);
+}
 #define AM13E_NATIVE_J (0.00013 * AM13E_NATIVE_J_RATIO)
 #define AM13E_NATIVE_L (AM13E_NATIVE_KV210 ? 0.00000875 : 0.000024)
 #define AM13E_NATIVE_R (AM13E_NATIVE_KV210 ? 0.0283 : 0.053)
@@ -264,6 +289,8 @@ static MemTxResult am13e_native_motor_read(void *opaque, hwaddr off,
     case 0xd0: *v=(uint32_t)llround(AM13E_NATIVE_J*1e9); break;
     case 0xd4: *v=(uint32_t)(int32_t)llround(m->last_prop_torque*1e6); break;
     case 0xd8: *v=AM13E_NATIVE_APC ? (m->model_profile-210U) : 0U; break;
+    /* SIM-only source waveform identity, not a hardware register. */
+    case 0xdc: *v=m->trapezoid_bemf ? 1U : 0U; break;
     default: return MEMTX_ERROR;
     }
     return MEMTX_OK;
