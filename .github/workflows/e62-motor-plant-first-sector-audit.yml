@@ -67,7 +67,7 @@ jobs:
           scenario="scenarios/e62-experimental-two-demand-coast-short300.json"
           python3 tools/sim_motor_cfg.py --sim-only-opt-in \
             --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
-            --motor-profile ecx87-kv210 --output "$root-cfg-flash.bin"
+            --motor-profile ecx87-kv210 --output "$root-g13b3-cfg-flash.bin"
           python3 tests/e62_autonomous_native_motor_probe.py \
             --qemu .build/qemu-src/build/qemu-system-arm \
             --sim-mcpwm-root-clock-hz 200000000 \
@@ -76,7 +76,7 @@ jobs:
             --switch-focus-window-ms 1498:1520 \
             --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
             --sim-motor-profile ecx87-kv210 --sim-native-adc-bemf \
-            --cfg-flash "$root-cfg-flash.bin" --scenario "$scenario" \
+            --cfg-flash "$root-g13b3-cfg-flash.bin" --scenario "$scenario" \
             --wall-timeout-s 600 --artifact "$root.json"
           python3 tools/e62_first_sector_reference.py \
             --evidence "$root.json" --events "$root.p0.events.log" \
