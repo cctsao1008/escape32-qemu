@@ -1,0 +1,24 @@
+name: E62 Issue5 Guest Observable Reacq Safety Candidate
+on:
+  push:
+    branches: [experiment/e62-issue5-guest-observable-reacq-policy-20261101]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  guest-only-guard-contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: No-rotor-truth candidate safety logic, not Original P1
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p test_e62_issue5_guest_observable_lock.py -v
+          python3 -m unittest discover -s tests -p test_e62_issue5_cap1_alias_audit.py -v
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("tools/e62_issue5_guest_observable_lock.py").read_text()
+          assert "theta" not in p and "omega" not in p
+          assert "HOLD_UNQUALIFIED" in p
+          print("PASS_CANDIDATE_GUEST_OBSERVATION_ONLY_NOT_ORIGINAL_P1")
+          PY
