@@ -364,6 +364,7 @@ typedef struct AM13ENativeMotor {
     struct AM13EMachineState *machine;
     bool enabled, active, faulted, gate;
     uint32_t model_profile; /* 0=KV147, 210=KV210; 211/212/215=APC J sensitivity */
+    bool trapezoid_bemf; /* SIM_ONLY ideal 120deg-plateau BEMF A/B; default sine */
     double last_prop_torque; /* Source-only signed aerodynamic drag, N*m */
     uint32_t phase_adc_publications[3]; /* EOC only, read-only observer */
     uint32_t phase_adc_nonmidscale[3]; /* dynamic modeled BEMF EOC */
@@ -4518,6 +4519,18 @@ static void am13e_set_native_motor_profile(Object *obj,
     }
 }
 
+/* Motor plant shape is a QEMU-only experiment: same actual PWM source,
+ * same Guest, same R/L/J, no firmware or BEMF capture override. */
+static bool am13e_get_native_trapezoid_bemf(Object *obj, Error **errp)
+{
+    return AM13E_MACHINE(obj)->native_motor.trapezoid_bemf;
+}
+static void am13e_set_native_trapezoid_bemf(Object *obj, bool on,
+                                            Error **errp)
+{
+    AM13E_MACHINE(obj)->native_motor.trapezoid_bemf=on;
+}
+
 static bool am13e_get_native_adc_bemf(Object *obj, Error **errp)
 {
     return AM13E_MACHINE(obj)->esc_sim_native_adc_bemf;
@@ -4729,6 +4742,14 @@ static void am13e_class_init(ObjectClass *oc, void *data)
         "SIM_ONLY: historical KV147/KV210; independent 47V KV210 no-prop; "
         "APC24x12E static aerodynamic-load J1/J2/J5 sensitivity. "
         "Never modifies Guest firmware, Original P1 or historical profiles.");
+    object_class_property_add_bool(oc, "esc-sim-native-trapezoid-bemf",
+                                   am13e_get_native_trapezoid_bemf,
+                                   am13e_set_native_trapezoid_bemf);
+    object_class_property_set_description(oc,"esc-sim-native-trapezoid-bemf",
+        "SIM_ONLY ideal trapezoid BEMF/torque flux basis, 120 degree flat "
+        "and 60 degree ramps. Default OFF preserves sine. Reuses exact "
+        "MCPWM, guest, DShot and comparator/ECAP/TIMG12. The physical "
+        "Maxon EC87 waveform is not verified; NOT a product model fit.");
     object_class_property_add_bool(oc, "esc-sim-native-adc-bemf",
                                    am13e_get_native_adc_bemf,
                                    am13e_set_native_adc_bemf);
