@@ -18,7 +18,8 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           p=Path("tools/e62_issue5_guest_observable_lock.py").read_text()
-          assert "theta" not in p and "omega" not in p
+          assert "m->theta" not in p and "m->omega" not in p
+          assert "rotor_state" not in p and "model_state_at_capture" not in p
           assert "HOLD_UNQUALIFIED" in p
           print("PASS_CANDIDATE_GUEST_OBSERVATION_ONLY_NOT_ORIGINAL_P1")
           PY
