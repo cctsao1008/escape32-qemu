@@ -57,6 +57,20 @@ class P0SourceAuditTest(unittest.TestCase):
         with self.assertRaises(TraceError):
             parse_events([line(1,10,"ADC_FORGED_ROTOR_ANGLE",0,1,12,2048,0,0)])
 
+    def test_read_only_pwm_clock_events_parse_but_cannot_authorize_p1(self):
+        events=parse_events([
+            line(1,1,"PWM_TBCTL",2,22,9450,6250000,1,0),
+            line(2,2,"PWM_AUDIO_PERIOD",9450,9000,22,6250000,1,0),
+        ])
+        self.assertEqual([x["kind"] for x in events],
+                         ["PWM_TBCTL","PWM_AUDIO_PERIOD"])
+        result=audit(events,evidence())
+        self.assertFalse(result["qualified"])
+        self.assertIn("NO_12_SOURCE_ORDERED_CAUSAL_CHAINS",
+                      result["unwaived_failure_reasons"])
+        with self.assertRaises(TraceError):
+            parse_events([line(1,1,"FAKE_GUEST_AUDIO_OWNER",0,0,0,0,0,0)])
+
     def test_manual_live_override_rejects_p0_json_certificate(self):
         events=parse_events([
             line(1,1,"THROT_SET",10,1,100,1,0,0),

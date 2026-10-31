@@ -21,6 +21,8 @@ on:
       - 'tests/test_e62_apc24x12e_sim_profile.py'
       - 'tools/native_p0_strict.py'
       - 'tests/test_e62_native_p0_strict.py'
+      - 'tools/e62_audio_motor_timeline.py'
+      - 'tests/test_e62_audio_motor_timeline.py'
       - '.github/workflows/e62-apc24x12e-47v-sim-only.yml'
   workflow_dispatch:
     inputs:
@@ -50,6 +52,7 @@ jobs:
           python3 -m unittest discover -s tests -p test_sim_motor_profiles.py -v
           python3 -m unittest discover -s tests -p test_e62_sim_model_profile.py -v
           python3 -m unittest discover -s tests -p test_e62_native_p0_strict.py -v
+          python3 -m unittest discover -s tests -p test_e62_audio_motor_timeline.py -v
           python3 -m unittest discover -s tests -p test_e62_guest_adc_phase_coast_audit.py -v
           python3 - <<'PY'
           from tools.e62_apc24x12e_static import load,static_torque
@@ -108,6 +111,10 @@ jobs:
           python3 tools/e62_sim_case_profiles.py \
             --profile-id "$id" --coast-ms "$coast" \
             --evidence "$root.json" --output "$root-profile-readback.json"
+          python3 tools/e62_audio_motor_timeline.py \
+            --events "$root.p0.events.log" --evidence "$root.json" \
+            --scenario "$scenario" --output "$root-audio-motor-timeline.json"
+          echo "SIM_ONLY_AUDIO_CLOCK_MODE_DIAGNOSTIC_NOT_ORIGINAL_P1_PASS"
           echo "PASS_PROFILE_QEMU_SOURCE_READBACK_ONLY_NOT_REACQUISITION"
       - name: Preserve actual strict Original P1 no-waiver verdict even when source-backed motor fails
         if: always()

@@ -2164,18 +2164,45 @@ static MemTxResult am13e_pwm4_write(void *opaque, hwaddr off,
         return MEMTX_ERROR;
     }
     switch (off) {
-    case 0x10U:
+    case 0x10U: {
+        /* SIM_ONLY observer: register-sourced timebase divider/ownership
+         * proxy. /32 may be Rel17 MUSIC; this event NEVER establishes
+         * software audio_owner and NEVER changes the Guest or rotor.
+         * Preserve old TBCTL and sample new running/Hz AFTER the actual
+         * existing guest-write side effects have occurred. */
+        uint32_t before_tbctl = p->reg[off / 4U];
         p->counter_base = am13e_pwm4_count(p);
         p->reg[off / 4U] = data;
         p->epoch_ns = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
         p->running = false;
         am13e_pwm4_clock_update(p);
+        if (before_tbctl != data) {
+            am13e_p0_event(p->machine, "PWM_TBCTL",
+                           before_tbctl, data,
+                           p->reg[0x14U/4U] & 0xffffU,
+                           am13e_pwm4_hz(p),
+                           p->running ? 1 : 0,
+                           p->zero_events);
+        }
         return MEMTX_OK;
-    case 0x14U:
+    }
+    case 0x14U: {
+        /* Changed active carrier period under actual /32 timebase:
+         * authentic note-rate candidate, NOT asserted MUSIC ownership.
+         * Rate-limited to genuine changes; no note synthesis or PWM edit. */
+        uint32_t before_period = p->reg[off / 4U] & 0xffffU;
         p->reg[off / 4U] = data & 0xffffU;
         am13e_pwm4_rearm(p);
         am13e_pwm4_hist_refresh(p,AM13E_H_GUEST_REG,false);
+        if (before_period != (data & 0xffffU) &&
+            ((p->reg[0x10U/4U] >> 2U) & 15U) == 5U) {
+            am13e_p0_event(p->machine, "PWM_AUDIO_PERIOD",
+                           before_period, data & 0xffffU,
+                           p->reg[0x10U/4U], am13e_pwm4_hz(p),
+                           p->running ? 1 : 0, p->zero_events);
+        }
         return MEMTX_OK;
+    }
     case 0x28U:
         p->counter_base = data & 0xffffU;
         p->epoch_ns = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
