@@ -22,8 +22,8 @@ static bool am13e_native_motor_current_step(AM13ENativeMotor *m, double dt)
         if (!driven[p]) {
             freephase[nfree++] = p;
         }
-        basis[p] = sin(m->theta + offs[p]);
-        e[p] = AM13E_NATIVE_K_PHASE*m->omega*basis[p];
+        basis[p] = am13e_native_flux_basis(m,m->theta+offs[p]);
+        e[p] = AM13E_NATIVE_K_FLUX*m->omega*basis[p];
         old[p] = m->currents[p];
     }
     int combinations = 1;
@@ -147,7 +147,7 @@ static bool am13e_native_motor_current_step(AM13ENativeMotor *m, double dt)
     for (int p = 0; p < 3; p++) {
         torque += currents[p]*basis[p];
     }
-    torque *= AM13E_NATIVE_K_PHASE;
+    torque *= AM13E_NATIVE_K_FLUX;
     double previous = m->omega;
     /* APC static V=0 analytic propeller load is an OPT-IN product-study
      * assumption. Do not inject its rotor angle, speed, or torque to Guest. */
