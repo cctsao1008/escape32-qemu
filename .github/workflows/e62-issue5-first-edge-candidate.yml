@@ -20,7 +20,7 @@ jobs:
           set -euo pipefail
           git clone -q --depth 1 -b experiment/e62-issue5-pinned-first-cross-20261101 \
             https://github.com/cctsao1008/ESCape32.git candidate-escape32
-          test "$(git -C candidate-escape32 rev-parse HEAD)" = "febd24f95467b8825034df9f397e82e903a4bdb0"
+          test "$(git -C candidate-escape32 rev-parse HEAD)" = "bae1ada4c4c9d9d0d0098b1d75cf8a70312eaa3e"
           git clone -q --depth 1 https://github.com/TexasInstruments/am13e2x_sdk.git /tmp/am13e-sdk
           git -C /tmp/am13e-sdk fetch -q --depth 1 origin b872469ceef18de5e39a1d3acb0821ec158b44c7
           git -C /tmp/am13e-sdk checkout -q --detach b872469ceef18de5e39a1d3acb0821ec158b44c7
