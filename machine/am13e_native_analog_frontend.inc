@@ -4,8 +4,8 @@ static void am13e_native_motor_publish(AM13ENativeMotor *m)
                             2.0*AM13E_NATIVE_PI/3.0};
     uint32_t words[3];
     for (int p = 0; p < 3; p++) {
-        double bemf = AM13E_NATIVE_K_PHASE*m->omega*
-                      sin(m->theta+offs[p]);
+        double bemf = AM13E_NATIVE_K_FLUX*m->omega*
+                      am13e_native_flux_basis(m,m->theta+offs[p]);
         double voltage = 1.65+0.02*bemf;
         if (!isfinite(voltage) || voltage < 0.0 || voltage > 3.3) {
             am13e_native_motor_fault(m, 3U);
