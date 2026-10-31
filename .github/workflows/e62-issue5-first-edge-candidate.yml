@@ -20,7 +20,7 @@ jobs:
           set -euo pipefail
           git clone -q --depth 1 -b experiment/e62-issue5-first-geometric-cross-handoff-20261101 \
             https://github.com/cctsao1008/ESCape32.git candidate-escape32
-          test "$(git -C candidate-escape32 rev-parse HEAD)" = "24ba5c03963f907768bf5e872f2d98222e719224"
+          test "$(git -C candidate-escape32 rev-parse HEAD)" = "f138568c2c1c8a0c9e6777e1d09208c0fa5f7aa1"
           git clone -q --depth 1 https://github.com/TexasInstruments/am13e2x_sdk.git /tmp/am13e-sdk
           git -C /tmp/am13e-sdk fetch -q --depth 1 origin b872469ceef18de5e39a1d3acb0821ec158b44c7
           git -C /tmp/am13e-sdk checkout -q --detach b872469ceef18de5e39a1d3acb0821ec158b44c7
