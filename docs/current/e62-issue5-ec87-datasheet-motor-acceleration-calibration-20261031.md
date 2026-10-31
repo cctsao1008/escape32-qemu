@@ -45,6 +45,10 @@ QEMU observed first-sector phase currents are 2.35–4.45× the **maximum contin
 
 A generous (but **not justified as a physical fit**) equivalent viscous drag `b≈0.000142 Nm·s/rad` from the *whole* KV210 1.63A no-load current would differ from current QEMU `b=0.0001` by only ≈0.0018–0.0027Nm over these first-sector RPMs, tiny relative to sampled 1–6Nm torque. Friction cannot plausibly explain the bulk of overshoot under this approximation.
 
+## Numerical integration timestep sanity (not a solver convergence certificate)
+
+The source native QEMU motor integrator step is **1µs** (`AM13E_NATIVE_MOTOR_STEP_NS=1000ns`). KV210 matched electrical time constant is `L_phase/R_phase = 8.75µH / 0.0283Ω ≈309µs`, and published mechanical time constant is `3570µs`. Thus `dt/tau_e ≈0.00323` and `dt/tau_mech ≈0.000280`. At the first-sector <620RPM, the electrical rotor travels under ≈0.079° per microsecond given 21 pole pairs. These figures **make gross insufficient numerical timestep resolution unlikely**, but the independent run did **not** replay the exact native six-pad switching waveform at 0.5µs to establish convergence, and no physical acceleration measurement exists. Do not equate adequate virtual-time sampling with a calibrated real motor.
+
 ## Calibration status / next action
 
 - **Matched with manufacturer within given conventions:** rotor J; pole pairs; Kt/Kv; line-line R/L; derived mechanical time constant.
