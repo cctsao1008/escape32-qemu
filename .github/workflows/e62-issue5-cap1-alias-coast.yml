@@ -1,0 +1,146 @@
+name: "E62 #5 CAP1 zero-cross provenance 300/1500/3000 SIM_ONLY"
+
+on:
+  push:
+    branches: [experiment/e62-issue5-cap1-alias-guard-20261031]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  independent-alias-guard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Original source and CAP1 geometry/speed alias unit contracts
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p test_e62_issue5_cap1_alias_audit.py -v
+          python3 -m py_compile tools/e62_issue5_cap1_alias_audit.py tests/test_e62_issue5_cap1_alias_audit.py
+          python3 - <<'PY'
+          import json
+          cfg=json.load(open("configs/e62-issue5-cap1-alias-coast-v1.json"))
+          assert cfg["schema"]=="e62.issue5.cap1-alias-coast.v1"
+          assert [r["coast_ms"] for r in cfg["coast_cases"]]==[300,1500,3000]
+          assert not cfg["firmware_changed"] and not cfg["original_p1_policy_changed"]
+          print("PASS_DIAGNOSTIC_ONLY_NOT_P1")
+          PY
+
+  original-guest-coasts:
+    needs: independent-alias-guard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 48
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - coast: 300
+            scenario: scenarios/e62-experimental-two-demand-coast-short300.json
+          - coast: 1500
+            scenario: scenarios/e62-experimental-two-demand-coast-medium1500.json
+          - coast: 3000
+            scenario: scenarios/e62-experimental-two-demand-coast-long3000.json
+    steps:
+      - uses: actions/checkout@v4
+      - name: Original ELF SHA and QEMU source build
+        run: |
+          set -euo pipefail
+          echo '05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0  baseline/e62-g13b3/firmware/AM13E-rev17.3.elf' | sha256sum -c -
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            libglib2.0-dev libpixman-1-dev libfdt-dev pkg-config meson ninja-build binutils-arm-none-eabi
+          git submodule update --init --depth 1 qemu
+          ./build.sh
+          mkdir -p artifacts/e62-issue5-alias
+      - name: Original Guest DShot600 / source PWM -> BEMF -> CAP1 observer
+        run: |
+          set -euo pipefail
+          root="artifacts/e62-issue5-alias/kv210-24v-coast${{ matrix.coast }}"
+          python3 tools/sim_motor_cfg.py --sim-only-opt-in \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --motor-profile ecx87-kv210 --output "$root-g13b3-cfg-flash.bin"
+          python3 tests/e62_autonomous_native_motor_probe.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --sim-mcpwm-root-clock-hz 200000000 \
+            --sim-bemf-waveform historical_sine \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --sim-motor-profile ecx87-kv210 --sim-native-adc-bemf \
+            --cfg-flash "$root-g13b3-cfg-flash.bin" \
+            --scenario "${{ matrix.scenario }}" \
+            --wall-timeout-s 600 --artifact "$root.json"
+          python3 tools/e62_issue5_cap1_alias_audit.py \
+            --events "$root.p0.events.log" --evidence "$root.json" \
+            --scenario "${{ matrix.scenario }}" \
+            --output "$root-cap1-causality.json"
+          python3 - "$root-cap1-causality.json" <<'PY'
+          import json,sys
+          d=json.load(open(sys.argv[1]))
+          assert not d["issue5_reacquisition_qualified"]
+          assert d["original_p1_policy_unchanged"]
+          assert len(d["results"])==2
+          print("PASS_SOURCE_CAP1_PROVENANCE_NOT_REACQUISITION")
+          PY
+      - name: Record unmodified Original P1 PASS or FAIL explicitly
+        if: always()
+        run: |
+          set -u
+          root="artifacts/e62-issue5-alias/kv210-24v-coast${{ matrix.coast }}"
+          if [[ ! -f "$root.json" || ! -f "$root.p0.events.log" ]]; then
+            echo "NO_ACTUAL_QEMU_SOURCE_FOR_STRICT_P1"; exit 1
+          fi
+          python3 tools/native_p1_qualification.py \
+            --scenario "${{ matrix.scenario }}" \
+            --evidence "$root.json" --events "$root.p0.events.log" \
+            --output "$root-original-p1.json"
+          code=$?
+          echo "ORIGINAL_P1_EXIT_CODE=$code (never overridden in JSON)"
+          if [[ ! -f "$root-original-p1.json" ]]; then exit 1; fi
+          python3 - "$root-original-p1.json" <<'PY'
+          import json,sys
+          d=json.load(open(sys.argv[1]))
+          print("ACTUAL_UNMODIFIED_P1",d.get("status"),d.get("unwaived_observability_failures"))
+          assert d.get("qualified") is False, "Unexpected P1 PASS requires independent review"
+          PY
+      - name: Archive original source and P1 verdict
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-issue5-cap1-coast${{ matrix.coast }}-SIM_ONLY
+          path: artifacts/e62-issue5-alias/**
+          retention-days: 30
+          if-no-files-found: warn
+
+  summary:
+    needs: original-guest-coasts
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: e62-issue5-cap1-coast*-SIM_ONLY
+          merge-multiple: true
+          path: artifacts/e62-issue5-alias
+      - name: Fail-closed per-coast causal matrix, never label P1 PASS
+        run: |
+          python3 - <<'PY'
+          import json,pathlib
+          root=pathlib.Path("artifacts/e62-issue5-alias")
+          for coast in (300,1500,3000):
+            base=root/f"kv210-24v-coast{coast}"
+            causal=pathlib.Path(str(base)+"-cap1-causality.json")
+            p1=pathlib.Path(str(base)+"-original-p1.json")
+            if not causal.is_file() or not p1.is_file():
+              print("MISSING_CASE_FAIL_CLOSED",coast); continue
+            data=json.loads(causal.read_text())
+            p=json.loads(p1.read_text())
+            for item in data["results"]:
+              print("COAST",coast,"STAGE",item["source_dshot_stage"],
+                    "PRE_RPM",item["actual_pre_demand_model_rpm"],
+                    "SCHEDULED_NON_GEOMETRIC",item["scheduled_non_geometric_or_ambiguous_captures"],
+                    "DECISION",item["reacquisition_safety_decision"])
+            print("ACTUAL_ORIGINAL_P1",coast,p.get("status"),
+                  p.get("unwaived_observability_failures"))
+          PY
