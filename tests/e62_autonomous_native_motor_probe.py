@@ -536,6 +536,14 @@ def run(args):
     if not args.cfg_flash.is_file():
         raise FileNotFoundError(args.cfg_flash)
     symbol_addrs, unresolved_guest_symbols = _guest_symbol_addresses(args.elf)
+    if args.issue5_bemf_diag:
+        from tools.e62_issue5_bemf_diag import snapshot_first
+        required = ("am13e_bemf_diag_seq", "am13e_bemf_diag_first")
+        missing = [name for name in required if name not in symbol_addrs]
+        if missing:
+            raise RuntimeError(
+                "Issue #5 diagnostic ELF missing unambiguous SRAM symbols: "
+                + ", ".join(missing))
     scenario_stages, scenario_meta = load_native_scenario(args.scenario)
     external_fault=(load_fault_plan(args.fault_scenario,scenario_stages)
                     if args.fault_scenario else None)
@@ -734,6 +742,14 @@ def run(args):
                     evidence.update(autonomous_dshot=auto,native_motor=motor)
                     evidence["pwm_source_after"] = _pwm_source_snapshot(qtest)
                     evidence["original_guest_after"] = _read_original_guest_telemetry(qtest,symbol_addrs)
+                    if args.issue5_bemf_diag:
+                        evidence["issue5_bemf_first_history"] = snapshot_first(
+                            qtest.read, symbol_addrs["am13e_bemf_diag_seq"],
+                            symbol_addrs["am13e_bemf_diag_first"])
+                        history = evidence["issue5_bemf_first_history"]
+                        if not history["entries"]:
+                            raise AssertionError(
+                                "No source Firmware BEMF callbacks recorded")
                     evidence["receiver_after"] = _receiver_snapshot(qtest.read)
                     evidence["receiver_failure_reasons"] = _classify_receive_path(
                         auto,evidence["original_guest_after"],evidence["receiver_after"])
@@ -922,6 +938,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--qemu", type=Path, required=True)
     parser.add_argument("--elf", type=Path, required=True)
+    parser.add_argument("--issue5-bemf-diag", action="store_true",
+                        help="Read first 64 Guest BEMF decisions over QTest; "
+                             "no Guest writes, fail if missing")
     parser.add_argument("--experimental-candidate-sha256",default=None,
                         help="EXPERIMENT BRANCH ONLY: exact non-original ELF "
                              "sha256 for passive physical source diagnostics; "
