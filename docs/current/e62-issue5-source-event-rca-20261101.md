@@ -77,3 +77,24 @@ Focused examples:
 **Inference supported:** the initial source PWM_PAIR payload matches while rotor phase differs by 45,816 raw angle units (do not convert to electrical degrees without QEMU format verification). The failing case produces significant reverse RPM before any accepted CAP1; merely adjusting post-capture ival cannot repair that first interval. This is *not yet proof* of a firmware bug because the motor/torque phase mapping may be wrong. Need QEMU emitter raw-field interpretation and torque sign validation from actual source.
 
 47 V first demand: CAP1 +2.120 ms, TIMG12 +2.604 ms, first sampled negative beyond −50 RPM +20.830 ms; a different downstream mode requires subsequent commutation/torque alignment. All eight cases still 1 PASS/7 FAIL; no firmware revision claimed.
+
+## 2026-11-01 source-verified decoded torque evidence
+
+QEMU emitter verified in `machine/am13e_native_motor_plant.inc` (`am13e_native_motor_tick`): `ROTOR` event payload is **(a)** mechanical RPM ×1000, **(b)** unwrapped electrical theta [radians] ×1000, **(c,d,e)** three phase currents [A] ×1000, **(f)** electromagnetic torque [N·m] ×1000000. This is actual native plant output, not an estimated torque reconstructed from RPM.
+
+In `machine/am13e_native_pwm_coupling.inc`, `PWM_PAIR` is `(1+3*hi_phase+lo_phase, newmask, gate_word, theta_unwrapped×1000, zero_events, 0)`. Phase index 0=U, 1=V, 2=W. First paired sector is a physical source observation; not a firmware callback count.
+
+| Same source Candidate v2 scenario (demand) | First PWM_PAIR (pair,mask) | First sampled phase angle (wrapped electrical deg) | First sampled actual torque [N m] | First sampled RPM | Status |
+|---|---|---:|---:|---:|---|
+| 24V/300ms/−30° (second) | (4,6) | 261.254° | **+0.937133** | +45.701 | PASS |
+| 24V/1500ms/−30° (second) | (4,6) | 6.317° | **−0.658305** | −3.321 | FAIL |
+| 24V/3000ms/−30° (second) | (4,6) | derived from preserved source event | **−0.328172** | −3.675 | FAIL |
+| 47V/300ms/−30° (first) | (8,24) | initial phase near −30° | **+1.934482** | +39.935 | FAIL later |
+| 24V/300ms/−60° (first) | (8,24) | source observed | **−0.284498** | −10.562 | FAIL |
+| 24V/300ms/+30° (first) | (8,24) | source observed | **−1.078666** | −18.209 | FAIL |
+
+The 24V 1500ms coast case has the **same** initial phase command `PWM_PAIR=(4,6)` as 300ms PASS but opposite source-computed torque sign. Its first sampled angular velocity is already negative ~0.836ms into second demand. Its first CAP1 is +6.073ms. Thus the initial adverse torque cannot be caused by a *later* CAP1 interval filter decision. It is consistent with a restart policy that reuses a predetermined sector without phase detection; confirm FW initial `step=oldstep; nextstep()` and observe the QEMU plant's angle convention before categorizing defect vs limitation. Motor dynamics source `machine/am13e_native_motor_dynamics.inc` evaluates `T=K_phase*sum(i_phase*sin(theta_e+offset))`, and updates omega using `J=0.00013 kg m²` (SIM_ONLY uncalibrated).
+
+At 47V/300ms first demand, actual torque goes **negative around +9.830ms (−6.182 Nm)** and again around **+13.830ms (−7.511 Nm)**, long after first CAP1 +2.120ms / TIMG12 +2.604ms. Sampled rotor becomes negative RPM at +20.830ms. This supports an *independent post-feedback torque-sign / sector-timing instability*, rather than solely no-feedback startup.
+
+Decoded 400 `ROTOR` samples across eight cases×two demands×25ms. Preserve caveats: event cadence 1ms; PWM switching much faster; rotor phase model and load not calibrated; torque values are **simulated plant torque**, not actual measured motor torque. Candidate remains 1 PASS / 7 FAIL, SIM_ONLY only. **No firmware change authorized merely by the sign of uncalibrated simulated torque.**
