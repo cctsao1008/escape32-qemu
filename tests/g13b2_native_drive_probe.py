@@ -2450,6 +2450,20 @@ def run(args):
                                     rsp.mem32,
                                     bemf_state["am13e_bemf_diag_seq"],
                                     bemf_state["am13e_bemf_diag_first"]))
+                            first = evidence["e62_issue5_bemf_first_decisions"]
+                            rolling = evidence["e62_issue5_bemf_decisions"]
+                            if first["seq_after"] != rolling["seq_after"]:
+                                raise AssertionError(
+                                    "Issue #5 BEMF diagnostic sequence mismatch")
+                            if not first["entries"]:
+                                raise AssertionError(
+                                    "Issue #5 Guest produced no BEMF decisions: "
+                                    "native diagnostic capture NOT qualified")
+                            if (first["entries"][0]["seq"] != 0 or
+                                    first["entries"][-1]["seq"] !=
+                                    len(first["entries"]) - 1):
+                                raise AssertionError(
+                                    "Issue #5 first BEMF history discontinuity")
                     finally:
                         # Keep the original failure visible if the
                         # simulator's control sockets became unresponsive.
