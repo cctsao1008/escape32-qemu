@@ -1579,6 +1579,13 @@ def run(args):
             bemf_state[name] = symbol_address(args.elf, name)
         except RuntimeError:
             continue
+    if args.issue5_bemf_diag and any(
+            name not in bemf_state for name in (
+                "am13e_bemf_diag_seq", "am13e_bemf_diag_ring",
+                "am13e_bemf_diag_first")):
+        raise AssertionError(
+            "Issue #5 diagnostic requested but candidate ELF does not "
+            "export the BEMF decision history symbols")
     evidence = {"status": "OPEN_NOT_NATIVE_DRIVE", "native_elf": str(args.elf)}
     profile = (args.motor_profile or
                ("reciprocal" if args.sim_only_reciprocal_motor else "legacy"))
