@@ -1557,7 +1557,8 @@ def run(args):
     except ValueError:
         symbols["bemf_fault"] = None
     bemf_state = {}
-    from tools.e62_issue5_bemf_diag import snapshot as read_bemf_diag
+    from tools.e62_issue5_bemf_diag import (
+        snapshot as read_bemf_diag, snapshot_first as read_bemf_diag_first)
     for name in ("cfg","tick","throt","erpm","valid_frame_feeds",
                   "calibration_done", "calibration_ticks",
                  "capture_ticks_per_ms", "capture_timeout_ticks",
@@ -1572,7 +1573,8 @@ def run(args):
                  "physical_runtime_image", "step", "sine", "prep",
                  "sync", "oldstep", "timer_armed",
                  "runtime_aq_last", "logical_aq", "logical_compare",
-                 "am13e_bemf_diag_seq", "am13e_bemf_diag_ring"):
+                 "am13e_bemf_diag_seq", "am13e_bemf_diag_ring",
+                 "am13e_bemf_diag_first"):
         try:
             bemf_state[name] = symbol_address(args.elf, name)
         except RuntimeError:
@@ -2433,6 +2435,14 @@ def run(args):
                                 rsp.mem32,
                                 bemf_state["am13e_bemf_diag_seq"],
                                 bemf_state["am13e_bemf_diag_ring"])
+                            if "am13e_bemf_diag_first" not in bemf_state:
+                                raise AssertionError(
+                                    "Issue #5 first-history symbol missing")
+                            evidence["e62_issue5_bemf_first_decisions"] = (
+                                read_bemf_diag_first(
+                                    rsp.mem32,
+                                    bemf_state["am13e_bemf_diag_seq"],
+                                    bemf_state["am13e_bemf_diag_first"]))
                     finally:
                         # Keep the original failure visible if the
                         # simulator's control sockets became unresponsive.
