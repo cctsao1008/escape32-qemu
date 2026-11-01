@@ -8,10 +8,11 @@ def fixture():
                    nonzero_phase_voltage_command=False)
     return {"g13b3i_original_no_bemf_timeout": {
         "simulator_feedback_injected": False,
+        "original_wfi_visits": 128,
         "pwm_before_timeout": dict(native_pwm_valid=True, gate_and_pads=True,
                                    nonzero_phase_voltage_command=True),
         "pwm_at_timeout": dict(pwm_off),
-        "post_timeout_wfi_samples": [{"pwm": dict(pwm_off)} for _ in range(48)],
+        "post_timeout_wfi_samples": [{"pwm": dict(pwm_off), "ecap_ticks": 5000*i} for i in range(48)],
         "post_timeout_all_samples_six_off": True,
     }}
 
@@ -39,6 +40,17 @@ class NativeTimeoutVerdictTest(unittest.TestCase):
         d = fixture()
         d["g13b3i_original_no_bemf_timeout"]["post_timeout_wfi_samples"][5]["pwm"]["native_pwm_valid"] = False
         self.assertIn("POST_TIMEOUT_PWM_OBSERVER_INVALID", verdict(d)["failures"])
+
+    def test_too_short_measured_window_fails(self):
+        d = fixture()
+        for i, row in enumerate(d["g13b3i_original_no_bemf_timeout"]["post_timeout_wfi_samples"]):
+            row["ecap_ticks"] = i * 100
+        self.assertIn("POST_TIMEOUT_DURATION_UNPROVEN", verdict(d)["failures"])
+
+    def test_missing_native_timestamps_fails(self):
+        d = fixture()
+        del d["g13b3i_original_no_bemf_timeout"]["post_timeout_wfi_samples"][2]["ecap_ticks"]
+        self.assertIn("POST_TIMEOUT_NATIVE_TIMESTAMPS_MISSING", verdict(d)["failures"])
 
     def test_missing_native_report_fails(self):
         self.assertFalse(verdict({})["timeout_observed"])
