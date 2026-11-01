@@ -98,3 +98,26 @@ The 24V 1500ms coast case has the **same** initial phase command `PWM_PAIR=(4,6)
 At 47V/300ms first demand, actual torque goes **negative around +9.830ms (−6.182 Nm)** and again around **+13.830ms (−7.511 Nm)**, long after first CAP1 +2.120ms / TIMG12 +2.604ms. Sampled rotor becomes negative RPM at +20.830ms. This supports an *independent post-feedback torque-sign / sector-timing instability*, rather than solely no-feedback startup.
 
 Decoded 400 `ROTOR` samples across eight cases×two demands×25ms. Preserve caveats: event cadence 1ms; PWM switching much faster; rotor phase model and load not calibrated; torque values are **simulated plant torque**, not actual measured motor torque. Candidate remains 1 PASS / 7 FAIL, SIM_ONLY only. **No firmware change authorized merely by the sign of uncalibrated simulated torque.**
+
+## 2026-11-01 47V first-demand first post-feedback loss-of-torque — precise QEMU event times
+
+Source ZIP: run `41291196333`, artifact `13077552641`, `47v-300-m30.p0.events.log`. QEMU virtual timestamps below are demand-relative (absolute demand t=1500ms), original `E62_P0_EVENT` fields retained.
+
+| event | t relative demand | details |
+|---|---:|---|
+| CAP1 | +8.046868 ms | phase b=1 |
+| TIMG12 | +8.152068 ms | c=10399 |
+| PWM_PAIR | +8.184778 ms | pair=8 mask=24 |
+| CAP1 | +8.451876 ms | phase b=0 |
+| TIMG12 | +8.554040 ms | c=10099 |
+| PWM_PAIR | +8.559848 ms | pair=2 mask=9 |
+| CAP1 | **+8.831876 ms** | phase b=2; no immediately corresponding TIMG12 in event log |
+| ROTOR | +8.829636 ms | +1234.618 RPM, +0.870003 N m (sample slightly before CAP1) |
+| ROTOR | **+9.829636 ms** | +1162.624 RPM, **−6.182254 N m**, pair remains 2 |
+| ROTOR | +10.829636 ms | +772.603 RPM, +0.073844 N m, pair remains 2 |
+| CAP1 | +11.667876 ms | phase b=2 |
+| TIMG12 | **+12.473040 ms** | c=80399 |
+| PWM_PAIR | +12.518710 ms | pair=3 mask=33 |
+| ROTOR | +13.829640 ms | +673.849 RPM, **−7.511136 N m** |
+
+**Observed fact:** following source CAP1 at +8.831876ms, no source TIMG12/PWM_PAIR was emitted until +12.473040/+12.518710ms. The ~3.641ms no-commutation interval overlaps first large negative simulated torque. CAP1 is a QEMU peripheral event, **not** independently proof that Guest application accepted crossing; need inspect `captured_events/rejected_events`, `sync/ival`, ECAP1 IRQ and TIMG12 timer programming or add source-owned diagnostics. Do not conclude timer malfunction from CAP1 alone. Compare with 24V PASS with same firmware/source model and evaluate intentional `capture < ival/2` rejection, missed IRQ or delayed timer schedule. Exact torque is SIM_ONLY uncalibrated model. Keep Issue #5 OPEN and Draft PR unmerged.
