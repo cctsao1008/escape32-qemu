@@ -47,3 +47,23 @@ def snapshot(read32, seq_address, ring_address, limit=64):
         raise RuntimeError("BEMF diagnostic ring changed during read")
     return {"seq_after": before, "overwritten": before > DEPTH,
             "entries": out}
+
+def snapshot_first(read32, seq_address, first_address):
+    """Read immutable first 64 callbacks even after rolling history wraps.
+
+    Must be sampled with the Guest halted; seq read-back prevents
+    concurrent writes. A count over 64 is reported, never treated as
+    complete startup history.
+    """
+    before = read32(seq_address)
+    count = min(before, DEPTH)
+    entries = []
+    for seq in range(count):
+        addr = first_address + seq * WORDS_PER_ENTRY * 4
+        entries.append(decode_entry(
+            [read32(addr + 4 * i) for i in range(WORDS_PER_ENTRY)], seq))
+    after = read32(seq_address)
+    if after != before:
+        raise RuntimeError("BEMF first-history changed during read")
+    return {"seq_after": before, "first_history_capped": before > DEPTH,
+            "entries": entries}
