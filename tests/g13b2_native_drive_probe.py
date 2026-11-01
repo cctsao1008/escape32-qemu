@@ -606,6 +606,31 @@ def observe_original_no_bemf_timeout(
             report["post_timeout_six_off_observed"] = bool(
                 not report["pwm_at_timeout"]["gate_and_pads"] and
                 not report["pwm_at_timeout"]["nonzero_phase_voltage_command"])
+            # Continue the genuine Guest WFI clock after timeout. Read QEMU's
+            # actual PWM observer repeatedly; never infer shutdown from one
+            # transient register snapshot or from ECAP disarm alone.
+            post = []
+            for post_visit in range(48):
+                checkpoint = step_unchanged_native_wfi(
+                    rsp, checkpoint, armed_breakpoints=armed_breakpoints,
+                    wfi=wfi, hardfault=hardfault,
+                    slice_ms=slice_ms, runtime_slices=runtime_slices,
+                    stage=f"G13B3I_POST_TIMEOUT_WFI_{post_visit+1}")
+                if observer(rsp)["cfsr"] or observer(rsp)["hfsr"]:
+                    raise AssertionError("Original CPU fault after BEMF timeout")
+                post.append({
+                    "ecap_ticks": qtest.read(ECAP1_TSCTR),
+                    "pwm": observe_original_pwm(qtest.read).to_dict(),
+                    "armed": guest("armed"),
+                    "cancelled": guest("cancelled"),
+                })
+            report["post_timeout_wfi_samples"] = post
+            report["post_timeout_all_samples_six_off"] = all(
+                not row["pwm"]["gate_and_pads"] and
+                not row["pwm"]["nonzero_phase_voltage_command"]
+                for row in post)
+            report["post_timeout_ecap_elapsed_ticks"] = (
+                post[-1]["ecap_ticks"] - post[0]["ecap_ticks"]) & 0xffffffff
             report["post_timeout_safety_qualified"] = False
             report["simulator_feedback_injected"]=False
             print("PASS_G13B3I_ORIGINAL_ECAP_SYSTICK_NO_BEMF_TIMEOUT " +
