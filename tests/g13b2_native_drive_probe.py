@@ -549,6 +549,9 @@ def observe_original_no_bemf_timeout(
     if guest("calibration_done") != 1:
         raise AssertionError("Original 200MHz ECAP SysTick uncalibrated")
     start = {name:guest(name) for name in fields}
+    # Actual six-channel QEMU output and gate/pad readback at the armed checkpoint.
+    # These are read-only hardware observations, NOT a synthetic CAP1/IRQ.
+    pwm_before_timeout = observe_original_pwm(qtest.read).to_dict()
     if (start["armed"] != 1 or
             start["crossing_epoch_valid"] != 1 or
             start["capture_ticks_per_ms"] != 200000 or
@@ -595,6 +598,15 @@ def observe_original_no_bemf_timeout(
                 physical_tz_flags=qtest.read(PWM4+0xb0))
             report = result.to_dict()
             report["original_wfi_visits"]=visit
+            report["pwm_before_timeout"]=pwm_before_timeout
+            report["pwm_at_timeout"]=observe_original_pwm(qtest.read).to_dict()
+            # Strict separation: ECAP timeout PASS does NOT establish bridge
+            # shutdown. Preserve the original probe verdict and expose actual
+            # observed gate/PWM state for Issue #5 policy review.
+            report["post_timeout_six_off_observed"] = bool(
+                not report["pwm_at_timeout"]["gate_and_pads"] and
+                not report["pwm_at_timeout"]["nonzero_phase_voltage_command"])
+            report["post_timeout_safety_qualified"] = False
             report["simulator_feedback_injected"]=False
             print("PASS_G13B3I_ORIGINAL_ECAP_SYSTICK_NO_BEMF_TIMEOUT " +
                   json.dumps(report,sort_keys=True),flush=True)
