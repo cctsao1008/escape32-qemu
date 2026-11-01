@@ -36,6 +36,12 @@ jobs:
             --require-native-no-bemf-timeout --no-bemf-timeout-visits 640 \
             --artifact artifacts/e62-issue5-native-timeout.json \
             2>&1 | tee artifacts/e62-issue5-native-timeout.log
+      - name: Classify native PWM output at timeout separately from ECAP timeout
+        run: |
+          set -euo pipefail
+          python3 tools/e62_issue5_native_timeout_verdict.py \\
+            artifacts/e62-issue5-native-timeout.json \\
+            | tee artifacts/e62-issue5-native-timeout-verdict.json
       - name: State evidence boundary
         if: always()
         run: |
