@@ -37,6 +37,22 @@ def verdict(artifact):
     if not isinstance(post, list) or len(post) < 48:
         failures.append("POST_TIMEOUT_HISTORY_INCOMPLETE")
     else:
+        ticks = []
+        for row in post:
+            if isinstance(row, dict) and type(row.get("ecap_ticks")) is int:
+                ticks.append(row["ecap_ticks"])
+            else:
+                failures.append("POST_TIMEOUT_NATIVE_TIMESTAMPS_MISSING")
+                break
+        # The source ECAP runs at 200 MHz; a list of 48 WFI samples alone
+        # is not evidence of elapsed time. Require a measured 1ms horizon.
+        if len(ticks) == len(post):
+            diffs = [(ticks[i] - ticks[i-1]) & 0xffffffff
+                     for i in range(1, len(ticks))]
+            if any(delta == 0 or delta >= 0x80000000 for delta in diffs):
+                failures.append("POST_TIMEOUT_TIMESTAMPS_INVALID")
+            if ((ticks[-1] - ticks[0]) & 0xffffffff) < 200000:
+                failures.append("POST_TIMEOUT_DURATION_UNPROVEN")
         for row in post:
             if not isinstance(row, dict) or not isinstance(row.get("pwm"), dict):
                 failures.append("POST_TIMEOUT_SAMPLE_INVALID")
@@ -51,10 +67,10 @@ def verdict(artifact):
         if report.get("post_timeout_all_samples_six_off") is not True:
             failures.append("POST_TIMEOUT_ALL_SIX_OFF_NOT_PROVEN")
     return {
-        "timeout_observed": not any(x.endswith("MISSING") for x in failures),
+        "timeout_observed": bool(report.get("original_wfi_visits")) and\n                            report.get("simulator_feedback_injected") is False,
         "safe_off_observed": not failures,
         "failures": failures,
-        "scope": "48_POST_TIMEOUT_WFI_SNAPSHOTS_NOT_CONTINUOUS_TIME_PROOF",
+        "scope": "48_WFI_SNAPSHOTS_AT_LEAST_1MS_NOT_CONTINUOUS_TIME_PROOF",
         "firmware_fix_authorized": False,
     }
 
