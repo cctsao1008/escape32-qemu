@@ -1,0 +1,49 @@
+name: E62 Issue 5 Native No-BEMF Output Audit
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'tests/g13b2_native_drive_probe.py'
+      - '.github/workflows/e62-issue5-native-timeout.yml'
+permissions:
+  contents: read
+jobs:
+  native-timeout:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build QEMU and verify immutable Original ELF
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libglib2.0-dev libpixman-1-dev libfdt-dev pkg-config meson ninja-build binutils-arm-none-eabi
+          git submodule update --init --depth 1 qemu
+          ./build.sh
+          echo '05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0  baseline/e62-g13b3/firmware/AM13E-rev17.3.elf' | sha256sum -c -
+          mkdir -p artifacts
+      - name: Native Guest BEMF timeout with read-only six-PWM snapshots
+        run: |
+          set -euo pipefail
+          python3 tests/g13b2_native_drive_probe.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf baseline/e62-g13b3/firmware/AM13E-rev17.3.elf \
+            --throttle 1500 --startup-steps 32768 \
+            --slice-ms 300 --runtime-slices 20 \
+            --wait-native-bemf-calibration --calibration-wfi-visits 24 \
+            --require-drive --require-native-pwm --require-native-bemf-arm \
+            --require-native-no-bemf-timeout --no-bemf-timeout-visits 640 \
+            --artifact artifacts/e62-issue5-native-timeout.json \
+            2>&1 | tee artifacts/e62-issue5-native-timeout.log
+      - name: State evidence boundary
+        if: always()
+        run: |
+          echo 'No-BEMF timeout proof is not proof of safe six-pad shutdown.'
+          echo 'Check pwm_at_timeout, post_timeout_six_off_observed and post_timeout_safety_qualified.'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: issue5-native-no-bemf-timeout
+          path: artifacts/e62-issue5-native-timeout*
+          if-no-files-found: warn
