@@ -121,3 +121,18 @@ Source ZIP: run `41291196333`, artifact `13077552641`, `47v-300-m30.p0.events.lo
 | ROTOR | +13.829640 ms | +673.849 RPM, **−7.511136 N m** |
 
 **Observed fact:** following source CAP1 at +8.831876ms, no source TIMG12/PWM_PAIR was emitted until +12.473040/+12.518710ms. The ~3.641ms no-commutation interval overlaps first large negative simulated torque. CAP1 is a QEMU peripheral event, **not** independently proof that Guest application accepted crossing; need inspect `captured_events/rejected_events`, `sync/ival`, ECAP1 IRQ and TIMG12 timer programming or add source-owned diagnostics. Do not conclude timer malfunction from CAP1 alone. Compare with 24V PASS with same firmware/source model and evaluate intentional `capture < ival/2` rejection, missed IRQ or delayed timer schedule. Exact torque is SIM_ONLY uncalibrated model. Keep Issue #5 OPEN and Draft PR unmerged.
+
+## 2026-11-01 late: 47V CAP1 event **was handled**, but Guest did not program TIMG12
+
+Re-examined actual source event log from run `41291196333` artifact `13077552641`; timestamps below are relative to first 47V DShot demand (1500ms):
+
+| Source CAP1 | QEMU CAP1_ACK | Guest ECAP1_CAP1_READ | T12_LOAD | T12_START | Classification |
+|---|---|---|---|---|---|
+| +8.046868 ms | +8.046904 | +8.047008 | +8.047880 | +8.048068 | read and scheduled |
+| +8.451876 ms | +8.451912 | +8.452016 | +8.452852 | +8.453040 | read and scheduled |
+| **+8.831876 ms** | **+8.831912** | **+8.832016** | **none before next CAP1** | **none** | **read without Timer programming** |
+| +11.667876 ms | +11.667912 | +11.668016 | +11.668852 | +11.669040 | read and scheduled |
+
+Consequent rotor sample at +9.829636ms: **−6.182254 Nm**, while last `PWM_PAIR` still represents old pair 2. Source QEMU timer MMIO records were verified in `machine/am13e23019.c` (`T12_LOAD/T12_START` represent actual Guest timer writes, not fabricated model instrumentation). `motor_bemf.c` in Firmware calls `am13e_app_motor_on_bemf_event(capture_us,0)` and counts `rejected_events` when callback returns zero; `src/main.c` returns zero for `capture_ticks < ival/2`, but the trace does not by itself expose `ival` and `capture_us` for this event. Therefore **confirmed source observation** is `CAP1 ACK+READ, no timer programming`; **suspected cause**, not yet confirmed, is BEMF early-rejection/guard policy. It is **not** defensible to call this 'lost IRQ' or 'TIMG12 hardware fault'.
+
+Reproducible parser: `tools/e62_issue5_cap1_timer_audit.py`; UNIT negative cases `tests/test_e62_issue5_cap1_timer_audit.py`. Parser separates `READ_WITHOUT_TIMER_PROGRAMMING` from `NO_CAPTURE_ACK_OR_READ` and `INCOMPLETE_TIMER_PROGRAMMING`. No firmware policy/plant changes or fabricated CAP1; original P1 remains FAIL. Next root cause discriminator: source-qualified read-only capture of `capture_us`, `ival` and callback accept/reject at the exact problematic CAP1, then propose a bounded AM13E-specific fix with independent matrix. 
