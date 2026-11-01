@@ -1,0 +1,60 @@
+#!/usr/bin/env python3
+"""Issue #5 native timeout output audit: preserve ECAP PASS vs PWM safety.
+Read only actual native probe artifact. Fail closed on missing provenance.
+This tool deliberately does NOT assume that stop-on-timeout is original
+Rel17 recovery policy: the verdict is a separate output-state diagnostic.
+"""
+import argparse
+import json
+from pathlib import Path
+
+
+def verdict(artifact):
+    failures = []
+    report = artifact.get("g13b3i_original_no_bemf_timeout")
+    if not isinstance(report, dict):
+        return {"timeout_observed": False, "safe_off_observed": False,
+                "failures": ["NATIVE_TIMEOUT_EVIDENCE_MISSING"]}
+    before, after = report.get("pwm_before_timeout"), report.get("pwm_at_timeout")
+    if not isinstance(before, dict) or not isinstance(after, dict):
+        return {"timeout_observed": False, "safe_off_observed": False,
+                "failures": ["NATIVE_PWM_SNAPSHOTS_MISSING"]}
+    if report.get("simulator_feedback_injected") is not False:
+        failures.append("FEEDBACK_PROVENANCE_INVALID")
+    if before.get("native_pwm_valid") is not True or after.get("native_pwm_valid") is not True:
+        failures.append("NATIVE_PWM_OBSERVER_INVALID")
+    if (before.get("gate_and_pads") is not True or
+        before.get("nonzero_phase_voltage_command") is not True):
+        failures.append("PRE_TIMEOUT_POWERED_DRIVE_NOT_PROVEN")
+    if after.get("gate_and_pads") is not False:
+        failures.append("GATE_OR_PAD_STILL_CONNECTED_AT_TIMEOUT")
+    if after.get("nonzero_phase_voltage_command") is not False:
+        failures.append("ENERGIZED_PWM_IMAGE_RETAINED_AT_TIMEOUT")
+    return {
+        "timeout_observed": not any(x.endswith("MISSING") for x in failures),
+        "safe_off_observed": not failures,
+        "failures": failures,
+        "scope": "AT_TIMEOUT_SNAPSHOT_ONLY_NOT_POST_TIMEOUT_DURATION",
+        "firmware_fix_authorized": False,
+    }
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("artifact", type=Path)
+    parser.add_argument("--require-safe-off", action="store_true",
+                        help="Separate exploratory strict output gate; not Rel17 compatibility claim")
+    args = parser.parse_args()
+    try:
+        result = verdict(json.loads(args.artifact.read_text()))
+    except (OSError, ValueError) as exc:
+        parser.error(str(exc))
+    print(json.dumps(result, indent=2, sort_keys=True))
+    if not result["timeout_observed"]:
+        raise SystemExit(1)
+    if args.require_safe_off and not result["safe_off_observed"]:
+        raise SystemExit(2)
+
+
+if __name__ == "__main__":
+    main()
