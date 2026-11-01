@@ -1,0 +1,28 @@
+name: E62 Issue 5 Timeout Oracle Unit Gates
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/e62_issue5_timeout_oracle.py'
+      - 'tests/test_e62_issue5_timeout_oracle.py'
+      - '.github/workflows/e62-issue5-timeout-oracle.yml'
+  pull_request:
+    paths:
+      - 'tools/e62_issue5_timeout_oracle.py'
+      - 'tests/test_e62_issue5_timeout_oracle.py'
+      - '.github/workflows/e62-issue5-timeout-oracle.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  timeout-oracle-unit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unit-only negative and structural gates (NOT native QEMU)
+        run: |
+          python3 -m unittest -v tests/test_e62_issue5_timeout_oracle.py
+      - name: Explicit qualification boundary
+        run: |
+          echo 'UNIT_ONLY: does not establish real Guest BEMF timeout or six-pad safe-off.'
