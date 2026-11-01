@@ -477,6 +477,7 @@ _GUEST_DIAGNOSTIC_SYMBOLS = (
     "captured_events", "rejected_events", "scheduled", "serviced",
     "calibration_done", "runtime_aq_updates",
     "runtime_pwm_updates", "runtime_commit_count",
+    "am13e_bemf_diag_seq", "am13e_bemf_diag_first",
 )
 
 
