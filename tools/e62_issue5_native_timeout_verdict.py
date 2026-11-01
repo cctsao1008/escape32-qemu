@@ -30,11 +30,31 @@ def verdict(artifact):
         failures.append("GATE_OR_PAD_STILL_CONNECTED_AT_TIMEOUT")
     if after.get("nonzero_phase_voltage_command") is not False:
         failures.append("ENERGIZED_PWM_IMAGE_RETAINED_AT_TIMEOUT")
+    # Repeated post-timeout native WFI observations are independent of
+    # the one-shot snapshot.  Never promote a single quiet instant to a
+    # sustained bridge-safe claim.
+    post = report.get("post_timeout_wfi_samples")
+    if not isinstance(post, list) or len(post) < 48:
+        failures.append("POST_TIMEOUT_HISTORY_INCOMPLETE")
+    else:
+        for row in post:
+            if not isinstance(row, dict) or not isinstance(row.get("pwm"), dict):
+                failures.append("POST_TIMEOUT_SAMPLE_INVALID")
+                break
+            pwm = row["pwm"]
+            if pwm.get("native_pwm_valid") is not True:
+                failures.append("POST_TIMEOUT_PWM_OBSERVER_INVALID")
+            if pwm.get("gate_and_pads") is not False:
+                failures.append("POST_TIMEOUT_GATE_OR_PAD_CONNECTED")
+            if pwm.get("nonzero_phase_voltage_command") is not False:
+                failures.append("POST_TIMEOUT_ENERGIZED_PWM_RETAINED")
+        if report.get("post_timeout_all_samples_six_off") is not True:
+            failures.append("POST_TIMEOUT_ALL_SIX_OFF_NOT_PROVEN")
     return {
         "timeout_observed": not any(x.endswith("MISSING") for x in failures),
         "safe_off_observed": not failures,
         "failures": failures,
-        "scope": "AT_TIMEOUT_SNAPSHOT_ONLY_NOT_POST_TIMEOUT_DURATION",
+        "scope": "48_POST_TIMEOUT_WFI_SNAPSHOTS_NOT_CONTINUOUS_TIME_PROOF",
         "firmware_fix_authorized": False,
     }
 
