@@ -1,0 +1,124 @@
+name: "E62 Issue5 Candidate-v2 24/47V coast and initial-angle matrix"
+on:
+  push:
+    branches: [experiment/e62-issue5-candidate-v2-validation-matrix-20261101]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-candidate-eight-cases:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {id: 24v-300-m30, profile: ecx87-kv210, angle: -30, scenario: scenarios/e62-experimental-two-demand-coast-short300.json}
+          - {id: 24v-1500-m30, profile: ecx87-kv210, angle: -30, scenario: scenarios/e62-experimental-two-demand-coast-medium1500.json}
+          - {id: 24v-3000-m30, profile: ecx87-kv210, angle: -30, scenario: scenarios/e62-experimental-two-demand-coast-long3000.json}
+          - {id: 47v-300-m30, profile: ecx87-kv210-47v-no-prop, angle: -30, scenario: scenarios/e62-experimental-two-demand-coast-short300.json}
+          - {id: 47v-1500-m30, profile: ecx87-kv210-47v-no-prop, angle: -30, scenario: scenarios/e62-experimental-two-demand-coast-medium1500.json}
+          - {id: 47v-3000-m30, profile: ecx87-kv210-47v-no-prop, angle: -30, scenario: scenarios/e62-experimental-two-demand-coast-long3000.json}
+          - {id: 24v-300-m60, profile: ecx87-kv210, angle: -60, scenario: scenarios/e62-experimental-two-demand-coast-short300.json}
+          - {id: 24v-300-p30, profile: ecx87-kv210, angle: 30, scenario: scenarios/e62-experimental-two-demand-coast-short300.json}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: carlosperate/arm-none-eabi-gcc-action@v1
+      - name: Pin candidate source, exact base reference, Original ELF and TI SDK
+        run: |
+          set -euo pipefail
+          echo '05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0  baseline/e62-g13b3/firmware/AM13E-rev17.3.elf' | sha256sum -c -
+          git clone -q --depth 1 -b experiment/e62-issue5-pinned-first-cross-20261101 https://github.com/cctsao1008/ESCape32.git candidate-escape32
+          test "$(git -C candidate-escape32 rev-parse HEAD)" = "bae1ada4c4c9d9d0d0098b1d75cf8a70312eaa3e"
+          git clone -q --depth 1 https://github.com/TexasInstruments/am13e2x_sdk.git /tmp/am13e-sdk
+          git -C /tmp/am13e-sdk fetch -q --depth 1 origin b872469ceef18de5e39a1d3acb0821ec158b44c7
+          git -C /tmp/am13e-sdk checkout -q --detach b872469ceef18de5e39a1d3acb0821ec158b44c7
+      - name: Build exact SIM_ONLY candidate v2, never flash real hardware
+        run: |
+          set -euo pipefail
+          cmake -S candidate-escape32 -B candidate-build \
+            -DESCAPE32_BUILD_AM13E=ON -DAM13E_SDK_ROOT=/tmp/am13e-sdk \
+            -DAM13E_BOOT_LINKER_SCRIPT="$PWD/candidate-escape32/boot/mcu/AM13E/config.ld" \
+            -DAM13E_BOARD_BOARD_PROFILE_FILE="$PWD/tests/fixtures/g13b3l_sim_only_ramp.cmake" \
+            -DG13B2_SIM_ONLY_OPT_IN=ON -DG13B2_SIM_ONLY_IDEAL_BEMF_REFERENCE=ON
+          cmake --build candidate-build --target AM13E-rev17.3.elf -j 3
+          sha="$(sha256sum candidate-build/AM13E-rev17.3.elf | cut -d' ' -f1)"
+          [[ "$sha" != "05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0" ]]
+          echo "CANDIDATE_SHA=$sha" >> "$GITHUB_ENV"
+          arm-none-eabi-size candidate-build/AM13E-rev17.3.elf
+      - name: Build unchanged QEMU model and native motor monitor
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            libglib2.0-dev libpixman-1-dev libfdt-dev pkg-config meson ninja-build binutils-arm-none-eabi
+          git submodule update --init --depth 1 qemu
+          ./build.sh
+          mkdir -p artifacts/e62-v2-matrix
+      - name: Run actual Guest, genuine DShot600, specified model and startup state
+        run: |
+          set -euo pipefail
+          root="artifacts/e62-v2-matrix/${{ matrix.id }}"
+          elf="candidate-build/AM13E-rev17.3.elf"
+          python3 tools/sim_motor_cfg.py --sim-only-opt-in --elf "$elf" \
+            --motor-profile "${{ matrix.profile }}" --output "$root-g13b3-cfg-flash.bin"
+          python3 tests/e62_autonomous_native_motor_probe.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf "$elf" --experimental-candidate-sha256 "$CANDIDATE_SHA" \
+            --sim-mcpwm-root-clock-hz 200000000 --sim-bemf-waveform historical_sine \
+            --sim-motor-profile "${{ matrix.profile }}" --sim-native-adc-bemf \
+            --sim-initial-electrical-degrees ${{ matrix.angle }} \
+            --cfg-flash "$root-g13b3-cfg-flash.bin" \
+            --scenario "${{ matrix.scenario }}" --wall-timeout-s 600 --artifact "$root.json"
+      - name: Fail closed on real negative rotation or non-forward demand ending
+        run: |
+          set -euo pipefail
+          root="artifacts/e62-v2-matrix/${{ matrix.id }}"
+          python3 tools/e62_issue5_candidate_metrics.py \
+            --evidence "$root.json" --events "$root.p0.events.log" \
+            --output "$root-candidate-metrics.json"
+      - name: Preserve all measured evidence, including candidate failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-v2-${{ matrix.id }}
+          path: |
+            artifacts/e62-v2-matrix/**
+            candidate-build/AM13E-rev17.3.elf
+          if-no-files-found: warn
+          retention-days: 21
+  summarize:
+    if: always()
+    needs: source-candidate-eight-cases
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: e62-v2-*
+          merge-multiple: true
+          path: artifacts/e62-v2-matrix
+      - name: Report all cases and do not replace Original P1 FAIL
+        run: |
+          python3 - <<'PY'
+          import pathlib,json
+          base=pathlib.Path("artifacts/e62-v2-matrix")
+          ids=("24v-300-m30","24v-1500-m30","24v-3000-m30","47v-300-m30",
+               "47v-1500-m30","47v-3000-m30","24v-300-m60","24v-300-p30")
+          problems=[]
+          for item in ids:
+              p=base/f"{item}-candidate-metrics.json"
+              if not p.exists():
+                  print(item,"INCOMPLETE"); problems.append(item);continue
+              d=json.loads(p.read_text())
+              a=d["first_and_second_start"]["1"]
+              b=d["first_and_second_start"]["3"]
+              passed=d["candidate_start_reacquisition_qualified"]
+              print(item,"CANDIDATE_SIM_ONLY_PASS" if passed else "CANDIDATE_FAIL",
+                    "minimumRPM",a["min_rpm"],b["min_rpm"],
+                    "finalRPM",a["final_rpm"],b["final_rpm"],
+                    "reverseSamples",a["negative_below_50rpm_count"],b["negative_below_50rpm_count"])
+              if not passed: problems.append(item)
+          print("ORIGINAL_REl17_P1_REMAINS_FAIL_AND_SEPARATE; NOT_REAL_HARDWARE")
+          print("MATRIX_FAIL_OR_INCOMPLETE" if problems else "MATRIX_CANDIDATE_SIM_ONLY_PASS",problems)
+          if problems:raise SystemExit(2)
+          PY
