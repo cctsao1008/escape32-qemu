@@ -1,6 +1,6 @@
 """UNIT_ONLY tests: physical Guest read-only BEMF decision ring decoding."""
 import unittest
-from tools.e62_issue5_bemf_diag import snapshot, decode_entry
+from tools.e62_issue5_bemf_diag import snapshot, snapshot_first, decode_entry
 
 
 class RingTests(unittest.TestCase):
@@ -20,6 +20,23 @@ class RingTests(unittest.TestCase):
         result = snapshot(mem.__getitem__, 0x100, 0x1000)
         self.assertEqual((result["entries"][0]["seq"], result["entries"][-1]["seq"]), (2, 65))
         self.assertTrue(result["overwritten"])
+
+    def test_persistent_first_history_survives_ring_wrap(self):
+        mem = {0x100: 99}
+        for seq in range(64):
+            addr = 0x2000 + seq * 24
+            for i, value in enumerate([seq, 400+seq, 10000, 0, 1, 2]):
+                mem[addr + i*4] = value
+        result = snapshot_first(mem.__getitem__, 0x100, 0x2000)
+        self.assertEqual(len(result["entries"]), 64)
+        self.assertTrue(result["first_history_capped"])
+        self.assertEqual(result["entries"][0]["capture_us"], 400)
+        self.assertEqual(result["entries"][63]["capture_us"], 463)
+
+    def test_missing_first_history_word_fails(self):
+        mem = {0x100: 1}
+        with self.assertRaises(KeyError):
+            snapshot_first(mem.__getitem__, 0x100, 0x2000)
 
     def test_invalid_decision_fails(self):
         with self.assertRaises(ValueError):
