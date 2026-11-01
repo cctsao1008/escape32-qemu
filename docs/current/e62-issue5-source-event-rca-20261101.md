@@ -33,3 +33,29 @@ For each failing demand, extract the **first physical PWM sector/phase-to-phase 
 - missing valid comparator edge in low BEMF = observability/re-acquisition design limit or analog/model defect, not automatically a firmware bug.
 
 No firmware or QEMU plant changes were made in this evidence analysis; Issue #5 remains OPEN.
+
+
+## Completed eight-artifact first-event sweep
+
+Retrieved all eight separate CI artifact ZIPs from run `41291196333` (original archive entries `*.p0.events.log`, `*.json`, `*-candidate-metrics.json`) and parsed source event timestamps. All three previously documented cases remain consistent. Times are relative to the relevant DShot demand start.
+
+| Case | Demand | First PWM_PAIR ms | First CAP1 ms | First TIMG12 ms | First rotor < −50 RPM ms | Demand min RPM |
+|---|---|---:|---:|---:|---:|---:|
+| 24V 300ms −30° PASS | first | 0.267 | 2.699 | 3.328 | none | +20.238 |
+| 24V 300ms −30° PASS | second | 0.267 | 0.770 | 0.917 | none | +45.701 |
+| 24V 1500ms −30° FAIL | second | 0.267 | 6.073 | 8.317 | **1.836** | −344.114 |
+| 24V 3000ms −30° FAIL | second | 0.267 | 6.075 | 8.320 | **2.838** | −344.090 |
+| 47V 300ms −30° FAIL | first | 0.267 | 2.120 | 2.604 | **20.830** | −673.868 |
+| 47V 1500ms −30° FAIL | first | 0.267 | 2.120 | 2.604 | **20.830** | −670.850 |
+| 47V 3000ms −30° FAIL | first | 0.267 | 2.120 | 2.604 | **20.830** | −673.868 |
+| 24V 300ms −60° FAIL | first | 0.517 | 1.083 | 1.247 | **1.848** | −334.723 |
+| 24V 300ms +30° FAIL | first | 0.267 | 1.170 | 1.417 | **1.830** | −216.026 |
+
+For completeness, second demand at 47V/300ms becomes <−50RPM **+1.831ms** before first CAP1 **+4.777ms**; 47V/1500ms second demand crosses <−50RPM **+7.831ms** after first CAP1 **+3.559ms**; 47V/3000ms second demand crosses at **+1.833ms** after CAP1 **+0.838ms**. First negative time is a sampled crossing; no motor/prop qualification.
+
+### Fault-class consequences
+- **Pre-CAP1 reversal:** 24V/1500, 24V/3000, 47V/300 second demand. Changing a CAP1 interval filter **cannot by itself correct the torque command which precedes that first event**. Investigate first PWM sector and residual rotor angle/speed, open-loop startup, stale `oldstep`, and QEMU torque phase orientation.
+- **Post-CAP1 reversal:** all 47V first demands and ±angle first demands; requires physical angle/torque-to-sector correlation and sensing/handoff analysis. A CAP1 occurrence is not a proof of correct rotation lock.
+- **Mixed second-demand behavior:** 47V/1500 and 47V/3000 must remain distinct, not lumped with 24V long-coast.
+
+No verified Firmware-only fix follows from RPM/event ordering alone. Core Firmware vs QEMU motor-phase-model attribution awaits matched electrical-angle and signed torque evidence. The v2 Candidate 1/8 outcome remains blocking.
