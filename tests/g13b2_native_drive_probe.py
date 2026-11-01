@@ -1557,6 +1557,7 @@ def run(args):
     except ValueError:
         symbols["bemf_fault"] = None
     bemf_state = {}
+    from tools.e62_issue5_bemf_diag import snapshot as read_bemf_diag
     for name in ("cfg","tick","throt","erpm","valid_frame_feeds",
                   "calibration_done", "calibration_ticks",
                  "capture_ticks_per_ms", "capture_timeout_ticks",
@@ -1570,7 +1571,8 @@ def run(args):
                  "runtime_phase_pending", "physical_shadow_dirty",
                  "physical_runtime_image", "step", "sine", "prep",
                  "sync", "oldstep", "timer_armed",
-                 "runtime_aq_last", "logical_aq", "logical_compare"):
+                 "runtime_aq_last", "logical_aq", "logical_compare",
+                 "am13e_bemf_diag_seq", "am13e_bemf_diag_ring"):
         try:
             bemf_state[name] = symbol_address(args.elf, name)
         except RuntimeError:
@@ -2421,6 +2423,16 @@ def run(args):
                         else:
                             print("G13B2E_OPEN_NO_POSITIVE_NATIVE_DRIVE_PROOF",
                                   flush=True)
+                        # Optional non-invasive Firmware ring snapshot at the
+                        # original Guest halt checkpoint. Original builds do
+                        # not export the symbols and remain unchanged.
+                        if (args.issue5_bemf_diag and
+                                "am13e_bemf_diag_seq" in bemf_state and
+                                "am13e_bemf_diag_ring" in bemf_state):
+                            evidence["e62_issue5_bemf_decisions"] = read_bemf_diag(
+                                rsp.mem32,
+                                bemf_state["am13e_bemf_diag_seq"],
+                                bemf_state["am13e_bemf_diag_ring"])
                     finally:
                         # Keep the original failure visible if the
                         # simulator's control sockets became unresponsive.
@@ -2588,6 +2600,9 @@ def main():
                    help="G13B3L only, explicit SIM_ONLY stationary rotor "
                         "magnetic phase relative to initial six-step sector; "
                         "never an initial RPM or synthetic BEMF stimulus")
+    p.add_argument("--issue5-bemf-diag", action="store_true",
+                   help="Read-only source Firmware BEMF accept/reject ring "
+                        "at native Guest checkpoint (candidate ELF only)")
     p.add_argument("--require-native-no-bemf-timeout",
                    action="store_true",
                    help="G13B3I original native ECAP/SysTick no-valid-BEMF "
