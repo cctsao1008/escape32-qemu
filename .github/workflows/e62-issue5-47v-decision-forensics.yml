@@ -1,0 +1,92 @@
+name: E62 Issue 5 Candidate v2 47V BEMF Decision Forensics
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'tests/e62_autonomous_native_motor_probe.py'
+      - 'tools/e62_issue5_bemf_diag.py'
+      - '.github/workflows/e62-issue5-47v-decision-forensics.yml'
+permissions:
+  contents: read
+jobs:
+  source-candidate-v2-47v:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: carlosperate/arm-none-eabi-gcc-action@v1
+      - name: Pin identical Candidate v2 control policy plus passive diagnostic
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone -q --depth 1 -b experiment/e62-issue5-v2-bemf-diagnostic-20261102 https://github.com/cctsao1008/ESCape32.git candidate-escape32
+          test "$(git -C candidate-escape32 rev-parse HEAD)" = "0fb6c00c243e29d96071245ff90d9bc953ec1d83"
+          git clone -q https://github.com/TexasInstruments/am13e2x_sdk.git /tmp/am13e-sdk
+          git -C /tmp/am13e-sdk checkout -q --detach b872469ceef18de5e39a1d3acb0821ec158b44c7
+      - name: Build exact source and preserve firmware fingerprints
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          cmake -S candidate-escape32 -B candidate-build \
+            -DESCAPE32_BUILD_AM13E=ON -DAM13E_SDK_ROOT=/tmp/am13e-sdk \
+            -DAM13E_BOOT_LINKER_SCRIPT="$PWD/candidate-escape32/boot/mcu/AM13E/config.ld" \
+            -DAM13E_BOARD_BOARD_PROFILE_FILE="$PWD/tests/fixtures/g13b3l_sim_only_ramp.cmake"
+          cmake --build candidate-build --target AM13E-rev17.3.elf -j 3
+          arm-none-eabi-nm candidate-build/AM13E-rev17.3.elf > artifacts/e62-issue5-v2-diagnostic-symbols.txt
+          for symbol in am13e_bemf_diag_seq am13e_bemf_diag_ring am13e_bemf_diag_first; do
+            grep -Eq "[[:space:]][BD] $symbol$" artifacts/e62-issue5-v2-diagnostic-symbols.txt
+          done
+          arm-none-eabi-size candidate-build/AM13E-rev17.3.elf | tee artifacts/e62-issue5-v2-diagnostic-size.txt
+          sha256sum candidate-build/AM13E-rev17.3.elf | tee artifacts/e62-issue5-v2-diagnostic-sha256.txt
+      - name: Build source QEMU; preserve immutable Original
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libglib2.0-dev libpixman-1-dev libfdt-dev pkg-config meson ninja-build binutils-arm-none-eabi
+          git submodule update --init --depth 1 qemu
+          ./build.sh
+          echo '05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0  baseline/e62-g13b3/firmware/AM13E-rev17.3.elf' | sha256sum -c -
+      - name: Native 47V source DShot two demands, real Guest decision history
+        shell: bash
+        run: |
+          set -euo pipefail
+          elf=candidate-build/AM13E-rev17.3.elf
+          sha="$(sha256sum "$elf" | cut -d' ' -f1)"
+          root=artifacts/e62-issue5-47v-300-m30-diagnostic
+          python3 tools/sim_motor_cfg.py --sim-only-opt-in --elf "$elf" \
+            --motor-profile ecx87-kv210-47v-no-prop \
+            --output "$root-g13b3-cfg-flash.bin"
+          python3 tests/e62_autonomous_native_motor_probe.py \
+            --qemu .build/qemu-src/build/qemu-system-arm \
+            --elf "$elf" --experimental-candidate-sha256 "$sha" \
+            --issue5-bemf-diag \
+            --sim-mcpwm-root-clock-hz 200000000 \
+            --sim-bemf-waveform historical_sine \
+            --sim-motor-profile ecx87-kv210-47v-no-prop --sim-native-adc-bemf \
+            --sim-initial-electrical-degrees -30 \
+            --cfg-flash "$root-g13b3-cfg-flash.bin" \
+            --scenario scenarios/e62-experimental-two-demand-coast-short300.json \
+            --wall-timeout-s 600 --artifact "$root.json" \
+            2>&1 | tee "$root.log"
+          python3 tools/e62_issue5_cap1_timer_audit.py "$root.p0.events.log" \
+            --begin-ms 1508 --end-ms 1513 \
+            > "$root-cap1-timer-audit.json"
+          python3 - "$root.json" <<'PY'
+          import json,sys
+          doc=json.load(open(sys.argv[1]))
+          first=doc.get("issue5_bemf_first_history")
+          if not isinstance(first,dict) or not first.get("entries"):
+              raise SystemExit("NO_FIRMWARE_BEMF_DECISIONS")
+          print("ISSUE5_BEMF_FIRST_HISTORY",json.dumps(first,sort_keys=True))
+          PY
+      - name: Keep all artifacts even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e62-issue5-candidate-v2-47v-diagnostic
+          path: artifacts/e62-issue5-*
+          if-no-files-found: warn
+          retention-days: 21
