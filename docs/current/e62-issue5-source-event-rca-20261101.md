@@ -59,3 +59,21 @@ For completeness, second demand at 47V/300ms becomes <−50RPM **+1.831ms** befo
 - **Mixed second-demand behavior:** 47V/1500 and 47V/3000 must remain distinct, not lumped with 24V long-coast.
 
 No verified Firmware-only fix follows from RPM/event ordering alone. Core Firmware vs QEMU motor-phase-model attribution awaits matched electrical-angle and signed torque evidence. The v2 Candidate 1/8 outcome remains blocking.
+
+## 2026-11-01 second-stage raw event alignment
+
+The complete eight-artifact CI run `41291196333` was parsed into a local 1,839-row CSV covering the first 25 ms of each first/second demand. Preserved **uninterpreted original** six raw QEMU event payload fields `a..f` and event types `ROTOR`, `PWM_PAIR`, `CAP1`, `TIMG12`, `BEMF_FRONTEND`, `SWITCH_CURRENT`. Avoid assigning physical torque units to raw fields without verifying the QEMU emitter implementation.
+
+Focused examples:
+
+| Source event | 24 V / 300ms PASS second demand | 24 V / 1500ms FAIL second demand |
+|---|---|---|
+| First `PWM_PAIR` | +0.267 ms, a=4 b=6 | +0.267 ms, a=4 b=6 |
+| First `ROTOR` sample | +0.836 ms, raw RPM=+45.701, raw angle=3912701 | +0.836 ms, raw RPM=−3.321, raw angle=3958517 |
+| Second `ROTOR` sample | +1.836 ms, +155.738 RPM, raw angle=3912905 | +1.836 ms, −85.268 RPM, raw angle=3958429 |
+| First `CAP1` | +0.770 ms | +6.073 ms |
+| First `TIMG12` | +0.917 ms | +8.317 ms |
+
+**Inference supported:** the initial source PWM_PAIR payload matches while rotor phase differs by 45,816 raw angle units (do not convert to electrical degrees without QEMU format verification). The failing case produces significant reverse RPM before any accepted CAP1; merely adjusting post-capture ival cannot repair that first interval. This is *not yet proof* of a firmware bug because the motor/torque phase mapping may be wrong. Need QEMU emitter raw-field interpretation and torque sign validation from actual source.
+
+47 V first demand: CAP1 +2.120 ms, TIMG12 +2.604 ms, first sampled negative beyond −50 RPM +20.830 ms; a different downstream mode requires subsequent commutation/torque alignment. All eight cases still 1 PASS/7 FAIL; no firmware revision claimed.
