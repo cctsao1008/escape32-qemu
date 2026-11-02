@@ -8,6 +8,8 @@ on:
       - 'tools/e62_issue5_cap1_timer_audit.py'
       - 'tests/test_e62_issue5_cap1_timer_audit.py'
       - 'tools/e62_issue5_bemf_diag.py'
+      - 'tools/e62_issue5_bemf_decision_verdict.py'
+      - 'tests/test_e62_issue5_bemf_decision_verdict.py'
       - 'tests/test_e62_issue5_bemf_diag.py'
       - 'tools/e62_issue5_native_timeout_verdict.py'
       - 'tests/test_e62_issue5_native_timeout_verdict.py'
@@ -19,6 +21,8 @@ on:
       - 'tools/e62_issue5_cap1_timer_audit.py'
       - 'tests/test_e62_issue5_cap1_timer_audit.py'
       - 'tools/e62_issue5_bemf_diag.py'
+      - 'tools/e62_issue5_bemf_decision_verdict.py'
+      - 'tests/test_e62_issue5_bemf_decision_verdict.py'
       - 'tests/test_e62_issue5_bemf_diag.py'
       - '.github/workflows/e62-issue5-timeout-oracle.yml'
   workflow_dispatch:
@@ -32,7 +36,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Unit-only negative and structural gates (NOT native QEMU)
         run: |
-          python3 -m unittest -v tests/test_e62_issue5_timeout_oracle.py tests/test_e62_issue5_native_timeout_verdict.py tests/test_e62_issue5_cap1_timer_audit.py tests/test_e62_issue5_bemf_diag.py
+          python3 -m unittest -v tests/test_e62_issue5_timeout_oracle.py tests/test_e62_issue5_native_timeout_verdict.py tests/test_e62_issue5_cap1_timer_audit.py tests/test_e62_issue5_bemf_diag.py tests/test_e62_issue5_bemf_decision_verdict.py
       - name: Explicit qualification boundary
         run: |
           echo 'UNIT_ONLY: does not establish real Guest BEMF timeout or six-pad safe-off.'
