@@ -74,6 +74,8 @@ jobs:
           python3 tools/e62_issue5_cap1_timer_audit.py "$root.p0.events.log" \
             --begin-ms 1508 --end-ms 1513 \
             > "$root-cap1-timer-audit.json"
+          python3 tools/e62_issue5_bemf_decision_verdict.py "$root.json" \
+            --output "$root-bemf-decision-verdict.json"
           python3 - "$root.json" <<'PY'
           import json,sys
           doc=json.load(open(sys.argv[1]))
