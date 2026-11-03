@@ -130,34 +130,19 @@ static void am13e_pwm4_hist_schedule(AM13ESimPWM *p)
         return;
     }
     uint32_t hz = am13e_pwm4_hz(p);
-    if (!hz || target <= now_ctr) {
-        return;
+    uint32_t base = p->counter_base %
+        ((p->reg[0x14U / 4U] & 0xffffU) + 1U);
+    if (!hz || target <= base) {
+        return;  /* May have reset counter mid-carrier; no prediction. */
     }
-
-    /*
-     * Schedule from the CURRENT observed TBCTR phase, not from the older
-     * epoch/counter_base anchor. Guest MMIO and shadow/clock boundaries can
-     * refresh the history model mid-carrier; reusing the old absolute anchor
-     * after such a refresh can place an otherwise-future target in the past.
-     *
-     * Keep sub-tick phase so this is not a one-tick-delayed approximation:
-     * am13e_pwm4_count() uses floor(elapsed*hz/1e9), therefore the remaining
-     * time to target is (target-now_ctr-frac_tick)/hz.
-     */
+    uint64_t offset = ((uint64_t)(target-base) * UINT64_C(1000000000)
+                       + hz-1U) / hz;
+    int64_t deadline = p->epoch_ns + (int64_t)offset;
     int64_t now = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
-    int64_t elapsed = now - p->epoch_ns;
-    uint64_t frac_num = 0U; /* fractional tick numerator, denominator 1e9 */
-    if (elapsed > 0) {
-        uint64_t rem_ns = (uint64_t)(elapsed % INT64_C(1000000000));
-        frac_num = (rem_ns * (uint64_t)hz) % UINT64_C(1000000000);
-    }
-    uint64_t tick_num =
-        (uint64_t)(target - now_ctr) * UINT64_C(1000000000) - frac_num;
-    uint64_t ns = (tick_num + hz - 1U) / hz;
-    int64_t deadline = now + (int64_t)MAX(ns, UINT64_C(1));
-
     if (deadline <= now) {
-        /* Arithmetic/provenance invariant: never fabricate a past edge. */
+        /* Never invent earlier edges at "now" after a late callback.
+         * A scheduled historic edge must be strictly future-dated.
+         */
         p->hist_model_valid = false;
         p->hist_invalid_count++;
         p->hist_invalid_late_count++;
