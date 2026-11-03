@@ -315,6 +315,9 @@ typedef struct AM13ESimPWM {
     AM13EPWMHistoryRecord hist_records[AM13E_H_CAPACITY];
     uint64_t hist_total, hist_dropped, hist_last_time_ns;
     uint32_t hist_mask, hist_invalid_count, hist_gate_word;
+    uint32_t hist_invalid_eval_count;
+    uint32_t hist_invalid_late_count;
+    uint32_t hist_invalid_drive_window_count;
     bool hist_model_valid;
     /* Prior ACTIVE carrier image for RED/FED lookback across ZERO.
      * These are QEMU internal levels, not physical gate voltages. */
@@ -1942,6 +1945,9 @@ static void am13e_pwm4_reset(AM13ESimPWM *p)
     memset(p->hist_records,0,sizeof(p->hist_records));
     p->hist_total=p->hist_dropped=p->hist_last_time_ns=0;
     p->hist_mask=p->hist_invalid_count=p->hist_gate_word=0;
+    p->hist_invalid_eval_count=0U;
+    p->hist_invalid_late_count=0U;
+    p->hist_invalid_drive_window_count=0U;
     p->hist_model_valid=false;
     p->previous_carrier_valid=false;
     memset(p->previous_carrier_reg,0,sizeof(p->previous_carrier_reg));
