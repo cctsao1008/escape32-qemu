@@ -360,6 +360,9 @@ def _pwm_source_snapshot(qtest):
         "native_pwm_zero_callbacks": get(0x28),
         "native_pwm_invalid_level_events": get(0x40),
         "effective_mcpwm_root_clock_hz": get(0x44),
+        "native_pwm_invalid_eval_events": get(0x48),
+        "native_pwm_invalid_late_events": get(0x4c),
+        "native_pwm_invalid_drive_window_events": get(0x50),
     }
     if records:
         aux = get(0x80+(records-1)*32+0x1c)
