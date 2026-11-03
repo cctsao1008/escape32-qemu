@@ -72,10 +72,13 @@ def main() -> int:
     print()
     print(f"PWM_HIST_LATE count={len(late)}")
     for st, ev in late:
-        rk = REFRESH_KIND.get(ev["a"], str(ev["a"]))
+        refresh_code = (ev["a"] >> 32) & 0xffffffff
+        reg = ev["a"] & 0xffffffff
+        rk = REFRESH_KIND.get(refresh_code, str(refresh_code))
+        reg_text = "-" if reg == 0xffffffff else f"0x{reg:03x}"
         print(
             f"stage={STAGE_NAMES.get(st, str(st))} "
-            f"vns={ev['vns']} refresh={rk} "
+            f"vns={ev['vns']} refresh={rk} reg={reg_text} "
             f"now_ctr={ev['b']} target={ev['c']} base={ev['d']} "
             f"late_ns={ev['e']} zero_events={ev['f']}"
         )
