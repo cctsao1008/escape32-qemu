@@ -1904,10 +1904,11 @@ static void am13e_pwm4_zero_event(void *opaque)
     /* ZERO timestamp is a callback actually executed at this virtual
      * time. Shadow load (if armed) precedes the next carrier's model.
      */
+    p->hist_refresh_reg=UINT32_MAX;
     am13e_pwm4_hist_refresh(p,AM13E_H_ZERO,true);
     if (shadow_loaded) {
         /* Report both one-shot and continuous ACTIVE shadow loads. */
-        p->hist_refresh_reg=(uint32_t)off;
+        p->hist_refresh_reg=UINT32_MAX;
         am13e_pwm4_hist_refresh(p,AM13E_H_SHADOW,true);
     }
 }
@@ -1929,6 +1930,7 @@ static void am13e_pwm4_clock_update(AM13ESimPWM *p)
         p->epoch_ns = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
         am13e_pwm4_rearm(p);
     }
+    p->hist_refresh_reg=UINT32_MAX;
     am13e_pwm4_hist_refresh(p,AM13E_H_CLOCK,before!=p->running);
     if (before != p->running) {
         p->previous_carrier_valid=false; /* no continuous carrier */
@@ -2274,6 +2276,7 @@ static MemTxResult am13e_pwm4_write(void *opaque, hwaddr off,
         }
         am13e_g13b2_trip_update(p->machine);
         am13e_pwm4_irq_update(p);
+        p->hist_refresh_reg=(uint32_t)off;
         am13e_pwm4_hist_refresh(p,AM13E_H_TRIP,false);
         am13e_auto_route_changed(p->machine);
         return MEMTX_OK;
@@ -2282,6 +2285,7 @@ static MemTxResult am13e_pwm4_write(void *opaque, hwaddr off,
         if (data & 1U) p->latch = true;
         if (data & 4U) {
             am13e_pwm4_shadow_load(p);
+            p->hist_refresh_reg=(uint32_t)off;
             am13e_pwm4_hist_refresh(p,AM13E_H_SHADOW,true);
         }
         return MEMTX_OK;
@@ -2295,6 +2299,7 @@ static MemTxResult am13e_pwm4_write(void *opaque, hwaddr off,
          * writes still refresh immediately.
          */
         if (!am13e_pwm4_shadow_only_reg(off)) {
+            p->hist_refresh_reg=(uint32_t)off;
             am13e_pwm4_hist_refresh(p,AM13E_H_GUEST_REG,false);
         }
         return MEMTX_OK;
