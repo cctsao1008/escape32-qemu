@@ -318,6 +318,7 @@ typedef struct AM13ESimPWM {
     uint32_t hist_invalid_eval_count;
     uint32_t hist_invalid_late_count;
     uint32_t hist_invalid_drive_window_count;
+    uint32_t hist_refresh_reg;
     bool hist_model_valid;
     /* Prior ACTIVE carrier image for RED/FED lookback across ZERO.
      * These are QEMU internal levels, not physical gate voltages. */
@@ -1906,6 +1907,7 @@ static void am13e_pwm4_zero_event(void *opaque)
     am13e_pwm4_hist_refresh(p,AM13E_H_ZERO,true);
     if (shadow_loaded) {
         /* Report both one-shot and continuous ACTIVE shadow loads. */
+        p->hist_refresh_reg=(uint32_t)off;
         am13e_pwm4_hist_refresh(p,AM13E_H_SHADOW,true);
     }
 }
@@ -1948,6 +1950,7 @@ static void am13e_pwm4_reset(AM13ESimPWM *p)
     p->hist_invalid_eval_count=0U;
     p->hist_invalid_late_count=0U;
     p->hist_invalid_drive_window_count=0U;
+    p->hist_refresh_reg=UINT32_MAX;
     p->hist_model_valid=false;
     p->previous_carrier_valid=false;
     memset(p->previous_carrier_reg,0,sizeof(p->previous_carrier_reg));
@@ -2221,6 +2224,7 @@ static MemTxResult am13e_pwm4_write(void *opaque, hwaddr off,
         uint32_t before_period = p->reg[off / 4U] & 0xffffU;
         p->reg[off / 4U] = data & 0xffffU;
         am13e_pwm4_rearm(p);
+        p->hist_refresh_reg=(uint32_t)off;
         am13e_pwm4_hist_refresh(p,AM13E_H_GUEST_REG,false);
         if (before_period != (data & 0xffffU) &&
             ((p->reg[0x10U/4U] >> 2U) & 15U) == 5U) {
@@ -2235,6 +2239,7 @@ static MemTxResult am13e_pwm4_write(void *opaque, hwaddr off,
         p->counter_base = data & 0xffffU;
         p->epoch_ns = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
         am13e_pwm4_rearm(p);
+        p->hist_refresh_reg=(uint32_t)off;
         am13e_pwm4_hist_refresh(p,AM13E_H_GUEST_REG,true);
         return MEMTX_OK;
     case 0x90U:
@@ -2255,6 +2260,7 @@ static MemTxResult am13e_pwm4_write(void *opaque, hwaddr off,
         }
         p->reg[off / 4U] = data;
         am13e_g13b2_trip_update(p->machine);
+        p->hist_refresh_reg=(uint32_t)off;
         am13e_pwm4_hist_refresh(p,AM13E_H_TRIP,false);
         am13e_auto_route_changed(p->machine);
         return MEMTX_OK;
