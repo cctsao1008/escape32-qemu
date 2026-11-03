@@ -139,7 +139,10 @@ static bool am13e_g10_raw(AM13ESimFeedback *f)
         mux >= 3U || !f->phase_valid[mux]) {
         return false;
     }
-    bool raw = f->phase_code[mux] > (f->cmp[0x0eU / 2U] & 0x0fffU);
+    uint16_t dach = f->cmp[0x0eU / 2U] & 0x0fffU;
+    uint32_t threshold_num = ((uint32_t)dach + 1U) * 4095U;
+    uint16_t threshold = (uint16_t)((threshold_num + 2048U) / 4096U);
+    bool raw = f->phase_code[mux] > threshold;
     return raw ^ !!(f->cmp[0x00U / 2U] & 2U);
 }
 static void am13e_g10_output(AM13ESimFeedback *f, bool level)
