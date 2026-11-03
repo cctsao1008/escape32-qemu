@@ -29,6 +29,13 @@ static uint32_t am13e_pwm4_hist_gate_word(AM13ESimPWM *p)
            (((s->pincm[45] & 0xbfU) == 0x81U) << 3U);
 }
 
+static bool am13e_pwm4_hist_drive_window(AM13ESimPWM *p)
+{
+    return (am13e_pwm4_hist_gate_word(p) & 15U) == 15U &&
+           p->running &&
+           (p->reg[0xb0U / 4U] & 0x60000U) == 0U;
+}
+
 static void am13e_pwm4_hist_log(AM13ESimPWM *p, uint32_t kind,
                                 uint32_t oldmask, uint32_t newmask,
                                 uint32_t ctr, bool valid)
@@ -138,6 +145,10 @@ static void am13e_pwm4_hist_schedule(AM13ESimPWM *p)
          */
         p->hist_model_valid = false;
         p->hist_invalid_count++;
+        p->hist_invalid_late_count++;
+        if (am13e_pwm4_hist_drive_window(p)) {
+            p->hist_invalid_drive_window_count++;
+        }
         am13e_pwm4_hist_log(p,AM13E_H_INVALID,p->hist_mask,
                             p->hist_mask,now_ctr,false);
         return;
@@ -163,6 +174,10 @@ static void am13e_pwm4_hist_refresh(AM13ESimPWM *p, uint32_t kind,
     if (!valid) {
         if (p->hist_model_valid) {
             p->hist_invalid_count++;
+            p->hist_invalid_eval_count++;
+            if (am13e_pwm4_hist_drive_window(p)) {
+                p->hist_invalid_drive_window_count++;
+            }
             am13e_pwm4_hist_log(p,AM13E_H_INVALID,previous,
                                 previous,c,false);
         }
@@ -252,6 +267,9 @@ static MemTxResult am13e_pwm4_hist_read(void *opaque,hwaddr off,
     case 0x44U:*val=p->machine->esc_sim_mcpwm_root_200mhz ?
                      AM13E_SIM_PWM_MCLK_200 : AM13E_SIM_PWM_CLK;
                 return MEMTX_OK;
+    case 0x48U:*val=p->hist_invalid_eval_count;return MEMTX_OK;
+    case 0x4cU:*val=p->hist_invalid_late_count;return MEMTX_OK;
+    case 0x50U:*val=p->hist_invalid_drive_window_count;return MEMTX_OK;
     default:
         if (off<0x80U) {
             return MEMTX_ERROR;
