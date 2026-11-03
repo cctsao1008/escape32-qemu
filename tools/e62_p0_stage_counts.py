@@ -72,10 +72,16 @@ def main() -> int:
     print()
     print(f"PWM_HIST_LATE count={len(late)}")
     for st, ev in late:
-        refresh_code = (ev["a"] >> 32) & 0xffffffff
-        reg = ev["a"] & 0xffffffff
+        if 0 <= ev["a"] <= 8:
+            # Legacy trace before register-tag instrumentation: field 'a'
+            # contained only refresh_kind. Do not misdecode it as reg=0x005.
+            refresh_code = ev["a"]
+            reg_text = "legacy-unavailable"
+        else:
+            refresh_code = (ev["a"] >> 32) & 0xffffffff
+            reg = ev["a"] & 0xffffffff
+            reg_text = "-" if reg == 0xffffffff else f"0x{reg:03x}"
         rk = REFRESH_KIND.get(refresh_code, str(refresh_code))
-        reg_text = "-" if reg == 0xffffffff else f"0x{reg:03x}"
         print(
             f"stage={STAGE_NAMES.get(st, str(st))} "
             f"vns={ev['vns']} refresh={rk} reg={reg_text} "
