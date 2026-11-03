@@ -2006,13 +2006,19 @@ static bool am13e_pwm4_rw_reg(hwaddr off)
            minor == 0x30U || minor == 0x34U;
 }
 
-static bool am13e_pwm4_shadow_only_reg(hwaddr off)
+static bool am13e_pwm4_current_level_neutral_reg(hwaddr off)
 {
-    /* Writes to these registers do not change the CURRENT carrier image.
-     * They become visible only at an explicit/automatic shadow-load
-     * boundary, which already performs its own history refresh.
+    /* Writes to these registers do not change the CURRENT carrier's
+     * six-output level. Shadow data becomes visible only at its load
+     * boundary; AQCTL changes only shadow-load policy; ETPERIOD changes
+     * interrupt/event cadence, not PWM output topology.
      */
-    if (off == 0x18U || off == 0xd8U || off == 0xdcU || off == 0xf0U) {
+    if (off == 0x18U ||  /* TBPRDS: period shadow */
+        off == 0x50U ||  /* AQCTL: AQ shadow-load modes */
+        off == 0x84U ||  /* ETPERIOD: event trigger period */
+        off == 0xd8U ||  /* DBRED shadow */
+        off == 0xdcU ||  /* DBFED shadow */
+        off == 0xf0U) {  /* global-load configuration */
         return true;
     }
     if (off >= 0x100U && off <= 0x534U) {
@@ -2298,7 +2304,7 @@ static MemTxResult am13e_pwm4_write(void *opaque, hwaddr off,
          * strobe) refreshes the active image exactly once. Active-image
          * writes still refresh immediately.
          */
-        if (!am13e_pwm4_shadow_only_reg(off)) {
+        if (!am13e_pwm4_current_level_neutral_reg(off)) {
             p->hist_refresh_reg=(uint32_t)off;
             am13e_pwm4_hist_refresh(p,AM13E_H_GUEST_REG,false);
         }
