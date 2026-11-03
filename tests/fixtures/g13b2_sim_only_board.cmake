@@ -22,7 +22,6 @@ endif()
 # These values are not measurements, electrical design recommendations
 # or qualified protective thresholds for any physical power stage.
 set(AM13E_BOARD_BOARD_DEFINITIONS
-  AM13E_SIM_ONLY_BOARD_PROFILE=1
   AM13E_MOTOR_GATE_ACTIVE_LEVEL=1
   AM13E_MOTOR_PAD_INVERT_MASK=0
   AM13E_MOTOR_OUTPUT_RED_TICKS=32
@@ -37,19 +36,12 @@ set(AM13E_BOARD_BOARD_DEFINITIONS
   AM13E_OC_V_INVERT=0
   AM13E_OC_W_INVERT=0
 )
-message(STATUS
-  "G13B2 SIM_ONLY test build: virtual PB13/RED/FED/nFAULT/OC; NEVER HARDWARE-QUALIFIED")
+# The Guest uses the same board-calibrated runtime BEMF-reference path
+# as silicon. This forced include supplies only the virtual board's external
+# electrical transfer functions; it does NOT define a firmware SIM_ONLY mode
+# and never supplies a static CMPSS DAC seed.
+target_compile_options(${target} PRIVATE
+  "SHELL:-include ${CMAKE_CURRENT_LIST_DIR}/g13b2_virtual_board_calibration.h")
 
-# G13B2E experimental opt-in: ideal virtual neutral reference.
-# Original non-SC5 AM13E HAL explicitly supports setting DACH through
-# AM13E_BEMF_INITIAL_DAC_CODE in am13e_app_motor_bemf_init(), invoking
-# the REAL am13e_app_motor_bemf_reference_set() safety preconditions.
-# The uncalibrated baseline profile does not supply this assumption.
-# Code 2048 is a SIMULATED 12-bit midscale level, NOT measured E62
-# Vbus/2, PCB analog attenuation, offset, calibration, or motor data.
-if(G13B2_SIM_ONLY_IDEAL_BEMF_REFERENCE)
-  list(APPEND AM13E_BOARD_BOARD_DEFINITIONS
-    AM13E_BEMF_INITIAL_DAC_CODE=2048)
-  message(WARNING
-    "G13B2E IDEAL VIRTUAL BEMF DACH=2048 TEST ONLY: uncalibrated, NOT E62 hardware data")
-endif()
+message(STATUS
+  "G13B2 virtual board: external PB13/RED/FED/nFAULT/OC/ADC model; Guest uses runtime BEMF calibration; NEVER HARDWARE-QUALIFIED")
