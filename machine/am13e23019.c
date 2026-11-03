@@ -2001,6 +2001,23 @@ static bool am13e_pwm4_rw_reg(hwaddr off)
            minor == 0x30U || minor == 0x34U;
 }
 
+static bool am13e_pwm4_shadow_only_reg(hwaddr off)
+{
+    /* Writes to these registers do not change the CURRENT carrier image.
+     * They become visible only at an explicit/automatic shadow-load
+     * boundary, which already performs its own history refresh.
+     */
+    if (off == 0x18U || off == 0xd8U || off == 0xdcU || off == 0xf0U) {
+        return true;
+    }
+    if (off >= 0x100U && off <= 0x534U) {
+        unsigned minor = (off - 0x100U) % 0x200U;
+        return minor == 0x04U || minor == 0x0cU ||
+               minor == 0x24U || minor == 0x2cU;
+    }
+    return false;
+}
+
 static uint32_t am13e_pwm4_raw_aq_image(AM13ESimPWM *p, unsigned out,
                                         uint32_t c, bool *valid,
                                         const uint32_t *image)
@@ -2266,9 +2283,14 @@ static MemTxResult am13e_pwm4_write(void *opaque, hwaddr off,
         return am13e_pwm4_invalid(p, off, true, size);
     default:
         p->reg[off / 4U] = data;
-        /* Ordinary Guest active image writes can change modeled levels
-         * without waiting for ZERO. Shadow-only writes are harmless. */
-        am13e_pwm4_hist_refresh(p,AM13E_H_GUEST_REG,false);
+        /* Shadow-only programming must not disturb the CURRENT carrier
+         * edge timer. The transfer boundary (ZERO or explicit global-load
+         * strobe) refreshes the active image exactly once. Active-image
+         * writes still refresh immediately.
+         */
+        if (!am13e_pwm4_shadow_only_reg(off)) {
+            am13e_pwm4_hist_refresh(p,AM13E_H_GUEST_REG,false);
+        }
         return MEMTX_OK;
     }
 }
