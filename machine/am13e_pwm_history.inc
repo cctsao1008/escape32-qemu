@@ -151,8 +151,11 @@ static void am13e_pwm4_hist_schedule(AM13ESimPWM *p, uint32_t refresh_kind)
         if (am13e_pwm4_hist_drive_window(p)) {
             p->hist_invalid_drive_window_count++;
         }
+        int64_t refresh_source =
+            ((int64_t)refresh_kind << 32) |
+            (int64_t)(uint32_t)p->hist_refresh_reg;
         am13e_p0_event(p->machine, "PWM_HIST_LATE",
-                       refresh_kind, now_ctr, target, base,
+                       refresh_source, now_ctr, target, base,
                        now - deadline, p->zero_events);
         am13e_pwm4_hist_log(p,AM13E_H_INVALID,p->hist_mask,
                             p->hist_mask,now_ctr,false);
