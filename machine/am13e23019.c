@@ -3146,6 +3146,23 @@ static void am13e_sim_adc_reset(AM13ESimADC *adc)
     am13e_sim_adc_irq_update(adc);
 }
 
+/*
+ * External virtual-board VBUS sense for the Guest's normal ADC path.
+ * The matching fixture calibration models ADC pin = VBUS / 20 at 3.3 V
+ * full scale. Use the ADC's 4096-code transfer convention and fail
+ * closed instead of clipping an out-of-range board voltage.
+ */
+static bool am13e_native_vbus_adc_code(AM13ENativeMotor *m, uint16_t *out)
+{
+    const double pin_v = AM13E_NATIVE_VBUS / 20.0;
+    const long code = lround(pin_v * 4096.0 / 3.3);
+    if (!out || !isfinite(pin_v) || code <= 0L || code > 4095L) {
+        return false;
+    }
+    *out = (uint16_t)code;
+    return true;
+}
+
 static void am13e_sim_adc_complete(void *opaque)
 {
     AM13ESimADC *adc = opaque;
@@ -3176,8 +3193,28 @@ static void am13e_sim_adc_complete(void *opaque)
         const unsigned phase_soc = adc->instance == 1U ? 2U : 1U;
         const unsigned phase_channel = adc->instance == 0U ? 12U :
                                        adc->instance == 1U ? 2U : 5U;
-        if (adc->machine->esc_sim_native_adc_bemf && i == phase_soc) {
-            AM13ENativeMotor *m = &adc->machine->native_motor;
+        AM13ENativeMotor *m = &adc->machine->native_motor;
+        /* ADC1 SOC1/CH12 is the Guest's physical VBUS sense input.
+         * Feed it from the same external virtual bus that powers the
+         * motor model so firmware derives its own BEMF reference.
+         */
+        if (adc->machine->esc_sim_native_adc_bemf &&
+            adc->instance == 1U && i == 1U) {
+            uint16_t vbus_code = 0U;
+            if (channel != 12U || m->faulted ||
+                !am13e_native_vbus_adc_code(m, &vbus_code)) {
+                error_report("E62_NATIVE_ADC_VBUS_FAIL_CLOSED "
+                             "adc=%u soc=%u channel=%u fault=%u",
+                             adc->instance, i, channel,
+                             m->faulted ? 1U : 0U);
+                return;
+            }
+            adc->results[i] = vbus_code;
+            am13e_p0_event(adc->machine,"ADC_VBUS_EOC",
+                           adc->instance,adc->results[i],channel,i,
+                           (int64_t)llround(AM13E_NATIVE_VBUS*1000.0),0);
+        } else if (adc->machine->esc_sim_native_adc_bemf &&
+                   i == phase_soc) {
             if (channel != phase_channel || m->faulted) {
                 error_report("E62_SIM_NATIVE_ADC_BEMF_FAIL_CLOSED "
                              "adc=%u soc=%u channel=%u expected=%u fault=%u",
