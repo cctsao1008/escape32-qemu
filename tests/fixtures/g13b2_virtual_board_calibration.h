@@ -11,6 +11,12 @@
  *   VBUS sense:         ADC pin = VBUS / 20
  *   BEMF neutral:       phase sense = (33/470) * VBUS/2
  *   CMPSS DAC:          VDDA = 3.3 V, ideal gain/offset
+ *   reference validity: 64 ms (1024 x 16 kHz ticks)
+ *
+ * The virtual DC bus is constant over a run. Reference validity therefore
+ * exceeds the Rel17 32.768 ms BEMF timeout: loss of a zero crossing must be
+ * decided by the motor-control timeout, not by an unrelated 2 ms synthetic
+ * host-test freshness value.
  *
  * QEMU must present matching external ADC voltages. The Guest derives the
  * CMPSS DACH reference through the normal AM13E ADC/reference lifecycle.
@@ -26,5 +32,5 @@
     .phase_num={33U,33U,33U}, .phase_den={470U,470U,470U}, \
     .vdda_uv=3300000U, .dac_gain_ppm=1000000U, \
     .bus_min_uv=10000000U, .bus_max_uv=80000000U, \
-    .max_age_ticks=32U \
+    .max_age_ticks=1024U \
 }
