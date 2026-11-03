@@ -115,7 +115,7 @@ static bool am13e_pwm4_hist_next_tick(AM13ESimPWM *p, uint32_t from,
     return true;
 }
 
-static void am13e_pwm4_hist_schedule(AM13ESimPWM *p)
+static void am13e_pwm4_hist_schedule(AM13ESimPWM *p, uint32_t refresh_kind)
 {
     if (p->edge_timer) {
         timer_del(p->edge_timer);
@@ -142,6 +142,8 @@ static void am13e_pwm4_hist_schedule(AM13ESimPWM *p)
     if (deadline <= now) {
         /* Never invent earlier edges at "now" after a late callback.
          * A scheduled historic edge must be strictly future-dated.
+         * Record the exact refresh source and carrier geometry so the
+         * remaining strict-provenance failures can be fixed at source.
          */
         p->hist_model_valid = false;
         p->hist_invalid_count++;
@@ -149,6 +151,9 @@ static void am13e_pwm4_hist_schedule(AM13ESimPWM *p)
         if (am13e_pwm4_hist_drive_window(p)) {
             p->hist_invalid_drive_window_count++;
         }
+        am13e_p0_event(p->machine, "PWM_HIST_LATE",
+                       refresh_kind, now_ctr, target, base,
+                       now - deadline, p->zero_events);
         am13e_pwm4_hist_log(p,AM13E_H_INVALID,p->hist_mask,
                             p->hist_mask,now_ctr,false);
         return;
@@ -191,7 +196,7 @@ static void am13e_pwm4_hist_refresh(AM13ESimPWM *p, uint32_t kind,
     p->hist_mask=mask;
     p->hist_model_valid=true;
     am13e_native_motor_pwm_event(p, mask, true);
-    am13e_pwm4_hist_schedule(p);
+    am13e_pwm4_hist_schedule(p,kind);
 }
 
 static void am13e_pwm4_hist_edge_event(void *opaque)
