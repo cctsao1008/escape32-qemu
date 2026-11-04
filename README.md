@@ -17,6 +17,7 @@ this is not physical motor, rotor trajectory, or hardware qualification.
 ## Documentation
 
 - [System architecture and stable APIs](docs/current/architecture.md)
+- [E62 AM13E Issue #5 closure / productionization status](docs/current/e62-issue5-closure-20261104.md)
 - [G16 motor profiles: ECX87 PWM/BEMF and Guest telemetry pole Cfg](docs/current/motor-profiles.md)
 - [G17–G20 BEMF timing, QEMU filter correction and strict rotor evidence](docs/current/g17-g20-p0.md)
 - [Test/CI matrix and honest gate meanings](docs/current/test-matrix.md)
