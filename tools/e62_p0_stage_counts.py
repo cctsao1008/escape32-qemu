@@ -7,6 +7,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 import statistics
 import math
+import bisect
 
 EVENT_RE = re.compile(
     r"E62_P0_EVENT seq=(?P<seq>\d+) vns=(?P<vns>-?\d+) "
@@ -234,6 +235,48 @@ def main() -> int:
             f"{vns/1e6:.3f}ms:{pair}:{err:+.1f}deg"
         )
     print(" ".join(first_errors))
+
+    print()
+    print("demand2 phase error by actual rotor direction")
+    rotor_ts = [vns for vns, _ in rotor_samples[3]]
+    rotor_rpm = [rpm/1000.0 for _, rpm in rotor_samples[3]]
+    buckets = {
+        "forward>50rpm": [],
+        "near-zero": [],
+        "reverse<-50rpm": [],
+    }
+    for vns, pair, angle in pwm_pair_samples[3]:
+        if pair not in ref_angle or not rotor_ts:
+            continue
+        i = bisect.bisect_left(rotor_ts, vns)
+        if i <= 0:
+            j = 0
+        elif i >= len(rotor_ts):
+            j = len(rotor_ts)-1
+        else:
+            j = i if rotor_ts[i]-vns < vns-rotor_ts[i-1] else i-1
+        rpm = rotor_rpm[j]
+        err = math.atan2(
+            math.sin(angle-ref_angle[pair]),
+            math.cos(angle-ref_angle[pair]))
+        if rpm > 50.0:
+            buckets["forward>50rpm"].append(err)
+        elif rpm < -50.0:
+            buckets["reverse<-50rpm"].append(err)
+        else:
+            buckets["near-zero"].append(err)
+    for name, errs in buckets.items():
+        if not errs:
+            print(f"{name:16s} n=0")
+            continue
+        sx = sum(math.cos(e) for e in errs)
+        sy = sum(math.sin(e) for e in errs)
+        mean_err = math.degrees(math.atan2(sy, sx))
+        r = math.hypot(sx, sy) / len(errs)
+        print(
+            f"{name:16s} n={len(errs):4d} "
+            f"mean_err={mean_err:7.1f}deg R={r:.3f}"
+        )
 
     print()
     print("demand2 rotor/pair diagnostics")
