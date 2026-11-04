@@ -38,6 +38,8 @@ def main() -> int:
 
     stage = -1
     counts = defaultdict(Counter)
+    first_vns = defaultdict(dict)
+    last_vns = defaultdict(dict)
     late = []
     dshot_first = {}
     dshot_last = {}
@@ -55,6 +57,8 @@ def main() -> int:
                 dshot_last[stage] = ev["a"]
             if kind in KINDS and stage >= 0:
                 counts[stage][kind] += 1
+                first_vns[stage].setdefault(kind, ev["vns"])
+                last_vns[stage][kind] = ev["vns"]
             if kind == "PWM_HIST_LATE":
                 late.append((stage, ev))
 
@@ -68,6 +72,19 @@ def main() -> int:
             frames = "-"
         print(f"{name:10s} {frames:>11s} " +
               " ".join(f"{counts[st][k]:12d}" for k in KINDS))
+
+    print()
+    print("event windows (ms from scenario start)")
+    for st in range(5):
+        name = STAGE_NAMES[st]
+        parts = []
+        for kind in KINDS:
+            if kind in first_vns[st]:
+                parts.append(
+                    f"{kind}={first_vns[st][kind]/1e6:.3f}.."
+                    f"{last_vns[st][kind]/1e6:.3f}"
+                )
+        print(f"{name:10s} " + (" ".join(parts) if parts else "-"))
 
     print()
     print(f"PWM_HIST_LATE count={len(late)}")
