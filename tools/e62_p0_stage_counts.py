@@ -6,6 +6,7 @@ import re
 from collections import Counter, defaultdict
 from pathlib import Path
 import statistics
+import math
 
 EVENT_RE = re.compile(
     r"E62_P0_EVENT seq=(?P<seq>\d+) vns=(?P<vns>-?\d+) "
@@ -45,6 +46,7 @@ def main() -> int:
     rotor_millirpm = defaultdict(list)
     rotor_samples = defaultdict(list)
     pwm_pairs = defaultdict(list)
+    pwm_pair_angles = defaultdict(lambda: defaultdict(list))
     late = []
     dshot_first = {}
     dshot_last = {}
@@ -70,6 +72,7 @@ def main() -> int:
                     rotor_samples[stage].append((ev["vns"], ev["a"]))
                 elif kind == "PWM_PAIR":
                     pwm_pairs[stage].append((ev["vns"], ev["a"], ev["b"]))
+                    pwm_pair_angles[stage][ev["a"]].append(ev["d"] / 1000.0)
             if kind == "PWM_HIST_LATE":
                 late.append((stage, ev))
 
@@ -136,6 +139,40 @@ def main() -> int:
             f"{STAGE_NAMES[st]:10s} first24=[{prefix}] "
             f"top_transitions=[{top}]"
         )
+
+    print()
+    print("PWM pair electrical-angle summary")
+    for st in (1, 3):
+        parts = []
+        for pair in (8, 2, 3, 6, 4, 7):
+            vals = pwm_pair_angles[st][pair]
+            if not vals:
+                continue
+            sx = sum(math.cos(v) for v in vals)
+            sy = sum(math.sin(v) for v in vals)
+            mean = math.atan2(sy, sx)
+            deg = (math.degrees(mean) + 360.0) % 360.0
+            r = math.hypot(sx, sy) / len(vals)
+            parts.append(f"{pair}:{deg:.1f}deg/R={r:.3f}")
+        print(f"{STAGE_NAMES[st]:10s} " + " ".join(parts))
+
+    if pwm_pair_angles[1] and pwm_pair_angles[3]:
+        print("pair angle delta demand2-demand1")
+        deltas = []
+        for pair in (8, 2, 3, 6, 4, 7):
+            a1 = pwm_pair_angles[1][pair]
+            a2 = pwm_pair_angles[3][pair]
+            if not a1 or not a2:
+                continue
+            m1 = math.atan2(sum(math.sin(v) for v in a1),
+                            sum(math.cos(v) for v in a1))
+            m2 = math.atan2(sum(math.sin(v) for v in a2),
+                            sum(math.cos(v) for v in a2))
+            d = math.degrees(math.atan2(math.sin(m2-m1), math.cos(m2-m1)))
+            deltas.append(d)
+            print(f"pair={pair} delta={d:.1f}deg")
+        if deltas:
+            print(f"mean_abs_delta={sum(abs(x) for x in deltas)/len(deltas):.1f}deg")
 
     print()
     print("demand2 rotor/pair diagnostics")
