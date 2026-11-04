@@ -5,6 +5,7 @@ import argparse
 import re
 from collections import Counter, defaultdict
 from pathlib import Path
+import statistics
 
 EVENT_RE = re.compile(
     r"E62_P0_EVENT seq=(?P<seq>\d+) vns=(?P<vns>-?\d+) "
@@ -40,6 +41,8 @@ def main() -> int:
     counts = defaultdict(Counter)
     first_vns = defaultdict(dict)
     last_vns = defaultdict(dict)
+    event_vns = defaultdict(lambda: defaultdict(list))
+    rotor_millirpm = defaultdict(list)
     late = []
     dshot_first = {}
     dshot_last = {}
@@ -59,6 +62,9 @@ def main() -> int:
                 counts[stage][kind] += 1
                 first_vns[stage].setdefault(kind, ev["vns"])
                 last_vns[stage][kind] = ev["vns"]
+                event_vns[stage][kind].append(ev["vns"])
+                if kind == "ROTOR":
+                    rotor_millirpm[stage].append(ev["a"])
             if kind == "PWM_HIST_LATE":
                 late.append((stage, ev))
 
@@ -85,6 +91,32 @@ def main() -> int:
                     f"{last_vns[st][kind]/1e6:.3f}"
                 )
         print(f"{name:10s} " + (" ".join(parts) if parts else "-"))
+
+    print()
+    print("motor/cadence summary")
+    for st in range(5):
+        name = STAGE_NAMES[st]
+        rpm = rotor_millirpm[st]
+        rpm_text = "-"
+        if rpm:
+            rpm_text = (
+                f"ROTOR rpm first={rpm[0]/1000:.1f} "
+                f"last={rpm[-1]/1000:.1f} "
+                f"min={min(rpm)/1000:.1f} max={max(rpm)/1000:.1f}"
+            )
+        cadence = []
+        for kind in ("CAP1", "PWM_PAIR", "TIMG12"):
+            ts = event_vns[st][kind]
+            if len(ts) >= 2:
+                intervals_us = [(b-a)/1000.0 for a,b in zip(ts,ts[1:]) if b>a]
+                if intervals_us:
+                    med = statistics.median(intervals_us)
+                    text = f"{kind} med_dt={med:.1f}us"
+                    if kind == "CAP1" and med > 0:
+                        text += f" (~{476190.0/med:.1f}rpm)"
+                    cadence.append(text)
+        print(f"{name:10s} {rpm_text}" +
+              ((" | " + " | ".join(cadence)) if cadence else ""))
 
     print()
     print(f"PWM_HIST_LATE count={len(late)}")
