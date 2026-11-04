@@ -124,6 +124,20 @@ def main() -> int:
               ((" | " + " | ".join(cadence)) if cadence else ""))
 
     print()
+    print("PWM pair transition summary")
+    for st in (1, 3):
+        pairs = [pair for _, pair, _ in pwm_pairs[st]]
+        trans = Counter(zip(pairs, pairs[1:]))
+        top = ", ".join(
+            f"{a}->{b}:{n}" for (a,b),n in trans.most_common(12)
+        )
+        prefix = ",".join(str(x) for x in pairs[:24])
+        print(
+            f"{STAGE_NAMES[st]:10s} first24=[{prefix}] "
+            f"top_transitions=[{top}]"
+        )
+
+    print()
     print("demand2 rotor/pair diagnostics")
     st = 3
     samples = rotor_samples[st]
