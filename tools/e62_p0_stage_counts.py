@@ -187,8 +187,12 @@ def main() -> int:
             ref_angle[pair] = math.atan2(
                 sum(math.sin(v) for v in vals),
                 sum(math.cos(v) for v in vals))
-    for begin_ms in range(3300, 4800, 100):
-        end_ms = begin_ms + 100
+    demand2_begin_ms = dshot_first.get(3)
+    demand2_end_ms = (dshot_last.get(3) + 1) if 3 in dshot_last else None
+    if demand2_begin_ms is None or demand2_end_ms is None:
+        demand2_begin_ms, demand2_end_ms = 3300, 4800
+    for begin_ms in range(demand2_begin_ms, demand2_end_ms, 100):
+        end_ms = min(begin_ms + 100, demand2_end_ms)
         errs = []
         for vns, pair, angle in pwm_pair_samples[3]:
             ms = vns / 1e6
