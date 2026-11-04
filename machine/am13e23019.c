@@ -2015,6 +2015,7 @@ static bool am13e_pwm4_current_level_neutral_reg(hwaddr off)
      */
     if (off == 0x18U ||  /* TBPRDS: period shadow */
         off == 0x50U ||  /* AQCTL: AQ shadow-load modes */
+        off == 0x80U ||  /* ETSEL: event trigger source selection */
         off == 0x84U ||  /* ETPERIOD: event trigger period */
         off == 0xd8U ||  /* DBRED shadow */
         off == 0xdcU ||  /* DBFED shadow */
