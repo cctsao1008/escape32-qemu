@@ -47,6 +47,7 @@ def main() -> int:
     rotor_samples = defaultdict(list)
     pwm_pairs = defaultdict(list)
     pwm_pair_angles = defaultdict(lambda: defaultdict(list))
+    pwm_pair_samples = defaultdict(list)
     late = []
     dshot_first = {}
     dshot_last = {}
@@ -71,8 +72,10 @@ def main() -> int:
                     rotor_millirpm[stage].append(ev["a"])
                     rotor_samples[stage].append((ev["vns"], ev["a"]))
                 elif kind == "PWM_PAIR":
+                    angle = ev["d"] / 1000.0
                     pwm_pairs[stage].append((ev["vns"], ev["a"], ev["b"]))
-                    pwm_pair_angles[stage][ev["a"]].append(ev["d"] / 1000.0)
+                    pwm_pair_angles[stage][ev["a"]].append(angle)
+                    pwm_pair_samples[stage].append((ev["vns"], ev["a"], angle))
             if kind == "PWM_HIST_LATE":
                 late.append((stage, ev))
 
@@ -173,6 +176,64 @@ def main() -> int:
             print(f"pair={pair} delta={d:.1f}deg")
         if deltas:
             print(f"mean_abs_delta={sum(abs(x) for x in deltas)/len(deltas):.1f}deg")
+
+    print()
+    print("demand2 normalized phase-lock timeline (100ms bins)")
+    ref_angle = {}
+    for pair in (8, 2, 3, 6, 4, 7):
+        vals = pwm_pair_angles[1][pair]
+        if vals:
+            ref_angle[pair] = math.atan2(
+                sum(math.sin(v) for v in vals),
+                sum(math.cos(v) for v in vals))
+    for begin_ms in range(3300, 4800, 100):
+        end_ms = begin_ms + 100
+        errs = []
+        for vns, pair, angle in pwm_pair_samples[3]:
+            ms = vns / 1e6
+            if begin_ms <= ms < end_ms and pair in ref_angle:
+                errs.append(math.atan2(
+                    math.sin(angle-ref_angle[pair]),
+                    math.cos(angle-ref_angle[pair])))
+        rpm_vals = [
+            rpm/1000.0 for vns, rpm in rotor_samples[3]
+            if begin_ms <= vns/1e6 < end_ms
+        ]
+        if not errs and not rpm_vals:
+            continue
+        if errs:
+            sx = sum(math.cos(e) for e in errs)
+            sy = sum(math.sin(e) for e in errs)
+            mean_err = math.degrees(math.atan2(sy, sx))
+            lock_r = math.hypot(sx, sy) / len(errs)
+            phase_text = (
+                f"pairs={len(errs):4d} mean_err={mean_err:7.1f}deg "
+                f"R={lock_r:.3f}"
+            )
+        else:
+            phase_text = "pairs=   0 mean_err=      - R=-"
+        if rpm_vals:
+            rpm_text = (
+                f"rpm mean={statistics.mean(rpm_vals):7.1f} "
+                f"min={min(rpm_vals):7.1f} max={max(rpm_vals):7.1f}"
+            )
+        else:
+            rpm_text = "rpm -"
+        print(f"{begin_ms}..{end_ms}ms {phase_text} | {rpm_text}")
+
+    print()
+    print("demand2 first 24 pair phase errors")
+    first_errors = []
+    for vns, pair, angle in pwm_pair_samples[3][:24]:
+        if pair not in ref_angle:
+            continue
+        err = math.degrees(math.atan2(
+            math.sin(angle-ref_angle[pair]),
+            math.cos(angle-ref_angle[pair])))
+        first_errors.append(
+            f"{vns/1e6:.3f}ms:{pair}:{err:+.1f}deg"
+        )
+    print(" ".join(first_errors))
 
     print()
     print("demand2 rotor/pair diagnostics")
