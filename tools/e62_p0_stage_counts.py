@@ -43,6 +43,8 @@ def main() -> int:
     last_vns = defaultdict(dict)
     event_vns = defaultdict(lambda: defaultdict(list))
     rotor_millirpm = defaultdict(list)
+    rotor_samples = defaultdict(list)
+    pwm_pairs = defaultdict(list)
     late = []
     dshot_first = {}
     dshot_last = {}
@@ -65,6 +67,9 @@ def main() -> int:
                 event_vns[stage][kind].append(ev["vns"])
                 if kind == "ROTOR":
                     rotor_millirpm[stage].append(ev["a"])
+                    rotor_samples[stage].append((ev["vns"], ev["a"]))
+                elif kind == "PWM_PAIR":
+                    pwm_pairs[stage].append((ev["vns"], ev["a"], ev["b"]))
             if kind == "PWM_HIST_LATE":
                 late.append((stage, ev))
 
@@ -117,6 +122,41 @@ def main() -> int:
                     cadence.append(text)
         print(f"{name:10s} {rpm_text}" +
               ((" | " + " | ".join(cadence)) if cadence else ""))
+
+    print()
+    print("demand2 rotor/pair diagnostics")
+    st = 3
+    samples = rotor_samples[st]
+    if samples:
+        min_sample = min(samples, key=lambda x: x[1])
+        max_sample = max(samples, key=lambda x: x[1])
+        print(
+            f"ROTOR max={max_sample[1]/1000:.1f}rpm "
+            f"at={max_sample[0]/1e6:.3f}ms "
+            f"min={min_sample[1]/1000:.1f}rpm "
+            f"at={min_sample[0]/1e6:.3f}ms"
+        )
+        crossings = []
+        prev = samples[0]
+        for cur in samples[1:]:
+            if (prev[1] < 0 <= cur[1]) or (prev[1] > 0 >= cur[1]):
+                crossings.append((prev, cur))
+            prev = cur
+        print(f"ROTOR sign_crossings={len(crossings)}")
+        for before, after in crossings[:12]:
+            t = after[0]
+            nearby = [
+                pair for pair in pwm_pairs[st]
+                if abs(pair[0] - t) <= 5_000_000
+            ]
+            seq = ",".join(str(pair[1]) for pair in nearby[-18:])
+            print(
+                f"cross at~{t/1e6:.3f}ms "
+                f"{before[1]/1000:.1f}->{after[1]/1000:.1f}rpm "
+                f"PWM_PAIR±5ms=[{seq}]"
+            )
+    else:
+        print("no demand2 rotor samples")
 
     print()
     print(f"PWM_HIST_LATE count={len(late)}")
