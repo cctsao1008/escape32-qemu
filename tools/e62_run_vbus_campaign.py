@@ -20,5 +20,8 @@ def main():
         with out.with_suffix('.stdout.log').open('w') as log:rc=subprocess.run(cmd,cwd=root,stdout=log,stderr=subprocess.STDOUT).returncode
         if rc:failures.append(case);continue
         subprocess.run([sys.executable,'-m','tools.e62_vbus_handover_audit','--log',str(out.with_suffix('.qemu.log')),'--evidence',str(out),'--output',str(out.with_suffix('.handover.json'))],cwd=root,check=True)
-    print(json.dumps(dict(probe_failures=failures,p1_qualified=False)));return bool(failures)
+        observed=json.loads(out.with_suffix('.handover.json').read_text())['status']
+        expected={'constant':'CONSTANT_INPUT_CONTROL_OBSERVED','up-down':'SPECIFIC_SOURCE_HANDOVERS_VERIFIED','invalid-reference':'FAIL_CLOSED_OBSERVED','stale-reference':'FAIL_CLOSED_OBSERVED'}[case]
+        if observed!=expected:failures.append(case+':'+observed)
+    print(json.dumps(dict(incomplete_or_failed_cases=failures,p1_qualified=False)));return bool(failures)
 if __name__=='__main__':raise SystemExit(main())
