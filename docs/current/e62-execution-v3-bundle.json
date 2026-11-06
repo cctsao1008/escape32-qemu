@@ -1,0 +1,14 @@
+{
+  "schema": "e62.execution-bundle.v3",
+  "path": "/workspace/escape32-qemu/artifacts/e62-execution-v3-evidence.tar.gz",
+  "bytes": 50456108,
+  "sha256": "7062bc6c88b3e5e8f6f28d3082f6997b498515f087c31967257943db74631def",
+  "files": 302,
+  "verified_index_members": 301,
+  "exact_issue3_cases": 14,
+  "exact_issue3_non_sha_passes": 7,
+  "exact_issue3_failed_cases": 7,
+  "changed_sc5_native_cases": 14,
+  "changed_sc5_strict_failures": 14,
+  "hardware_qualified": false
+}
