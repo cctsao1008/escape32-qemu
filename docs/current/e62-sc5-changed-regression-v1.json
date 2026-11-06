@@ -1,0 +1,519 @@
+{
+  "schema": "e62.sc5-candidate-regression.v1",
+  "status": "FAILED",
+  "scope": "CHANGED_CODE_SC5_NEW_EXPERIMENT_NOT_ISSUE3_OR_ORIGINAL",
+  "source_commit": "759a558b0714547b45fffc56b6a76ebd25efa575",
+  "inputs": {
+    "candidate": {
+      "path": "/workspace/escape32-qemu/.build/mission-fw-sc5-changed-no-journal/AM13E-rev17.3.elf",
+      "sha256": "d7a44dcda4f836ec6da15b19398af092cc79ff102b54778b0cd58bb245f9cba6"
+    },
+    "original": {
+      "path": "/workspace/escape32-qemu/baseline/e62-g13b3/firmware/AM13E-rev17.3.elf",
+      "sha256": "05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0"
+    },
+    "qemu": {
+      "path": "/workspace/escape32-qemu/.build/qemu-src/build/qemu-system-arm",
+      "sha256": "d5f4f5102469bb6dc4012682f4d7101d01b7c26fe7c3b29cd01a8c685ba7b943"
+    },
+    "cfg": {
+      "path": "/workspace/escape32-qemu/artifacts/mission-sc5/sc5-g13b3-cfg-flash.bin",
+      "sha256": "ab144c4b281ec53feb399b45c758b1de72b2c16f252e6ff64980f263b3a51702"
+    }
+  },
+  "cases": [
+    {
+      "case": "smoke",
+      "stress": null,
+      "scenario_sha256": "120fdf49397a1c8f86868aba81aab46ecdebdcf792713bce7b1199d01fa97781",
+      "probe_exit": 0,
+      "analyzer_exit": 1,
+      "strict_status": "FAIL_P1_SIM_ONLY_OBSERVABILITY",
+      "failures": [
+        "DSHOT_VIRTUAL_CLOCK_OR_VALUE_MISMATCH",
+        "ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN",
+        "STARTUP_SIGNIFICANT_DIRECTION_REVERSAL"
+      ],
+      "direction_changes": 133,
+      "speed_signs": [
+        -1,
+        1
+      ],
+      "guest_after": {
+        "am13e_bemf_diag_first": 24174,
+        "am13e_bemf_diag_seq": 300,
+        "calibration_done": 1,
+        "captured_events": 299,
+        "rejected_events": 0,
+        "runtime_aq_updates": 300,
+        "runtime_commit_count": 3,
+        "runtime_pwm_updates": 42537,
+        "scheduled": 298,
+        "serviced": 297,
+        "step": 0,
+        "throt": 0,
+        "valid_frame_feeds": 2869
+      },
+      "source_frames": 3000,
+      "evidence": "/workspace/escape32-qemu/artifacts/sc5-changed-handover/matrix-v1/smoke-nominal.json",
+      "p1_qualified": false
+    },
+    {
+      "case": "gentle",
+      "stress": null,
+      "scenario_sha256": "2531e1b3432e1cfd9e717bd1a3682d2c7bad0f394878b1403674809782020d28",
+      "probe_exit": 0,
+      "analyzer_exit": 1,
+      "strict_status": "FAIL_P1_SIM_ONLY_OBSERVABILITY",
+      "failures": [
+        "ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN",
+        "STARTUP_SIGNIFICANT_DIRECTION_REVERSAL"
+      ],
+      "direction_changes": 178,
+      "speed_signs": [
+        -1,
+        1
+      ],
+      "guest_after": {
+        "am13e_bemf_diag_first": 24423,
+        "am13e_bemf_diag_seq": 763,
+        "calibration_done": 1,
+        "captured_events": 762,
+        "rejected_events": 0,
+        "runtime_aq_updates": 764,
+        "runtime_commit_count": 3,
+        "runtime_pwm_updates": 83494,
+        "scheduled": 762,
+        "serviced": 761,
+        "step": 0,
+        "throt": 0,
+        "valid_frame_feeds": 4786
+      },
+      "source_frames": 5000,
+      "evidence": "/workspace/escape32-qemu/artifacts/sc5-changed-handover/matrix-v1/gentle-nominal.json",
+      "p1_qualified": false
+    },
+    {
+      "case": "direct20",
+      "stress": null,
+      "scenario_sha256": "bebbdadbf3d209ec13758be197add552f8c263ddc26229c96ba0afe4bbb7da92",
+      "probe_exit": 0,
+      "analyzer_exit": 1,
+      "strict_status": "FAIL_P1_SIM_ONLY_OBSERVABILITY",
+      "failures": [
+        "ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN",
+        "STARTUP_SIGNIFICANT_DIRECTION_REVERSAL"
+      ],
+      "direction_changes": 262,
+      "speed_signs": [
+        -1,
+        1
+      ],
+      "guest_after": {
+        "am13e_bemf_diag_first": 23865,
+        "am13e_bemf_diag_seq": 138,
+        "calibration_done": 1,
+        "captured_events": 137,
+        "rejected_events": 0,
+        "runtime_aq_updates": 139,
+        "runtime_commit_count": 3,
+        "runtime_pwm_updates": 48070,
+        "scheduled": 137,
+        "serviced": 136,
+        "step": 0,
+        "throt": 0,
+        "valid_frame_feeds": 3155
+      },
+      "source_frames": 3300,
+      "evidence": "/workspace/escape32-qemu/artifacts/sc5-changed-handover/matrix-v1/direct20-nominal.json",
+      "p1_qualified": false
+    },
+    {
+      "case": "steps",
+      "stress": null,
+      "scenario_sha256": "d7b4798b271205314ebd90e5ba4ae06e0c8723c9c5a2e909669fec04b59c41b2",
+      "probe_exit": 0,
+      "analyzer_exit": 1,
+      "strict_status": "FAIL_P1_SIM_ONLY_OBSERVABILITY",
+      "failures": [
+        "ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN",
+        "STARTUP_SIGNIFICANT_DIRECTION_REVERSAL"
+      ],
+      "direction_changes": 257,
+      "speed_signs": [
+        -1,
+        1
+      ],
+      "guest_after": {
+        "am13e_bemf_diag_first": 23870,
+        "am13e_bemf_diag_seq": 131,
+        "calibration_done": 1,
+        "captured_events": 130,
+        "rejected_events": 0,
+        "runtime_aq_updates": 132,
+        "runtime_commit_count": 3,
+        "runtime_pwm_updates": 47954,
+        "scheduled": 130,
+        "serviced": 129,
+        "step": 0,
+        "throt": 0,
+        "valid_frame_feeds": 3157
+      },
+      "source_frames": 3300,
+      "evidence": "/workspace/escape32-qemu/artifacts/sc5-changed-handover/matrix-v1/steps-nominal.json",
+      "p1_qualified": false
+    },
+    {
+      "case": "ramp20_100ms",
+      "stress": null,
+      "scenario_sha256": "f2688ee5fbcc13fc2cc10f6277456e2d20d896c7bc9d68c36e603d2e29c032ca",
+      "probe_exit": 0,
+      "analyzer_exit": 1,
+      "strict_status": "FAIL_P1_SIM_ONLY_OBSERVABILITY",
+      "failures": [
+        "DSHOT_VIRTUAL_CLOCK_OR_VALUE_MISMATCH",
+        "ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN",
+        "STARTUP_SIGNIFICANT_DIRECTION_REVERSAL"
+      ],
+      "direction_changes": 186,
+      "speed_signs": [
+        -1,
+        1
+      ],
+      "guest_after": {
+        "am13e_bemf_diag_first": 24033,
+        "am13e_bemf_diag_seq": 98,
+        "calibration_done": 1,
+        "captured_events": 97,
+        "rejected_events": 0,
+        "runtime_aq_updates": 99,
+        "runtime_commit_count": 3,
+        "runtime_pwm_updates": 37941,
+        "scheduled": 97,
+        "serviced": 96,
+        "step": 0,
+        "throt": 0,
+        "valid_frame_feeds": 2676
+      },
+      "source_frames": 2800,
+      "evidence": "/workspace/escape32-qemu/artifacts/sc5-changed-handover/matrix-v1/ramp20_100ms-nominal.json",
+      "p1_qualified": false
+    },
+    {
+      "case": "ramp20_500ms",
+      "stress": null,
+      "scenario_sha256": "b760302b95efd990260b6b26a90dc201ff4784b57ab7f4add96943bf0ff1b875",
+      "probe_exit": 0,
+      "analyzer_exit": 1,
+      "strict_status": "FAIL_P1_SIM_ONLY_OBSERVABILITY",
+      "failures": [
+        "ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN",
+        "STARTUP_SIGNIFICANT_DIRECTION_REVERSAL"
+      ],
+      "direction_changes": 229,
+      "speed_signs": [
+        -1,
+        1
+      ],
+      "guest_after": {
+        "am13e_bemf_diag_first": 24145,
+        "am13e_bemf_diag_seq": 139,
+        "calibration_done": 1,
+        "captured_events": 138,
+        "rejected_events": 0,
+        "runtime_aq_updates": 140,
+        "runtime_commit_count": 3,
+        "runtime_pwm_updates": 46098,
+        "scheduled": 138,
+        "serviced": 137,
+        "step": 0,
+        "throt": 0,
+        "valid_frame_feeds": 3060
+      },
+      "source_frames": 3200,
+      "evidence": "/workspace/escape32-qemu/artifacts/sc5-changed-handover/matrix-v1/ramp20_500ms-nominal.json",
+      "p1_qualified": false
+    },
+    {
+      "case": "direct20",
+      "stress": "0:16",
+      "scenario_sha256": "bebbdadbf3d209ec13758be197add552f8c263ddc26229c96ba0afe4bbb7da92",
+      "probe_exit": 0,
+      "analyzer_exit": 1,
+      "strict_status": "FAIL_P1_SIM_ONLY_OBSERVABILITY",
+      "failures": [
+        "ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN",
+        "STARTUP_SIGNIFICANT_DIRECTION_REVERSAL"
+      ],
+      "direction_changes": 8,
+      "speed_signs": [
+        -1,
+        1
+      ],
+      "guest_after": {
+        "am13e_bemf_diag_first": 23822,
+        "am13e_bemf_diag_seq": 3152,
+        "calibration_done": 1,
+        "captured_events": 3152,
+        "rejected_events": 2,
+        "runtime_aq_updates": 2626,
+        "runtime_commit_count": 3,
+        "runtime_pwm_updates": 54015,
+        "scheduled": 2624,
+        "serviced": 2623,
+        "step": 0,
+        "throt": 0,
+        "valid_frame_feeds": 3155
+      },
+      "source_frames": 3300,
+      "evidence": "/workspace/escape32-qemu/artifacts/sc5-changed-handover/matrix-v1/direct20-0_16.json",
+      "p1_qualified": false
+    },
+    {
+      "case": "gentle",
+      "stress": "0:16",
+      "scenario_sha256": "2531e1b3432e1cfd9e717bd1a3682d2c7bad0f394878b1403674809782020d28",
+      "probe_exit": 0,
+      "analyzer_exit": 1,
+      "strict_status": "FAIL_P1_SIM_ONLY_OBSERVABILITY",
+      "failures": [
+        "INVALID_OR_MISSING_INPUT"
+      ],
+      "direction_changes": null,
+      "speed_signs": null,
+      "guest_after": {
+        "am13e_bemf_diag_first": 24142,
+        "am13e_bemf_diag_seq": 17870,
+        "calibration_done": 1,
+        "captured_events": 17870,
+        "rejected_events": 2,
+        "runtime_aq_updates": 2812,
+        "runtime_commit_count": 3,
+        "runtime_pwm_updates": 96580,
+        "scheduled": 2810,
+        "serviced": 2809,
+        "step": 0,
+        "throt": 0,
+        "valid_frame_feeds": 4787
+      },
+      "source_frames": 5000,
+      "evidence": "/workspace/escape32-qemu/artifacts/sc5-changed-handover/matrix-v1/gentle-0_16.json",
+      "p1_qualified": false
+    },
+    {
+      "case": "direct20",
+      "stress": "16:0",
+      "scenario_sha256": "bebbdadbf3d209ec13758be197add552f8c263ddc26229c96ba0afe4bbb7da92",
+      "probe_exit": 0,
+      "analyzer_exit": 1,
+      "strict_status": "FAIL_P1_SIM_ONLY_OBSERVABILITY",
+      "failures": [
+        "ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN",
+        "STARTUP_SIGNIFICANT_DIRECTION_REVERSAL",
+        "INSUFFICIENT_ORIGINAL_GUEST_CLOSED_LOOP_AFTER_ARM"
+      ],
+      "direction_changes": 60,
+      "speed_signs": [
+        -1,
+        1
+      ],
+      "guest_after": {
+        "am13e_bemf_diag_first": 24016,
+        "am13e_bemf_diag_seq": 4,
+        "calibration_done": 1,
+        "captured_events": 3,
+        "rejected_events": 0,
+        "runtime_aq_updates": 5,
+        "runtime_commit_count": 3,
+        "runtime_pwm_updates": 47752,
+        "scheduled": 3,
+        "serviced": 2,
+        "step": 0,
+        "throt": 0,
+        "valid_frame_feeds": 3155
+      },
+      "source_frames": 3300,
+      "evidence": "/workspace/escape32-qemu/artifacts/sc5-changed-handover/matrix-v1/direct20-16_0.json",
+      "p1_qualified": false
+    },
+    {
+      "case": "steps",
+      "stress": "16:0",
+      "scenario_sha256": "d7b4798b271205314ebd90e5ba4ae06e0c8723c9c5a2e909669fec04b59c41b2",
+      "probe_exit": 0,
+      "analyzer_exit": 1,
+      "strict_status": "FAIL_P1_SIM_ONLY_OBSERVABILITY",
+      "failures": [
+        "DSHOT_VIRTUAL_CLOCK_OR_VALUE_MISMATCH",
+        "ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN",
+        "STARTUP_SIGNIFICANT_DIRECTION_REVERSAL"
+      ],
+      "direction_changes": 91,
+      "speed_signs": [
+        -1,
+        1
+      ],
+      "guest_after": {
+        "am13e_bemf_diag_first": 24044,
+        "am13e_bemf_diag_seq": 45,
+        "calibration_done": 1,
+        "captured_events": 44,
+        "rejected_events": 0,
+        "runtime_aq_updates": 47,
+        "runtime_commit_count": 3,
+        "runtime_pwm_updates": 47763,
+        "scheduled": 45,
+        "serviced": 44,
+        "step": 0,
+        "throt": 0,
+        "valid_frame_feeds": 3156
+      },
+      "source_frames": 3300,
+      "evidence": "/workspace/escape32-qemu/artifacts/sc5-changed-handover/matrix-v1/steps-16_0.json",
+      "p1_qualified": false
+    },
+    {
+      "case": "direct20",
+      "stress": "-16:0",
+      "scenario_sha256": "bebbdadbf3d209ec13758be197add552f8c263ddc26229c96ba0afe4bbb7da92",
+      "probe_exit": 0,
+      "analyzer_exit": 1,
+      "strict_status": "FAIL_P1_SIM_ONLY_OBSERVABILITY",
+      "failures": [
+        "ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN",
+        "STARTUP_SIGNIFICANT_DIRECTION_REVERSAL",
+        "INSUFFICIENT_ORIGINAL_GUEST_CLOSED_LOOP_AFTER_ARM"
+      ],
+      "direction_changes": 60,
+      "speed_signs": [
+        -1,
+        1
+      ],
+      "guest_after": {
+        "am13e_bemf_diag_first": 23881,
+        "am13e_bemf_diag_seq": 3,
+        "calibration_done": 1,
+        "captured_events": 2,
+        "rejected_events": 0,
+        "runtime_aq_updates": 4,
+        "runtime_commit_count": 3,
+        "runtime_pwm_updates": 47610,
+        "scheduled": 2,
+        "serviced": 1,
+        "step": 0,
+        "throt": 0,
+        "valid_frame_feeds": 3155
+      },
+      "source_frames": 3300,
+      "evidence": "/workspace/escape32-qemu/artifacts/sc5-changed-handover/matrix-v1/direct20--16_0.json",
+      "p1_qualified": false
+    },
+    {
+      "case": "ramp20_100ms",
+      "stress": "-16:0",
+      "scenario_sha256": "f2688ee5fbcc13fc2cc10f6277456e2d20d896c7bc9d68c36e603d2e29c032ca",
+      "probe_exit": 0,
+      "analyzer_exit": 1,
+      "strict_status": "FAIL_P1_SIM_ONLY_OBSERVABILITY",
+      "failures": [
+        "ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN",
+        "STARTUP_SIGNIFICANT_DIRECTION_REVERSAL",
+        "INSUFFICIENT_ORIGINAL_GUEST_CLOSED_LOOP_AFTER_ARM",
+        "NO_ORIGINAL_BEMF_COMPARATOR_FILTER_TRANSITIONS"
+      ],
+      "direction_changes": 58,
+      "speed_signs": [
+        -1,
+        1
+      ],
+      "guest_after": {
+        "am13e_bemf_diag_first": 24426,
+        "am13e_bemf_diag_seq": 1,
+        "calibration_done": 1,
+        "captured_events": 0,
+        "rejected_events": 0,
+        "runtime_aq_updates": 3,
+        "runtime_commit_count": 3,
+        "runtime_pwm_updates": 37657,
+        "scheduled": 1,
+        "serviced": 0,
+        "step": 0,
+        "throt": 0,
+        "valid_frame_feeds": 2676
+      },
+      "source_frames": 2800,
+      "evidence": "/workspace/escape32-qemu/artifacts/sc5-changed-handover/matrix-v1/ramp20_100ms--16_0.json",
+      "p1_qualified": false
+    },
+    {
+      "case": "direct20",
+      "stress": "16:20",
+      "scenario_sha256": "bebbdadbf3d209ec13758be197add552f8c263ddc26229c96ba0afe4bbb7da92",
+      "probe_exit": 0,
+      "analyzer_exit": 1,
+      "strict_status": "FAIL_P1_SIM_ONLY_OBSERVABILITY",
+      "failures": [
+        "ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN",
+        "STARTUP_SIGNIFICANT_DIRECTION_REVERSAL"
+      ],
+      "direction_changes": 336,
+      "speed_signs": [
+        -1,
+        1
+      ],
+      "guest_after": {
+        "am13e_bemf_diag_first": 23822,
+        "am13e_bemf_diag_seq": 3401,
+        "calibration_done": 1,
+        "captured_events": 3401,
+        "rejected_events": 2,
+        "runtime_aq_updates": 359,
+        "runtime_commit_count": 3,
+        "runtime_pwm_updates": 50725,
+        "scheduled": 357,
+        "serviced": 356,
+        "step": 0,
+        "throt": 0,
+        "valid_frame_feeds": 3155
+      },
+      "source_frames": 3300,
+      "evidence": "/workspace/escape32-qemu/artifacts/sc5-changed-handover/matrix-v1/direct20-16_20.json",
+      "p1_qualified": false
+    },
+    {
+      "case": "ramp20_500ms",
+      "stress": "16:20",
+      "scenario_sha256": "b760302b95efd990260b6b26a90dc201ff4784b57ab7f4add96943bf0ff1b875",
+      "probe_exit": 0,
+      "analyzer_exit": 1,
+      "strict_status": "FAIL_P1_SIM_ONLY_OBSERVABILITY",
+      "failures": [
+        "ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN"
+      ],
+      "direction_changes": 0,
+      "speed_signs": [
+        1
+      ],
+      "guest_after": {
+        "am13e_bemf_diag_first": 23902,
+        "am13e_bemf_diag_seq": 4343,
+        "calibration_done": 1,
+        "captured_events": 4343,
+        "rejected_events": 1,
+        "runtime_aq_updates": 2403,
+        "runtime_commit_count": 3,
+        "runtime_pwm_updates": 52001,
+        "scheduled": 2401,
+        "serviced": 2400,
+        "step": 0,
+        "throt": 0,
+        "valid_frame_feeds": 3059
+      },
+      "source_frames": 3200,
+      "evidence": "/workspace/escape32-qemu/artifacts/sc5-changed-handover/matrix-v1/ramp20_500ms-16_20.json",
+      "p1_qualified": false
+    }
+  ],
+  "p1_thresholds_changed": false,
+  "hardware_qualified": false
+}
