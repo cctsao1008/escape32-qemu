@@ -20,7 +20,7 @@ def symbols(elf):
 
 
 def decode(words,sequence):
-    if len(words)!=20 or words[0]!=sequence or words[1] not in (1,2,3,4,5,6,7,8,9):
+    if len(words)!=20 or words[0]!=sequence or words[1] not in (1,2,3,4,5,6,7,8,9,11):
         raise ValueError('Uncommitted/invalid reference record')
     row=dict(zip(FIELDS,words));row['age_ticks']=(row['tick']-row['acquisition_tick'])&0xffffffff
     problems=[]
@@ -51,6 +51,7 @@ def snapshot(read32,addresses):
         missing_sequence_ranges=gaps,history_complete=not gaps,
         status='INCOMPLETE' if not entries else
                'VIOLATIONS' if any(r['violations'] for r in entries) else
+               'FAIL_CLOSED_SHUTDOWN_OBSERVED' if any(r['event']==11 for r in entries) else
                'FAIL_CLOSED_ENTRY_OBSERVED' if any(r['event']==5 for r in entries) else 'OBSERVED_INVARIANTS_ONLY',
         timestamp_domain='MCU_TICK_AND_ECAP_COUNTER_NOT_ABSOLUTE_QEMU_VNS',
         source_publication_proven=False,p1_qualified=False,hardware_qualified=False)
