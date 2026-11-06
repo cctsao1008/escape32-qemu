@@ -20,6 +20,8 @@ python3 tools/e62_exact_cmpss_suite.py \
 
 All seven group command arrays and per-case raw QEMU/source/probe/strict reports are retained. The aggregate exits1 and remains FAILED. Every strict report retains ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN; experimental non-SHA PASS never becomes Original qualification.
 
+All14 new cases use the existing24V ECX87 KV147 unloaded SIM_ONLY plant and the default historical comparator path. They are separate from the47V KV210 c49 WSL cohort and the dynamic-SC5 candidate. No evidence is merged across those identities.
+
 ## Full results
 
 | Stress | Case | Experimental result | Reversals | CAP1 ACK / TIMG12 ACK | Additional failures |
