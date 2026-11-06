@@ -4,6 +4,8 @@ on:
     paths:
       - 'tools/e62_acquisition_timeline.py'
       - 'tests/test_e62_acquisition_timeline.py'
+      - 'tools/e62_lifecycle_alignment.py'
+      - 'tests/test_e62_lifecycle_alignment.py'
       - 'tools/ci/check_e62_reference_contract.sh'
       - '.github/workflows/e62-acquisition-diagnostics.yml'
   workflow_dispatch:
@@ -14,7 +16,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - run: python3 -m unittest tests.test_e62_acquisition_timeline tests.test_e62_issue5_cap1_timer_audit -v
+      - run: python3 -m unittest tests.test_e62_acquisition_timeline tests.test_e62_lifecycle_alignment tests.test_e62_issue5_cap1_timer_audit -v
   existing-firmware-reference-contract:
     runs-on: ubuntu-24.04
     steps:

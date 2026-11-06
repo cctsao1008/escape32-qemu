@@ -308,3 +308,16 @@ repeatability from motor/model causality; run the independent near-stall,
 300/1500/3000ms, both-direction qualification matrix with complete profiles and
 unchanged thresholds. API access is required to publish the reviewable PR; saving
 an api.github.com network requirement does not apply it to this running machine.
+
+## Lifecycle replay extension
+
+`tools/e62_lifecycle_alignment.py MANIFEST --output REPORT` now preserves the
+complete requested source-event overlay, clock-mode intervals (including a
+candidate audio interval that began before a demand), all actual command-stage
+anchors and boundary sample ages. Software-private arming/audio states remain
+inferred. Main-source traces without clock instrumentation do not acquire
+invented audio intervals. Four focused tests exercise overlap, exit, absent
+clock evidence and timestamp preservation. Both real current-cloud Original
+Guest traces replay successfully; their private lifecycle/reference verdicts
+remain incomplete. A separate source-equivalent runtime cohort is in progress;
+it is not relabeled as the missing historical c49a7485 cohort.
