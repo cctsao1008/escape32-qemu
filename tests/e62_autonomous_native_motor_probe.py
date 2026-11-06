@@ -746,14 +746,18 @@ def run(args):
                     # Complete original-source diagnostics once per run.
                     # These are non-atomic read-only observations, not a
                     # source of physical model updates.
+                    if reference_addresses is not None:
+                        from tools.e62_reference_observer import snapshot_bulk
+                        def reference_bytes(addr,length):
+                            reply=qtest.cmd(f"read 0x{addr:x} 0x{length:x}")
+                            if len(reply)!=2 or not reply[1].startswith('0x'):raise ValueError('Invalid bulk journal response')
+                            return bytes.fromhex(reply[1][2:])
+                        evidence["reference_observer"]=snapshot_bulk(reference_bytes,reference_addresses)
                     auto = read_auto(qtest.read)
                     motor = _motor_snapshot(qtest)
                     evidence.update(autonomous_dshot=auto,native_motor=motor)
                     evidence["pwm_source_after"] = _pwm_source_snapshot(qtest)
                     evidence["original_guest_after"] = _read_original_guest_telemetry(qtest,symbol_addrs)
-                    if reference_addresses is not None:
-                        from tools.e62_reference_observer import snapshot
-                        evidence["reference_observer"] = snapshot(qtest.read, reference_addresses)
                     if args.issue5_bemf_diag:
                         evidence["issue5_bemf_first_history"] = snapshot_first(
                             qtest.read, symbol_addrs["am13e_bemf_diag_seq"],

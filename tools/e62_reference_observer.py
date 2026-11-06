@@ -55,3 +55,34 @@ def snapshot(read32,addresses):
                'FAIL_CLOSED_ENTRY_OBSERVED' if any(r['event']==5 for r in entries) else 'OBSERVED_INVARIANTS_ONLY',
         timestamp_domain='MCU_TICK_AND_ECAP_COUNTER_NOT_ABSOLUTE_QEMU_VNS',
         source_publication_proven=False,p1_qualified=False,hardware_qualified=False)
+
+
+def snapshot_bulk(read_bytes,addresses):
+    """Two unhalted SRAM copies; retain only matching sequence-last records."""
+    import struct,hashlib
+    lo=min(addresses.values());hi=max(addresses[NAMES[0]]+4,addresses[NAMES[1]]+64*80,addresses[NAMES[2]]+256*80)
+    if not 0x20000000<=lo<hi<=0x20018000 or hi-lo>32768:
+        raise ValueError('Unsafe journal memory span')
+    copies=[read_bytes(lo,hi-lo),read_bytes(lo,hi-lo)]
+    if any(len(b)!=hi-lo for b in copies):raise ValueError('Short journal block')
+    def word(b,addr):return struct.unpack_from('<I',b,addr-lo)[0]
+    counts=[word(b,addresses[NAMES[0]]) for b in copies]
+    if counts[1]<counts[0]:raise ValueError('Journal sequence reset during capture')
+    head=counts[0];rows={};rejected=[]
+    for n in sorted(set(range(1,min(head,64)+1))|set(range(max(1,head-255),head+1))):
+        addr=addresses[NAMES[1]]+(n-1)*80 if n<=64 else addresses[NAMES[2]]+((n-1)%256)*80
+        a,b=[list(struct.unpack_from('<20I',v,addr-lo)) for v in copies]
+        if a!=b or a[0]!=n:
+            rejected.append(n);continue
+        rows[n]=decode(a,n)
+    gaps=[(a+1,b-1) for a,b in zip(sorted(rows),sorted(rows)[1:]) if b>a+1]
+    if counts[1]>head:gaps.append((head+1,counts[1]))
+    entries=list(rows.values())
+    return dict(schema='e62.reference-observer.bulk.v2',seq_after=counts[1],entries=entries,
+        missing_sequence_ranges=gaps,history_complete=bool(entries) and not gaps and not rejected,
+        rejected_unstable_sequences=rejected,snapshot_high_watermarks=counts,
+        snapshot_block_base=lo,snapshot_block_bytes=hi-lo,snapshot_sha256=[hashlib.sha256(b).hexdigest() for b in copies],
+        status='INCOMPLETE' if not entries else 'VIOLATIONS' if any(r['violations'] for r in entries) else
+        'FAIL_CLOSED_SHUTDOWN_OBSERVED' if any(r['event']==11 for r in entries) else 'OBSERVED_STABLE_RECORDS_ONLY',
+        timestamp_domain='MCU_TICK_AND_ECAP_COUNTER_NOT_ABSOLUTE_QEMU_VNS',
+        source_publication_proven=False,p1_qualified=False,hardware_qualified=False)
