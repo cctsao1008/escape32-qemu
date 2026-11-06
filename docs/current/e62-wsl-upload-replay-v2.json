@@ -21642,5 +21642,14 @@
     "bytes": 24646661,
     "members": 33,
     "review_date_taipei": "2026-11-07"
+  },
+  "existing_source_contract": {
+    "repository_commit": "204fe85a512fff9ea0cfdfe430a29132c52197c4",
+    "launcher": "tools/e62_issue5_startup_repeatability.py",
+    "expected_cfg_sha256": "77366cfe9f0632b795a72393f7f0e990a99e8af92429cbb82d42bbb3f7c8ed4b",
+    "expected_cfg_path": "artifacts/issue5/ztc-ab/B-ztc1-damp1.cfg.bin",
+    "actual_cfg_bytes_verified": false,
+    "actual_executed_launcher_verified": false,
+    "top_level_driver_qemu_hash_output_available": false
   }
 }
