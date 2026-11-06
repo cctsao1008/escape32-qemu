@@ -1,0 +1,29 @@
+name: E62 read-only acquisition diagnostics
+on:
+  pull_request:
+    paths:
+      - 'tools/e62_acquisition_timeline.py'
+      - 'tests/test_e62_acquisition_timeline.py'
+      - 'tools/ci/check_e62_reference_contract.sh'
+      - '.github/workflows/e62-acquisition-diagnostics.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-diagnostics:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 -m unittest tests.test_e62_acquisition_timeline tests.test_e62_issue5_cap1_timer_audit -v
+  existing-firmware-reference-contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch exact existing firmware and official SDK sources
+        run: |
+          git clone --no-checkout https://github.com/cctsao1008/ESCape32.git /tmp/e62-reference-fw
+          git -C /tmp/e62-reference-fw checkout --detach 53953c04f7d857f3b402b3a19870605ed0471d8f
+          git clone --no-checkout https://github.com/TexasInstruments/am13e2x_sdk.git /tmp/e62-reference-sdk
+          git -C /tmp/e62-reference-sdk checkout --detach b872469ceef18de5e39a1d3acb0821ec158b44c7
+      - name: Execute unchanged conversion and register-model negative tests
+        run: bash tools/ci/check_e62_reference_contract.sh /tmp/e62-reference-fw /tmp/e62-reference-sdk
