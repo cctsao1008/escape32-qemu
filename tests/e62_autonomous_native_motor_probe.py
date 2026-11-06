@@ -545,6 +545,12 @@ def run(args):
             raise RuntimeError(
                 "Issue #5 diagnostic ELF missing unambiguous SRAM symbols: "
                 + ", ".join(missing))
+    reference_addresses = None
+    if getattr(args, "reference_diagnostics", False):
+        if exp_sha is None:
+            raise ValueError("Reference observer requires a separately pinned experimental ELF")
+        from tools.e62_reference_observer import symbols
+        reference_addresses = symbols(args.elf)
     scenario_stages, scenario_meta = load_native_scenario(args.scenario)
     external_fault=(load_fault_plan(args.fault_scenario,scenario_stages)
                     if args.fault_scenario else None)
@@ -743,6 +749,9 @@ def run(args):
                     evidence.update(autonomous_dshot=auto,native_motor=motor)
                     evidence["pwm_source_after"] = _pwm_source_snapshot(qtest)
                     evidence["original_guest_after"] = _read_original_guest_telemetry(qtest,symbol_addrs)
+                    if reference_addresses is not None:
+                        from tools.e62_reference_observer import snapshot
+                        evidence["reference_observer"] = snapshot(qtest.read, reference_addresses)
                     if args.issue5_bemf_diag:
                         evidence["issue5_bemf_first_history"] = snapshot_first(
                             qtest.read, symbol_addrs["am13e_bemf_diag_seq"],
@@ -939,6 +948,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--qemu", type=Path, required=True)
     parser.add_argument("--elf", type=Path, required=True)
+    parser.add_argument("--reference-diagnostics", action="store_true",
+                        help="Read experimental SC5 journal only; never original qualification")
     parser.add_argument("--issue5-bemf-diag", action="store_true",
                         help="Read first 64 Guest BEMF decisions over QTest; "
                              "no Guest writes, fail if missing")
