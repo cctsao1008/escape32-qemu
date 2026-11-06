@@ -180,7 +180,7 @@
     "diag/e62-model-correlation": "c4181779c99464de0cd891189e7a741083c20858",
     "diag/e62-reference-startup-evidence": "4f42cf5e6ed42afbdf029177137c9c2564dacd44",
     "diag/e62-sc5-source-observer": "84ad91f228c33afb71ce7ff0a1baeb6d04fbb754",
-    "experiment/e62-cmpss-cloud-matrix": "5d673350034b35f0aac0028d215ba9dec4d37c5a",
+    "experiment/e62-cmpss-cloud-matrix": "b4ca2889351ba9d2496782d4d62ff3b9bc8932be",
     "experiment/e62-qtest-record-replay": "3cbbec56e0a8d4c83c65699e0d1716f55114d178",
     "experiment/e62-sc5-regression": "b959c931f207f4484580dad162849642523676ef",
     "fix/e62-passive-trace-schema": "96a3b28c6f83b5ec88b079247abcaf149a86ca4a",
@@ -6503,5 +6503,18 @@
     "hardware_qualified": false
   },
   "changed_code_sc5_register_status": "DONE_REGISTER_TESTED_NOT_MOTOR_QUALIFIED",
-  "changed_code_sc5_dynamic_input_sitl_status": "IN_PROGRESS_NOT_DEMONSTRATED_BY_CONSTANT_VBUS_SCENARIO"
+  "changed_code_sc5_dynamic_input_sitl_status": "IN_PROGRESS_NOT_DEMONSTRATED_BY_CONSTANT_VBUS_SCENARIO",
+  "new_draft_pr_creation_error": "Post https://api.github.com/graphql: Forbidden",
+  "regression_validation": {
+    "runner_strict_p1_tests": {
+      "passed": 19,
+      "initial_bad_module_command_retained": true
+    },
+    "baseline_host_groups": 107,
+    "candidate_host_groups": 107,
+    "sdk_register_negative_cases": "PASS",
+    "arm_candidate": "PASS",
+    "arm_feature_off": "PASS",
+    "feature_off_has_changed_state": false
+  }
 }

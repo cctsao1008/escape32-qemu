@@ -44,3 +44,5 @@ Firmware code/report: [isolated changed handover](https://github.com/cctsao1008/
 ## Review inventory
 
 Firmware default branch is `am13e-port-v2`, not main. User-confirmed Draft PR6 diagnostics and PR8 release gates use that base; PR7 remains stacked on PR6. New handover is separate and stacked on PR7's branch. Existing Draft PR11 remains the timeline evidence review. Updated machine-readable review inventory and prepared new PR bodies are retained under docs/review. No automatic merge/closure. No repeated broad audit or original functional T01 rerun was used in place of this executable work.
+
+New firmware Draft PR creation was attempted after code and tests were complete. GitHub returned `Post "https://api.github.com/graphql": Forbidden`; the published isolated branch and prepared PR body remain reviewable. This is API/network access failure, not an approval rejection.19 relevant runner/strict/P1 tests pass; an initial command using a nonexistent test-module name is retained beside its corrected result.
