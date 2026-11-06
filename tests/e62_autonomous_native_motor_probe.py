@@ -545,6 +545,12 @@ def run(args):
             raise RuntimeError(
                 "Issue #5 diagnostic ELF missing unambiguous SRAM symbols: "
                 + ", ".join(missing))
+    reference_addresses = None
+    if getattr(args, "reference_diagnostics", False):
+        if exp_sha is None:
+            raise ValueError("Reference observer requires a separately pinned experimental ELF")
+        from tools.e62_reference_observer import symbols
+        reference_addresses = symbols(args.elf)
     scenario_stages, scenario_meta = load_native_scenario(args.scenario)
     external_fault=(load_fault_plan(args.fault_scenario,scenario_stages)
                     if args.fault_scenario else None)
@@ -578,6 +584,8 @@ def run(args):
                 ",esc-sim-native-motor-profile="+args.sim_motor_profile+
                 ",esc-sim-native-initial-electrical-deg="+
                 str(args.sim_initial_electrical_degrees)+
+                (",esc-sim-vbus-plan="+str(args.source_vbus_plan.resolve())
+                 if getattr(args,"source_vbus_plan",None) else "") +
                 (",esc-sim-native-adc-bemf=on"
                  if args.sim_native_adc_bemf else ""),
                 *(["-S","-qmp",f"unix:{qmp_sockpath},server=on,wait=off"]
@@ -738,6 +746,13 @@ def run(args):
                     # Complete original-source diagnostics once per run.
                     # These are non-atomic read-only observations, not a
                     # source of physical model updates.
+                    if reference_addresses is not None:
+                        from tools.e62_reference_observer import snapshot_bulk
+                        def reference_bytes(addr,length):
+                            reply=qtest.cmd(f"read 0x{addr:x} 0x{length:x}")
+                            if len(reply)!=2 or not reply[1].startswith('0x'):raise ValueError('Invalid bulk journal response')
+                            return bytes.fromhex(reply[1][2:])
+                        evidence["reference_observer"]=snapshot_bulk(reference_bytes,reference_addresses)
                     auto = read_auto(qtest.read)
                     motor = _motor_snapshot(qtest)
                     evidence.update(autonomous_dshot=auto,native_motor=motor)
@@ -937,8 +952,12 @@ def run(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--source-vbus-plan",type=Path,default=None,
+                        help="Explicit experimental source-owned supply/native-ADC plan")
     parser.add_argument("--qemu", type=Path, required=True)
     parser.add_argument("--elf", type=Path, required=True)
+    parser.add_argument("--reference-diagnostics", action="store_true",
+                        help="Read experimental SC5 journal only; never original qualification")
     parser.add_argument("--issue5-bemf-diag", action="store_true",
                         help="Read first 64 Guest BEMF decisions over QTest; "
                              "no Guest writes, fail if missing")
@@ -1025,6 +1044,10 @@ def main():
         parser.error("Explicit bounded wall/QTest/progress timeouts required")
     if not -180 <= args.sim_initial_electrical_degrees <= 180:
         parser.error("SIM_ONLY initial electrical degrees outside [-180,180]")
+    if args.source_vbus_plan is not None and (not args.experimental_candidate_sha256 or
+            not args.sim_native_adc_bemf or not args.reference_diagnostics or
+            not args.source_vbus_plan.is_file()):
+        parser.error("Source VBUS requires pinned experimental ELF, native ADC and passive reference diagnostics")
     if args.experimental_bemf_robustness is not None:
         import re
         if args.experimental_candidate_sha256 is None:
