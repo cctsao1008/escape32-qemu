@@ -1,0 +1,13 @@
+{
+  "schema": "e62.engineering-bundle.v1",
+  "archive_path": "artifacts/e62-engineering-evidence-v1.tar.gz",
+  "bytes": 146589554,
+  "sha256": "b963034c6a0893c8f3f464a70d2c5f7ec2d4de9a38567354236393dad5ae533d",
+  "archive_files": 358,
+  "verified_indexed_members": 357,
+  "included_status_report_commit": "c470ab9",
+  "missing_historical_wsl_data_not_substituted": true,
+  "exact_issue3_elf_not_present": true,
+  "hardware_qualified": false,
+  "p1_qualified": false
+}
