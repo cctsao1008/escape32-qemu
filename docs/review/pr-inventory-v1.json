@@ -1,0 +1,102 @@
+[
+  {
+    "repository": "cctsao1008/escape32-qemu",
+    "head": "diag/e62-sc5-source-observer",
+    "base": "main",
+    "title": "Add passive SIM_ONLY SC5 publication observations",
+    "body_file": "docs/review/escape32-qemu-diag-e62-sc5-source-observer.md",
+    "draft": true,
+    "status": "PREPARED_API_ACCESS_BLOCKED",
+    "compare_url": "https://github.com/cctsao1008/escape32-qemu/compare/main...diag/e62-sc5-source-observer?expand=1"
+  },
+  {
+    "repository": "cctsao1008/ESCape32",
+    "head": "diag/e62-sc5-acquisition",
+    "base": "main",
+    "title": "Observe SC5 acquisition and publication without changing policy",
+    "body_file": "docs/review/ESCape32-diag-e62-sc5-acquisition.md",
+    "draft": true,
+    "status": "PREPARED_API_ACCESS_BLOCKED",
+    "compare_url": "https://github.com/cctsao1008/ESCape32/compare/main...diag/e62-sc5-acquisition?expand=1"
+  },
+  {
+    "repository": "cctsao1008/ESCape32",
+    "head": "experiment/e62-sc5-equivalent-refresh",
+    "base": "diag/e62-sc5-acquisition",
+    "title": "Experiment: refresh equivalent SC5 sample associations at ZERO",
+    "body_file": "docs/review/ESCape32-experiment-e62-sc5-equivalent-refresh.md",
+    "draft": true,
+    "status": "PREPARED_API_ACCESS_BLOCKED",
+    "compare_url": "https://github.com/cctsao1008/ESCape32/compare/diag/e62-sc5-acquisition...experiment/e62-sc5-equivalent-refresh?expand=1"
+  },
+  {
+    "repository": "cctsao1008/escape32-qemu",
+    "head": "experiment/e62-sc5-regression",
+    "base": "fix/e62-passive-trace-schema",
+    "title": "Regress pinned SC5 integration candidate across nominal and stress cases",
+    "body_file": "docs/review/escape32-qemu-experiment-e62-sc5-regression.md",
+    "draft": true,
+    "status": "PREPARED_API_ACCESS_BLOCKED",
+    "compare_url": "https://github.com/cctsao1008/escape32-qemu/compare/fix/e62-passive-trace-schema...experiment/e62-sc5-regression?expand=1"
+  },
+  {
+    "repository": "cctsao1008/escape32-qemu",
+    "head": "experiment/e62-cmpss-cloud-matrix",
+    "base": "main",
+    "title": "Prepare exact Issue3 robustness suite with immutable binary guards",
+    "body_file": "docs/review/escape32-qemu-experiment-e62-cmpss-cloud-matrix.md",
+    "draft": true,
+    "status": "PREPARED_API_ACCESS_BLOCKED",
+    "compare_url": "https://github.com/cctsao1008/escape32-qemu/compare/main...experiment/e62-cmpss-cloud-matrix?expand=1"
+  },
+  {
+    "repository": "cctsao1008/escape32-qemu",
+    "head": "fix/e62-passive-trace-schema",
+    "base": "main",
+    "title": "Accept first-party passive ADC and PWM observer event types",
+    "body_file": "docs/review/escape32-qemu-fix-e62-passive-trace-schema.md",
+    "draft": true,
+    "status": "PREPARED_API_ACCESS_BLOCKED",
+    "compare_url": "https://github.com/cctsao1008/escape32-qemu/compare/main...fix/e62-passive-trace-schema?expand=1"
+  },
+  {
+    "repository": "cctsao1008/escape32-qemu",
+    "head": "experiment/e62-qtest-record-replay",
+    "base": "main",
+    "title": "Finalize diagnostic recordings and verify source replay independently",
+    "body_file": "docs/review/escape32-qemu-experiment-e62-qtest-record-replay.md",
+    "draft": true,
+    "status": "PREPARED_API_ACCESS_BLOCKED",
+    "compare_url": "https://github.com/cctsao1008/escape32-qemu/compare/main...experiment/e62-qtest-record-replay?expand=1"
+  },
+  {
+    "repository": "cctsao1008/escape32-qemu",
+    "head": "diag/e62-model-correlation",
+    "base": "main",
+    "title": "Require traceable physical evidence for motor model correlation",
+    "body_file": "docs/review/escape32-qemu-diag-e62-model-correlation.md",
+    "draft": true,
+    "status": "PREPARED_API_ACCESS_BLOCKED",
+    "compare_url": "https://github.com/cctsao1008/escape32-qemu/compare/main...diag/e62-model-correlation?expand=1"
+  },
+  {
+    "repository": "cctsao1008/ESCape32",
+    "head": "fix/e62-boot-release-gates",
+    "base": "main",
+    "title": "Restore strict Boot build and real-image flash host gates",
+    "body_file": "docs/review/ESCape32-fix-e62-boot-release-gates.md",
+    "draft": true,
+    "status": "PREPARED_API_ACCESS_BLOCKED",
+    "compare_url": "https://github.com/cctsao1008/ESCape32/compare/main...fix/e62-boot-release-gates?expand=1"
+  },
+  {
+    "repository": "cctsao1008/escape32-qemu",
+    "head": "report/e62-engineering-execution",
+    "base": "main",
+    "title": "Record E62 causal evidence and independent acceptance status",
+    "body_file": "docs/review/escape32-qemu-report-e62-engineering-execution.md",
+    "draft": true,
+    "status": "PREPARED_API_ACCESS_BLOCKED",
+    "compare_url": "https://github.com/cctsao1008/escape32-qemu/compare/main...report/e62-engineering-execution?expand=1"
+  }
+]

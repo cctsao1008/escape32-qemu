@@ -1,0 +1,1206 @@
+{
+  "acceptance_matrix": [
+    {
+      "criterion": "Verify restoration in a genuinely new published-environment task",
+      "evidence": "Same onboarding instance; no task-creation tool. This workspace cannot prove restoration.",
+      "issue": "#10",
+      "status": "BLOCKED_EXTERNAL"
+    },
+    {
+      "criterion": "Same-instance HEAD, submodule, binary hashes, host audit, full functional T01 + independent verifier",
+      "evidence": "main 3f1ed18; QEMU44f28; original05563; 62 host tests + audit; 11,000 frames; functional-only PASS.",
+      "issue": "#10",
+      "status": "DONE"
+    },
+    {
+      "criterion": "Source-owned absolute DShot anchors, boundary rotor samples/age, observed vs inferred states, audio vs six-step, missing/stale bounds",
+      "evidence": "Extended PR11 timeline/alignment tools, 19 focused tests and real cloud replays; source SWITCH/audio intervals remain bounded.",
+      "issue": "#10",
+      "status": "DONE"
+    },
+    {
+      "criterion": "Replay three specified synchronized WSL datasets with raw/scenario/CFG/provenance",
+      "evidence": "All three bundles unavailable; user will supply archive. New cloud cohort is a separate identity, not replacement evidence.",
+      "issue": "#10",
+      "status": "BLOCKED_EXTERNAL"
+    },
+    {
+      "criterion": "Calibration contract / conversions / coherent sample identity / epoch / stale handling",
+      "evidence": "Existing source53953 contract reused; official SDK/host negative tests, no production midpoint seed. Actual board constants unavailable.",
+      "issue": "#4",
+      "status": "DONE"
+    },
+    {
+      "criterion": "MCPWM publication, phase/polarity, CAP1 fail-closed negative tests",
+      "evidence": "Native register suite verifies all phase/polarity mappings; missing/stale/invalid/phase mismatch/delayed active-DAC cases.",
+      "issue": "#4",
+      "status": "DONE"
+    },
+    {
+      "criterion": "Investigate dynamic SC5 acquisition liveness",
+      "evidence": "Baseline fault at age33 > unchanged32 despite newer valid sample; independent uninstrumented control zero captures.",
+      "issue": "#4",
+      "status": "DONE"
+    },
+    {
+      "criterion": "Isolated equivalent-code liveness correction",
+      "evidence": "Experimental sourcebb02, pinned no-reference-journal run132 captures/131 serviced; not production approval or motor stability.",
+      "issue": "#4",
+      "status": "DONE"
+    },
+    {
+      "criterion": "Complete dynamic changed-code/bus-transient reference handover",
+      "evidence": "Same-code fix does not implement changed-code settling/publication. Fail-closed is retained.",
+      "issue": "#4",
+      "status": "IN_PROGRESS"
+    },
+    {
+      "criterion": "Rerun all nominal/offset motor regressions after experimental control change",
+      "evidence": "All14 executed;11 non-SHA failures, two identity-only failures, one incomplete event-budget failure. Suite FAILED. Not Issue3 exact evidence.",
+      "issue": "#4",
+      "status": "DONE"
+    },
+    {
+      "criterion": "Physical calibration / route / settling confirmation",
+      "evidence": "Board BOM/netlist, measured divider/reference/gain/offset and settling absent.",
+      "issue": "#4",
+      "status": "BLOCKED_EXTERNAL"
+    },
+    {
+      "criterion": "Demand-boundary actual rotor state / acquisition / timer evidence",
+      "evidence": "Original A/A and SC5 runs; first-event, CAP1 read/ACK/TIMG and phase/torque analyzers reused. Gate freshness remains explicit.",
+      "issue": "#5",
+      "status": "DONE"
+    },
+    {
+      "criterion": "First Startup / 300ms restart no significant reversals",
+      "evidence": "Original A/A: 262 reversals per demand; candidate full run also262 per demand. Capture counts do not imply lock.",
+      "issue": "#5",
+      "status": "FAILED"
+    },
+    {
+      "criterion": "Coast observability / near-stall reacquisition",
+      "evidence": "100 source ADC triplets in final100ms before restart all rank ties, contrast <=3 codes; no valid phase-order observation. Safe refusal is not successful restart.",
+      "issue": "#5",
+      "status": "FAILED"
+    },
+    {
+      "criterion": "Earliest matched-run source divergence",
+      "evidence": "Original A/A WWDT_FEED seq7409 differs32ns before first demand; new090 A/A ROTOR seq6971 differs224ns. Not a proven firmware fault.",
+      "issue": "#5",
+      "status": "DONE"
+    },
+    {
+      "criterion": "Discriminate deterministic replay from independent-boot scheduling",
+      "evidence": "Fixed debug transport/finalization;74,596 exact source events/4820 frames record/replay. Independent A/A nondeterminism attribution still limited.",
+      "issue": "#5",
+      "status": "DONE"
+    },
+    {
+      "criterion": "Qualify near-stall, all coast300/1500/3000, second demand, both directions and invalid-signal cases",
+      "evidence": "Existing archived failures preserved. No unsupported firmware startup fix promoted. Physical measurements are NOT a closure prerequisite for this SIM_ONLY issue.",
+      "issue": "#5",
+      "status": "IN_PROGRESS"
+    },
+    {
+      "criterion": "Exact5b90 ELF recovery and independent SHA check",
+      "evidence": "API artifact12894011805 returns Forbidden; no binary downloaded. Source-built reproduction is a distinct ELF, never substituted.",
+      "issue": "#3",
+      "status": "BLOCKED_EXTERNAL"
+    },
+    {
+      "criterion": "Exact14-case nominal/stress qualification",
+      "evidence": "Guarded runner prepared, 14 cases marked unavailable/executed0. Existing verified +/-16 evidence reused; not blindly rerun.",
+      "issue": "#3",
+      "status": "BLOCKED_EXTERNAL"
+    },
+    {
+      "criterion": "Immutable Original/P1 guards and per-case evidence retention",
+      "evidence": "Guard tests reject substitution; strict non-SHA thresholds unchanged; no suite PASS from launches/counts alone.",
+      "issue": "#3",
+      "status": "DONE"
+    },
+    {
+      "criterion": "Source parameter provenance / numerical correctness / convergence",
+      "evidence": "Existing source/datasheet audit reused;46 focused model tests; actual first90ms frozen-switch replay107 edges/90 rotor samples passes.",
+      "issue": "#6",
+      "status": "DONE"
+    },
+    {
+      "criterion": "Traceable motor/prop/load/PSU uncertainties and measured transient correlation",
+      "evidence": "Physical RPM/V/I transient, calibrated sensors/time sync, intended prop curve/inertia/limits missing. Correlation tool rejects synthetic/unaligned input.",
+      "issue": "#6",
+      "status": "BLOCKED_EXTERNAL"
+    },
+    {
+      "criterion": "Qualified intended47V KV210 propeller scenarios",
+      "evidence": "Requires validated parameters and safety gates. New47V source diagnostics are not that qualification.",
+      "issue": "#6",
+      "status": "BLOCKED_EXTERNAL"
+    },
+    {
+      "criterion": "ARM boot/application/diagnostic compile + image audit",
+      "evidence": "Isolated Boot case-label correction; official SDK; all listed targets/image audit pass.",
+      "issue": "#8",
+      "status": "DONE"
+    },
+    {
+      "criterion": "Software programming/CFG/flash failure/retry / handoff tests",
+      "evidence": "Isolated host link fix; actual BIN tested with ASan/UBSan;107 host groups;29 release/readiness Python tests.",
+      "issue": "#8",
+      "status": "DONE"
+    },
+    {
+      "criterion": "Full-image integrity / atomic update / rollback guarantee",
+      "evidence": "Adopted protocol lacks these guarantees; existing tests expose limitations. No invented interface or approval. Needs product policy/interface decision.",
+      "issue": "#8",
+      "status": "IN_PROGRESS"
+    },
+    {
+      "criterion": "Physical bring-up, independent protections,47V45N/90N5s/current/thermal, signed release",
+      "evidence": "No board/programmer/bench data or signed configuration. porting_complete=false; hardware_qualified=false.",
+      "issue": "#8",
+      "status": "BLOCKED_EXTERNAL"
+    }
+  ],
+  "baseline_qemu_sha256": "d5f4f5102469bb6dc4012682f4d7101d01b7c26fe7c3b29cd01a8c685ba7b943",
+  "branches": {
+    "diag/e62-model-correlation": "c4181779c99464de0cd891189e7a741083c20858",
+    "diag/e62-reference-startup-evidence": "b794bcfc5f4ff9797ef1ee302a3a108cebae5f54",
+    "diag/e62-sc5-source-observer": "84ad91f228c33afb71ce7ff0a1baeb6d04fbb754",
+    "experiment/e62-cmpss-cloud-matrix": "6ab039ad8c583351ec19fb151c8727497d608706",
+    "experiment/e62-qtest-record-replay": "3cbbec56e0a8d4c83c65699e0d1716f55114d178",
+    "experiment/e62-sc5-regression": "b959c931f207f4484580dad162849642523676ef",
+    "fix/e62-passive-trace-schema": "96a3b28c6f83b5ec88b079247abcaf149a86ca4a"
+  },
+  "date_utc": "2026-11-06",
+  "draft_pr_creation_error": "Post https://api.github.com/graphql: Forbidden",
+  "evidence_files": {
+    "artifacts/e62-acquisition/repeat01.manifest.json": {
+      "bytes": 1990,
+      "sha256": "636636f078c9474fc0c622d8641fd8c6e9f23804b57ec9690c99a1149f8972c4"
+    },
+    "artifacts/e62-acquisition/repeat02.manifest.json": {
+      "bytes": 1990,
+      "sha256": "fab900416ede499021c45165ae1d7c87ea5d6d72851ddf3e06a890e549d4732b"
+    },
+    "artifacts/e62-t01-full.json": {
+      "bytes": 64310,
+      "sha256": "c3b19006253ba9c99967d576ff3f3f564e33e38af5bb15fc52862aac09d960f3"
+    },
+    "artifacts/e62-t01-qualification.json": {
+      "bytes": 224,
+      "sha256": "a9c2abdec5b7d597b9d63f1a9f3d3b3e0365d7581d7a6f3cf94192d68380afda"
+    },
+    "artifacts/mission-model/correlation.json": {
+      "bytes": 247,
+      "sha256": "6634e08e631681ee9e7b08f709e369a0dd77786bed869203ffe644aaedd71afd"
+    },
+    "artifacts/mission-model/frozen-real-source.json": {
+      "bytes": 686,
+      "sha256": "3f8189dd7257824e8a2a826260eb16c5a6ae91f3f64194bc79fb527bfef86047"
+    },
+    "artifacts/mission-rr-qtest-fixed-v2/record.command.json": {
+      "bytes": 1172,
+      "sha256": "af51d042ceb75f94475cfec6351786cdd64efb22cfb11571d0d75ff359c03d80"
+    },
+    "artifacts/mission-rr-qtest-fixed-v2/record.json": {
+      "bytes": 16335,
+      "sha256": "be288b76940152cba7ca21b226e006af6fcd784e4ec8867dd16a73cf37edf954"
+    },
+    "artifacts/mission-rr-qtest-fixed-v2/replay.command.json": {
+      "bytes": 1172,
+      "sha256": "f6217c3e615ec6e11c294892eb1bcf9e3969c641b0c590e650ee56625605d4e3"
+    },
+    "artifacts/mission-rr-qtest-fixed-v2/replay.json": {
+      "bytes": 12350,
+      "sha256": "5ba367ebc57b6721565009365f0183aabcd0e02ef1f8db3a1151215572ac1591"
+    },
+    "artifacts/mission-rr-qtest-fixed-v2/source-comparison.json": {
+      "bytes": 1047,
+      "sha256": "dc4545be9e591ada6d8f028f3aed02d2827b6d6dd9bb3f24917a099b8552d4bb"
+    },
+    "artifacts/mission-sc5-regression/direct20--16_0.manifest.json": {
+      "bytes": 2003,
+      "sha256": "aa0bf7fa85dbe3f0f1d7fe2abbfcbcfd8cde35a9c9235d76aaf5ad82915fb67c"
+    },
+    "artifacts/mission-sc5-regression/direct20--16_0.result.json": {
+      "bytes": 947,
+      "sha256": "dbd6c3fe92be064ad734f65a3c3cd5f9c648feb7e2dcf5d110a5bd168f275709"
+    },
+    "artifacts/mission-sc5-regression/direct20-0_16.manifest.json": {
+      "bytes": 2000,
+      "sha256": "42467a5ae933ef83aca8dadb8d4e46ed6a7ec9ef020022fa6c8b9a7f3021db58"
+    },
+    "artifacts/mission-sc5-regression/direct20-0_16.result.json": {
+      "bytes": 902,
+      "sha256": "5639b859c86687eba1e3e846e2bb2ca95f36052dea3ea2d3dba4cf931f2872e2"
+    },
+    "artifacts/mission-sc5-regression/direct20-16_0.manifest.json": {
+      "bytes": 2000,
+      "sha256": "53e8234c8d7b91116963a19a8edec2ff9ebbf9464380e0407d96fb317b97c8ab"
+    },
+    "artifacts/mission-sc5-regression/direct20-16_0.result.json": {
+      "bytes": 945,
+      "sha256": "64cd3a366aafae3b52c9203a98bbbb51725fc7f56fcc2b39929b4202decd656c"
+    },
+    "artifacts/mission-sc5-regression/direct20-16_20.manifest.json": {
+      "bytes": 2003,
+      "sha256": "9a68b40ba0432ea42e65facc733209a8519196417a1c42688a46dc37a29c0949"
+    },
+    "artifacts/mission-sc5-regression/direct20-16_20.result.json": {
+      "bytes": 903,
+      "sha256": "e6d63913f130656276552bed2875618b5fd2a7bb905c73a114070316b99dea13"
+    },
+    "artifacts/mission-sc5-regression/direct20-nominal.manifest.json": {
+      "bytes": 2004,
+      "sha256": "c01019ea8b284790e96c3c63db6242dff70edb878eaa0c1d69635529be4a5ccd"
+    },
+    "artifacts/mission-sc5-regression/direct20-nominal.result.json": {
+      "bytes": 900,
+      "sha256": "58f1d662eb158fce37fbb599f94099444ceaa7a9f3ace5958b216a137d0dcd76"
+    },
+    "artifacts/mission-sc5-regression/gentle-0_16.result.json": {
+      "bytes": 827,
+      "sha256": "865e7be058793119b570a1db5955dfc83879bb6ef5cbc30404cfecb1937abcfb"
+    },
+    "artifacts/mission-sc5-regression/gentle-nominal.result.json": {
+      "bytes": 889,
+      "sha256": "0c15a99bb2f63de5d5becec74c5b01e562e34976c04c3b73463bba5666919bfb"
+    },
+    "artifacts/mission-sc5-regression/ramp20_100ms--16_0.result.json": {
+      "bytes": 1009,
+      "sha256": "cc376fdab573d3176cff1e2acef61252bcdf282075478e205f6e7d47092de0f1"
+    },
+    "artifacts/mission-sc5-regression/ramp20_100ms-nominal.result.json": {
+      "bytes": 903,
+      "sha256": "f67447391896c17dce3f5533ac8b74e5f47b3ee9fefb95f0859ebd531dfa2ff1"
+    },
+    "artifacts/mission-sc5-regression/ramp20_500ms-16_20.result.json": {
+      "bytes": 858,
+      "sha256": "18c7023db6ee6ecff5d177d7da4f26c48cf7ff038fc7f3b86eae008200e073b4"
+    },
+    "artifacts/mission-sc5-regression/ramp20_500ms-nominal.result.json": {
+      "bytes": 908,
+      "sha256": "81fd5475421a1322f3ee4d4d4b41b94a6d42f7f8d65b5c91fbb36023a43cbc37"
+    },
+    "artifacts/mission-sc5-regression/smoke-nominal.result.json": {
+      "bytes": 843,
+      "sha256": "7b4dba58455d4872f02c6de946b57702c4e6c47a5c1fbeedfe76f6163669ebb2"
+    },
+    "artifacts/mission-sc5-regression/steps-16_0.result.json": {
+      "bytes": 888,
+      "sha256": "f85380d9c59354b34b68521265ff98a9c9ce09df6c82c54423434af8821b2126"
+    },
+    "artifacts/mission-sc5-regression/steps-nominal.result.json": {
+      "bytes": 894,
+      "sha256": "01828397b84d18aba3e192b623698dd9a197f781884fdc8b34cd5f99cfd72d5a"
+    },
+    "artifacts/mission-sc5-regression/stress-provenance.json": {
+      "bytes": 4148,
+      "sha256": "021cbbdb0b105a5fd0729980ae66c0b07a8025c60af27a68b300dfcb7d4c4fc6"
+    },
+    "artifacts/mission-startup/original-repeat01-adc.json": {
+      "bytes": 2970,
+      "sha256": "387c1187aa96ed191a2ad5f05b8ae56bd868ec3a66eda1a80941aa9a90d8c1e8"
+    },
+    "artifacts/mission-startup/original-repeat01-cap1.json": {
+      "bytes": 608,
+      "sha256": "61a62c07eace4307299e8bb91a8fcfb71202ac08e37244c9244f7cca9c8295ed"
+    },
+    "artifacts/mission-startup/original-repeat01-observability.json": {
+      "bytes": 2264,
+      "sha256": "b36ae72dec047071608960f69565a7c60fbd2ad97d2357190cfbad8109d2e01c"
+    },
+    "artifacts/mission-startup/original-repeat01-torque.json": {
+      "bytes": 911,
+      "sha256": "fe3bedc1b9c6f2a3f49d189c3c614315b0dd4787a960daea3648536da4b7901a"
+    },
+    "artifacts/mission-startup/sc5-refresh-torque.json": {
+      "bytes": 917,
+      "sha256": "89f7a52605863b4edc0bb0a2192ac4ef7b2b0669029dde2218619cc597ea5d76"
+    },
+    "artifacts/mission-timeline/cloud-angle-030-repeat01.manifest.json": {
+      "bytes": 2040,
+      "sha256": "10fe0eeec014869ce86e4e7eb908a61f1560bf886a2f45c2ea7cf4ca6d5aa43d"
+    },
+    "artifacts/mission-timeline/cloud-angle-090-repeat01.manifest.json": {
+      "bytes": 2040,
+      "sha256": "3539702be9990f14ec4441a73bc5eef0186c13c57101c33faa0ab059c5e83afa"
+    },
+    "artifacts/mission-timeline/cloud-angle-090-repeat02.manifest.json": {
+      "bytes": 2040,
+      "sha256": "2a5a7ad80aedcdf7a9a8b7929d9d40efdc0838cb1d45062d7c1025cca644cf27"
+    },
+    "artifacts/mission-timeline/cohort-summary.json": {
+      "bytes": 45144,
+      "sha256": "93977d0a1ead7a942d65a8486cc08576c40951d0902d695c6f09a399e015dfb9"
+    }
+  },
+  "firmware_branches": {
+    "diag/e62-sc5-acquisition": "783252d1333d012f59d9e17f899e7bd7289240b7",
+    "experiment/e62-sc5-equivalent-refresh": "cd35a13771fe3847730040663588157312f7cf83",
+    "fix/e62-boot-release-gates": "b2dea0aa5c9017e7869a4f31e4b126d783ec2f3b"
+  },
+  "fresh_task_restore": "BLOCKED_EXTERNAL_NEW_TASK_NOT_CREATED_BY_AVAILABLE_TOOLS",
+  "issue3": {
+    "artifact_id": 12894011805,
+    "blocker": "GitHub API download Forbidden; exact binary not recovered; no substitution",
+    "required_elf_sha256": "5b90b200429333cef82b982b7a7f845f31fb885c7ea63fc7e783c75232fac8d1",
+    "run_id": 40865298408,
+    "status": "BLOCKED_EXTERNAL"
+  },
+  "original_elf_sha256": "05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0",
+  "production_root_fixes_elf_available": false,
+  "production_root_fixes_elf_sha256": "c49a7485af218966a2e3ec764de8d997d8ba478954dcad42b88c0c99e4f3c003",
+  "qemu_pin": "44f28df24767cf9dca1ddc9b23157737c4cbb645",
+  "restart_observation": "Same environment ID and persisted files; NOT a new-task restoration verification; API remains excluded at spec1.",
+  "rr_source_replay": {
+    "absolute_vns_preserved": true,
+    "dshot_frames": 4820,
+    "first_mismatch_index": null,
+    "hardware_qualified": false,
+    "host_missing_observations_reconstructed": false,
+    "host_record_status": "PASS_NATIVE_AUTONOMOUS_WIRING_SMOKE_SIM_ONLY_STRICT_STABILITY_STILL_OPEN",
+    "host_replay_exception": "RuntimeError: QEMU exited during autonomous motor test",
+    "host_replay_status": "FAIL_NATIVE_AUTONOMOUS_WIRING_SMOKE",
+    "input_sha256": {
+      "record": "c7c7063035f6ddfc76525b9ab8719f05abfc87dd6bcd5706ca486c625056c5e9",
+      "record_evidence": "be288b76940152cba7ca21b226e006af6fcd784e4ec8867dd16a73cf37edf954",
+      "replay": "c7c7063035f6ddfc76525b9ab8719f05abfc87dd6bcd5706ca486c625056c5e9",
+      "replay_evidence": "5ba367ebc57b6721565009365f0183aabcd0e02ef1f8db3a1151215572ac1591"
+    },
+    "p1_qualified": false,
+    "record_events": 74596,
+    "replay_events": 74596,
+    "schema": "e62.rr-source-compare.v1",
+    "scope": "ONE_FINALIZED_RECORDING_NOT_INDEPENDENT_A_A_DETERMINISM_OR_MOTOR_QUALIFICATION",
+    "status": "PASS_EXACT_SOURCE_RR_REPLAY"
+  },
+  "sc5_cases": [
+    {
+      "elf_sha256": "7820370e743212035d150a0e725cf1f28650664caa7fd8ef532bfb693d0fece8",
+      "exact_source_commit": "UNCOMMITTED_EXPERIMENT_ITERATION_SEE_ELF_IDENTITY",
+      "file": "artifacts/mission-sc5/baseline-fault.json",
+      "firmware_class": "experimental_source_build_not_original_or_production_root_fixes",
+      "frames": 3300,
+      "guest_after": {
+        "am13e_bemf_diag_first": 0,
+        "am13e_bemf_diag_seq": 0,
+        "calibration_done": 1,
+        "captured_events": 0,
+        "rejected_events": 0,
+        "runtime_aq_updates": 2,
+        "runtime_commit_count": 2,
+        "runtime_pwm_updates": 11080,
+        "scheduled": 1,
+        "serviced": 0,
+        "step": 1,
+        "throt": 401,
+        "valid_frame_feeds": 1429
+      },
+      "p1_qualified": false,
+      "scenario_sha256": "bebbdadbf3d209ec13758be197add552f8c263ddc26229c96ba0afe4bbb7da92",
+      "sha256": "e94a7e95c79f1bea11331c9b3d4c5458d4d89025d994d8fb1cf6a7db5f78ddfe",
+      "status": "PASS_NATIVE_AUTONOMOUS_WIRING_SMOKE_SIM_ONLY_STRICT_STABILITY_STILL_OPEN"
+    },
+    {
+      "elf_sha256": "49c0aaa39606153d889a55fd9eded506f1a5a63aab3308b0066a0294768fab5b",
+      "exact_source_commit": "UNCOMMITTED_EXPERIMENT_ITERATION_SEE_ELF_IDENTITY",
+      "file": "artifacts/mission-sc5/continuous-equivalent-refresh.json",
+      "firmware_class": "experimental_source_build_not_original_or_production_root_fixes",
+      "frames": 3300,
+      "guest_after": {
+        "am13e_bemf_diag_first": 23864,
+        "am13e_bemf_diag_seq": 9,
+        "calibration_done": 1,
+        "captured_events": 9,
+        "rejected_events": 0,
+        "runtime_aq_updates": 10,
+        "runtime_commit_count": 2,
+        "runtime_pwm_updates": 13136,
+        "scheduled": 9,
+        "serviced": 8,
+        "step": 3,
+        "throt": 401,
+        "valid_frame_feeds": 1531
+      },
+      "p1_qualified": false,
+      "scenario_sha256": "bebbdadbf3d209ec13758be197add552f8c263ddc26229c96ba0afe4bbb7da92",
+      "sha256": "d80f99ec94e47cda889fd0dbbed998b24d1921ece3afac1b6e299168246ecc7a",
+      "status": "PASS_NATIVE_AUTONOMOUS_WIRING_SMOKE_SIM_ONLY_STRICT_STABILITY_STILL_OPEN"
+    },
+    {
+      "elf_sha256": "b8500032aeb15c3c2d98974cb36f7a10e68558eb32f197dd5781142f40a18270",
+      "exact_source_commit": "UNCOMMITTED_EXPERIMENT_ITERATION_SEE_ELF_IDENTITY",
+      "file": "artifacts/mission-sc5/equivalent-refresh.json",
+      "firmware_class": "experimental_source_build_not_original_or_production_root_fixes",
+      "frames": 3300,
+      "guest_after": {
+        "am13e_bemf_diag_first": 0,
+        "am13e_bemf_diag_seq": 0,
+        "calibration_done": 1,
+        "captured_events": 0,
+        "rejected_events": 0,
+        "runtime_aq_updates": 2,
+        "runtime_commit_count": 2,
+        "runtime_pwm_updates": 11080,
+        "scheduled": 1,
+        "serviced": 0,
+        "step": 1,
+        "throt": 401,
+        "valid_frame_feeds": 1429
+      },
+      "p1_qualified": false,
+      "scenario_sha256": "bebbdadbf3d209ec13758be197add552f8c263ddc26229c96ba0afe4bbb7da92",
+      "sha256": "9ad77e9373a916c98ee53b69eaff503f8344a177a74e5613ba24d7edf21102e4",
+      "status": "PASS_NATIVE_AUTONOMOUS_WIRING_SMOKE_SIM_ONLY_STRICT_STABILITY_STILL_OPEN"
+    },
+    {
+      "elf_sha256": "1452b4ec1575615662d2f9e9e793cbd15fb3e6a381d32bce2fc79fdfff54e1ab",
+      "exact_source_commit": "bb02e4c",
+      "file": "artifacts/mission-sc5/fixed-no-journal-pinned.json",
+      "firmware_class": "experimental_source_build_not_original_or_production_root_fixes",
+      "frames": 3300,
+      "guest_after": {
+        "am13e_bemf_diag_first": 23865,
+        "am13e_bemf_diag_seq": 133,
+        "calibration_done": 1,
+        "captured_events": 132,
+        "rejected_events": 0,
+        "runtime_aq_updates": 134,
+        "runtime_commit_count": 3,
+        "runtime_pwm_updates": 47924,
+        "scheduled": 132,
+        "serviced": 131,
+        "step": 0,
+        "throt": 0,
+        "valid_frame_feeds": 3155
+      },
+      "p1_qualified": false,
+      "scenario_sha256": "bebbdadbf3d209ec13758be197add552f8c263ddc26229c96ba0afe4bbb7da92",
+      "sha256": "333c5d7e084a983b3644f6df695822b4537c976e0d93749bb356640d47b03a96",
+      "status": "PASS_NATIVE_AUTONOMOUS_WIRING_SMOKE_SIM_ONLY_STRICT_STABILITY_STILL_OPEN"
+    },
+    {
+      "elf_sha256": "b69a55e01a101871014e0e8b688be92035f9e902bc84bd614e173e1c36dae66a",
+      "exact_source_commit": "UNCOMMITTED_EXPERIMENT_ITERATION_SEE_ELF_IDENTITY",
+      "file": "artifacts/mission-sc5/fixed-no-journal.json",
+      "firmware_class": "experimental_source_build_not_original_or_production_root_fixes",
+      "frames": 3300,
+      "guest_after": {
+        "am13e_bemf_diag_first": 23865,
+        "am13e_bemf_diag_seq": 133,
+        "calibration_done": 1,
+        "captured_events": 132,
+        "rejected_events": 0,
+        "runtime_aq_updates": 134,
+        "runtime_commit_count": 3,
+        "runtime_pwm_updates": 48020,
+        "scheduled": 132,
+        "serviced": 131,
+        "step": 0,
+        "throt": 0,
+        "valid_frame_feeds": 3155
+      },
+      "p1_qualified": false,
+      "scenario_sha256": "bebbdadbf3d209ec13758be197add552f8c263ddc26229c96ba0afe4bbb7da92",
+      "sha256": "1049793f68d1078b18252795731d0c865d7c955a6faa2e4dca2f9b1603f3fbdc",
+      "status": "PASS_NATIVE_AUTONOMOUS_WIRING_SMOKE_SIM_ONLY_STRICT_STABILITY_STILL_OPEN"
+    },
+    {
+      "elf_sha256": "7820370e743212035d150a0e725cf1f28650664caa7fd8ef532bfb693d0fece8",
+      "exact_source_commit": "UNCOMMITTED_EXPERIMENT_ITERATION_SEE_ELF_IDENTITY",
+      "file": "artifacts/mission-sc5/matched-control.json",
+      "firmware_class": "experimental_source_build_not_original_or_production_root_fixes",
+      "frames": 5100,
+      "guest_after": {
+        "am13e_bemf_diag_first": 0,
+        "am13e_bemf_diag_seq": 0,
+        "calibration_done": 1,
+        "captured_events": 0,
+        "rejected_events": 0,
+        "runtime_aq_updates": 2,
+        "runtime_commit_count": 2,
+        "runtime_pwm_updates": 11080,
+        "scheduled": 1,
+        "serviced": 0,
+        "step": 1,
+        "throt": 401,
+        "valid_frame_feeds": 1429
+      },
+      "p1_qualified": false,
+      "scenario_sha256": "891b9b7503f0933d58310fbd8541139d6fec69f8c1b35212b34c88b6c4ffce20",
+      "sha256": "941c1b3d66a8d23240f446c5e13498aba73f719eba0808a99ec9e5f59557a296",
+      "status": "PASS_NATIVE_AUTONOMOUS_WIRING_SMOKE_SIM_ONLY_STRICT_STABILITY_STILL_OPEN"
+    },
+    {
+      "elf_sha256": "458b21a0721e21d5aa3c27198843e6b114d465967f2b0f0baa916f6f3b8f88e2",
+      "exact_source_commit": "UNCOMMITTED_EXPERIMENT_ITERATION_SEE_ELF_IDENTITY",
+      "file": "artifacts/mission-sc5/native.json",
+      "firmware_class": "experimental_source_build_not_original_or_production_root_fixes",
+      "frames": 5100,
+      "guest_after": {
+        "am13e_bemf_diag_first": 0,
+        "am13e_bemf_diag_seq": 0,
+        "calibration_done": 1,
+        "captured_events": 0,
+        "rejected_events": 0,
+        "runtime_aq_updates": 2,
+        "runtime_commit_count": 2,
+        "runtime_pwm_updates": 11080,
+        "scheduled": 1,
+        "serviced": 0,
+        "step": 1,
+        "throt": 401,
+        "valid_frame_feeds": 1429
+      },
+      "p1_qualified": false,
+      "scenario_sha256": "891b9b7503f0933d58310fbd8541139d6fec69f8c1b35212b34c88b6c4ffce20",
+      "sha256": "9b0a8644b12b9c9c65fffc88f8c15a08d97fd35a8bfed57851e0119380ec2ff0",
+      "status": "PASS_NATIVE_AUTONOMOUS_WIRING_SMOKE_SIM_ONLY_STRICT_STABILITY_STILL_OPEN"
+    },
+    {
+      "elf_sha256": "c0502dcf4df936905cfc71162a28652d9384078299d375378bc673d6ec1436c2",
+      "exact_source_commit": "UNCOMMITTED_EXPERIMENT_ITERATION_SEE_ELF_IDENTITY",
+      "file": "artifacts/mission-sc5/pending-association-refresh.json",
+      "firmware_class": "experimental_source_build_not_original_or_production_root_fixes",
+      "frames": 5100,
+      "guest_after": {
+        "am13e_bemf_diag_first": 23864,
+        "am13e_bemf_diag_seq": 266,
+        "calibration_done": 1,
+        "captured_events": 264,
+        "rejected_events": 0,
+        "runtime_aq_updates": 268,
+        "runtime_commit_count": 5,
+        "runtime_pwm_updates": 80267,
+        "scheduled": 265,
+        "serviced": 263,
+        "step": 0,
+        "throt": 0,
+        "valid_frame_feeds": 4881
+      },
+      "p1_qualified": false,
+      "scenario_sha256": "891b9b7503f0933d58310fbd8541139d6fec69f8c1b35212b34c88b6c4ffce20",
+      "sha256": "3eee6031d0a32ff61a87a6a26bd6a0dbb353c0329ba71162e8f409390104e92a",
+      "status": "PASS_NATIVE_AUTONOMOUS_WIRING_SMOKE_SIM_ONLY_STRICT_STABILITY_STILL_OPEN"
+    },
+    {
+      "elf_sha256": "5a0f562bf66444c3f4b34b2ea416e3a8d334c6df512afea2a701fa3852117166",
+      "exact_source_commit": "UNCOMMITTED_EXPERIMENT_ITERATION_SEE_ELF_IDENTITY",
+      "file": "artifacts/mission-sc5/producer-refresh.json",
+      "firmware_class": "experimental_source_build_not_original_or_production_root_fixes",
+      "frames": 3300,
+      "guest_after": {
+        "am13e_bemf_diag_first": 23864,
+        "am13e_bemf_diag_seq": 2,
+        "calibration_done": 1,
+        "captured_events": 2,
+        "rejected_events": 1,
+        "runtime_aq_updates": 2,
+        "runtime_commit_count": 2,
+        "runtime_pwm_updates": 11353,
+        "scheduled": 2,
+        "serviced": 0,
+        "step": 1,
+        "throt": 401,
+        "valid_frame_feeds": 1442
+      },
+      "p1_qualified": false,
+      "scenario_sha256": "bebbdadbf3d209ec13758be197add552f8c263ddc26229c96ba0afe4bbb7da92",
+      "sha256": "dde7204d388a215bc5f33d037102add6a5337397e71174c49b5b054384e32d16",
+      "status": "PASS_NATIVE_AUTONOMOUS_WIRING_SMOKE_SIM_ONLY_STRICT_STABILITY_STILL_OPEN"
+    },
+    {
+      "elf_sha256": "1a8cbafdf1a91691bdaf6dcecdf8cd7bd8d3b8147b915adc3c4da5a173afffb6",
+      "exact_source_commit": "UNCOMMITTED_EXPERIMENT_ITERATION_SEE_ELF_IDENTITY",
+      "file": "artifacts/mission-sc5/quarantined-refresh.json",
+      "firmware_class": "experimental_source_build_not_original_or_production_root_fixes",
+      "frames": 3300,
+      "guest_after": {
+        "am13e_bemf_diag_first": 23864,
+        "am13e_bemf_diag_seq": 97,
+        "calibration_done": 1,
+        "captured_events": 97,
+        "rejected_events": 0,
+        "runtime_aq_updates": 98,
+        "runtime_commit_count": 2,
+        "runtime_pwm_updates": 32504,
+        "scheduled": 97,
+        "serviced": 96,
+        "step": 1,
+        "throt": 401,
+        "valid_frame_feeds": 2489
+      },
+      "p1_qualified": false,
+      "scenario_sha256": "bebbdadbf3d209ec13758be197add552f8c263ddc26229c96ba0afe4bbb7da92",
+      "sha256": "dd7218b6f386298d3cd3e2d3d46270980d1577f25e6737177a027fbe51f80ff6",
+      "status": "PASS_NATIVE_AUTONOMOUS_WIRING_SMOKE_SIM_ONLY_STRICT_STABILITY_STILL_OPEN"
+    },
+    {
+      "elf_sha256": "483c9845f8ef251f5d790db155e703377e5d4669d2e99f3cdf95ae29c060d6ce",
+      "exact_source_commit": "UNCOMMITTED_EXPERIMENT_ITERATION_SEE_ELF_IDENTITY",
+      "file": "artifacts/mission-sc5/uninstrumented-control.json",
+      "firmware_class": "experimental_source_build_not_original_or_production_root_fixes",
+      "frames": 3300,
+      "guest_after": {
+        "am13e_bemf_diag_first": 0,
+        "am13e_bemf_diag_seq": 0,
+        "calibration_done": 1,
+        "captured_events": 0,
+        "rejected_events": 0,
+        "runtime_aq_updates": 2,
+        "runtime_commit_count": 2,
+        "runtime_pwm_updates": 11650,
+        "scheduled": 1,
+        "serviced": 0,
+        "step": 1,
+        "throt": 401,
+        "valid_frame_feeds": 1428
+      },
+      "p1_qualified": false,
+      "scenario_sha256": "bebbdadbf3d209ec13758be197add552f8c263ddc26229c96ba0afe4bbb7da92",
+      "sha256": "9d999b47f231469a28680cef255c0536bdfaed683444e38eaf3eb7c5c0abfb92",
+      "status": "PASS_NATIVE_AUTONOMOUS_WIRING_SMOKE_SIM_ONLY_STRICT_STABILITY_STILL_OPEN"
+    }
+  ],
+  "sc5_regression": {
+    "cases": [
+      {
+        "analyzer_exit": 1,
+        "case": "smoke",
+        "direction_changes": 0,
+        "evidence": "artifacts/mission-sc5-regression/smoke-nominal.json",
+        "failures": [
+          "ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN"
+        ],
+        "guest_after": {
+          "am13e_bemf_diag_first": 24174,
+          "am13e_bemf_diag_seq": 1455,
+          "calibration_done": 1,
+          "captured_events": 1454,
+          "rejected_events": 0,
+          "runtime_aq_updates": 1457,
+          "runtime_commit_count": 3,
+          "runtime_pwm_updates": 45346,
+          "scheduled": 1455,
+          "serviced": 1454,
+          "step": 0,
+          "throt": 0,
+          "valid_frame_feeds": 2868
+        },
+        "p1_qualified": false,
+        "probe_exit": 0,
+        "scenario_sha256": "120fdf49397a1c8f86868aba81aab46ecdebdcf792713bce7b1199d01fa97781",
+        "source_frames": 3000,
+        "speed_signs": [
+          1
+        ],
+        "stress": null,
+        "strict_status": "FAIL_P1_SIM_ONLY_OBSERVABILITY"
+      },
+      {
+        "analyzer_exit": 1,
+        "case": "gentle",
+        "direction_changes": 5,
+        "evidence": "artifacts/mission-sc5-regression/gentle-nominal.json",
+        "failures": [
+          "ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN",
+          "STARTUP_SIGNIFICANT_DIRECTION_REVERSAL"
+        ],
+        "guest_after": {
+          "am13e_bemf_diag_first": 24423,
+          "am13e_bemf_diag_seq": 79,
+          "calibration_done": 1,
+          "captured_events": 78,
+          "rejected_events": 1,
+          "runtime_aq_updates": 80,
+          "runtime_commit_count": 3,
+          "runtime_pwm_updates": 81897,
+          "scheduled": 78,
+          "serviced": 77,
+          "step": 0,
+          "throt": 0,
+          "valid_frame_feeds": 4788
+        },
+        "p1_qualified": false,
+        "probe_exit": 0,
+        "scenario_sha256": "2531e1b3432e1cfd9e717bd1a3682d2c7bad0f394878b1403674809782020d28",
+        "source_frames": 5000,
+        "speed_signs": [
+          -1,
+          1
+        ],
+        "stress": null,
+        "strict_status": "FAIL_P1_SIM_ONLY_OBSERVABILITY"
+      },
+      {
+        "analyzer_exit": 1,
+        "case": "direct20",
+        "direction_changes": 262,
+        "evidence": "artifacts/mission-sc5-regression/direct20-nominal.json",
+        "failures": [
+          "ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN",
+          "STARTUP_SIGNIFICANT_DIRECTION_REVERSAL"
+        ],
+        "guest_after": {
+          "am13e_bemf_diag_first": 23865,
+          "am13e_bemf_diag_seq": 133,
+          "calibration_done": 1,
+          "captured_events": 132,
+          "rejected_events": 0,
+          "runtime_aq_updates": 134,
+          "runtime_commit_count": 3,
+          "runtime_pwm_updates": 48090,
+          "scheduled": 132,
+          "serviced": 131,
+          "step": 0,
+          "throt": 0,
+          "valid_frame_feeds": 3155
+        },
+        "p1_qualified": false,
+        "probe_exit": 0,
+        "scenario_sha256": "bebbdadbf3d209ec13758be197add552f8c263ddc26229c96ba0afe4bbb7da92",
+        "source_frames": 3300,
+        "speed_signs": [
+          -1,
+          1
+        ],
+        "stress": null,
+        "strict_status": "FAIL_P1_SIM_ONLY_OBSERVABILITY"
+      },
+      {
+        "analyzer_exit": 1,
+        "case": "steps",
+        "direction_changes": 257,
+        "evidence": "artifacts/mission-sc5-regression/steps-nominal.json",
+        "failures": [
+          "ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN",
+          "STARTUP_SIGNIFICANT_DIRECTION_REVERSAL"
+        ],
+        "guest_after": {
+          "am13e_bemf_diag_first": 23870,
+          "am13e_bemf_diag_seq": 132,
+          "calibration_done": 1,
+          "captured_events": 131,
+          "rejected_events": 1,
+          "runtime_aq_updates": 132,
+          "runtime_commit_count": 3,
+          "runtime_pwm_updates": 48108,
+          "scheduled": 130,
+          "serviced": 129,
+          "step": 0,
+          "throt": 0,
+          "valid_frame_feeds": 3156
+        },
+        "p1_qualified": false,
+        "probe_exit": 0,
+        "scenario_sha256": "d7b4798b271205314ebd90e5ba4ae06e0c8723c9c5a2e909669fec04b59c41b2",
+        "source_frames": 3300,
+        "speed_signs": [
+          -1,
+          1
+        ],
+        "stress": null,
+        "strict_status": "FAIL_P1_SIM_ONLY_OBSERVABILITY"
+      },
+      {
+        "analyzer_exit": 1,
+        "case": "ramp20_100ms",
+        "direction_changes": 186,
+        "evidence": "artifacts/mission-sc5-regression/ramp20_100ms-nominal.json",
+        "failures": [
+          "ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN",
+          "STARTUP_SIGNIFICANT_DIRECTION_REVERSAL"
+        ],
+        "guest_after": {
+          "am13e_bemf_diag_first": 24033,
+          "am13e_bemf_diag_seq": 98,
+          "calibration_done": 1,
+          "captured_events": 97,
+          "rejected_events": 0,
+          "runtime_aq_updates": 99,
+          "runtime_commit_count": 3,
+          "runtime_pwm_updates": 37930,
+          "scheduled": 97,
+          "serviced": 96,
+          "step": 0,
+          "throt": 0,
+          "valid_frame_feeds": 2676
+        },
+        "p1_qualified": false,
+        "probe_exit": 0,
+        "scenario_sha256": "f2688ee5fbcc13fc2cc10f6277456e2d20d896c7bc9d68c36e603d2e29c032ca",
+        "source_frames": 2800,
+        "speed_signs": [
+          -1,
+          1
+        ],
+        "stress": null,
+        "strict_status": "FAIL_P1_SIM_ONLY_OBSERVABILITY"
+      },
+      {
+        "analyzer_exit": 1,
+        "case": "ramp20_500ms",
+        "direction_changes": 144,
+        "evidence": "artifacts/mission-sc5-regression/ramp20_500ms-nominal.json",
+        "failures": [
+          "ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN",
+          "STARTUP_SIGNIFICANT_DIRECTION_REVERSAL"
+        ],
+        "guest_after": {
+          "am13e_bemf_diag_first": 24145,
+          "am13e_bemf_diag_seq": 849,
+          "calibration_done": 1,
+          "captured_events": 848,
+          "rejected_events": 0,
+          "runtime_aq_updates": 847,
+          "runtime_commit_count": 3,
+          "runtime_pwm_updates": 47873,
+          "scheduled": 845,
+          "serviced": 844,
+          "step": 0,
+          "throt": 0,
+          "valid_frame_feeds": 3060
+        },
+        "p1_qualified": false,
+        "probe_exit": 0,
+        "scenario_sha256": "b760302b95efd990260b6b26a90dc201ff4784b57ab7f4add96943bf0ff1b875",
+        "source_frames": 3200,
+        "speed_signs": [
+          -1,
+          1
+        ],
+        "stress": null,
+        "strict_status": "FAIL_P1_SIM_ONLY_OBSERVABILITY"
+      },
+      {
+        "analyzer_exit": 1,
+        "case": "direct20",
+        "direction_changes": 8,
+        "evidence": "artifacts/mission-sc5-regression/direct20-0_16.json",
+        "failures": [
+          "ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN",
+          "STARTUP_SIGNIFICANT_DIRECTION_REVERSAL"
+        ],
+        "guest_after": {
+          "am13e_bemf_diag_first": 23822,
+          "am13e_bemf_diag_seq": 3149,
+          "calibration_done": 1,
+          "captured_events": 3149,
+          "rejected_events": 2,
+          "runtime_aq_updates": 2626,
+          "runtime_commit_count": 3,
+          "runtime_pwm_updates": 54068,
+          "scheduled": 2624,
+          "serviced": 2623,
+          "step": 0,
+          "throt": 0,
+          "valid_frame_feeds": 3155
+        },
+        "p1_qualified": false,
+        "probe_exit": 0,
+        "scenario_sha256": "bebbdadbf3d209ec13758be197add552f8c263ddc26229c96ba0afe4bbb7da92",
+        "source_frames": 3300,
+        "speed_signs": [
+          -1,
+          1
+        ],
+        "stress": "0:16",
+        "strict_status": "FAIL_P1_SIM_ONLY_OBSERVABILITY"
+      },
+      {
+        "analyzer_exit": 1,
+        "case": "gentle",
+        "direction_changes": null,
+        "evidence": "artifacts/mission-sc5-regression/gentle-0_16.json",
+        "failures": [
+          "INVALID_OR_MISSING_INPUT"
+        ],
+        "guest_after": {
+          "am13e_bemf_diag_first": 24142,
+          "am13e_bemf_diag_seq": 18780,
+          "calibration_done": 1,
+          "captured_events": 18780,
+          "rejected_events": 2,
+          "runtime_aq_updates": 2827,
+          "runtime_commit_count": 3,
+          "runtime_pwm_updates": 97297,
+          "scheduled": 2825,
+          "serviced": 2824,
+          "step": 0,
+          "throt": 0,
+          "valid_frame_feeds": 4787
+        },
+        "p1_qualified": false,
+        "probe_exit": 0,
+        "scenario_sha256": "2531e1b3432e1cfd9e717bd1a3682d2c7bad0f394878b1403674809782020d28",
+        "source_frames": 5000,
+        "speed_signs": null,
+        "stress": "0:16",
+        "strict_status": "FAIL_P1_SIM_ONLY_OBSERVABILITY"
+      },
+      {
+        "analyzer_exit": 1,
+        "case": "direct20",
+        "direction_changes": 60,
+        "evidence": "artifacts/mission-sc5-regression/direct20-16_0.json",
+        "failures": [
+          "ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN",
+          "STARTUP_SIGNIFICANT_DIRECTION_REVERSAL",
+          "INSUFFICIENT_ORIGINAL_GUEST_CLOSED_LOOP_AFTER_ARM"
+        ],
+        "guest_after": {
+          "am13e_bemf_diag_first": 24016,
+          "am13e_bemf_diag_seq": 4,
+          "calibration_done": 1,
+          "captured_events": 3,
+          "rejected_events": 0,
+          "runtime_aq_updates": 5,
+          "runtime_commit_count": 3,
+          "runtime_pwm_updates": 47609,
+          "scheduled": 3,
+          "serviced": 2,
+          "step": 0,
+          "throt": 0,
+          "valid_frame_feeds": 3155
+        },
+        "p1_qualified": false,
+        "probe_exit": 0,
+        "scenario_sha256": "bebbdadbf3d209ec13758be197add552f8c263ddc26229c96ba0afe4bbb7da92",
+        "source_frames": 3300,
+        "speed_signs": [
+          -1,
+          1
+        ],
+        "stress": "16:0",
+        "strict_status": "FAIL_P1_SIM_ONLY_OBSERVABILITY"
+      },
+      {
+        "analyzer_exit": 1,
+        "case": "steps",
+        "direction_changes": 126,
+        "evidence": "artifacts/mission-sc5-regression/steps-16_0.json",
+        "failures": [
+          "ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN",
+          "STARTUP_SIGNIFICANT_DIRECTION_REVERSAL"
+        ],
+        "guest_after": {
+          "am13e_bemf_diag_first": 24044,
+          "am13e_bemf_diag_seq": 65,
+          "calibration_done": 1,
+          "captured_events": 64,
+          "rejected_events": 0,
+          "runtime_aq_updates": 65,
+          "runtime_commit_count": 3,
+          "runtime_pwm_updates": 47764,
+          "scheduled": 63,
+          "serviced": 62,
+          "step": 0,
+          "throt": 0,
+          "valid_frame_feeds": 3156
+        },
+        "p1_qualified": false,
+        "probe_exit": 0,
+        "scenario_sha256": "d7b4798b271205314ebd90e5ba4ae06e0c8723c9c5a2e909669fec04b59c41b2",
+        "source_frames": 3300,
+        "speed_signs": [
+          -1,
+          1
+        ],
+        "stress": "16:0",
+        "strict_status": "FAIL_P1_SIM_ONLY_OBSERVABILITY"
+      },
+      {
+        "analyzer_exit": 1,
+        "case": "direct20",
+        "direction_changes": 58,
+        "evidence": "artifacts/mission-sc5-regression/direct20--16_0.json",
+        "failures": [
+          "ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN",
+          "STARTUP_SIGNIFICANT_DIRECTION_REVERSAL",
+          "INSUFFICIENT_ORIGINAL_GUEST_CLOSED_LOOP_AFTER_ARM"
+        ],
+        "guest_after": {
+          "am13e_bemf_diag_first": 23881,
+          "am13e_bemf_diag_seq": 3,
+          "calibration_done": 1,
+          "captured_events": 2,
+          "rejected_events": 0,
+          "runtime_aq_updates": 4,
+          "runtime_commit_count": 3,
+          "runtime_pwm_updates": 47604,
+          "scheduled": 2,
+          "serviced": 1,
+          "step": 0,
+          "throt": 0,
+          "valid_frame_feeds": 3155
+        },
+        "p1_qualified": false,
+        "probe_exit": 0,
+        "scenario_sha256": "bebbdadbf3d209ec13758be197add552f8c263ddc26229c96ba0afe4bbb7da92",
+        "source_frames": 3300,
+        "speed_signs": [
+          -1,
+          1
+        ],
+        "stress": "-16:0",
+        "strict_status": "FAIL_P1_SIM_ONLY_OBSERVABILITY"
+      },
+      {
+        "analyzer_exit": 1,
+        "case": "ramp20_100ms",
+        "direction_changes": 58,
+        "evidence": "artifacts/mission-sc5-regression/ramp20_100ms--16_0.json",
+        "failures": [
+          "ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN",
+          "STARTUP_SIGNIFICANT_DIRECTION_REVERSAL",
+          "INSUFFICIENT_ORIGINAL_GUEST_CLOSED_LOOP_AFTER_ARM",
+          "NO_ORIGINAL_BEMF_COMPARATOR_FILTER_TRANSITIONS"
+        ],
+        "guest_after": {
+          "am13e_bemf_diag_first": 24426,
+          "am13e_bemf_diag_seq": 1,
+          "calibration_done": 1,
+          "captured_events": 0,
+          "rejected_events": 0,
+          "runtime_aq_updates": 3,
+          "runtime_commit_count": 3,
+          "runtime_pwm_updates": 37631,
+          "scheduled": 1,
+          "serviced": 0,
+          "step": 0,
+          "throt": 0,
+          "valid_frame_feeds": 2676
+        },
+        "p1_qualified": false,
+        "probe_exit": 0,
+        "scenario_sha256": "f2688ee5fbcc13fc2cc10f6277456e2d20d896c7bc9d68c36e603d2e29c032ca",
+        "source_frames": 2800,
+        "speed_signs": [
+          -1,
+          1
+        ],
+        "stress": "-16:0",
+        "strict_status": "FAIL_P1_SIM_ONLY_OBSERVABILITY"
+      },
+      {
+        "analyzer_exit": 1,
+        "case": "direct20",
+        "direction_changes": 336,
+        "evidence": "artifacts/mission-sc5-regression/direct20-16_20.json",
+        "failures": [
+          "ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN",
+          "STARTUP_SIGNIFICANT_DIRECTION_REVERSAL"
+        ],
+        "guest_after": {
+          "am13e_bemf_diag_first": 23822,
+          "am13e_bemf_diag_seq": 3505,
+          "calibration_done": 1,
+          "captured_events": 3505,
+          "rejected_events": 2,
+          "runtime_aq_updates": 364,
+          "runtime_commit_count": 3,
+          "runtime_pwm_updates": 50946,
+          "scheduled": 362,
+          "serviced": 361,
+          "step": 0,
+          "throt": 0,
+          "valid_frame_feeds": 3155
+        },
+        "p1_qualified": false,
+        "probe_exit": 0,
+        "scenario_sha256": "bebbdadbf3d209ec13758be197add552f8c263ddc26229c96ba0afe4bbb7da92",
+        "source_frames": 3300,
+        "speed_signs": [
+          -1,
+          1
+        ],
+        "stress": "16:20",
+        "strict_status": "FAIL_P1_SIM_ONLY_OBSERVABILITY"
+      },
+      {
+        "analyzer_exit": 1,
+        "case": "ramp20_500ms",
+        "direction_changes": 0,
+        "evidence": "artifacts/mission-sc5-regression/ramp20_500ms-16_20.json",
+        "failures": [
+          "ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN"
+        ],
+        "guest_after": {
+          "am13e_bemf_diag_first": 23902,
+          "am13e_bemf_diag_seq": 4284,
+          "calibration_done": 1,
+          "captured_events": 4284,
+          "rejected_events": 2,
+          "runtime_aq_updates": 2405,
+          "runtime_commit_count": 3,
+          "runtime_pwm_updates": 51904,
+          "scheduled": 2403,
+          "serviced": 2402,
+          "step": 0,
+          "throt": 0,
+          "valid_frame_feeds": 3060
+        },
+        "p1_qualified": false,
+        "probe_exit": 0,
+        "scenario_sha256": "b760302b95efd990260b6b26a90dc201ff4784b57ab7f4add96943bf0ff1b875",
+        "source_frames": 3200,
+        "speed_signs": [
+          1
+        ],
+        "stress": "16:20",
+        "strict_status": "FAIL_P1_SIM_ONLY_OBSERVABILITY"
+      }
+    ],
+    "hardware_qualified": false,
+    "inputs": {
+      "candidate": {
+        "path": "/workspace/escape32-qemu/.build/mission-fw-sc5-fixed-no-journal/AM13E-rev17.3.elf",
+        "sha256": "1452b4ec1575615662d2f9e9e793cbd15fb3e6a381d32bce2fc79fdfff54e1ab"
+      },
+      "cfg": {
+        "path": "/workspace/escape32-qemu/artifacts/mission-sc5/sc5-g13b3-cfg-flash.bin",
+        "sha256": "ab144c4b281ec53feb399b45c758b1de72b2c16f252e6ff64980f263b3a51702"
+      },
+      "original": {
+        "path": "/workspace/escape32-qemu/baseline/e62-g13b3/firmware/AM13E-rev17.3.elf",
+        "sha256": "05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0"
+      },
+      "qemu": {
+        "path": "/workspace/escape32-qemu/.build/qemu-src/build/qemu-system-arm",
+        "sha256": "d5f4f5102469bb6dc4012682f4d7101d01b7c26fe7c3b29cd01a8c685ba7b943"
+      }
+    },
+    "p1_thresholds_changed": false,
+    "schema": "e62.sc5-candidate-regression.v1",
+    "scope": "NEW_SC5_EXPERIMENT_NOT_ISSUE3_EXACT_SUITE_OR_ORIGINAL",
+    "source_commit": "bb02e4c",
+    "status": "FAILED"
+  },
+  "schema": "e62.engineering-evidence.v1",
+  "wsl_datasets": {
+    "sync-angle-030-repeat01": {
+      "configuration": "UNAVAILABLE",
+      "provenance": "UNAVAILABLE",
+      "raw_log": "UNAVAILABLE",
+      "scenario": "UNAVAILABLE",
+      "status": "BLOCKED_EXTERNAL"
+    },
+    "sync-angle-090-repeat01": {
+      "configuration": "UNAVAILABLE",
+      "provenance": "UNAVAILABLE",
+      "raw_log": "UNAVAILABLE",
+      "scenario": "UNAVAILABLE",
+      "status": "BLOCKED_EXTERNAL"
+    },
+    "sync-angle-090-repeat02": {
+      "configuration": "UNAVAILABLE",
+      "provenance": "UNAVAILABLE",
+      "raw_log": "UNAVAILABLE",
+      "scenario": "UNAVAILABLE",
+      "status": "BLOCKED_EXTERNAL"
+    }
+  }
+}

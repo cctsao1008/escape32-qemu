@@ -1,0 +1,12 @@
+{
+  "environment_id": "ccarenv_b64_Y2NhcmVudl9kZGY1ZTBiYTBmOTg4MTkxODM2OGU5OWU3ZWQ1NWNmMA",
+  "source_config_id": "5a16e8145ab3d8adcab4547ba6949c925375c6949150c4e5afa922f86d7d5300~cecfg_64f797b7cc18819cb115033e76babe62",
+  "source_config_version_id": "5a16e8145ab3d8adcab4547ba6949c925375c6949150c4e5afa922f86d7d5300~cecfgver_6aede1409df4819c8ee0312d6cbd8058",
+  "spec_revision": "1",
+  "observed_spec_revision": "1",
+  "phase": "running",
+  "network_mode": "restricted",
+  "network_state": "enforced",
+  "github_api_effectively_allowed": false,
+  "fresh_task_creation_available": false
+}
