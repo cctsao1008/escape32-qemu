@@ -21,3 +21,16 @@ PYTHONPATH=.:tests python3 -m unittest tests.test_e62_qtest_noreplay tests.test_
 Five focused tests pass: unique source anchor/idempotence, rejection of missing/duplicate anchors, QMP event/ack consumption, EOF plus independent process verification, and rejection of QMP errors. Actual full QEMU experiments are separately versioned with complete command arrays, binary SHA256 and raw source event logs under `artifacts/mission-rr-qtest-fixed-v2/`. They use experimental source-53953c firmware and the existing 204fe85 experimental QEMU implementation, not c49a7485 Production Root Fixes or Original055. `-icount shift=2,sleep=off,align=off` was already enabled in the non-RR cohort; RR adds event recording, not that timing option.
 
 QTest queries are debug-side observations. Excluding the query transport from character replay does not establish deterministic query arrival, nor may host wall times be used for event chronology. Compare absolute source `vns`/event identities before claiming determinism. No synthetic event may fill a missing replay interval.
+
+## Finalized source replay result
+
+`tools/e62_rr_source_compare.py` verifies sequential/monotonic source records, complete indexed DShot input, matching firmware/scenario/effective-profile identities, finalized zero-exit processes, and exact tuples including absolute virtual timestamps. It reports `PASS_EXACT_SOURCE_RR_REPLAY` for 74,596 events / 4820 frames. Both raw event files have SHA256 `c7c7063035f6ddfc76525b9ab8719f05abfc87dd6bcd5706ca486c625056c5e9`. The live replay probe **FAILS** (`QEMU exited during autonomous motor test`): QEMU exits at the recorded end before the host's final poll. That failure and missing final observation are retained in the comparison output, not converted to a live-probe PASS. This result demonstrates replay of this recorded event history, not identical independent boots or motor success. Ten focused tests cover transport/QMP plus incomplete or corrupt input, absolute timestamp mismatch, provenance mismatch and preserving host failure.
+
+```sh
+python3 tools/e62_rr_source_compare.py \
+  --record artifacts/mission-rr-qtest-fixed-v2/record.p0.events.log \
+  --replay artifacts/mission-rr-qtest-fixed-v2/replay.p0.events.log \
+  --record-evidence artifacts/mission-rr-qtest-fixed-v2/record.json \
+  --replay-evidence artifacts/mission-rr-qtest-fixed-v2/replay.json \
+  --output artifacts/mission-rr-qtest-fixed-v2/source-comparison.json
+```
