@@ -23,7 +23,11 @@ KINDS={"CMP_FILTER","CAP1","TIMG12","PWM_PAIR","ROTOR",
        "SWITCH_FOCUS","SWITCH_FOCUS_LIMIT",
        "CAP1_ACK","TIMG12_ACK","DSHOT","BEMF_FRONTEND","OC_FRONTEND",
        "NFAULT_EDGE","THROT_SET","ECAP1_CAP1_READ",
-       "T12_LOAD","T12_START","T12_STOP","WWDT_FEED"}
+       "T12_LOAD","T12_START","T12_STOP","WWDT_FEED",
+       # Passive events already emitted by native ADC/clock observers.
+       # Admission changes no physical, identity, or P1 acceptance predicate.
+       "ADC_PHASE_EOC","ADC_PHASE_READ","ADC_VBUS_EOC",
+       "PWM_TBCTL","PWM_AUDIO_PERIOD"}
 STABILITY_MIN_SECTORS=12
 STABILITY_MIN_TIME_NS=90_000_000
 SIGNIFICANT_SPEED_RPM=50.0
