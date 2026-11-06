@@ -95,8 +95,18 @@ def _quit_differential_rr_vm(qmp_path):
             if "return" in response:
                 break
         conn.sendall((_json.dumps({"execute":"quit"})+chr(10)).encode())
-        # "quit" may close the stream before its reply; process exit is
-        # independently checked by the existing bounded communicate().
+        # Keep the command connection alive until QEMU acknowledges quit or
+        # closes it. Closing immediately after send can discard a queued QMP
+        # command and leave a recording without its final replay events.
+        while True:
+            line=stream.readline()
+            if not line:
+                break
+            response=_json.loads(line)
+            if "error" in response:
+                raise RuntimeError("QMP quit failed on RR teardown")
+            if "return" in response:
+                break
 
 
 def _resume_prearmed_differential_vm(qmp_path):
@@ -929,9 +939,14 @@ def run(args):
                 evidence["source_latched_first_ost3_log"] = trip_events[-1:] 
                 evidence["qemu_stderr_log_tail"] = log_tail[-4096:]
                 evidence["qemu_exit_code_after_probe"] = proc.returncode
+                if rr_mode and not evidence.get("differential_rr_graceful_shutdown",False):
+                    evidence["status_before_rr_finalization"]=evidence.get("status")
+                    evidence["status"]="FAIL_RECORD_REPLAY_FINALIZATION"
                 args.artifact.parent.mkdir(parents=True,exist_ok=True)
                 args.artifact.write_text(json.dumps(
                     evidence,indent=2,sort_keys=True)+"\n")
+            if rr_mode and not evidence.get("differential_rr_graceful_shutdown",False):
+                raise RuntimeError("RR recording/replay was not finalized; evidence retained")
             return evidence
 
 
