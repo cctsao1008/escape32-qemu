@@ -330,8 +330,8 @@ static bool am13e_auto_wire_frame(AM13EAutoSITL *a, uint32_t throttle)
         return false;
     }
     w->running = true;
-    timer_mod(w->timer, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) +
-              w->delta_ns[0]);
+    a->diagnostic_wave_ns = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
+    timer_mod(w->timer, a->diagnostic_wave_ns + w->delta_ns[0]);
     return true;
 }
 
@@ -366,6 +366,7 @@ static void am13e_auto_dshot_event(void *opaque)
     AM13EAutoSITL *a = opaque;
     if (!a->running) return;
     int64_t now = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
+    a->diagnostic_callback_ns = now;
     if (a->sent >= a->target_frames) {
         bool full_stage = a->sent == a->total_frames;
         am13e_auto_checkpoint(a, a->current_stage, now, full_stage);

@@ -469,6 +469,7 @@ typedef struct AM13EAutoSITL {
     uint32_t last_phase, last_falling, current_stage, error_code;
     bool epoch_valid, running, done;
     int64_t start_ns, end_ns, phase_epoch_ns;
+    int64_t diagnostic_callback_ns, diagnostic_wave_ns;
     uint32_t last_sample_word;
     /* Opt-in P1 virtual-time EXTERNAL PA22 nFAULT fixture.
      * Solely driven by QEMU FC frame timer; original Guest IRQ/PWM
@@ -661,18 +662,29 @@ struct AM13EMachineState {
  * Event tags are observational; temporal adjacency alone does NOT prove
  * a complete closed-loop causal chain.
  */
+extern bool e62_timer_observation(QEMUTimer *, int64_t *, int64_t *);
 static void am13e_p0_event(AM13EMachineState *s, const char *kind,
                            int64_t a,int64_t b,int64_t c,
                            int64_t d,int64_t e,int64_t f)
 {
     if (!s->native_motor.enabled || !s->auto_sitl.running) return;
+    const int64_t observed = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
     error_report("E62_P0_EVENT seq=%" PRIu64 " vns=%" PRId64
                  " kind=%s a=%" PRId64 " b=%" PRId64
                  " c=%" PRId64 " d=%" PRId64
                  " e=%" PRId64 " f=%" PRId64,
                  ++s->p0_trace_sequence,
-                 qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL),
+                 observed,
                  kind,a,b,c,d,e,f);
+    if (!strcmp(kind,"DSHOT") && g_getenv("E62_DSHOT_DIAGNOSTICS")) {
+        int64_t deadline=-1,snapshot=-1;
+        bool valid=e62_timer_observation(s->auto_sitl.dshot_timer,&deadline,&snapshot);
+        error_report("E62_DSHOT_DIAG frame=%" PRId64 " valid=%u deadline=%" PRId64
+                     " snapshot=%" PRId64 " callback=%" PRId64 " wave=%" PRId64
+                     " event=%" PRId64 " epoch=%" PRId64,
+                     a,valid,deadline,snapshot,s->auto_sitl.diagnostic_callback_ns,
+                     s->auto_sitl.diagnostic_wave_ns,observed,s->auto_sitl.start_ns);
+    }
 }
 static void am13e_auto_route_changed(AM13EMachineState *s);
 static void am13e_auto_trace_cap1(AM13EMachineState *s);

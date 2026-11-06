@@ -172,6 +172,7 @@ if not target.exists() or target.read_bytes() != source.read_bytes():
     target.write_bytes(source.read_bytes())
 print('G0 machine integration: OK')
 PY
+python3 "$ROOT/tools/ci/prepare_e62_timer_observer.py" --source "$SRC"
 git -C "$SRC" diff --check
 if ! pkg-config --exists glib-2.0 gthread-2.0 pixman-1; then
     echo "ERROR: sudo apt install libglib2.0-dev libpixman-1-dev pkg-config" >&2
