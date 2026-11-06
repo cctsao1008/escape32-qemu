@@ -39,7 +39,7 @@
 #define AM13E_NATIVE_J 0.00013
 #define AM13E_NATIVE_L (m->model_profile == 210U ? 0.00000875 : 0.000024)
 #define AM13E_NATIVE_R (m->model_profile == 210U ? 0.0283 : 0.053)
-#define AM13E_NATIVE_VBUS 24.0
+#define AM13E_NATIVE_VBUS (m->bus_millivolts ? m->bus_millivolts*0.001 : 24.0)
 #define AM13E_NATIVE_DIODE 0.7
 #define AM13E_NATIVE_FRICTION 0.0001
 #define AM13E_NATIVE_PI 3.14159265358979323846

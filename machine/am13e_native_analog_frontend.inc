@@ -7,6 +7,7 @@ static void am13e_native_motor_publish(AM13ENativeMotor *m)
         double bemf = AM13E_NATIVE_K_PHASE*m->omega*
                       sin(m->theta+offs[p]);
         double voltage = 1.65+0.02*bemf;
+        if(m->machine->sim_vbus_plan_file)voltage += 0.01*(AM13E_NATIVE_VBUS-24.0);
         if (!isfinite(voltage) || voltage < 0.0 || voltage > 3.3) {
             am13e_native_motor_fault(m, 3U);
             return; /* NO silent analog saturation/clipping. */
