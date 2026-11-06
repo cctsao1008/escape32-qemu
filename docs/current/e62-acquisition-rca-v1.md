@@ -321,3 +321,30 @@ clock evidence and timestamp preservation. Both real current-cloud Original
 Guest traces replay successfully; their private lifecycle/reference verdicts
 remain incomplete. A separate source-equivalent runtime cohort is in progress;
 it is not relabeled as the missing historical c49a7485 cohort.
+
+## Additional cloud cohort — not the pending WSL evidence
+
+The pinned experimental QEMU source already emits ADC_VBUS_EOC. The diagnostic
+parser now explicitly retains that source event without changing the strict P1
+parser or claiming calibrated-reference publication from an ADC conversion.
+The full new-cohort replay is summarized in e62-cloud-lifecycle-replay-v1.json.
+
+These three runs are explicitly NEW experimental identities: source-built
+firmware from 53953c04 with the virtual ramp profile, GCC14/newlib, 4KiB ELF load
+page alignment; experimental QEMU repository commit204fe85, native ADC,
+200MHz MCPWM root, historical_sine, KV210/47V/no-prop, new CFG and 20ms-coast
+scenario hashes. Their byte identities do not match c49a7485 /08ea869d /77366cfe /
+3e1e5ed4. They are NOT replacements for the three synchronized WSL bundles.
+
+All three completed 4820 frames and model_fault=0. Candidate audio windows are
+11.382072..386.438928ms and 637.005316..887.063788ms, before demand1 at1500ms.
+The -30-degree first-demand preceding sample is0RPM/-0.524rad; both -90-degree
+runs have -4.470RPM/-17.345rad (86.205degrees modulo). Sample ages are retained.
+Their first recorded mismatch is ROTOR seq6971 at469841324 vs469841100ns with
+identical values, a224ns source timestamp difference before demand. This does
+not establish causal attribution. Record/replay testing is a separate experiment.
+
+The WSL historical gate remains BLOCKED_EXTERNAL until the user supplies its
+archive. The user identified the exact Issue #3 Actions artifact, but the web
+artifact URL returned404 and the API request returnedForbidden. Neither a
+source-equivalent ELF nor these new traces are used to satisfy exact identities.

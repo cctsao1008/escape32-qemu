@@ -10,7 +10,7 @@ from tools.e62_acquisition_timeline import load
 OVERLAY = {'DSHOT', 'PWM_TBCTL', 'PWM_AUDIO_PERIOD', 'PWM_PAIR', 'SWITCH',
            'SWITCH_FOCUS', 'SWITCH_FOCUS_LIMIT', 'ROTOR', 'CMP_FILTER', 'CAP1',
            'CAP1_ACK', 'ECAP1_CAP1_READ', 'T12_LOAD', 'T12_START', 'T12_STOP',
-           'TIMG12', 'TIMG12_ACK', 'ADC_PHASE_EOC', 'ADC_PHASE_READ'}
+           'TIMG12', 'TIMG12_ACK', 'ADC_PHASE_EOC', 'ADC_PHASE_READ', 'ADC_VBUS_EOC'}
 
 
 def align(events, source):

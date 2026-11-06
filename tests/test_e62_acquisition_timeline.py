@@ -84,6 +84,12 @@ class TimelineTests(unittest.TestCase):
                 if mutation == 'time': ds[-1]['vns'] += 1000
                 with self.assertRaises(ValueError): analyze(e, s, m)
 
+    def test_source_vbus_observation_is_retained_without_calibration_claim(self):
+        line='E62_P0_EVENT seq=1 vns=2 kind=ADC_VBUS_EOC a=1 b=1490 c=12 d=1 e=24000 f=0'
+        e=read_events([line])[0]
+        self.assertEqual(e['kind'],'ADC_VBUS_EOC')
+        self.assertEqual(e['data'],[1,1490,12,1,24000,0])
+
     def test_parser_rejects_gap_reversal_malformed_and_unknown(self):
         base = 'E62_P0_EVENT seq={} vns={} kind={} a=0 b=0 c=0 d=0 e=0 f=0'
         for text in (base.format(2, 1, 'ROTOR'),
