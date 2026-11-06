@@ -584,6 +584,8 @@ def run(args):
                 ",esc-sim-native-motor-profile="+args.sim_motor_profile+
                 ",esc-sim-native-initial-electrical-deg="+
                 str(args.sim_initial_electrical_degrees)+
+                (",esc-sim-vbus-plan="+str(args.source_vbus_plan.resolve())
+                 if getattr(args,"source_vbus_plan",None) else "") +
                 (",esc-sim-native-adc-bemf=on"
                  if args.sim_native_adc_bemf else ""),
                 *(["-S","-qmp",f"unix:{qmp_sockpath},server=on,wait=off"]
@@ -946,6 +948,8 @@ def run(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--source-vbus-plan",type=Path,default=None,
+                        help="Explicit experimental source-owned supply/native-ADC plan")
     parser.add_argument("--qemu", type=Path, required=True)
     parser.add_argument("--elf", type=Path, required=True)
     parser.add_argument("--reference-diagnostics", action="store_true",
@@ -1036,6 +1040,10 @@ def main():
         parser.error("Explicit bounded wall/QTest/progress timeouts required")
     if not -180 <= args.sim_initial_electrical_degrees <= 180:
         parser.error("SIM_ONLY initial electrical degrees outside [-180,180]")
+    if args.source_vbus_plan is not None and (not args.experimental_candidate_sha256 or
+            not args.sim_native_adc_bemf or not args.reference_diagnostics or
+            not args.source_vbus_plan.is_file()):
+        parser.error("Source VBUS requires pinned experimental ELF, native ADC and passive reference diagnostics")
     if args.experimental_bemf_robustness is not None:
         import re
         if args.experimental_candidate_sha256 is None:

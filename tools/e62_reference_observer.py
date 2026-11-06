@@ -20,7 +20,7 @@ def symbols(elf):
 
 
 def decode(words,sequence):
-    if len(words)!=20 or words[0]!=sequence or words[1] not in (1,2,3,4,5,6,7):
+    if len(words)!=20 or words[0]!=sequence or words[1] not in (1,2,3,4,5,6,7,8,9):
         raise ValueError('Uncommitted/invalid reference record')
     row=dict(zip(FIELDS,words));row['age_ticks']=(row['tick']-row['acquisition_tick'])&0xffffffff
     problems=[]
