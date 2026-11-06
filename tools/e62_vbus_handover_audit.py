@@ -70,8 +70,10 @@ def audit(events,evidence):
                 shadow['cap_enabled']==0 and active['cap_enabled']==0 and
                 active['mux']==(request['selected_code']&3)-1 and
                 active['edge']==(0 if request['selected_code']&4 else 1) and
-                not request['published'] and not loaded['published'] and not loaded['armed'] and
-                pub['published'] and pub['ready'] and pub['fresh'] and pub['latest_valid'] and
+                not request['published'] and not request['armed'] and not loaded['published'] and not loaded['armed'] and
+                pub['published'] and pub['ready'] and pub['armed'] and pub['fresh'] and pub['latest_valid'] and
+                all(r['active_code']==request['expected_code'] for r in (loaded,pub)) and
+                not any(r.get('violations') for r in (request,loaded,pub)) and pub['max_age_ticks']>0 and
                 pub['age_ticks']<=pub['max_age_ticks'] and zero_count is not None and zero_count>=2 and not mapping_errors)
         handovers.append(h)
     fault=next((r for r in rows if r['event']==5),None);shutdown=next((r for r in rows if r['event']==11),None)
