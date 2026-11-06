@@ -50,8 +50,10 @@
     "title": "Prepare exact Issue3 robustness suite with immutable binary guards",
     "body_file": "docs/review/escape32-qemu-experiment-e62-cmpss-cloud-matrix.md",
     "draft": true,
-    "status": "PREPARED_API_ACCESS_BLOCKED",
-    "compare_url": "https://github.com/cctsao1008/escape32-qemu/compare/main...experiment/e62-cmpss-cloud-matrix?expand=1"
+    "status": "DRAFT_CREATED_USER_CONFIRMED",
+    "compare_url": "https://github.com/cctsao1008/escape32-qemu/compare/main...experiment/e62-cmpss-cloud-matrix?expand=1",
+    "pr_number": 12,
+    "pr_url": "https://github.com/cctsao1008/escape32-qemu/pull/12"
   },
   {
     "repository": "cctsao1008/escape32-qemu",
@@ -112,8 +114,10 @@
     "title": "Experiment: quarantine changed-code SC5 publication through native load and settling",
     "body_file": "docs/review/ESCape32-experiment-e62-sc5-changed-handover.md",
     "draft": true,
-    "status": "PREPARED_API_ACCESS_BLOCKED",
-    "compare_url": "https://github.com/cctsao1008/ESCape32/compare/experiment/e62-sc5-equivalent-refresh...experiment/e62-sc5-changed-handover?expand=1"
+    "status": "DRAFT_CREATED_USER_CONFIRMED",
+    "compare_url": "https://github.com/cctsao1008/ESCape32/compare/experiment/e62-sc5-equivalent-refresh...experiment/e62-sc5-changed-handover?expand=1",
+    "pr_number": 9,
+    "pr_url": "https://github.com/cctsao1008/ESCape32/pull/9"
   },
   {
     "repository": "cctsao1008/escape32-qemu",
@@ -124,5 +128,45 @@
     "draft": true,
     "status": "PREPARED_API_ACCESS_BLOCKED",
     "compare_url": "https://github.com/cctsao1008/escape32-qemu/compare/experiment/e62-sc5-regression...experiment/e62-sc5-changed-regression?expand=1"
+  },
+  {
+    "repository": "cctsao1008/escape32-qemu",
+    "head": "diag/e62-source-clock-observer",
+    "base": "main",
+    "title": "Observe DShot timer dispatch and source-clock timing without rescheduling",
+    "body_file": "docs/review/escape32-qemu-diag-e62-source-clock-observer.md",
+    "draft": true,
+    "status": "PUBLISHED_BRANCH_DRAFT_PREPARED_API_ACCESS_BLOCKED",
+    "compare_url": "https://github.com/cctsao1008/escape32-qemu/compare/main...diag/e62-source-clock-observer?expand=1"
+  },
+  {
+    "repository": "cctsao1008/escape32-qemu",
+    "head": "diag/e62-clock-poll-factor",
+    "base": "diag/e62-source-clock-observer",
+    "title": "Make host polling cadence an explicit diagnostic factor",
+    "body_file": "docs/review/escape32-qemu-diag-e62-clock-poll-factor.md",
+    "draft": true,
+    "status": "PUBLISHED_BRANCH_DRAFT_PREPARED_API_ACCESS_BLOCKED",
+    "compare_url": "https://github.com/cctsao1008/escape32-qemu/compare/diag/e62-source-clock-observer...diag/e62-clock-poll-factor?expand=1"
+  },
+  {
+    "repository": "cctsao1008/escape32-qemu",
+    "head": "experiment/e62-source-vbus-handover",
+    "base": "diag/e62-source-clock-observer",
+    "title": "Validate native changing-VBUS reference handover and preserve startup failures",
+    "body_file": "docs/review/escape32-qemu-experiment-e62-source-vbus-handover.md",
+    "draft": true,
+    "status": "PUBLISHED_BRANCH_DRAFT_PREPARED_API_ACCESS_BLOCKED",
+    "compare_url": "https://github.com/cctsao1008/escape32-qemu/compare/diag/e62-source-clock-observer...experiment/e62-source-vbus-handover?expand=1"
+  },
+  {
+    "repository": "cctsao1008/ESCape32",
+    "head": "diag/e62-dynamic-handover-evidence",
+    "base": "experiment/e62-sc5-changed-handover",
+    "title": "Observe native changed-code publication with an explicit SIM_ONLY affine profile",
+    "body_file": "docs/review/ESCape32-diag-e62-dynamic-handover-evidence.md",
+    "draft": true,
+    "status": "PUBLISHED_BRANCH_DRAFT_PREPARED_API_ACCESS_BLOCKED",
+    "compare_url": "https://github.com/cctsao1008/ESCape32/compare/experiment/e62-sc5-changed-handover...diag/e62-dynamic-handover-evidence?expand=1"
   }
 ]

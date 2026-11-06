@@ -1,0 +1,10 @@
+{
+  "schema": "e62.execution-bundle.v4",
+  "archive": "e62-execution-v4-evidence.tar.gz",
+  "bytes": 69297944,
+  "sha256": "c8a5c2410a27cce79353aae9812a3d222b2bd57451d51b7bab1613d489065df5",
+  "verified_manifest_files": 455,
+  "excluded": "Three QEMU executables; preserved locally, SHA/source/build log included",
+  "p1_qualified": false,
+  "hardware_qualified": false
+}
