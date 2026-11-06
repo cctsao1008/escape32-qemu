@@ -12,12 +12,14 @@
   {
     "repository": "cctsao1008/ESCape32",
     "head": "diag/e62-sc5-acquisition",
-    "base": "main",
+    "base": "am13e-port-v2",
     "title": "Observe SC5 acquisition and publication without changing policy",
     "body_file": "docs/review/ESCape32-diag-e62-sc5-acquisition.md",
     "draft": true,
-    "status": "PREPARED_API_ACCESS_BLOCKED",
-    "compare_url": "https://github.com/cctsao1008/ESCape32/compare/main...diag/e62-sc5-acquisition?expand=1"
+    "status": "DRAFT_CREATED_USER_CONFIRMED",
+    "compare_url": "https://github.com/cctsao1008/ESCape32/compare/am13e-port-v2...diag/e62-sc5-acquisition?expand=1",
+    "pr_number": 6,
+    "pr_url": "https://github.com/cctsao1008/ESCape32/pull/6"
   },
   {
     "repository": "cctsao1008/ESCape32",
@@ -26,8 +28,10 @@
     "title": "Experiment: refresh equivalent SC5 sample associations at ZERO",
     "body_file": "docs/review/ESCape32-experiment-e62-sc5-equivalent-refresh.md",
     "draft": true,
-    "status": "PREPARED_API_ACCESS_BLOCKED",
-    "compare_url": "https://github.com/cctsao1008/ESCape32/compare/diag/e62-sc5-acquisition...experiment/e62-sc5-equivalent-refresh?expand=1"
+    "status": "DRAFT_CREATED_USER_CONFIRMED",
+    "compare_url": "https://github.com/cctsao1008/ESCape32/compare/diag/e62-sc5-acquisition...experiment/e62-sc5-equivalent-refresh?expand=1",
+    "pr_number": 7,
+    "pr_url": "https://github.com/cctsao1008/ESCape32/pull/7"
   },
   {
     "repository": "cctsao1008/escape32-qemu",
@@ -82,12 +86,14 @@
   {
     "repository": "cctsao1008/ESCape32",
     "head": "fix/e62-boot-release-gates",
-    "base": "main",
+    "base": "am13e-port-v2",
     "title": "Restore strict Boot build and real-image flash host gates",
     "body_file": "docs/review/ESCape32-fix-e62-boot-release-gates.md",
     "draft": true,
-    "status": "PREPARED_API_ACCESS_BLOCKED",
-    "compare_url": "https://github.com/cctsao1008/ESCape32/compare/main...fix/e62-boot-release-gates?expand=1"
+    "status": "DRAFT_CREATED_USER_CONFIRMED",
+    "compare_url": "https://github.com/cctsao1008/ESCape32/compare/am13e-port-v2...fix/e62-boot-release-gates?expand=1",
+    "pr_number": 8,
+    "pr_url": "https://github.com/cctsao1008/ESCape32/pull/8"
   },
   {
     "repository": "cctsao1008/escape32-qemu",

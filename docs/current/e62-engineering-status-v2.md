@@ -21,3 +21,7 @@ The existing timeline's pure rotor decoder, lifecycle overlay and CAP1→Guest r
 Validation:27 focused tests PASS;62 host tests/repository audit PASS;8/8 raw replays internally consistent with0 source errors. Missing/stale information, wrong command/count, sequence gaps, invalid/injected observer metadata, identity conflicts and large-stream separation from strict budget are covered. Synthetic unit fixtures remain test-only.
 
 Detailed source findings and commands are on the updated [Draft PR11 branch](https://github.com/cctsao1008/escape32-qemu/blob/diag/e62-reference-startup-evidence/docs/current/e62-wsl-upload-replay-v2.md); machine-readable current acceptance/provenance is in `e62-engineering-evidence-v2.json`. The v1 report remains the prior snapshot. Exact Issue3 ELF/API access, fresh-task verification, changed-code SC5 handover, startup/restart defects, model measurements and hardware qualification remain unresolved as previously recorded.
+
+## User-confirmed review updates
+
+Firmware default branch is `am13e-port-v2`. Firmware Draft PR6 is passive SC5 diagnostics; PR7 is the equivalent-code experiment stacked on PR6; PR8 is Boot/Flash release gates. The review inventory now uses those PR URLs and the correct default base. The exact Issue3 ELF is user-confirmed recovered, awaiting upload here; the local SHA check and exact14-case run have not yet occurred. No binary substitution or merge.
