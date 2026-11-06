@@ -1,0 +1,3 @@
+Pin the separate changed-code SC5 no-journal ELF/source and reuse the existing regression runner with explicit identity parameters. Existing1452 and exact Issue3 identities stay unchanged. Preserve every source/probe/strict verdict and exact command.
+
+Validation:14/14 probes complete input; all strict verdicts remain FAILED. Source deadline violations, reversals, insufficient feedback and one event-budget-incomplete case remain visible.19 runner/strict/P1 tests pass. No P1 criteria or Original identity guard changed. This motor matrix does not establish changed-code path coverage under a constant-VBUS input. No production or hardware approval.

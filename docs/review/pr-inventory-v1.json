@@ -104,5 +104,25 @@
     "draft": true,
     "status": "PREPARED_API_ACCESS_BLOCKED",
     "compare_url": "https://github.com/cctsao1008/escape32-qemu/compare/main...report/e62-engineering-execution?expand=1"
+  },
+  {
+    "repository": "cctsao1008/ESCape32",
+    "head": "experiment/e62-sc5-changed-handover",
+    "base": "experiment/e62-sc5-equivalent-refresh",
+    "title": "Experiment: quarantine changed-code SC5 publication through native load and settling",
+    "body_file": "docs/review/ESCape32-experiment-e62-sc5-changed-handover.md",
+    "draft": true,
+    "status": "PREPARED_API_ACCESS_BLOCKED",
+    "compare_url": "https://github.com/cctsao1008/ESCape32/compare/experiment/e62-sc5-equivalent-refresh...experiment/e62-sc5-changed-handover?expand=1"
+  },
+  {
+    "repository": "cctsao1008/escape32-qemu",
+    "head": "experiment/e62-sc5-changed-regression",
+    "base": "experiment/e62-sc5-regression",
+    "title": "Regress independently pinned changed-code SC5 experiment",
+    "body_file": "docs/review/escape32-qemu-experiment-e62-sc5-changed-regression.md",
+    "draft": true,
+    "status": "PREPARED_API_ACCESS_BLOCKED",
+    "compare_url": "https://github.com/cctsao1008/escape32-qemu/compare/experiment/e62-sc5-regression...experiment/e62-sc5-changed-regression?expand=1"
   }
 ]
