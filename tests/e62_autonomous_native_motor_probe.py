@@ -545,6 +545,11 @@ def run(args):
             raise RuntimeError(
                 "Issue #5 diagnostic ELF missing unambiguous SRAM symbols: "
                 + ", ".join(missing))
+    restart_seed_address = None
+    if getattr(args,"restart_rate_diagnostics",False):
+        if exp_sha is None:raise ValueError("Restart observer requires pinned experimental ELF")
+        from tools.e62_restart_seed_diag import symbol
+        restart_seed_address=symbol(args.elf)
     reference_addresses = None
     if getattr(args, "reference_diagnostics", False):
         if exp_sha is None:
@@ -766,6 +771,9 @@ def run(args):
                         if not history["entries"]:
                             raise AssertionError(
                                 "No source Firmware BEMF callbacks recorded")
+                    if restart_seed_address is not None:
+                        from tools.e62_restart_seed_diag import snapshot as restart_snapshot
+                        evidence["restart_seed_candidate_record"]=restart_snapshot(qtest.read,restart_seed_address)
                     evidence["receiver_after"] = _receiver_snapshot(qtest.read)
                     evidence["receiver_failure_reasons"] = _classify_receive_path(
                         auto,evidence["original_guest_after"],evidence["receiver_after"])
@@ -956,6 +964,8 @@ def main():
                         help="Explicit experimental source-owned supply/native-ADC plan")
     parser.add_argument("--qemu", type=Path, required=True)
     parser.add_argument("--elf", type=Path, required=True)
+    parser.add_argument("--restart-rate-diagnostics",action="store_true",
+                        help="Read optional first-restart seed record, no writes or qualification")
     parser.add_argument("--reference-diagnostics", action="store_true",
                         help="Read experimental SC5 journal only; never original qualification")
     parser.add_argument("--issue5-bemf-diag", action="store_true",
