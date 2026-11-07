@@ -1,0 +1,5 @@
+A source-observed B/falling transition reaches the correct native ECAP route while capture is disabled for an equivalent-code reference refresh. Preserve capture using the still-fresh published association, stage the new coherent identity and commit only at MCPWM ZERO. Preserve accepted-capture/commutation epochs and changed-code quarantine. Recheck route, phase/polarity, DAC, epoch, latest validity and freshness at actual capture use; fail closed on mismatch.
+
+This is an isolated SIM_ONLY opt-in correction on top of Draft #10. It leaves default firmware and the Original Rel17.3 binary intact.16 new race/safety-negative cases and complete107-group official-SDK regressions pass on/off. Native testing exposes a separate producer-latency expiry with this correction alone; the failed stop is retained, not called successful startup. The independent prompt-producer branch addresses that defect; its combined motor tests still fail90° startup and Flying Restart.
+
+Draft for review; do not merge or close #4/#5. No physical settling or production approval.

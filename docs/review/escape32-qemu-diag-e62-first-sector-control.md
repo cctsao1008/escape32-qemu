@@ -1,0 +1,5 @@
+A valid selected B/falling transition is lost while native CAPLDEN is off during a same-code SC5 refresh. Earlier first-sector reversal also precedes accepted feedback and the first commutation IRQ. Add source-anchored sampled chronology, bounded read-only comparator acquisition snapshots, native campaign/input hash guards, fresh-invalid fault-order auditing and focused analyzer regressions. No motor solver/constants, native event generation or P1 criterion changes.
+
+Validation:45 focused Python tests pass. Pinned native campaigns retain all controller and restart failures; combined experimental firmware sustains the−30° first demand but90° startup and all300/1500/3000ms Flying Restart cases fail. Native invalid-only-before-expiry is isolated at unchanged1kHz cadence. Original Guest qualification remains false for every new candidate.
+
+Firmware continuity and prompt-producer corrections are separate branches/PR review units. v5 report and per-case evidence inventory live on `report/e62-engineering-execution`; historical344–532ns failures remain failures. Draft only; do not merge or close #5/#4/#10.
