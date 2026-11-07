@@ -22,6 +22,16 @@ class ChronologyTests(unittest.TestCase):
         self.assertEqual(phase_of(250,None,None,None,None),'NO_OBSERVED_ACCEPTED_CAPTURE')
         es=self.events();es[3]['seq']+=1
         with self.assertRaises(ValueError):analyze(es,{})
+    def test_reused_restart_pair_is_derived_from_real_pad_edge_not_invented_pwm_pair(self):
+        es=self.events();es=[e for e in es if not(e['kind']=='PWM_PAIR' and e['vns']==101)]
+        for n,e in enumerate(es):e['seq']=n+1
+        r=analyze(es,{},(90,350))['demands'][0]
+        self.assertEqual(r['first_pair']['source']['kind'],'SWITCH_FOCUS')
+        self.assertTrue(r['first_pair']['pair_id_derived_from_pad_mask'])
+        self.assertEqual(r['first_pair']['pair_id'],8)
+        self.assertEqual(r['first_changed_pair']['pair_id'],2)
+        self.assertEqual(r['first_sector_negative_samples'],2)
+
     def test_program_header_overlap_fails_before_vm_launch(self):
         with tempfile.TemporaryDirectory() as d:
             p=Path(d)/'x.elf';cfg=Path(d)/'cfg';cfg.write_bytes(bytes(336));data=bytearray(84);data[:6]=b'\x7fELF\x01\x01';struct.pack_into('<I',data,28,52);struct.pack_into('<HH',data,42,32,1)

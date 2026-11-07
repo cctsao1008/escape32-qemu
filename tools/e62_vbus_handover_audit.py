@@ -13,16 +13,38 @@ def convert(raw):
     return rounded(phase*4096,3300000)-1
 
 def parse(lines):
-    out=[]
+    out=[];last_source=None
     for line in lines:
         if line.startswith('[R '):
             q=re.search(r' (read[bwlq]?|write[bwlq]?|b64read) (0x[0-9a-fA-F]+)(?: (0x[0-9a-fA-F]+))?',line)
             if q:
                 addr=int(q[2],16);size={'readb':1,'readw':2,'readl':4,'readq':8}.get(q[1],int(q[3],16) if q[3] else 4)
                 if addr<0x4000b020 and addr+size>0x4000b000:out.append({'kind':'HOST_ADC_RESULT_ACCESS','address':addr})
+        source=re.search(r'E62_P0_EVENT seq=(\d+) vns=(\d+) kind=(\w+)',line)
+        if source:
+            last_source=dict(kind='SOURCE_LOG_COVERAGE_END',seq=int(source[1]),vns=int(source[2]))
+            if source[3]=='CAP1':out.append(dict(kind='SOURCE_CAP1',seq=int(source[1]),vns=int(source[2])))
         m=RX.search(line)
         if m:out.append({'kind':m[1],**{k:int(v) for k,v in KV.findall(m[2])}})
+    if last_source:out.append(last_source)
     return out
+
+def map_native_counter(events,counter):
+    # Use the nearest preceding local ZERO pair. ECAP control writes can
+    # rebase/truncate fractional ticks; a global affine clock is not assumed.
+    zeros=[r for r in events if r['kind']=='E62_VBUS_ZERO'];candidates=[]
+    for a,b in zip(zeros,zeros[1:]):
+        dn=b['vns']-a['vns'];dc=(b['counter']-a['counter'])&0xffffffff
+        if not dc or dn<=0:continue
+        tick=rounded(dn,dc)
+        if tick<=0 or abs(dn-dc*tick)>tick:continue
+        delta=((counter-b['counter']+2**31)%2**32)-2**31
+        if delta<0 or delta*tick>1000000:continue
+        estimate=b['vns']+delta*tick
+        following=[z for z in zeros if b['vns']<z['vns']<=estimate]
+        if any(abs((z['vns']-b['vns'])-(((z['counter']-b['counter']+2**31)%2**32)-2**31)*tick)>tick for z in following):continue
+        candidates.append((delta*tick,dict(observed_ecap_tick_ns=tick,estimated_vns=b['vns']+delta*tick,quantization_ns=tick,preceding_zero_age_ns=delta*tick,verified_preceding_zero_points=2,local_zero_vns=[a['vns'],b['vns']])))
+    return min(candidates,key=lambda x:x[0])[1] if candidates else None
 
 def audit(events,evidence):
     sources=[r for r in events if r['kind']=='E62_VBUS_SOURCE'];eocs={};reads=[];errors=[]
@@ -81,9 +103,19 @@ def audit(events,evidence):
     failure_closed=bool(fault and shutdown and not shutdown['armed'] and not shutdown['published'] and not shutdown['ready'] and evidence.get('native_motor',{}).get('actual_pwm_six_bit_mask')==0)
     if stale:failure_closed=failure_closed and bool(any(r['kind']=='E62_VBUS_ADC_CLOCK_STOP' for r in events)) and fault['age_ticks']>fault['max_age_ticks']
     if invalid:failure_closed=failure_closed and bool(any(r['code']==0 for r in eocs.values())) and not fault['latest_valid']
+    fault_mapping=map_native_counter(events,fault['ecap_counter']) if fault else None
+    shutdown_mapping=map_native_counter(events,shutdown['ecap_counter']) if shutdown else None
+    source_end=next((r['vns'] for r in events if r['kind']=='SOURCE_LOG_COVERAGE_END'),None)
+    cap_after_shutdown=[r for r in events if shutdown_mapping and r['kind']=='SOURCE_CAP1' and r['vns']>shutdown_mapping['estimated_vns']+shutdown_mapping['quantization_ns']]
+    if cap_after_shutdown:errors.append('CAP1_AFTER_SHUTDOWN')
+    quiet=bool(shutdown_mapping and source_end is not None and source_end>shutdown_mapping['estimated_vns'] and not cap_after_shutdown)
+
+    invalid_reads=[r for r in reads if r['code']==0 and r['sample'] in eocs and eocs[r['sample']]['code']==0]
+    fresh_invalid=bool(invalid and not stale and failure_closed and not errors and fault['fresh'] and fault['age_ticks']<=fault['max_age_ticks'] and not fault['latest_valid'])
+    ordered_invalid=bool(fresh_invalid and quiet and fault_mapping and any(r['vns']<=fault_mapping['estimated_vns']-fault_mapping['quantization_ns'] for r in invalid_reads))
     positive=bool(len(handovers)>=2 and all(h['complete'] for h in handovers) and not errors)
     constant=bool(len(sources)==1 and not handovers and not errors)
-    return {'schema':'e62.source-vbus-handover.v1','status':('FAIL_CLOSED_OBSERVED' if failure_closed and not errors else 'INCOMPLETE_FAIL_CLOSED') if invalid or stale else ('SPECIFIC_SOURCE_HANDOVERS_VERIFIED' if positive else 'CONSTANT_INPUT_CONTROL_OBSERVED' if constant else 'INCOMPLETE_HANDOVER_EVIDENCE'),'sources':sources,'adc_eoc_samples':len(eocs),'adc_reads':len(reads),'source_errors':errors,'handovers':handovers,'fault_entry':fault,'post_shutdown':shutdown,'bounded_journal_missing_ranges':journal.get('missing_sequence_ranges'),'reference_network':'SIM_ONLY1.41V+.02*(VBUS/2+BEMF); VBUS11/160; ADC/DAC3.3V','counter_mapping':'Tick duration derived and checked from local source ZERO timestamp/counter pairs; not host clock','p1_qualified':False,'rotor_synchronized':False,'hardware_qualified':False}
+    return {'schema':'e62.source-vbus-handover.v1','status':('FAIL_CLOSED_OBSERVED' if failure_closed and not errors else 'INCOMPLETE_FAIL_CLOSED') if invalid or stale else ('SPECIFIC_SOURCE_HANDOVERS_VERIFIED' if positive else 'CONSTANT_INPUT_CONTROL_OBSERVED' if constant else 'INCOMPLETE_HANDOVER_EVIDENCE'),'invalid_only_before_expiry':dict(status='NATIVE_INVALID_ONLY_BEFORE_EXPIRY_VERIFIED' if ordered_invalid else 'FRESH_INVALID_STATE_OBSERVED_ORDER_INCOMPLETE' if fresh_invalid else 'NOT_ISOLATED',fresh_staged_reference_at_fault=fresh_invalid,fault_observation_mapping=fault_mapping,shutdown_observation_mapping=shutdown_mapping,source_quiet_after_shutdown=quiet,source_coverage_end_vns=source_end,native_cap1_after_shutdown=cap_after_shutdown,source_invalid_sample_reads=invalid_reads),'sources':sources,'adc_eoc_samples':len(eocs),'adc_reads':len(reads),'source_errors':errors,'handovers':handovers,'fault_entry':fault,'post_shutdown':shutdown,'bounded_journal_missing_ranges':journal.get('missing_sequence_ranges'),'reference_network':'SIM_ONLY1.41V+.02*(VBUS/2+BEMF); VBUS11/160; ADC/DAC3.3V','counter_mapping':'Tick duration derived and checked from local source ZERO timestamp/counter pairs; not host clock','p1_qualified':False,'rotor_synchronized':False,'hardware_qualified':False}
 
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--log',type=Path,required=True);p.add_argument('--evidence',type=Path,required=True);p.add_argument('--output',type=Path,required=True);a=p.parse_args();r=audit(parse(a.log.open()),json.loads(a.evidence.read_text()));a.output.write_text(json.dumps(r,indent=2)+'\n');print(r['status'])

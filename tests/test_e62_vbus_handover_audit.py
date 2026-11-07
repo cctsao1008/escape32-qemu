@@ -34,5 +34,24 @@ class FlowTests(unittest.TestCase):
     def test_host_result_access_is_not_guest_sampling(self):
         e,f=self.fixture();e+=parse(['[R +1] readl 0x4000b002'])
         self.assertIn('HOST_ADC_RESULT_ACCESS_CONFOUND',audit(e,f)['source_errors'])
+    def fresh_invalid_fixture(self):
+        events=[dict(kind='E62_VBUS_SOURCE',vns=0,frame=0,mv=24000,sensor_mode=0),dict(kind='E62_VBUS_SOURCE',vns=1000,frame=1,mv=24000,sensor_mode=1),dict(kind='E62_VBUS_EOC',vns=1200,acquisition=1100,sample=21,code=0,channel=12,soc=1),dict(kind='E62_VBUS_READ',vns=1300,sample=21,code=0)]
+        events += [dict(kind='E62_VBUS_ZERO',vns=t,counter=c) for t,c in ((1000,100),(1500,200),(2000,300))]
+        events += [dict(kind='SOURCE_LOG_COVERAGE_END',vns=3000)]
+        common=dict(armed=1,published=1,ready=1,age_ticks=17,max_age_ticks=32,fresh=1,latest_valid=0)
+        fault=dict(common,event=5,seq=1,ecap_counter=320);shutdown=dict(common,event=11,seq=2,ecap_counter=324);shutdown.update(armed=0,published=0,ready=0)
+        return events,dict(reference_observer=dict(entries=[fault,shutdown]),native_motor=dict(actual_pwm_six_bit_mask=0))
+    def test_native_fresh_invalid_requires_read_order_shutdown_and_future_capture_quiet(self):
+        e,f=self.fresh_invalid_fixture();r=audit(e,f)
+        self.assertEqual(r['invalid_only_before_expiry']['status'],'NATIVE_INVALID_ONLY_BEFORE_EXPIRY_VERIFIED')
+        e,f=self.fresh_invalid_fixture();f['reference_observer']['entries'][0].update(fresh=0,age_ticks=33)
+        self.assertEqual(audit(e,f)['invalid_only_before_expiry']['status'],'NOT_ISOLATED')
+        e,f=self.fresh_invalid_fixture();e=[r for r in e if r['kind']!='E62_VBUS_READ']
+        self.assertNotEqual(audit(e,f)['invalid_only_before_expiry']['status'],'NATIVE_INVALID_ONLY_BEFORE_EXPIRY_VERIFIED')
+        e,f=self.fresh_invalid_fixture();e += [dict(kind='SOURCE_CAP1',vns=2200)]
+        self.assertIn('CAP1_AFTER_SHUTDOWN',audit(e,f)['source_errors'])
+    def test_local_counter_reset_is_not_absolute_time_evidence(self):
+        e,f=self.fresh_invalid_fixture();next(r for r in e if r['kind']=='E62_VBUS_ZERO' and r['vns']==2000)['counter']=0
+        self.assertIsNone(audit(e,f)['invalid_only_before_expiry']['fault_observation_mapping'])
     def test_invalid_input_not_reinterpreted_as_calibrated_midpoint(self):self.assertIsNone(convert(0))
 if __name__=='__main__':unittest.main()
