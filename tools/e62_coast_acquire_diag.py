@@ -14,7 +14,7 @@ def snapshot(read32,address):
     return dict(d,status=STATUS[first[9]],timestamp_domain='GUEST_TICKS_NOT_SOURCE_VNS',hardware_qualified=False,original_qualified=False)
 
 def reference_symbols(elf):
-    """Exact ARM ABI of AM13E_BemfReference: codes[3],pad,six? five u32.
+    """Exact ARM ABI of AM13E_BemfReference: codes[3], two padding bytes, five u32.
     Require ELF sizes instead of reading an invented or ambiguous structure.
     """
     text=subprocess.check_output(['arm-none-eabi-nm','-S','-n',str(elf)],text=True)
