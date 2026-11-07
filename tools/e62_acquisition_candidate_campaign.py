@@ -8,14 +8,15 @@ def sha(p):return hashlib.sha256(p.read_bytes()).hexdigest()
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     for n in ('controls','seed-control','elf','output'):p.add_argument('--'+n,type=Path,required=True)
-    p.add_argument('--elf-sha256',required=True);p.add_argument('--qemu-sha256',required=True);p.add_argument('--jobs',type=int,choices=(1,2,3),default=3);a=p.parse_args();root=Path(__file__).resolve().parents[1]
+    p.add_argument('--parent-campaign',type=Path);p.add_argument('--policy-id',choices=('acquisition','estimator'),default='acquisition');p.add_argument('--elf-sha256',required=True);p.add_argument('--qemu-sha256',required=True);p.add_argument('--jobs',type=int,choices=(1,2,3),default=3);a=p.parse_args();root=Path(__file__).resolve().parents[1]
     if sha(a.elf)!=a.elf_sha256:raise SystemExit('Candidate ELF SHA mismatch')
     a.output.mkdir(parents=True,exist_ok=True)
     cases=[('startup-acquisition-angle-30',a.seed_control,None),('startup-acquisition-angle90',a.controls/'startup-firstedge-angle90.command.json',None)]
     cases += [(f'restart-acquisition-coast{c}',a.controls/f'restart-firstedge-coast{c}.command.json',None) for c in (300,1500,3000)]
     cases += [('startup-acquisition-fixed16',a.seed_control,'16:0'),('startup-acquisition-switch16',a.seed_control,'0:16'),('acquisition-clock-loss',a.controls/'adc2k-stale-reference.command.json',None)]
+    if a.parent_campaign:cases=[(n,a.parent_campaign/(n+'.command.json'),None) for n,_,_ in cases]
     def run(item):
-        name,template,stress=item;parent=json.loads(template.read_text());cmd=parent['command'][:];cmd[0]=sys.executable
+        name,template,stress=item;name=name.replace('acquisition',a.policy_id);parent=json.loads(template.read_text());cmd=parent['command'][:];cmd[0]=sys.executable
         qemu=Path(cmd[cmd.index('--qemu')+1]);cfg=Path(cmd[cmd.index('--cfg-flash')+1]);scenario=Path(cmd[cmd.index('--scenario')+1]);plan=Path(cmd[cmd.index('--source-vbus-plan')+1])
         if sha(qemu)!=a.qemu_sha256:raise ValueError('QEMU hash differs from pinned controls')
         validate_cfg_separation(a.elf,cfg)
@@ -24,7 +25,7 @@ def main():
             if parent['hashes'].get(str(f.resolve()))!=sha(f):raise ValueError('Control input changed: '+str(f))
         out=a.output.resolve()/(name+'.json');cmd[cmd.index('--elf')+1]=str(a.elf.resolve());cmd[cmd.index('--experimental-candidate-sha256')+1]=a.elf_sha256;cmd[cmd.index('--artifact')+1]=str(out)
         if stress:cmd+=['--experimental-bemf-robustness='+stress]
-        meta=dict(command=cmd,control_template=str(template.resolve()),hypothesis='H6 restore spatial-capture acquisition before sync6; H7 sensor-bias/switch-artifact counterexamples. Restart protocol assessed separately at measured second-demand state.',hashes={str(f.resolve()):sha(f) for f in (qemu,cfg,scenario,plan,a.elf)},concurrent_jobs=a.jobs,identity='EXPERIMENTAL_SIM_ONLY_ACQUISITION_CANDIDATE_NOT_ORIGINAL',physics_changed=False,p1_thresholds_changed=False,adc_cadence_hz=1000)
+        meta=dict(command=cmd,control_template=str(template.resolve()),hypothesis=('H8 use measured sector intervals during acquisition versus the pinned H6 filtered-estimator control; then restore original locked filter. Independent restart and sensor-artifact negatives.' if a.policy_id=='estimator' else 'H6 restore spatial-capture acquisition before sync6; H7 sensor-bias/switch-artifact counterexamples. Restart protocol assessed separately at measured second-demand state.'),hashes={str(f.resolve()):sha(f) for f in (qemu,cfg,scenario,plan,a.elf)},concurrent_jobs=a.jobs,identity='EXPERIMENTAL_SIM_ONLY_'+a.policy_id.upper()+'_CANDIDATE_NOT_ORIGINAL',physics_changed=False,p1_thresholds_changed=False,adc_cadence_hz=1000)
         out.with_suffix('.command.json').write_text(json.dumps(meta,indent=2)+'\n');env=os.environ.copy();env.pop('E62_DSHOT_DIAGNOSTICS',None)
         with out.with_suffix('.stdout.log').open('w') as log:rc=subprocess.run(cmd,cwd=root,env=env,stdout=log,stderr=subprocess.STDOUT).returncode
         meta['probe_rc']=rc;out.with_suffix('.command.json').write_text(json.dumps(meta,indent=2)+'\n');print(name,rc,flush=True)

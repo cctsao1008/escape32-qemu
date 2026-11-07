@@ -51,6 +51,15 @@ def demand(events,evidence,anchor,end,focus,policy,index):
     chains=classify(events,t,window)
     accepted=next((c for c in chains if c['classification']=='READ_AND_TIMER_PROGRAMMED'),None)
     cap=accepted['cap1_ns'] if accepted else None;start=accepted['timer_start_ns'] if accepted else None
+    timer_audit=None
+    if accepted:
+        load=next((e for e in events if e['kind']=='T12_LOAD' and e['vns']==accepted['timer_load_ns']),None)
+        replaced=bool(irq and start is not None and any(e['kind']=='T12_START' and start<e['vns']<irq['vns'] for e in events))
+        if load and load['b']>0 and irq and start is not None and not replaced:
+            numerator=(load['a']+1)*1000000000
+            requested=numerator//load['b'] if numerator%load['b']==0 else None
+            elapsed=irq['vns']-start
+            timer_audit=dict(source_load=load,source_start_vns=start,source_irq_vns=irq['vns'],source_programmed_period_ns=requested,actual_start_to_irq_ns=elapsed,observed_error_ns=elapsed-requested if requested is not None else None,replaced_before_irq=False)
     samples=[];negative={}
     for e in events:
         if e['kind']!='ROTOR' or not t<=e['vns']<window:continue
@@ -63,7 +72,7 @@ def demand(events,evidence,anchor,end,focus,policy,index):
     for h in history:
         if len(decisions)>=len(chains):break
         if h['decision']=='TIMEOUT':break # Do not invent a CAP1 for a timeout.
-        row=dict(h);row['candidate_ignore_before_us']=(h['ival_before']>>2 if policy in ('firstedge','firstseed') and h['sync_before']==0 else h['ival_before']>>1);row['source_capture_order_match']=chains[len(decisions)]['cap1_ns'];decisions.append(row)
+        row=dict(h);row['candidate_ignore_before_us']=(h['ival_before']>>2 if (policy in ('firstedge','firstseed') and h['sync_before']==0) or (policy in ('acquisition','estimator') and h['sync_before']<6) else h['ival_before']>>1);row['source_capture_order_match']=chains[len(decisions)]['cap1_ns'];decisions.append(row)
     ledger=[]
     relevant={'PWM_PAIR','CAP1','CAP1_ACK','ECAP1_CAP1_READ','T12_LOAD','T12_START','TIMG12','TIMG12_ACK','CMP_FILTER'}
     for e in events:
@@ -81,7 +90,7 @@ def demand(events,evidence,anchor,end,focus,policy,index):
             elif a['rpm']*b['rpm']>0 and sa*sb<0:kind='CONSISTENT_WITH_SPATIAL_SINE_CROSSING'
             else:kind='UNRESOLVED_AT_SAMPLED_RESOLUTION'
         motion.append(dict(source=e,classification=kind,phase_sine_before=sa,phase_sine_after=sb,rotor_before=a,rotor_after=b))
-    return dict(comparator_transition_geometry=motion,source_demand=anchor,window_end_ns=window,boundary=boundary,first_pair=pair(drive),first_changed_pair=pair(changed),first_commutation_irq=irq,first_accepted_capture_with_timer_chain=accepted,capture_timer_chains=chains,first_guest_decisions_order_correlated=decisions,guest_decision_limit='First-demand ordered correlation only; timeout or capped history not filled. Later demand acceptance is inferred from actual read/ACK and timer programming, not a fabricated Guest decision.',negative_torque_samples_by_feedback_phase={k:dict(count=len(v),sample_vns=v) for k,v in negative.items()},first_sector_negative_samples=sum(s['torque_nm']<0 and s['physical_first_sector'] for s in samples),first_reversed_sample=next((s for s in samples if s['rpm']<=-50),None),samples=samples,source_ledger=ledger)
+    return dict(first_accepted_timer_audit=timer_audit,comparator_transition_geometry=motion,source_demand=anchor,window_end_ns=window,boundary=boundary,first_pair=pair(drive),first_changed_pair=pair(changed),first_commutation_irq=irq,first_accepted_capture_with_timer_chain=accepted,capture_timer_chains=chains,first_guest_decisions_order_correlated=decisions,guest_decision_limit='First-demand ordered correlation only; timeout or capped history not filled. Later demand acceptance is inferred from actual read/ACK and timer programming, not a fabricated Guest decision.',negative_torque_samples_by_feedback_phase={k:dict(count=len(v),sample_vns=v) for k,v in negative.items()},first_sector_negative_samples=sum(s['torque_nm']<0 and s['physical_first_sector'] for s in samples),first_reversed_sample=next((s for s in samples if s['rpm']<=-50),None),samples=samples,source_ledger=ledger)
 def analyze(events,evidence,focus=None,policy='baseline'):
     if not events or events[0]['seq']!=1 or any(b['seq']!=a['seq']+1 or b['vns']<a['vns'] for a,b in zip(events,events[1:])):raise ValueError('Source sequence/time gap')
     ds=[e for e in events if e['kind']=='DSHOT'];anchors=[e for i,e in enumerate(ds) if e['c']>0 and (i==0 or ds[i-1]['c']==0)]
@@ -94,6 +103,6 @@ def analyze(events,evidence,focus=None,policy='baseline'):
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     for n in ('events','evidence','output'):p.add_argument('--'+n,type=Path,required=True)
-    p.add_argument('--focus-ms');p.add_argument('--policy',choices=('baseline','firstedge','firstseed','adc2k'),default='baseline');a=p.parse_args();focus=tuple(int(v)*1000000 for v in a.focus_ms.split(':')) if a.focus_ms else None
+    p.add_argument('--focus-ms');p.add_argument('--policy',choices=('baseline','firstedge','firstseed','acquisition','estimator','adc2k'),default='baseline');a=p.parse_args();focus=tuple(int(v)*1000000 for v in a.focus_ms.split(':')) if a.focus_ms else None
     r=analyze(parse(a.events.read_text()),json.loads(a.evidence.read_text()),focus,a.policy);a.output.write_text(json.dumps(r,indent=2)+'\n')
 if __name__=='__main__':main()

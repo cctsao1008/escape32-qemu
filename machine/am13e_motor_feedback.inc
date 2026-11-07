@@ -152,6 +152,22 @@ static void am13e_g10_output(AM13ESimFeedback *f, bool level)
     am13e_p0_event(f->machine, "CMP_FILTER", phase,level,
                    phase < 3U ? f->phase_code[phase] : 0,
                    f->cmp[0x0eU / 2U] & 0xfffU,0,0);
+    /* Optional bounded read-only acquisition point. No counter advance,
+     * ECAP flag load, synthetic edge or interrupt is performed here. */
+    AM13ENativeMotor *m=&f->machine->native_motor;
+    const int64_t observation_ns=qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
+    if(!g_strcmp0(g_getenv("E62_BEMF_ACQUISITION_DIAGNOSTICS"),"1") &&
+       m->source_focus_end_ns>m->source_focus_begin_ns &&
+       observation_ns>=m->source_focus_begin_ns && observation_ns<=m->source_focus_end_ns) {
+        error_report("E62_BEMF_ACQ vns=%" PRId64 " source_seq=%" PRIu64
+                     " phase=%u level=%u ecctl0=%u ecctl1=%u ecctl2=%u eceint=%u ecflg=%u capture_index=%u frozen=%u"
+                     " pwm_counter=%u pwm_period=%u motor_sample_vns=%" PRId64
+                     " motor_active=%u theta=%.17g omega=%.17g ia=%.17g ib=%.17g ic=%.17g torque=%.17g mask=%u gate=%u",
+                     observation_ns,f->machine->p0_trace_sequence,phase,level,
+                     f->ecctl0,f->ecctl1,f->ecctl2,f->eceint,f->ecflg,f->capture_index,f->oneshot_frozen,
+                     am13e_pwm4_count(&f->machine->pwm4),f->machine->pwm4.reg[0x14U/4U]&0xffffU,
+                     m->last_ns,m->active,m->theta_unwrapped,m->omega,m->currents[0],m->currents[1],m->currents[2],m->last_torque,m->mask,m->gate);
+    }
     if (level) {
         f->cmp_latch = true;
     }

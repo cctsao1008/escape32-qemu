@@ -693,6 +693,7 @@ static void am13e_p0_event(AM13EMachineState *s, const char *kind,
                      s->auto_sitl.diagnostic_wave_ns,observed,s->auto_sitl.start_ns);
     }
 }
+static uint32_t am13e_pwm4_count(AM13ESimPWM *p);
 static void am13e_auto_route_changed(AM13EMachineState *s);
 static void am13e_auto_trace_cap1(AM13EMachineState *s);
 static void am13e_auto_trace_timg12_zero(AM13ESimTimer *t);

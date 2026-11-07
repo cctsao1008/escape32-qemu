@@ -22,6 +22,18 @@ class ChronologyTests(unittest.TestCase):
         self.assertEqual(phase_of(250,None,None,None,None),'NO_OBSERVED_ACCEPTED_CAPTURE')
         es=self.events();es[3]['seq']+=1
         with self.assertRaises(ValueError):analyze(es,{})
+    def test_timer_period_is_measured_and_replacement_prevents_false_attribution(self):
+        es=self.events()
+        next(e for e in es if e['kind']=='T12_LOAD').update(a=9,b=100000000)
+        next(e for e in es if e['kind']=='TIMG12')['vns']=304
+        timer=analyze(es,{},(90,350))['demands'][0]['first_accepted_timer_audit']
+        self.assertEqual(timer['source_programmed_period_ns'],100)
+        self.assertEqual(timer['observed_error_ns'],0)
+        es.append(dict(kind='T12_START',vns=250,a=0,b=0,c=0,d=0,e=0,f=0,seq=99))
+        es.sort(key=lambda e:e['vns'])
+        for i,e in enumerate(es):e['seq']=i+1
+        self.assertIsNone(analyze(es,{},(90,350))['demands'][0]['first_accepted_timer_audit'])
+
     def test_reused_restart_pair_is_derived_from_real_pad_edge_not_invented_pwm_pair(self):
         es=self.events();es=[e for e in es if not(e['kind']=='PWM_PAIR' and e['vns']==101)]
         for n,e in enumerate(es):e['seq']=n+1
