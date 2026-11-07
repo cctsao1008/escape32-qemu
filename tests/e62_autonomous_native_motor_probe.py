@@ -545,11 +545,13 @@ def run(args):
             raise RuntimeError(
                 "Issue #5 diagnostic ELF missing unambiguous SRAM symbols: "
                 + ", ".join(missing))
+    coast_reference_addresses=None
     coast_acquire_address=None
     if getattr(args,"coast_phase_diagnostics",False):
         if exp_sha is None:raise ValueError("Coast observer requires pinned experimental ELF")
-        from tools.e62_coast_acquire_diag import symbol as coast_symbol
+        from tools.e62_coast_acquire_diag import symbol as coast_symbol,reference_symbols
         coast_acquire_address=coast_symbol(args.elf)
+        coast_reference_addresses=reference_symbols(args.elf)
     restart_seed_address = None
     if getattr(args,"restart_rate_diagnostics",False):
         if exp_sha is None:raise ValueError("Restart observer requires pinned experimental ELF")
@@ -777,7 +779,8 @@ def run(args):
                             raise AssertionError(
                                 "No source Firmware BEMF callbacks recorded")
                     if coast_acquire_address is not None:
-                        from tools.e62_coast_acquire_diag import snapshot as coast_snapshot
+                        from tools.e62_coast_acquire_diag import snapshot as coast_snapshot,pending_reference
+                        evidence["coast_reference_pending_snapshot"]=pending_reference(qtest.read,coast_reference_addresses)
                         evidence["coast_acquisition_candidate_record"]=coast_snapshot(qtest.read,coast_acquire_address)
                         evidence["coast_candidate_fault_registers"]={"cfsr":qtest.read(0xe000ed28),"hfsr":qtest.read(0xe000ed2c),"cpacr":qtest.read(0xe000ed88)}
                     if restart_seed_address is not None:
