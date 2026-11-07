@@ -7,5 +7,30 @@
   "manifest_verified": true,
   "original_rel17_qualified": false,
   "hardware_qualified": false,
-  "previous_bundle_sha256": "c8a5c2410a27cce79353aae9812a3d222b2bd57451d51b7bab1613d489065df5"
+  "previous_bundle_sha256": "c8a5c2410a27cce79353aae9812a3d222b2bd57451d51b7bab1613d489065df5",
+  "parts": [
+    {
+      "path": "artifacts/e62-execution-v5-evidence.part-01",
+      "bytes": 29360128,
+      "sha256": "2fab20a8e02fa5cd23e52f0dac4804d76ac18617bc298751f8aa956b032706b1"
+    },
+    {
+      "path": "artifacts/e62-execution-v5-evidence.part-02",
+      "bytes": 29360128,
+      "sha256": "d2be40667dde9f1e82334b6a9a1d9bfe8d81b3a77f9982344ddb5ac5c804dc44"
+    },
+    {
+      "path": "artifacts/e62-execution-v5-evidence.part-03",
+      "bytes": 29360128,
+      "sha256": "3c2324891deca452c6ac7cb4689f7fa3949914ad67fa66b6f63c509dc0a9d77c"
+    },
+    {
+      "path": "artifacts/e62-execution-v5-evidence.part-04",
+      "bytes": 19313318,
+      "sha256": "82142786e5a9e16be760b9b2b2a8ddf41cbdb646110dbb58e9774a63c607cd1c"
+    }
+  ],
+  "parts_limit_bytes": 33554432,
+  "parts_concatenation_verified": true,
+  "reassemble": "cat e62-execution-v5-evidence.part-01 e62-execution-v5-evidence.part-02 e62-execution-v5-evidence.part-03 e62-execution-v5-evidence.part-04 > e62-execution-v5-evidence.tar.gz"
 }
