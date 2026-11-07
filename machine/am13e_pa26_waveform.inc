@@ -34,6 +34,14 @@ static void am13e_pa26_wave_event(void *opaque)
         return;
     }
     unsigned n = w->delivered;
+    if (!n && w->machine->auto_sitl.running && g_getenv("E62_DSHOT_DIAGNOSTICS")) {
+        int64_t deadline=-1,snapshot=-1;
+        bool valid=e62_timer_observation(w->timer,&deadline,&snapshot);
+        error_report("E62_WIRE_DIAG frame=%u valid=%u deadline=%" PRId64
+                     " snapshot=%" PRId64 " callback=%" PRId64,
+                     w->machine->auto_sitl.sent-1U,valid,deadline,snapshot,
+                     qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL));
+    }
     /* Reuse G7B's original PA26 edge handler. Only the real PINCM,
      * timer-capture and DMA wiring can publish a guest timestamp. */
     if (am13e_sim_pa26_write(w->machine, 0U, w->levels[n], 4U,
