@@ -4,14 +4,14 @@ from pathlib import Path
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--baseline',type=Path,required=True);p.add_argument('--candidate',type=Path,required=True);p.add_argument('--seed',type=Path);p.add_argument('--output-prefix',type=Path,required=True);a=p.parse_args()
+    p.add_argument('--baseline',type=Path,required=True);p.add_argument('--candidate',type=Path,required=True);p.add_argument('--seed',type=Path);p.add_argument('--stable',type=Path);p.add_argument('--candidate-label',default='Acceptance only');p.add_argument('--window-ms',type=int,default=25);p.add_argument('--output-prefix',type=Path,required=True);a=p.parse_args()
     import matplotlib
     matplotlib.use('Agg')
     import matplotlib.pyplot as plt
     fig,axes=plt.subplots(3,1,figsize=(10,8),sharex=True)
-    for name,path,color in [('Baseline',a.baseline,'#365f9d'),('Acceptance only',a.candidate,'#c45a29'),('Interval seed',a.seed,'#36915e')]:
+    for name,path,color in [('Baseline',a.baseline,'#365f9d'),(a.candidate_label,a.candidate,'#c45a29'),('Interval seed',a.seed,'#36915e'),('Estimator + continuity + prompt',a.stable,'#764999')]:
         if path is None:continue
-        d=json.loads(path.read_text())['demands'][0];t=d['source_demand']['vns'];rows=[s for s in d['samples'] if s['after_demand_ns']<=25_000_000];x=[s['after_demand_ns']/1e6 for s in rows]
+        d=json.loads(path.read_text())['demands'][0];t=d['source_demand']['vns'];rows=[s for s in d['samples'] if s['after_demand_ns']<=a.window_ms*1_000_000];x=[s['after_demand_ns']/1e6 for s in rows]
         for ax,key in zip(axes,('electrical_angle_deg','torque_nm','rpm')):ax.plot(x,[s[key] for s in rows],'.-',ms=4,lw=.8,color=color,label=name)
         accepted=d['first_accepted_capture_with_timer_chain'];changed=d['first_changed_pair']
         for ax in axes:
