@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "archive": "/workspace/escape32-qemu/artifacts/e62-execution-v6-evidence.tar.gz",
+  "sha256": "27360c958eba7c29d501b7189ad6d1f6e55129a69616c47f33ec814be32d26fb",
+  "bytes": 65289300,
+  "verified_files": 415,
+  "all_member_sha256_verified": true,
+  "source_branches": {
+    "qemu": "diag/e62-restart-rate-evidence",
+    "firmware": "experiment/e62-coast-phase-acquisition",
+    "failed_firmware": "experiment/e62-restart-phase-rate"
+  },
+  "draft_prs": [
+    "https://github.com/cctsao1008/escape32-qemu/pull/17",
+    "https://github.com/cctsao1008/ESCape32/pull/15"
+  ],
+  "external_qemu_sha256": "6f99975e319ada16af98050c66b1ee39fef690d8dca16ec08a6c59560f7faef8",
+  "parts": [
+    {
+      "path": "/workspace/escape32-qemu/artifacts/e62-execution-v6-evidence.tar.gz.part000",
+      "bytes": 29360128,
+      "sha256": "a39498bb2e9fff7db6de11d97e74a793e3577754b800453e214faa359c8fd65f"
+    },
+    {
+      "path": "/workspace/escape32-qemu/artifacts/e62-execution-v6-evidence.tar.gz.part001",
+      "bytes": 29360128,
+      "sha256": "3d38d424e24f901f657f8af877c8b28b9447deeb226e6b58421c2138247ad7e0"
+    },
+    {
+      "path": "/workspace/escape32-qemu/artifacts/e62-execution-v6-evidence.tar.gz.part002",
+      "bytes": 6569044,
+      "sha256": "4ec9237cd5f346b23316941661121130fae123582351524323f9acc2f9e9f846"
+    }
+  ],
+  "reassembly": "cat e62-execution-v6-evidence.tar.gz.part* > e62-execution-v6-evidence.tar.gz"
+}

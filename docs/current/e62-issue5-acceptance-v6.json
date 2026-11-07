@@ -1,0 +1,2503 @@
+{
+  "schema": "e62.issue5.incremental.v6",
+  "date_taipei": "2026-11-08",
+  "prior_report": "docs/current/e62-engineering-status-v5.md",
+  "report": "docs/current/e62-issue5-restart-v6.md",
+  "original_qualified": false,
+  "hardware_qualified": false,
+  "model_physics_changed": false,
+  "p1_thresholds_changed": false,
+  "merge_performed": false,
+  "issues_closed": false,
+  "candidate_elf_sha256": "f61c7e2cf240bf79a0cdc2d65c88c06c03a52865122a0054d7a14fba55b22e08",
+  "control_elf_sha256": "ca0d40994efac4964d61073a690d10dc89f963af7180a77f6a6fea3401685e12",
+  "qemu_sha256": "6f99975e319ada16af98050c66b1ee39fef690d8dca16ec08a6c59560f7faef8",
+  "acceptance_matrix": [
+    {
+      "criterion": "Recover published baseline, both repositories and exact required artifacts",
+      "status": "PASS_NEW",
+      "evidence": "New ready environment; verified local/remote branch IDs, SHA256 and binary availability. Previous canceled environment is not a firmware failure."
+    },
+    {
+      "criterion": "Reuse v5 successful minus30 first startup and completed verification suites",
+      "status": "PASS_REUSED",
+      "evidence": "Only the original recorded774019cd/QEMU6f/CFG/scenario identities and unchanged components; no T01/62-host/full Issue3 rerun."
+    },
+    {
+      "criterion": "H13 nominal candidate-coast3000",
+      "status": "PASS_NEW",
+      "evidence": {
+        "negative_authorization_result": null,
+        "reference_pending_snapshot": null,
+        "case": "coast-phase-screen--candidate-coast3000",
+        "result": "PASS_NEW",
+        "scope": "EXPERIMENTAL_SIM_ONLY_INDEPENDENT_SECOND_DEMAND_NOT_ORIGINAL_QUALIFICATION",
+        "selection": "Previously failed coast with discriminating H12 correction/control;90/offset dependency impacted by ADC-observer code and new ELF. No unchanged PASS rerun.",
+        "elf_sha256": "f61c7e2cf240bf79a0cdc2d65c88c06c03a52865122a0054d7a14fba55b22e08",
+        "qemu_sha256": "6f99975e319ada16af98050c66b1ee39fef690d8dca16ec08a6c59560f7faef8",
+        "scenario_sha256": "fe3ba96a3bf68a44c105b57e41bc1d01ec85126e3ed417e86c8cfa88adecbfb4",
+        "guest_record": {
+          "acquisition_tick": 95808,
+          "coast_transitions": 24,
+          "decision": 4,
+          "first_capture_us": 4068,
+          "guest_tick": 95817,
+          "hardware_qualified": false,
+          "observed_direction": 1,
+          "oldstep": 4,
+          "original_qualified": false,
+          "phase_pattern": 3,
+          "sample": 5988,
+          "second_capture_us": 1477,
+          "selected_step": 4,
+          "stable_epochs": 22,
+          "status": "TWO_CAPTURES_NOT_ROTOR_QUALIFICATION",
+          "timestamp_domain": "GUEST_TICKS_NOT_SOURCE_VNS"
+        },
+        "source_boundary": {
+          "rotor_before": {
+            "vns": 5999353180,
+            "sample_age_ns": 646920,
+            "rpm": 1.027,
+            "electrical_angle_rad": 2760.462,
+            "electrical_angle_deg": 158162.82210624224,
+            "current_a": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "torque_nm": 0.0
+          },
+          "rotor_after": {
+            "vns": 6000353180,
+            "sample_age_ns": -353080,
+            "rpm": 1.076,
+            "electrical_angle_rad": 2760.464,
+            "electrical_angle_deg": 158162.93669780128,
+            "current_a": [
+              0.0,
+              0.242,
+              -0.242
+            ],
+            "torque_nm": 0.008551
+          },
+          "pads": {
+            "source_vns": 5999030148,
+            "state_age_ns": 969952,
+            "mask": 0,
+            "gate_enabled": false,
+            "gate_word": 14,
+            "on_pads": [],
+            "status": "SOURCE_TRANSITION_HELD_WITHIN_BOUNDED_WINDOW"
+          },
+          "pad_status": "OBSERVED"
+        },
+        "first_powered_pair": {
+          "source": {
+            "seq": 102702,
+            "vns": 6000280596,
+            "kind": "PWM_PAIR",
+            "a": 6,
+            "b": 36,
+            "c": 15,
+            "d": 2760464,
+            "e": 22506,
+            "f": 0
+          },
+          "pair_id": 6,
+          "pair_id_derived_from_pad_mask": false,
+          "high": "B",
+          "low": "C",
+          "floating": "A"
+        },
+        "first_changed_pair": {
+          "source": {
+            "seq": 102955,
+            "vns": 6004279932,
+            "kind": "PWM_PAIR",
+            "a": 4,
+            "b": 6,
+            "c": 15,
+            "d": 2761469,
+            "e": 22554,
+            "f": 0
+          },
+          "pair_id": 4,
+          "pair_id_derived_from_pad_mask": false,
+          "high": "B",
+          "low": "A",
+          "floating": "C"
+        },
+        "first_accepted_capture": {
+          "cap1_ns": 6004266420,
+          "phase": 0,
+          "ack": true,
+          "read": true,
+          "timer_load_ns": 6004268276,
+          "timer_start_ns": 6004268460,
+          "classification": "READ_AND_TIMER_PROGRAMMED"
+        },
+        "timer_audit": {
+          "source_load": {
+            "seq": 102950,
+            "vns": 6004268276,
+            "kind": "T12_LOAD",
+            "a": 99,
+            "b": 100000000,
+            "c": 0,
+            "d": 0,
+            "e": 0,
+            "f": 0
+          },
+          "source_start_vns": 6004268460,
+          "source_irq_vns": 6004269460,
+          "source_programmed_period_ns": 1000,
+          "actual_start_to_irq_ns": 1000,
+          "observed_error_ns": 0,
+          "replaced_before_irq": false
+        },
+        "negative_torque_samples": {
+          "AFTER_FIRST_PHYSICAL_PAIR_CHANGE": {
+            "count": 13,
+            "sample_vns": [
+              6021353184,
+              6024353184,
+              6026353184,
+              6030353184,
+              6033353184,
+              6035353184,
+              6036353184,
+              6038353184,
+              6039353184,
+              6042353184,
+              6043353184,
+              6046353184,
+              6047353184
+            ]
+          }
+        },
+        "first_reversed_sample": null,
+        "mechanism": "NO_SIGNIFICANT_REVERSE_SAMPLE_IN_FIRST50MS",
+        "independent_second_demand": {
+          "coast": {
+            "end_virtual_ns": 6000000100,
+            "late_guest_motor_event_counts": {
+              "CAP1_ACK": 0,
+              "PWM_PAIR": 0,
+              "TIMG12_ACK": 0
+            },
+            "settle_ms": 200,
+            "start_virtual_ns": 3000000100,
+            "verified_complete_standstill": false
+          },
+          "demand_windows": [
+            {
+              "end_virtual_ns": 3000000100,
+              "negative_rotor_samples_below_minus_floor": 0,
+              "positive_rotor_observation_span_ms": 1497.000608,
+              "positive_rotor_samples_ge_50rpm": 1498,
+              "profile_positive_rpm_floor": 50,
+              "rotor_samples": 1500,
+              "source_counts": {
+                "CAP1_ACK": 2597,
+                "PWM_PAIR": 2597,
+                "TIMG12_ACK": 2596
+              },
+              "stage_index": 1,
+              "start_virtual_ns": 1500000100
+            },
+            {
+              "end_virtual_ns": 7500000100,
+              "negative_rotor_samples_below_minus_floor": 0,
+              "positive_rotor_observation_span_ms": 1497.003004,
+              "positive_rotor_samples_ge_50rpm": 1498,
+              "profile_positive_rpm_floor": 50,
+              "rotor_samples": 1500,
+              "source_counts": {
+                "CAP1_ACK": 2595,
+                "PWM_PAIR": 2596,
+                "TIMG12_ACK": 2595
+              },
+              "stage_index": 3,
+              "start_virtual_ns": 6000000100
+            }
+          ],
+          "failures": [],
+          "pass": true
+        },
+        "rotor_diagnostic": {
+          "classification": "SIM_ONLY_READ_ONLY_PLANT_DIAGNOSTIC_NOT_GUEST_ROTOR_SENSING",
+          "coast_duration_ms": 3000,
+          "do_not_use_angle_or_torque_as_guest_input": true,
+          "first_20ms_min_model_torque_nm": 0.008551,
+          "first_20ms_min_rpm": 1.076,
+          "first_20ms_negative_rpm_samples_le_minus50": 0,
+          "first_new_guest_cap1_ack_ms": 4.26636,
+          "first_post_demand_model_torque_negative": false,
+          "first_post_demand_model_torque_nm": 0.008551,
+          "first_post_demand_sample_ms": 0.35308,
+          "hardware_qualified": false,
+          "has_guest_rotor_angle_measurement": false,
+          "p1_qualified": false,
+          "pre_demand_rpm": 1.027,
+          "pre_demand_unwrapped_electrical_angle_mrad": 2760462,
+          "pre_demand_wrapped_electrical_angle_deg": 122.822106,
+          "rotor_model_samples_first_20ms": 20,
+          "schema": "e62.experimental.native-coast-phase-torque-audit.v1",
+          "second_demand_start_virtual_ns": 6000000100,
+          "source_dshot_frames": 7800
+        },
+        "strict_unwaived_failures": [
+          "ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN"
+        ],
+        "original_qualified": false,
+        "hardware_qualified": false,
+        "source_events_sha256": "eb1c7bf9f13cc4f4142dc658a0de5deca621bb4164c381b6b1e525cbc3fcd157"
+      }
+    },
+    {
+      "criterion": "H13 nominal candidate-coast1500",
+      "status": "PASS_NEW",
+      "evidence": {
+        "negative_authorization_result": null,
+        "reference_pending_snapshot": null,
+        "case": "coast-phase-candidates--candidate-coast1500",
+        "result": "PASS_NEW",
+        "scope": "EXPERIMENTAL_SIM_ONLY_INDEPENDENT_SECOND_DEMAND_NOT_ORIGINAL_QUALIFICATION",
+        "selection": "Previously failed coast with discriminating H12 correction/control;90/offset dependency impacted by ADC-observer code and new ELF. No unchanged PASS rerun.",
+        "elf_sha256": "f61c7e2cf240bf79a0cdc2d65c88c06c03a52865122a0054d7a14fba55b22e08",
+        "qemu_sha256": "6f99975e319ada16af98050c66b1ee39fef690d8dca16ec08a6c59560f7faef8",
+        "scenario_sha256": "e6c782b194948fbda79a82d2f5f29a61640b8e0a6d510c1c54f43231818da008",
+        "guest_record": {
+          "acquisition_tick": 71808,
+          "coast_transitions": 10,
+          "decision": 4,
+          "first_capture_us": 1790,
+          "guest_inferred_direction": 1,
+          "guest_tick": 71818,
+          "hardware_qualified": false,
+          "oldstep": 4,
+          "original_qualified": false,
+          "phase_pattern": 5,
+          "sample": 4488,
+          "second_capture_us": 2330,
+          "selected_step": 2,
+          "stable_epochs": 185,
+          "status": "TWO_CAPTURES_NOT_ROTOR_QUALIFICATION",
+          "timestamp_domain": "GUEST_TICKS_NOT_SOURCE_VNS"
+        },
+        "source_boundary": {
+          "rotor_before": {
+            "vns": 4499351744,
+            "sample_age_ns": 648356,
+            "rpm": 2.045,
+            "electrical_angle_rad": 2746.642,
+            "electrical_angle_deg": 157370.99443337144,
+            "current_a": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "torque_nm": 0.0
+          },
+          "rotor_after": {
+            "vns": 4500351744,
+            "sample_age_ns": -351644,
+            "rpm": 2.108,
+            "electrical_angle_rad": 2746.646,
+            "electrical_angle_deg": 157371.22361648953,
+            "current_a": [
+              0.266,
+              -0.266,
+              0.0
+            ],
+            "torque_nm": 0.017069
+          },
+          "pads": {
+            "source_vns": 4499030148,
+            "state_age_ns": 969952,
+            "mask": 0,
+            "gate_enabled": false,
+            "gate_word": 14,
+            "on_pads": [],
+            "status": "SOURCE_TRANSITION_HELD_WITHIN_BOUNDED_WINDOW"
+          },
+          "pad_status": "OBSERVED"
+        },
+        "first_powered_pair": {
+          "source": {
+            "seq": 83260,
+            "vns": 4500303524,
+            "kind": "PWM_PAIR",
+            "a": 2,
+            "b": 9,
+            "c": 15,
+            "d": 2746646,
+            "e": 22846,
+            "f": 0
+          },
+          "pair_id": 2,
+          "pair_id_derived_from_pad_mask": false,
+          "high": "A",
+          "low": "B",
+          "floating": "C"
+        },
+        "first_changed_pair": {
+          "source": {
+            "seq": 83380,
+            "vns": 4502052530,
+            "kind": "PWM_PAIR",
+            "a": 3,
+            "b": 33,
+            "c": 15,
+            "d": 2746810,
+            "e": 22867,
+            "f": 0
+          },
+          "pair_id": 3,
+          "pair_id_derived_from_pad_mask": false,
+          "high": "A",
+          "low": "C",
+          "floating": "B"
+        },
+        "first_accepted_capture": {
+          "cap1_ns": 4502011984,
+          "phase": 2,
+          "ack": true,
+          "read": true,
+          "timer_load_ns": 4502013840,
+          "timer_start_ns": 4502014024,
+          "classification": "READ_AND_TIMER_PROGRAMMED"
+        },
+        "timer_audit": {
+          "source_load": {
+            "seq": 83374,
+            "vns": 4502013840,
+            "kind": "T12_LOAD",
+            "a": 99,
+            "b": 100000000,
+            "c": 0,
+            "d": 0,
+            "e": 0,
+            "f": 0
+          },
+          "source_start_vns": 4502014024,
+          "source_irq_vns": 4502015024,
+          "source_programmed_period_ns": 1000,
+          "actual_start_to_irq_ns": 1000,
+          "observed_error_ns": 0,
+          "replaced_before_irq": false
+        },
+        "negative_torque_samples": {
+          "AFTER_FIRST_PHYSICAL_PAIR_CHANGE": {
+            "count": 11,
+            "sample_vns": [
+              4524351752,
+              4527351756,
+              4528351756,
+              4531351756,
+              4535351756,
+              4538351764,
+              4539351764,
+              4542351764,
+              4543351768,
+              4548351772,
+              4549351772
+            ]
+          }
+        },
+        "first_reversed_sample": null,
+        "mechanism": "NO_SIGNIFICANT_REVERSE_SAMPLE_IN_FIRST50MS",
+        "independent_second_demand": {
+          "coast": {
+            "end_virtual_ns": 4500000100,
+            "late_guest_motor_event_counts": {
+              "CAP1_ACK": 0,
+              "PWM_PAIR": 0,
+              "TIMG12_ACK": 0
+            },
+            "settle_ms": 200,
+            "start_virtual_ns": 3000000100,
+            "verified_complete_standstill": false
+          },
+          "demand_windows": [
+            {
+              "end_virtual_ns": 3000000100,
+              "negative_rotor_samples_below_minus_floor": 0,
+              "positive_rotor_observation_span_ms": 1497.0013,
+              "positive_rotor_samples_ge_50rpm": 1498,
+              "profile_positive_rpm_floor": 50,
+              "rotor_samples": 1500,
+              "source_counts": {
+                "CAP1_ACK": 2596,
+                "PWM_PAIR": 2597,
+                "TIMG12_ACK": 2596
+              },
+              "stage_index": 1,
+              "start_virtual_ns": 1500000100
+            },
+            {
+              "end_virtual_ns": 6000000100,
+              "negative_rotor_samples_below_minus_floor": 0,
+              "positive_rotor_observation_span_ms": 1497.000704,
+              "positive_rotor_samples_ge_50rpm": 1498,
+              "profile_positive_rpm_floor": 50,
+              "rotor_samples": 1500,
+              "source_counts": {
+                "CAP1_ACK": 2596,
+                "PWM_PAIR": 2597,
+                "TIMG12_ACK": 2596
+              },
+              "stage_index": 3,
+              "start_virtual_ns": 4500000100
+            }
+          ],
+          "failures": [],
+          "pass": true
+        },
+        "rotor_diagnostic": {
+          "classification": "SIM_ONLY_READ_ONLY_PLANT_DIAGNOSTIC_NOT_GUEST_ROTOR_SENSING",
+          "coast_duration_ms": 1500,
+          "do_not_use_angle_or_torque_as_guest_input": true,
+          "first_20ms_min_model_torque_nm": 0.017069,
+          "first_20ms_min_rpm": 2.108,
+          "first_20ms_negative_rpm_samples_le_minus50": 0,
+          "first_new_guest_cap1_ack_ms": 2.011924,
+          "first_post_demand_model_torque_negative": false,
+          "first_post_demand_model_torque_nm": 0.017069,
+          "first_post_demand_sample_ms": 0.351644,
+          "hardware_qualified": false,
+          "has_guest_rotor_angle_measurement": false,
+          "p1_qualified": false,
+          "pre_demand_rpm": 2.045,
+          "pre_demand_unwrapped_electrical_angle_mrad": 2746642,
+          "pre_demand_wrapped_electrical_angle_deg": 50.994433,
+          "rotor_model_samples_first_20ms": 20,
+          "schema": "e62.experimental.native-coast-phase-torque-audit.v1",
+          "second_demand_start_virtual_ns": 4500000100,
+          "source_dshot_frames": 6300
+        },
+        "strict_unwaived_failures": [
+          "ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN"
+        ],
+        "original_qualified": false,
+        "hardware_qualified": false,
+        "source_events_sha256": "1532b505e51db52f86ed81d486693677fb0229f2a43dfcfb6c73a61e44781e1a"
+      }
+    },
+    {
+      "criterion": "H13 nominal candidate-coast300",
+      "status": "PASS_NEW",
+      "evidence": {
+        "negative_authorization_result": null,
+        "reference_pending_snapshot": null,
+        "case": "coast-phase-candidates--candidate-coast300",
+        "result": "PASS_NEW",
+        "scope": "EXPERIMENTAL_SIM_ONLY_INDEPENDENT_SECOND_DEMAND_NOT_ORIGINAL_QUALIFICATION",
+        "selection": "Previously failed coast with discriminating H12 correction/control;90/offset dependency impacted by ADC-observer code and new ELF. No unchanged PASS rerun.",
+        "elf_sha256": "f61c7e2cf240bf79a0cdc2d65c88c06c03a52865122a0054d7a14fba55b22e08",
+        "qemu_sha256": "6f99975e319ada16af98050c66b1ee39fef690d8dca16ec08a6c59560f7faef8",
+        "scenario_sha256": "891b9b7503f0933d58310fbd8541139d6fec69f8c1b35212b34c88b6c4ffce20",
+        "guest_record": {
+          "acquisition_tick": 52608,
+          "coast_transitions": 2,
+          "decision": 4,
+          "first_capture_us": 2988,
+          "guest_inferred_direction": 1,
+          "guest_tick": 52618,
+          "hardware_qualified": false,
+          "oldstep": 5,
+          "original_qualified": false,
+          "phase_pattern": 4,
+          "sample": 3288,
+          "second_capture_us": 1658,
+          "selected_step": 1,
+          "stable_epochs": 38,
+          "status": "TWO_CAPTURES_NOT_ROTOR_QUALIFICATION",
+          "timestamp_domain": "GUEST_TICKS_NOT_SOURCE_VNS"
+        },
+        "source_boundary": {
+          "rotor_before": {
+            "vns": 3299353712,
+            "sample_age_ns": 646388,
+            "rpm": 5.208,
+            "electrical_angle_rad": 2738.86,
+            "electrical_angle_deg": 156925.11867720066,
+            "current_a": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "torque_nm": 0.0
+          },
+          "rotor_after": {
+            "vns": 3300353712,
+            "sample_age_ns": -353612,
+            "rpm": 5.256,
+            "electrical_angle_rad": 2738.872,
+            "electrical_angle_deg": 156925.8062265548,
+            "current_a": [
+              0.0,
+              -0.231,
+              0.231
+            ],
+            "torque_nm": 0.012407
+          },
+          "pads": {
+            "source_vns": 3299030148,
+            "state_age_ns": 969952,
+            "mask": 0,
+            "gate_enabled": false,
+            "gate_word": 14,
+            "on_pads": [],
+            "status": "SOURCE_TRANSITION_HELD_WITHIN_BOUNDED_WINDOW"
+          },
+          "pad_status": "OBSERVED"
+        },
+        "first_powered_pair": {
+          "source": {
+            "seq": 67715,
+            "vns": 3300303476,
+            "kind": "PWM_PAIR",
+            "a": 8,
+            "b": 24,
+            "c": 15,
+            "d": 2738871,
+            "e": 22849,
+            "f": 0
+          },
+          "pair_id": 8,
+          "pair_id_derived_from_pad_mask": false,
+          "high": "C",
+          "low": "B",
+          "floating": "A"
+        },
+        "first_changed_pair": {
+          "source": {
+            "seq": 67908,
+            "vns": 3303302624,
+            "kind": "PWM_PAIR",
+            "a": 2,
+            "b": 9,
+            "c": 15,
+            "d": 2739518,
+            "e": 22885,
+            "f": 0
+          },
+          "pair_id": 2,
+          "pair_id_derived_from_pad_mask": false,
+          "high": "A",
+          "low": "B",
+          "floating": "C"
+        },
+        "first_accepted_capture": {
+          "cap1_ns": 3303209952,
+          "phase": 0,
+          "ack": true,
+          "read": true,
+          "timer_load_ns": 3303211808,
+          "timer_start_ns": 3303211992,
+          "classification": "READ_AND_TIMER_PROGRAMMED"
+        },
+        "timer_audit": {
+          "source_load": {
+            "seq": 67899,
+            "vns": 3303211808,
+            "kind": "T12_LOAD",
+            "a": 99,
+            "b": 100000000,
+            "c": 0,
+            "d": 0,
+            "e": 0,
+            "f": 0
+          },
+          "source_start_vns": 3303211992,
+          "source_irq_vns": 3303212992,
+          "source_programmed_period_ns": 1000,
+          "actual_start_to_irq_ns": 1000,
+          "observed_error_ns": 0,
+          "replaced_before_irq": false
+        },
+        "negative_torque_samples": {
+          "AFTER_FIRST_PHYSICAL_PAIR_CHANGE": {
+            "count": 12,
+            "sample_vns": [
+              3324353712,
+              3326353712,
+              3327353712,
+              3329353712,
+              3332353716,
+              3333353716,
+              3334353716,
+              3337353716,
+              3338353720,
+              3342353720,
+              3344353720,
+              3349353720
+            ]
+          }
+        },
+        "first_reversed_sample": null,
+        "mechanism": "NO_SIGNIFICANT_REVERSE_SAMPLE_IN_FIRST50MS",
+        "independent_second_demand": {
+          "coast": {
+            "end_virtual_ns": 3300000100,
+            "late_guest_motor_event_counts": {
+              "CAP1_ACK": 0,
+              "PWM_PAIR": 0,
+              "TIMG12_ACK": 0
+            },
+            "settle_ms": 200,
+            "start_virtual_ns": 3000000100,
+            "verified_complete_standstill": false
+          },
+          "demand_windows": [
+            {
+              "end_virtual_ns": 3000000100,
+              "negative_rotor_samples_below_minus_floor": 0,
+              "positive_rotor_observation_span_ms": 1497.00236,
+              "positive_rotor_samples_ge_50rpm": 1498,
+              "profile_positive_rpm_floor": 50,
+              "rotor_samples": 1500,
+              "source_counts": {
+                "CAP1_ACK": 2597,
+                "PWM_PAIR": 2597,
+                "TIMG12_ACK": 2596
+              },
+              "stage_index": 1,
+              "start_virtual_ns": 1500000100
+            },
+            {
+              "end_virtual_ns": 4800000100,
+              "negative_rotor_samples_below_minus_floor": 0,
+              "positive_rotor_observation_span_ms": 1497.000644,
+              "positive_rotor_samples_ge_50rpm": 1498,
+              "profile_positive_rpm_floor": 50,
+              "rotor_samples": 1500,
+              "source_counts": {
+                "CAP1_ACK": 2596,
+                "PWM_PAIR": 2597,
+                "TIMG12_ACK": 2596
+              },
+              "stage_index": 3,
+              "start_virtual_ns": 3300000100
+            }
+          ],
+          "failures": [],
+          "pass": true
+        },
+        "rotor_diagnostic": {
+          "classification": "SIM_ONLY_READ_ONLY_PLANT_DIAGNOSTIC_NOT_GUEST_ROTOR_SENSING",
+          "coast_duration_ms": 300,
+          "do_not_use_angle_or_torque_as_guest_input": true,
+          "first_20ms_min_model_torque_nm": 0.012407,
+          "first_20ms_min_rpm": 5.256,
+          "first_20ms_negative_rpm_samples_le_minus50": 0,
+          "first_new_guest_cap1_ack_ms": 3.209892,
+          "first_post_demand_model_torque_negative": false,
+          "first_post_demand_model_torque_nm": 0.012407,
+          "first_post_demand_sample_ms": 0.353612,
+          "hardware_qualified": false,
+          "has_guest_rotor_angle_measurement": false,
+          "p1_qualified": false,
+          "pre_demand_rpm": 5.208,
+          "pre_demand_unwrapped_electrical_angle_mrad": 2738860,
+          "pre_demand_wrapped_electrical_angle_deg": 325.118677,
+          "rotor_model_samples_first_20ms": 20,
+          "schema": "e62.experimental.native-coast-phase-torque-audit.v1",
+          "second_demand_start_virtual_ns": 3300000100,
+          "source_dshot_frames": 5100
+        },
+        "strict_unwaived_failures": [
+          "ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN"
+        ],
+        "original_qualified": false,
+        "hardware_qualified": false,
+        "source_events_sha256": "d4d65055bafe027956aceaa1c72ca38b76bfe50d055763af534f6b36a94f37df"
+      }
+    },
+    {
+      "criterion": "H13 shadow control-coast1500",
+      "status": "FAIL",
+      "evidence": {
+        "negative_authorization_result": null,
+        "reference_pending_snapshot": null,
+        "case": "coast-phase-controls--control-coast1500",
+        "result": "FAIL",
+        "scope": "EXPERIMENTAL_SIM_ONLY_INDEPENDENT_SECOND_DEMAND_NOT_ORIGINAL_QUALIFICATION",
+        "selection": "Previously failed coast with discriminating H12 correction/control;90/offset dependency impacted by ADC-observer code and new ELF. No unchanged PASS rerun.",
+        "elf_sha256": "ca0d40994efac4964d61073a690d10dc89f963af7180a77f6a6fea3401685e12",
+        "qemu_sha256": "6f99975e319ada16af98050c66b1ee39fef690d8dca16ec08a6c59560f7faef8",
+        "scenario_sha256": "e6c782b194948fbda79a82d2f5f29a61640b8e0a6d510c1c54f43231818da008",
+        "guest_record": {
+          "acquisition_tick": 71808,
+          "coast_transitions": 12,
+          "decision": 5,
+          "first_capture_us": 0,
+          "guest_inferred_direction": 1,
+          "guest_tick": 71818,
+          "hardware_qualified": false,
+          "oldstep": 5,
+          "original_qualified": false,
+          "phase_pattern": 2,
+          "sample": 4488,
+          "second_capture_us": 0,
+          "selected_step": 5,
+          "stable_epochs": 2,
+          "status": "SHADOW_ONLY_NOT_AUTHORIZATION",
+          "timestamp_domain": "GUEST_TICKS_NOT_SOURCE_VNS"
+        },
+        "source_boundary": {
+          "rotor_before": {
+            "vns": 4499357728,
+            "sample_age_ns": 642372,
+            "rpm": 2.244,
+            "electrical_angle_rad": 2748.899,
+            "electrical_angle_deg": 157500.3110077325,
+            "current_a": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "torque_nm": 0.0
+          },
+          "rotor_after": {
+            "vns": 4500357728,
+            "sample_age_ns": -357628,
+            "rpm": 2.203,
+            "electrical_angle_rad": 2748.904,
+            "electrical_angle_deg": 157500.59748663005,
+            "current_a": [
+              -0.301,
+              0.0,
+              0.301
+            ],
+            "torque_nm": -0.00961
+          },
+          "pads": {
+            "source_vns": 4499030148,
+            "state_age_ns": 969952,
+            "mask": 0,
+            "gate_enabled": false,
+            "gate_word": 14,
+            "on_pads": [],
+            "status": "SOURCE_TRANSITION_HELD_WITHIN_BOUNDED_WINDOW"
+          },
+          "pad_status": "OBSERVED"
+        },
+        "first_powered_pair": {
+          "source": {
+            "seq": 83269,
+            "vns": 4500303624,
+            "kind": "PWM_PAIR",
+            "a": 7,
+            "b": 18,
+            "c": 15,
+            "d": 2748903,
+            "e": 22790,
+            "f": 0
+          },
+          "pair_id": 7,
+          "pair_id_derived_from_pad_mask": false,
+          "high": "C",
+          "low": "A",
+          "floating": "B"
+        },
+        "first_changed_pair": {
+          "source": {
+            "seq": 83990,
+            "vns": 4511804412,
+            "kind": "PWM_PAIR",
+            "a": 8,
+            "b": 24,
+            "c": 15,
+            "d": 2745740,
+            "e": 22928,
+            "f": 0
+          },
+          "pair_id": 8,
+          "pair_id_derived_from_pad_mask": false,
+          "high": "C",
+          "low": "B",
+          "floating": "A"
+        },
+        "first_accepted_capture": {
+          "cap1_ns": 4509326968,
+          "phase": 1,
+          "ack": true,
+          "read": true,
+          "timer_load_ns": 4509328916,
+          "timer_start_ns": 4509329100,
+          "classification": "READ_AND_TIMER_PROGRAMMED"
+        },
+        "timer_audit": {
+          "source_load": {
+            "seq": 83832,
+            "vns": 4509328916,
+            "kind": "T12_LOAD",
+            "a": 244399,
+            "b": 100000000,
+            "c": 0,
+            "d": 0,
+            "e": 0,
+            "f": 0
+          },
+          "source_start_vns": 4509329100,
+          "source_irq_vns": 4511773100,
+          "source_programmed_period_ns": 2444000,
+          "actual_start_to_irq_ns": 2444000,
+          "observed_error_ns": 0,
+          "replaced_before_irq": false
+        },
+        "negative_torque_samples": {
+          "BEFORE_ACCEPTED_CAPTURE": {
+            "count": 7,
+            "sample_vns": [
+              4500357728,
+              4501357728,
+              4502357728,
+              4503357728,
+              4504357728,
+              4505357728,
+              4506357728
+            ]
+          },
+          "AFTER_FIRST_PHYSICAL_PAIR_CHANGE": {
+            "count": 8,
+            "sample_vns": [
+              4532357732,
+              4538357732,
+              4539357732,
+              4541357732,
+              4544357736,
+              4545357736,
+              4548357736,
+              4549357736
+            ]
+          }
+        },
+        "first_reversed_sample": {
+          "vns": 4502357728,
+          "sample_age_ns": null,
+          "rpm": -91.575,
+          "electrical_angle_rad": 2748.772,
+          "electrical_angle_deg": 157493.0344437343,
+          "current_a": [
+            -28.054,
+            0.0,
+            28.054
+          ],
+          "torque_nm": -1.094509,
+          "after_demand_ns": 2357628,
+          "feedback_phase": "BEFORE_ACCEPTED_CAPTURE",
+          "physical_first_sector": true
+        },
+        "mechanism": "PRE_ACCEPTED_FEEDBACK_REVERSAL",
+        "independent_second_demand": {
+          "coast": {
+            "end_virtual_ns": 4500000100,
+            "late_guest_motor_event_counts": {
+              "CAP1_ACK": 0,
+              "PWM_PAIR": 0,
+              "TIMG12_ACK": 0
+            },
+            "settle_ms": 200,
+            "start_virtual_ns": 3000000100,
+            "verified_complete_standstill": false
+          },
+          "demand_windows": [
+            {
+              "end_virtual_ns": 3000000100,
+              "negative_rotor_samples_below_minus_floor": 0,
+              "positive_rotor_observation_span_ms": 1497.0024,
+              "positive_rotor_samples_ge_50rpm": 1498,
+              "profile_positive_rpm_floor": 50,
+              "rotor_samples": 1500,
+              "source_counts": {
+                "CAP1_ACK": 2597,
+                "PWM_PAIR": 2598,
+                "TIMG12_ACK": 2597
+              },
+              "stage_index": 1,
+              "start_virtual_ns": 1500000100
+            },
+            {
+              "end_virtual_ns": 6000000100,
+              "negative_rotor_samples_below_minus_floor": 7,
+              "positive_rotor_observation_span_ms": 1489.000776,
+              "positive_rotor_samples_ge_50rpm": 1490,
+              "profile_positive_rpm_floor": 50,
+              "rotor_samples": 1500,
+              "source_counts": {
+                "CAP1_ACK": 2584,
+                "PWM_PAIR": 2584,
+                "TIMG12_ACK": 2583
+              },
+              "stage_index": 3,
+              "start_virtual_ns": 4500000100
+            }
+          ],
+          "failures": [
+            "SECOND_DEMAND_REACQUISITION_SIGNIFICANT_REVERSE_ROTATION"
+          ],
+          "pass": false
+        },
+        "rotor_diagnostic": {
+          "classification": "SIM_ONLY_READ_ONLY_PLANT_DIAGNOSTIC_NOT_GUEST_ROTOR_SENSING",
+          "coast_duration_ms": 1500,
+          "do_not_use_angle_or_torque_as_guest_input": true,
+          "first_20ms_min_model_torque_nm": -1.288475,
+          "first_20ms_min_rpm": -382.118,
+          "first_20ms_negative_rpm_samples_le_minus50": 7,
+          "first_new_guest_cap1_ack_ms": 0.695908,
+          "first_post_demand_model_torque_negative": true,
+          "first_post_demand_model_torque_nm": -0.00961,
+          "first_post_demand_sample_ms": 0.357628,
+          "hardware_qualified": false,
+          "has_guest_rotor_angle_measurement": false,
+          "p1_qualified": false,
+          "pre_demand_rpm": 2.244,
+          "pre_demand_unwrapped_electrical_angle_mrad": 2748899,
+          "pre_demand_wrapped_electrical_angle_deg": 180.311008,
+          "rotor_model_samples_first_20ms": 20,
+          "schema": "e62.experimental.native-coast-phase-torque-audit.v1",
+          "second_demand_start_virtual_ns": 4500000100,
+          "source_dshot_frames": 6300
+        },
+        "strict_unwaived_failures": [
+          "ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN",
+          "STARTUP_SIGNIFICANT_DIRECTION_REVERSAL"
+        ],
+        "original_qualified": false,
+        "hardware_qualified": false,
+        "source_events_sha256": "f3fc8284bb53591c7099386c1524da37c9d6bbb5533462ee8477d5f2abb18e43"
+      }
+    },
+    {
+      "criterion": "H13 shadow control-coast300",
+      "status": "FAIL",
+      "evidence": {
+        "negative_authorization_result": null,
+        "reference_pending_snapshot": null,
+        "case": "coast-phase-controls--control-coast300",
+        "result": "FAIL",
+        "scope": "EXPERIMENTAL_SIM_ONLY_INDEPENDENT_SECOND_DEMAND_NOT_ORIGINAL_QUALIFICATION",
+        "selection": "Previously failed coast with discriminating H12 correction/control;90/offset dependency impacted by ADC-observer code and new ELF. No unchanged PASS rerun.",
+        "elf_sha256": "ca0d40994efac4964d61073a690d10dc89f963af7180a77f6a6fea3401685e12",
+        "qemu_sha256": "6f99975e319ada16af98050c66b1ee39fef690d8dca16ec08a6c59560f7faef8",
+        "scenario_sha256": "891b9b7503f0933d58310fbd8541139d6fec69f8c1b35212b34c88b6c4ffce20",
+        "guest_record": {
+          "acquisition_tick": 52608,
+          "coast_transitions": 3,
+          "decision": 5,
+          "first_capture_us": 0,
+          "guest_inferred_direction": 1,
+          "guest_tick": 52618,
+          "hardware_qualified": false,
+          "oldstep": 4,
+          "original_qualified": false,
+          "phase_pattern": 4,
+          "sample": 3288,
+          "second_capture_us": 0,
+          "selected_step": 1,
+          "stable_epochs": 7,
+          "status": "SHADOW_ONLY_NOT_AUTHORIZATION",
+          "timestamp_domain": "GUEST_TICKS_NOT_SOURCE_VNS"
+        },
+        "source_boundary": {
+          "rotor_before": {
+            "vns": 3299353880,
+            "sample_age_ns": 646220,
+            "rpm": 6.209,
+            "electrical_angle_rad": 2738.513,
+            "electrical_angle_deg": 156905.2370417096,
+            "current_a": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "torque_nm": 0.0
+          },
+          "rotor_after": {
+            "vns": 3300353880,
+            "sample_age_ns": -353780,
+            "rpm": 6.23,
+            "electrical_angle_rad": 2738.527,
+            "electrical_angle_deg": 156906.0391826228,
+            "current_a": [
+              -0.243,
+              0.243,
+              0.0
+            ],
+            "torque_nm": 0.006416
+          },
+          "pads": {
+            "source_vns": 3299030148,
+            "state_age_ns": 969952,
+            "mask": 0,
+            "gate_enabled": false,
+            "gate_word": 14,
+            "on_pads": [],
+            "status": "SOURCE_TRANSITION_HELD_WITHIN_BOUNDED_WINDOW"
+          },
+          "pad_status": "OBSERVED"
+        },
+        "first_powered_pair": {
+          "source": {
+            "seq": 67708,
+            "vns": 3300303576,
+            "kind": "PWM_PAIR",
+            "a": 4,
+            "b": 6,
+            "c": 15,
+            "d": 2738526,
+            "e": 22706,
+            "f": 0
+          },
+          "pair_id": 4,
+          "pair_id_derived_from_pad_mask": false,
+          "high": "B",
+          "low": "A",
+          "floating": "C"
+        },
+        "first_changed_pair": {
+          "source": {
+            "seq": 68604,
+            "vns": 3314721584,
+            "kind": "PWM_PAIR",
+            "a": 7,
+            "b": 18,
+            "c": 15,
+            "d": 2738932,
+            "e": 22879,
+            "f": 0
+          },
+          "pair_id": 7,
+          "pair_id_derived_from_pad_mask": false,
+          "high": "C",
+          "low": "A",
+          "floating": "B"
+        },
+        "first_accepted_capture": {
+          "cap1_ns": 3312023120,
+          "phase": 2,
+          "ack": true,
+          "read": true,
+          "timer_load_ns": 3312030936,
+          "timer_start_ns": 3312031120,
+          "classification": "READ_AND_TIMER_PROGRAMMED"
+        },
+        "timer_audit": {
+          "source_load": {
+            "seq": 68433,
+            "vns": 3312030936,
+            "kind": "T12_LOAD",
+            "a": 261199,
+            "b": 100000000,
+            "c": 0,
+            "d": 0,
+            "e": 0,
+            "f": 0
+          },
+          "source_start_vns": 3312031120,
+          "source_irq_vns": 3314643120,
+          "source_programmed_period_ns": 2612000,
+          "actual_start_to_irq_ns": 2612000,
+          "observed_error_ns": 0,
+          "replaced_before_irq": false
+        },
+        "negative_torque_samples": {
+          "BEFORE_ACCEPTED_CAPTURE": {
+            "count": 5,
+            "sample_vns": [
+              3304353880,
+              3305353880,
+              3306353880,
+              3307353880,
+              3308353880
+            ]
+          },
+          "AFTER_FIRST_PHYSICAL_PAIR_CHANGE": {
+            "count": 19,
+            "sample_vns": [
+              3317353884,
+              3318353884,
+              3319353884,
+              3320353884,
+              3321353884,
+              3322353884,
+              3331353884,
+              3332353884,
+              3333353884,
+              3334353884,
+              3335353884,
+              3336353884,
+              3342353888,
+              3344353888,
+              3345353888,
+              3346353888,
+              3347353888,
+              3348353888,
+              3349353888
+            ]
+          }
+        },
+        "first_reversed_sample": {
+          "vns": 3308353880,
+          "sample_age_ns": null,
+          "rpm": -83.99,
+          "electrical_angle_rad": 2739.142,
+          "electrical_angle_deg": 156941.27608702332,
+          "current_a": [
+            -30.56,
+            30.56,
+            0.0
+          ],
+          "torque_nm": -0.388789,
+          "after_demand_ns": 8353780,
+          "feedback_phase": "BEFORE_ACCEPTED_CAPTURE",
+          "physical_first_sector": true
+        },
+        "mechanism": "PRE_ACCEPTED_FEEDBACK_REVERSAL",
+        "independent_second_demand": {
+          "coast": {
+            "end_virtual_ns": 3300000100,
+            "late_guest_motor_event_counts": {
+              "CAP1_ACK": 0,
+              "PWM_PAIR": 0,
+              "TIMG12_ACK": 0
+            },
+            "settle_ms": 200,
+            "start_virtual_ns": 3000000100,
+            "verified_complete_standstill": false
+          },
+          "demand_windows": [
+            {
+              "end_virtual_ns": 3000000100,
+              "negative_rotor_samples_below_minus_floor": 0,
+              "positive_rotor_observation_span_ms": 1497.001516,
+              "positive_rotor_samples_ge_50rpm": 1498,
+              "profile_positive_rpm_floor": 50,
+              "rotor_samples": 1500,
+              "source_counts": {
+                "CAP1_ACK": 2596,
+                "PWM_PAIR": 2597,
+                "TIMG12_ACK": 2596
+              },
+              "stage_index": 1,
+              "start_virtual_ns": 1500000100
+            },
+            {
+              "end_virtual_ns": 4800000100,
+              "negative_rotor_samples_below_minus_floor": 545,
+              "positive_rotor_observation_span_ms": 1497.000272,
+              "positive_rotor_samples_ge_50rpm": 793,
+              "profile_positive_rpm_floor": 50,
+              "rotor_samples": 1500,
+              "source_counts": {
+                "CAP1_ACK": 196,
+                "PWM_PAIR": 132,
+                "TIMG12_ACK": 131
+              },
+              "stage_index": 3,
+              "start_virtual_ns": 3300000100
+            }
+          ],
+          "failures": [
+            "SECOND_DEMAND_REACQUISITION_SUSTAINED_POSITIVE_ROTOR_RESPONSE_MISSING",
+            "SECOND_DEMAND_REACQUISITION_SIGNIFICANT_REVERSE_ROTATION"
+          ],
+          "pass": false
+        },
+        "rotor_diagnostic": {
+          "classification": "SIM_ONLY_READ_ONLY_PLANT_DIAGNOSTIC_NOT_GUEST_ROTOR_SENSING",
+          "coast_duration_ms": 300,
+          "do_not_use_angle_or_torque_as_guest_input": true,
+          "first_20ms_min_model_torque_nm": -1.773227,
+          "first_20ms_min_rpm": -98.11,
+          "first_20ms_negative_rpm_samples_le_minus50": 3,
+          "first_new_guest_cap1_ack_ms": 12.028928,
+          "first_post_demand_model_torque_negative": false,
+          "first_post_demand_model_torque_nm": 0.006416,
+          "first_post_demand_sample_ms": 0.35378,
+          "hardware_qualified": false,
+          "has_guest_rotor_angle_measurement": false,
+          "p1_qualified": false,
+          "pre_demand_rpm": 6.209,
+          "pre_demand_unwrapped_electrical_angle_mrad": 2738513,
+          "pre_demand_wrapped_electrical_angle_deg": 305.237042,
+          "rotor_model_samples_first_20ms": 20,
+          "schema": "e62.experimental.native-coast-phase-torque-audit.v1",
+          "second_demand_start_virtual_ns": 3300000100,
+          "source_dshot_frames": 5100
+        },
+        "strict_unwaived_failures": [
+          "ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN",
+          "STARTUP_SIGNIFICANT_DIRECTION_REVERSAL"
+        ],
+        "original_qualified": false,
+        "hardware_qualified": false,
+        "source_events_sha256": "a3527cda07bbdb38a593b435bb34b77de06f68449aa34df9ea6f76caedd7aed5"
+      }
+    },
+    {
+      "criterion": "H13 shadow control-coast3000",
+      "status": "FAIL",
+      "evidence": {
+        "negative_authorization_result": null,
+        "reference_pending_snapshot": null,
+        "case": "coast-phase-controls--control-coast3000",
+        "result": "FAIL",
+        "scope": "EXPERIMENTAL_SIM_ONLY_INDEPENDENT_SECOND_DEMAND_NOT_ORIGINAL_QUALIFICATION",
+        "selection": "Previously failed coast with discriminating H12 correction/control;90/offset dependency impacted by ADC-observer code and new ELF. No unchanged PASS rerun.",
+        "elf_sha256": "ca0d40994efac4964d61073a690d10dc89f963af7180a77f6a6fea3401685e12",
+        "qemu_sha256": "6f99975e319ada16af98050c66b1ee39fef690d8dca16ec08a6c59560f7faef8",
+        "scenario_sha256": "fe3ba96a3bf68a44c105b57e41bc1d01ec85126e3ed417e86c8cfa88adecbfb4",
+        "guest_record": {
+          "acquisition_tick": 95808,
+          "coast_transitions": 20,
+          "decision": 5,
+          "first_capture_us": 0,
+          "guest_inferred_direction": 1,
+          "guest_tick": 95817,
+          "hardware_qualified": false,
+          "oldstep": 5,
+          "original_qualified": false,
+          "phase_pattern": 4,
+          "sample": 5988,
+          "second_capture_us": 0,
+          "selected_step": 1,
+          "stable_epochs": 103,
+          "status": "SHADOW_ONLY_NOT_AUTHORIZATION",
+          "timestamp_domain": "GUEST_TICKS_NOT_SOURCE_VNS"
+        },
+        "source_boundary": {
+          "rotor_before": {
+            "vns": 5999358516,
+            "sample_age_ns": 641584,
+            "rpm": 0.871,
+            "electrical_angle_rad": 2757.475,
+            "electrical_angle_deg": 157991.67961283668,
+            "current_a": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "torque_nm": 0.0
+          },
+          "rotor_after": {
+            "vns": 6000358516,
+            "sample_age_ns": -358416,
+            "rpm": 0.972,
+            "electrical_angle_rad": 2757.477,
+            "electrical_angle_deg": 157991.7942043957,
+            "current_a": [
+              -0.252,
+              0.0,
+              0.252
+            ],
+            "torque_nm": 0.016038
+          },
+          "pads": {
+            "source_vns": 5999030148,
+            "state_age_ns": 969952,
+            "mask": 0,
+            "gate_enabled": false,
+            "gate_word": 14,
+            "on_pads": [],
+            "status": "SOURCE_TRANSITION_HELD_WITHIN_BOUNDED_WINDOW"
+          },
+          "pad_status": "OBSERVED"
+        },
+        "first_powered_pair": {
+          "source": {
+            "seq": 102710,
+            "vns": 6000280596,
+            "kind": "PWM_PAIR",
+            "a": 7,
+            "b": 18,
+            "c": 15,
+            "d": 2757477,
+            "e": 22631,
+            "f": 0
+          },
+          "pair_id": 7,
+          "pair_id_derived_from_pad_mask": false,
+          "high": "C",
+          "low": "A",
+          "floating": "B"
+        },
+        "first_changed_pair": {
+          "source": {
+            "seq": 103662,
+            "vns": 6015615404,
+            "kind": "PWM_PAIR",
+            "a": 8,
+            "b": 24,
+            "c": 15,
+            "d": 2758758,
+            "e": 22815,
+            "f": 0
+          },
+          "pair_id": 8,
+          "pair_id_derived_from_pad_mask": false,
+          "high": "C",
+          "low": "B",
+          "floating": "A"
+        },
+        "first_accepted_capture": {
+          "cap1_ns": 6012852756,
+          "phase": 1,
+          "ack": true,
+          "read": true,
+          "timer_load_ns": 6012855772,
+          "timer_start_ns": 6012855956,
+          "classification": "READ_AND_TIMER_PROGRAMMED"
+        },
+        "timer_audit": {
+          "source_load": {
+            "seq": 103486,
+            "vns": 6012855772,
+            "kind": "T12_LOAD",
+            "a": 266599,
+            "b": 100000000,
+            "c": 0,
+            "d": 0,
+            "e": 0,
+            "f": 0
+          },
+          "source_start_vns": 6012855956,
+          "source_irq_vns": 6015521956,
+          "source_programmed_period_ns": 2666000,
+          "actual_start_to_irq_ns": 2666000,
+          "observed_error_ns": 0,
+          "replaced_before_irq": false
+        },
+        "negative_torque_samples": {
+          "BEFORE_ACCEPTED_CAPTURE": {
+            "count": 5,
+            "sample_vns": [
+              6005358516,
+              6006358516,
+              6007358516,
+              6008358516,
+              6009358516
+            ]
+          },
+          "AFTER_FIRST_PHYSICAL_PAIR_CHANGE": {
+            "count": 19,
+            "sample_vns": [
+              6018358516,
+              6019358516,
+              6020358516,
+              6021358516,
+              6022358516,
+              6029358520,
+              6031358520,
+              6032358520,
+              6033358520,
+              6034358520,
+              6035358520,
+              6036358520,
+              6042358520,
+              6044358520,
+              6045358520,
+              6046358520,
+              6047358520,
+              6048358520,
+              6049358520
+            ]
+          }
+        },
+        "first_reversed_sample": {
+          "vns": 6008358516,
+          "sample_age_ns": null,
+          "rpm": -144.566,
+          "electrical_angle_rad": 2759.657,
+          "electrical_angle_deg": 158116.69900373422,
+          "current_a": [
+            -25.074,
+            0.0,
+            25.074
+          ],
+          "torque_nm": -1.184328,
+          "after_demand_ns": 8358416,
+          "feedback_phase": "BEFORE_ACCEPTED_CAPTURE",
+          "physical_first_sector": true
+        },
+        "mechanism": "PRE_ACCEPTED_FEEDBACK_REVERSAL",
+        "independent_second_demand": {
+          "coast": {
+            "end_virtual_ns": 6000000100,
+            "late_guest_motor_event_counts": {
+              "CAP1_ACK": 0,
+              "PWM_PAIR": 0,
+              "TIMG12_ACK": 0
+            },
+            "settle_ms": 200,
+            "start_virtual_ns": 3000000100,
+            "verified_complete_standstill": false
+          },
+          "demand_windows": [
+            {
+              "end_virtual_ns": 3000000100,
+              "negative_rotor_samples_below_minus_floor": 0,
+              "positive_rotor_observation_span_ms": 1497.001752,
+              "positive_rotor_samples_ge_50rpm": 1498,
+              "profile_positive_rpm_floor": 50,
+              "rotor_samples": 1500,
+              "source_counts": {
+                "CAP1_ACK": 2597,
+                "PWM_PAIR": 2598,
+                "TIMG12_ACK": 2597
+              },
+              "stage_index": 1,
+              "start_virtual_ns": 1500000100
+            },
+            {
+              "end_virtual_ns": 7500000100,
+              "negative_rotor_samples_below_minus_floor": 553,
+              "positive_rotor_observation_span_ms": 1497.000052,
+              "positive_rotor_samples_ge_50rpm": 794,
+              "profile_positive_rpm_floor": 50,
+              "rotor_samples": 1500,
+              "source_counts": {
+                "CAP1_ACK": 196,
+                "PWM_PAIR": 131,
+                "TIMG12_ACK": 131
+              },
+              "stage_index": 3,
+              "start_virtual_ns": 6000000100
+            }
+          ],
+          "failures": [
+            "SECOND_DEMAND_REACQUISITION_SUSTAINED_POSITIVE_ROTOR_RESPONSE_MISSING",
+            "SECOND_DEMAND_REACQUISITION_SIGNIFICANT_REVERSE_ROTATION"
+          ],
+          "pass": false
+        },
+        "rotor_diagnostic": {
+          "classification": "SIM_ONLY_READ_ONLY_PLANT_DIAGNOSTIC_NOT_GUEST_ROTOR_SENSING",
+          "coast_duration_ms": 3000,
+          "do_not_use_angle_or_torque_as_guest_input": true,
+          "first_20ms_min_model_torque_nm": -2.048949,
+          "first_20ms_min_rpm": -235.591,
+          "first_20ms_negative_rpm_samples_le_minus50": 5,
+          "first_new_guest_cap1_ack_ms": 12.853764,
+          "first_post_demand_model_torque_negative": false,
+          "first_post_demand_model_torque_nm": 0.016038,
+          "first_post_demand_sample_ms": 0.358416,
+          "hardware_qualified": false,
+          "has_guest_rotor_angle_measurement": false,
+          "p1_qualified": false,
+          "pre_demand_rpm": 0.871,
+          "pre_demand_unwrapped_electrical_angle_mrad": 2757475,
+          "pre_demand_wrapped_electrical_angle_deg": 311.679613,
+          "rotor_model_samples_first_20ms": 20,
+          "schema": "e62.experimental.native-coast-phase-torque-audit.v1",
+          "second_demand_start_virtual_ns": 6000000100,
+          "source_dshot_frames": 7800
+        },
+        "strict_unwaived_failures": [
+          "ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN",
+          "STARTUP_SIGNIFICANT_DIRECTION_REVERSAL"
+        ],
+        "original_qualified": false,
+        "hardware_qualified": false,
+        "source_events_sha256": "1a8b3ecdf23460f9a8090c670fee68e46eb577e7f4013b5ed35f433994b15888"
+      }
+    },
+    {
+      "criterion": "H13 coast-negative-clock-stop authorization",
+      "status": "PASS_NEW",
+      "reacquisition_status": "FAIL",
+      "evidence": {
+        "negative_authorization_result": "PASS_NEW",
+        "reference_pending_snapshot": {
+          "acquisition_epoch": 0,
+          "acquisition_tick": 52592,
+          "age_ticks": 26,
+          "codes": [
+            2047,
+            2047,
+            2047
+          ],
+          "completion_tick": 52592,
+          "controller_usable_not_inferred": true,
+          "current_epoch": 0,
+          "guest_tick": 52618,
+          "inside_age_bound": true,
+          "max_age_ticks": 32,
+          "sample": 3287,
+          "status": "PASSIVE_STABLE_SNAPSHOT",
+          "timestamp_domain": "GUEST_TICKS_NOT_SOURCE_VNS",
+          "valid_flag": 1
+        },
+        "case": "coast-phase-negatives--coast-negative-clock-stop",
+        "result": "FAIL",
+        "scope": "EXPERIMENTAL_SIM_ONLY_INDEPENDENT_SECOND_DEMAND_NOT_ORIGINAL_QUALIFICATION",
+        "selection": "Previously failed coast with discriminating H12 correction/control;90/offset dependency impacted by ADC-observer code and new ELF. No unchanged PASS rerun.",
+        "elf_sha256": "f61c7e2cf240bf79a0cdc2d65c88c06c03a52865122a0054d7a14fba55b22e08",
+        "qemu_sha256": "6f99975e319ada16af98050c66b1ee39fef690d8dca16ec08a6c59560f7faef8",
+        "scenario_sha256": "891b9b7503f0933d58310fbd8541139d6fec69f8c1b35212b34c88b6c4ffce20",
+        "guest_record": {
+          "acquisition_tick": 52592,
+          "coast_transitions": 2,
+          "decision": 2,
+          "first_capture_us": 0,
+          "guest_inferred_direction": 1,
+          "guest_tick": 52618,
+          "hardware_qualified": false,
+          "oldstep": 5,
+          "original_qualified": false,
+          "phase_pattern": 4,
+          "sample": 3287,
+          "second_capture_us": 0,
+          "selected_step": 0,
+          "stable_epochs": 53,
+          "status": "REFUSED_BEFORE_POWER_NOT_REACQUISITION",
+          "timestamp_domain": "GUEST_TICKS_NOT_SOURCE_VNS"
+        },
+        "source_boundary": {
+          "rotor_before": {
+            "vns": 3299351016,
+            "sample_age_ns": 649084,
+            "rpm": 5.531,
+            "electrical_angle_rad": 2739.079,
+            "electrical_angle_deg": 156937.66645291404,
+            "current_a": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "torque_nm": 0.0
+          },
+          "rotor_after": {
+            "vns": 3300351016,
+            "sample_age_ns": -350916,
+            "rpm": 5.527,
+            "electrical_angle_rad": 2739.091,
+            "electrical_angle_deg": 156938.35400226817,
+            "current_a": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "torque_nm": 0.0
+          },
+          "pads": {
+            "source_vns": 3299030148,
+            "state_age_ns": 969952,
+            "mask": 0,
+            "gate_enabled": false,
+            "gate_word": 14,
+            "on_pads": [],
+            "status": "SOURCE_TRANSITION_HELD_WITHIN_BOUNDED_WINDOW"
+          },
+          "pad_status": "OBSERVED"
+        },
+        "first_powered_pair": null,
+        "first_changed_pair": null,
+        "first_accepted_capture": null,
+        "timer_audit": null,
+        "negative_torque_samples": {},
+        "first_reversed_sample": null,
+        "mechanism": "NO_SIGNIFICANT_REVERSE_SAMPLE_IN_FIRST50MS;REFUSAL_IS_NOT_REACQUISITION",
+        "independent_second_demand": {
+          "coast": {
+            "end_virtual_ns": 3300000100,
+            "late_guest_motor_event_counts": {
+              "CAP1_ACK": 0,
+              "PWM_PAIR": 0,
+              "TIMG12_ACK": 0
+            },
+            "settle_ms": 200,
+            "start_virtual_ns": 3000000100,
+            "verified_complete_standstill": false
+          },
+          "demand_windows": [
+            {
+              "end_virtual_ns": 3000000100,
+              "negative_rotor_samples_below_minus_floor": 0,
+              "positive_rotor_observation_span_ms": 1497.000732,
+              "positive_rotor_samples_ge_50rpm": 1498,
+              "profile_positive_rpm_floor": 50,
+              "rotor_samples": 1500,
+              "source_counts": {
+                "CAP1_ACK": 2597,
+                "PWM_PAIR": 2598,
+                "TIMG12_ACK": 2597
+              },
+              "stage_index": 1,
+              "start_virtual_ns": 1500000100
+            },
+            {
+              "end_virtual_ns": 4800000100,
+              "negative_rotor_samples_below_minus_floor": 0,
+              "positive_rotor_observation_span_ms": 0.0,
+              "positive_rotor_samples_ge_50rpm": 0,
+              "profile_positive_rpm_floor": 50,
+              "rotor_samples": 1500,
+              "source_counts": {
+                "CAP1_ACK": 0,
+                "PWM_PAIR": 0,
+                "TIMG12_ACK": 0
+              },
+              "stage_index": 3,
+              "start_virtual_ns": 3300000100
+            }
+          ],
+          "failures": [
+            "SECOND_DEMAND_REACQUISITION_GUEST_CLOSED_LOOP_NOT_PROVEN",
+            "SECOND_DEMAND_REACQUISITION_SUSTAINED_POSITIVE_ROTOR_RESPONSE_MISSING"
+          ],
+          "pass": false
+        },
+        "rotor_diagnostic": {
+          "classification": "SIM_ONLY_READ_ONLY_PLANT_DIAGNOSTIC_NOT_GUEST_ROTOR_SENSING",
+          "coast_duration_ms": 300,
+          "do_not_use_angle_or_torque_as_guest_input": true,
+          "first_20ms_min_model_torque_nm": 0.0,
+          "first_20ms_min_rpm": 5.447,
+          "first_20ms_negative_rpm_samples_le_minus50": 0,
+          "first_new_guest_cap1_ack_ms": null,
+          "first_post_demand_model_torque_negative": false,
+          "first_post_demand_model_torque_nm": 0.0,
+          "first_post_demand_sample_ms": 0.350916,
+          "hardware_qualified": false,
+          "has_guest_rotor_angle_measurement": false,
+          "p1_qualified": false,
+          "pre_demand_rpm": 5.531,
+          "pre_demand_unwrapped_electrical_angle_mrad": 2739079,
+          "pre_demand_wrapped_electrical_angle_deg": 337.666453,
+          "rotor_model_samples_first_20ms": 20,
+          "schema": "e62.experimental.native-coast-phase-torque-audit.v1",
+          "second_demand_start_virtual_ns": 3300000100,
+          "source_dshot_frames": 5100
+        },
+        "strict_unwaived_failures": [
+          "ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN"
+        ],
+        "original_qualified": false,
+        "hardware_qualified": false,
+        "source_events_sha256": "9c609c4200878d134eecca6c14ee545bd3cb37d460af4f30cb9c56069fdc8b39"
+      }
+    },
+    {
+      "criterion": "H13 coast-negative-invalid-reference authorization",
+      "status": "PASS_NEW",
+      "reacquisition_status": "FAIL",
+      "evidence": {
+        "negative_authorization_result": "PASS_NEW",
+        "reference_pending_snapshot": {
+          "acquisition_epoch": 0,
+          "acquisition_tick": 52592,
+          "age_ticks": 26,
+          "codes": [
+            2047,
+            2047,
+            2047
+          ],
+          "completion_tick": 52592,
+          "controller_usable_not_inferred": true,
+          "current_epoch": 0,
+          "guest_tick": 52618,
+          "inside_age_bound": true,
+          "max_age_ticks": 32,
+          "sample": 3287,
+          "status": "PASSIVE_STABLE_SNAPSHOT",
+          "timestamp_domain": "GUEST_TICKS_NOT_SOURCE_VNS",
+          "valid_flag": 0
+        },
+        "case": "coast-phase-negatives--coast-negative-invalid-reference",
+        "result": "FAIL",
+        "scope": "EXPERIMENTAL_SIM_ONLY_INDEPENDENT_SECOND_DEMAND_NOT_ORIGINAL_QUALIFICATION",
+        "selection": "Previously failed coast with discriminating H12 correction/control;90/offset dependency impacted by ADC-observer code and new ELF. No unchanged PASS rerun.",
+        "elf_sha256": "f61c7e2cf240bf79a0cdc2d65c88c06c03a52865122a0054d7a14fba55b22e08",
+        "qemu_sha256": "6f99975e319ada16af98050c66b1ee39fef690d8dca16ec08a6c59560f7faef8",
+        "scenario_sha256": "891b9b7503f0933d58310fbd8541139d6fec69f8c1b35212b34c88b6c4ffce20",
+        "guest_record": {
+          "acquisition_tick": 0,
+          "coast_transitions": 0,
+          "decision": 2,
+          "first_capture_us": 0,
+          "guest_inferred_direction": 0,
+          "guest_tick": 52618,
+          "hardware_qualified": false,
+          "oldstep": 6,
+          "original_qualified": false,
+          "phase_pattern": 0,
+          "sample": 0,
+          "second_capture_us": 0,
+          "selected_step": 0,
+          "stable_epochs": 0,
+          "status": "REFUSED_BEFORE_POWER_NOT_REACQUISITION",
+          "timestamp_domain": "GUEST_TICKS_NOT_SOURCE_VNS"
+        },
+        "source_boundary": {
+          "rotor_before": {
+            "vns": 3299350764,
+            "sample_age_ns": 649336,
+            "rpm": 7.265,
+            "electrical_angle_rad": 2741.386,
+            "electrical_angle_deg": 157069.8478162507,
+            "current_a": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "torque_nm": 0.0
+          },
+          "rotor_after": {
+            "vns": 3300350764,
+            "sample_age_ns": -350664,
+            "rpm": 7.259,
+            "electrical_angle_rad": 2741.402,
+            "electrical_angle_deg": 157070.76454872292,
+            "current_a": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "torque_nm": 0.0
+          },
+          "pads": {
+            "source_vns": 3299030148,
+            "state_age_ns": 969952,
+            "mask": 0,
+            "gate_enabled": false,
+            "gate_word": 14,
+            "on_pads": [],
+            "status": "SOURCE_TRANSITION_HELD_WITHIN_BOUNDED_WINDOW"
+          },
+          "pad_status": "OBSERVED"
+        },
+        "first_powered_pair": null,
+        "first_changed_pair": null,
+        "first_accepted_capture": null,
+        "timer_audit": null,
+        "negative_torque_samples": {},
+        "first_reversed_sample": null,
+        "mechanism": "NO_SIGNIFICANT_REVERSE_SAMPLE_IN_FIRST50MS;REFUSAL_IS_NOT_REACQUISITION",
+        "independent_second_demand": {
+          "coast": {
+            "end_virtual_ns": 3300000100,
+            "late_guest_motor_event_counts": {
+              "CAP1_ACK": 0,
+              "PWM_PAIR": 0,
+              "TIMG12_ACK": 0
+            },
+            "settle_ms": 200,
+            "start_virtual_ns": 3000000100,
+            "verified_complete_standstill": false
+          },
+          "demand_windows": [
+            {
+              "end_virtual_ns": 3000000100,
+              "negative_rotor_samples_below_minus_floor": 0,
+              "positive_rotor_observation_span_ms": 1497.001144,
+              "positive_rotor_samples_ge_50rpm": 1498,
+              "profile_positive_rpm_floor": 50,
+              "rotor_samples": 1500,
+              "source_counts": {
+                "CAP1_ACK": 2599,
+                "PWM_PAIR": 2599,
+                "TIMG12_ACK": 2598
+              },
+              "stage_index": 1,
+              "start_virtual_ns": 1500000100
+            },
+            {
+              "end_virtual_ns": 4800000100,
+              "negative_rotor_samples_below_minus_floor": 0,
+              "positive_rotor_observation_span_ms": 0.0,
+              "positive_rotor_samples_ge_50rpm": 0,
+              "profile_positive_rpm_floor": 50,
+              "rotor_samples": 1500,
+              "source_counts": {
+                "CAP1_ACK": 0,
+                "PWM_PAIR": 0,
+                "TIMG12_ACK": 0
+              },
+              "stage_index": 3,
+              "start_virtual_ns": 3300000100
+            }
+          ],
+          "failures": [
+            "SECOND_DEMAND_REACQUISITION_GUEST_CLOSED_LOOP_NOT_PROVEN",
+            "SECOND_DEMAND_REACQUISITION_SUSTAINED_POSITIVE_ROTOR_RESPONSE_MISSING"
+          ],
+          "pass": false
+        },
+        "rotor_diagnostic": {
+          "classification": "SIM_ONLY_READ_ONLY_PLANT_DIAGNOSTIC_NOT_GUEST_ROTOR_SENSING",
+          "coast_duration_ms": 300,
+          "do_not_use_angle_or_torque_as_guest_input": true,
+          "first_20ms_min_model_torque_nm": 0.0,
+          "first_20ms_min_rpm": 7.154,
+          "first_20ms_negative_rpm_samples_le_minus50": 0,
+          "first_new_guest_cap1_ack_ms": null,
+          "first_post_demand_model_torque_negative": false,
+          "first_post_demand_model_torque_nm": 0.0,
+          "first_post_demand_sample_ms": 0.350664,
+          "hardware_qualified": false,
+          "has_guest_rotor_angle_measurement": false,
+          "p1_qualified": false,
+          "pre_demand_rpm": 7.265,
+          "pre_demand_unwrapped_electrical_angle_mrad": 2741386,
+          "pre_demand_wrapped_electrical_angle_deg": 109.847816,
+          "rotor_model_samples_first_20ms": 20,
+          "schema": "e62.experimental.native-coast-phase-torque-audit.v1",
+          "second_demand_start_virtual_ns": 3300000100,
+          "source_dshot_frames": 5100
+        },
+        "strict_unwaived_failures": [
+          "ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN"
+        ],
+        "original_qualified": false,
+        "hardware_qualified": false,
+        "source_events_sha256": "6d6556f634d3bea46a0962a9ed28b5bb816ce7e3dca606fb6b0c3bed1187a2b7"
+      }
+    },
+    {
+      "criterion": "H13 coast-negative-offset-minus16 authorization",
+      "status": "PASS_NEW",
+      "reacquisition_status": "FAIL",
+      "evidence": {
+        "negative_authorization_result": "PASS_NEW",
+        "reference_pending_snapshot": {
+          "acquisition_epoch": 0,
+          "acquisition_tick": 52608,
+          "age_ticks": 10,
+          "codes": [
+            2047,
+            2047,
+            2047
+          ],
+          "completion_tick": 52608,
+          "controller_usable_not_inferred": true,
+          "current_epoch": 0,
+          "guest_tick": 52618,
+          "inside_age_bound": true,
+          "max_age_ticks": 32,
+          "sample": 3288,
+          "status": "PASSIVE_STABLE_SNAPSHOT",
+          "timestamp_domain": "GUEST_TICKS_NOT_SOURCE_VNS",
+          "valid_flag": 1
+        },
+        "case": "coast-phase-negatives--coast-negative-offset-minus16",
+        "result": "FAIL",
+        "scope": "EXPERIMENTAL_SIM_ONLY_INDEPENDENT_SECOND_DEMAND_NOT_ORIGINAL_QUALIFICATION",
+        "selection": "Previously failed coast with discriminating H12 correction/control;90/offset dependency impacted by ADC-observer code and new ELF. No unchanged PASS rerun.",
+        "elf_sha256": "f61c7e2cf240bf79a0cdc2d65c88c06c03a52865122a0054d7a14fba55b22e08",
+        "qemu_sha256": "6f99975e319ada16af98050c66b1ee39fef690d8dca16ec08a6c59560f7faef8",
+        "scenario_sha256": "891b9b7503f0933d58310fbd8541139d6fec69f8c1b35212b34c88b6c4ffce20",
+        "guest_record": {
+          "acquisition_tick": 52608,
+          "coast_transitions": 5,
+          "decision": 2,
+          "first_capture_us": 0,
+          "guest_inferred_direction": -1,
+          "guest_tick": 52618,
+          "hardware_qualified": false,
+          "oldstep": 2,
+          "original_qualified": false,
+          "phase_pattern": 5,
+          "sample": 3288,
+          "second_capture_us": 0,
+          "selected_step": 0,
+          "stable_epochs": 44,
+          "status": "REFUSED_BEFORE_POWER_NOT_REACQUISITION",
+          "timestamp_domain": "GUEST_TICKS_NOT_SOURCE_VNS"
+        },
+        "source_boundary": {
+          "rotor_before": {
+            "vns": 3299357212,
+            "sample_age_ns": 642888,
+            "rpm": -7.202,
+            "electrical_angle_rad": 3.498,
+            "electrical_angle_deg": 200.42063673676196,
+            "current_a": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "torque_nm": 0.0
+          },
+          "rotor_after": {
+            "vns": 3300357212,
+            "sample_age_ns": -357112,
+            "rpm": -7.196,
+            "electrical_angle_rad": 3.482,
+            "electrical_angle_deg": 199.50390426455266,
+            "current_a": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "torque_nm": 0.0
+          },
+          "pads": {
+            "source_vns": 3299030148,
+            "state_age_ns": 969952,
+            "mask": 0,
+            "gate_enabled": false,
+            "gate_word": 14,
+            "on_pads": [],
+            "status": "SOURCE_TRANSITION_HELD_WITHIN_BOUNDED_WINDOW"
+          },
+          "pad_status": "OBSERVED"
+        },
+        "first_powered_pair": null,
+        "first_changed_pair": null,
+        "first_accepted_capture": null,
+        "timer_audit": null,
+        "negative_torque_samples": {},
+        "first_reversed_sample": null,
+        "mechanism": "NO_SIGNIFICANT_REVERSE_SAMPLE_IN_FIRST50MS;REFUSAL_IS_NOT_REACQUISITION",
+        "independent_second_demand": {
+          "coast": {
+            "end_virtual_ns": 3300000100,
+            "late_guest_motor_event_counts": {
+              "CAP1_ACK": 0,
+              "PWM_PAIR": 0,
+              "TIMG12_ACK": 0
+            },
+            "settle_ms": 200,
+            "start_virtual_ns": 3000000100,
+            "verified_complete_standstill": false
+          },
+          "demand_windows": [
+            {
+              "end_virtual_ns": 3000000100,
+              "negative_rotor_samples_below_minus_floor": 87,
+              "positive_rotor_observation_span_ms": 358.00024,
+              "positive_rotor_samples_ge_50rpm": 100,
+              "profile_positive_rpm_floor": 50,
+              "rotor_samples": 1500,
+              "source_counts": {
+                "CAP1_ACK": 8,
+                "PWM_PAIR": 8,
+                "TIMG12_ACK": 7
+              },
+              "stage_index": 1,
+              "start_virtual_ns": 1500000100
+            },
+            {
+              "end_virtual_ns": 4800000100,
+              "negative_rotor_samples_below_minus_floor": 0,
+              "positive_rotor_observation_span_ms": 0.0,
+              "positive_rotor_samples_ge_50rpm": 0,
+              "profile_positive_rpm_floor": 50,
+              "rotor_samples": 1500,
+              "source_counts": {
+                "CAP1_ACK": 0,
+                "PWM_PAIR": 0,
+                "TIMG12_ACK": 0
+              },
+              "stage_index": 3,
+              "start_virtual_ns": 3300000100
+            }
+          ],
+          "failures": [
+            "SECOND_DEMAND_FIRST_GUEST_CLOSED_LOOP_NOT_PROVEN",
+            "SECOND_DEMAND_FIRST_SUSTAINED_POSITIVE_ROTOR_RESPONSE_MISSING",
+            "SECOND_DEMAND_FIRST_SIGNIFICANT_REVERSE_ROTATION",
+            "SECOND_DEMAND_REACQUISITION_GUEST_CLOSED_LOOP_NOT_PROVEN",
+            "SECOND_DEMAND_REACQUISITION_SUSTAINED_POSITIVE_ROTOR_RESPONSE_MISSING"
+          ],
+          "pass": false
+        },
+        "rotor_diagnostic": {
+          "classification": "SIM_ONLY_READ_ONLY_PLANT_DIAGNOSTIC_NOT_GUEST_ROTOR_SENSING",
+          "coast_duration_ms": 300,
+          "do_not_use_angle_or_torque_as_guest_input": true,
+          "first_20ms_min_model_torque_nm": 0.0,
+          "first_20ms_min_rpm": -7.196,
+          "first_20ms_negative_rpm_samples_le_minus50": 0,
+          "first_new_guest_cap1_ack_ms": null,
+          "first_post_demand_model_torque_negative": false,
+          "first_post_demand_model_torque_nm": 0.0,
+          "first_post_demand_sample_ms": 0.357112,
+          "hardware_qualified": false,
+          "has_guest_rotor_angle_measurement": false,
+          "p1_qualified": false,
+          "pre_demand_rpm": -7.202,
+          "pre_demand_unwrapped_electrical_angle_mrad": 3498,
+          "pre_demand_wrapped_electrical_angle_deg": 200.420637,
+          "rotor_model_samples_first_20ms": 20,
+          "schema": "e62.experimental.native-coast-phase-torque-audit.v1",
+          "second_demand_start_virtual_ns": 3300000100,
+          "source_dshot_frames": 5100
+        },
+        "strict_unwaived_failures": [
+          "ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN",
+          "STARTUP_SIGNIFICANT_DIRECTION_REVERSAL",
+          "INSUFFICIENT_ORIGINAL_GUEST_CLOSED_LOOP_AFTER_ARM"
+        ],
+        "original_qualified": false,
+        "hardware_qualified": false,
+        "source_events_sha256": "168ab1f5c6528ae1114246660c7657a1d0125905f23ccc50126e01541694ef90"
+      }
+    },
+    {
+      "criterion": "H13 coast-negative-offset-plus16 authorization",
+      "status": "PASS_NEW",
+      "reacquisition_status": "FAIL",
+      "evidence": {
+        "negative_authorization_result": "PASS_NEW",
+        "reference_pending_snapshot": {
+          "acquisition_epoch": 0,
+          "acquisition_tick": 52608,
+          "age_ticks": 10,
+          "codes": [
+            2047,
+            2047,
+            2047
+          ],
+          "completion_tick": 52608,
+          "controller_usable_not_inferred": true,
+          "current_epoch": 0,
+          "guest_tick": 52618,
+          "inside_age_bound": true,
+          "max_age_ticks": 32,
+          "sample": 3288,
+          "status": "PASSIVE_STABLE_SNAPSHOT",
+          "timestamp_domain": "GUEST_TICKS_NOT_SOURCE_VNS",
+          "valid_flag": 1
+        },
+        "case": "coast-phase-negatives--coast-negative-offset-plus16",
+        "result": "FAIL",
+        "scope": "EXPERIMENTAL_SIM_ONLY_INDEPENDENT_SECOND_DEMAND_NOT_ORIGINAL_QUALIFICATION",
+        "selection": "Previously failed coast with discriminating H12 correction/control;90/offset dependency impacted by ADC-observer code and new ELF. No unchanged PASS rerun.",
+        "elf_sha256": "f61c7e2cf240bf79a0cdc2d65c88c06c03a52865122a0054d7a14fba55b22e08",
+        "qemu_sha256": "6f99975e319ada16af98050c66b1ee39fef690d8dca16ec08a6c59560f7faef8",
+        "scenario_sha256": "891b9b7503f0933d58310fbd8541139d6fec69f8c1b35212b34c88b6c4ffce20",
+        "guest_record": {
+          "acquisition_tick": 52608,
+          "coast_transitions": 19,
+          "decision": 2,
+          "first_capture_us": 0,
+          "guest_inferred_direction": -1,
+          "guest_tick": 52618,
+          "hardware_qualified": false,
+          "oldstep": 5,
+          "original_qualified": false,
+          "phase_pattern": 5,
+          "sample": 3288,
+          "second_capture_us": 0,
+          "selected_step": 0,
+          "stable_epochs": 11,
+          "status": "REFUSED_BEFORE_POWER_NOT_REACQUISITION",
+          "timestamp_domain": "GUEST_TICKS_NOT_SOURCE_VNS"
+        },
+        "source_boundary": {
+          "rotor_before": {
+            "vns": 3299355496,
+            "sample_age_ns": 644604,
+            "rpm": -30.369,
+            "electrical_angle_rad": 235.975,
+            "electrical_angle_deg": 13520.371570599602,
+            "current_a": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "torque_nm": 0.0
+          },
+          "rotor_after": {
+            "vns": 3300355496,
+            "sample_age_ns": -355396,
+            "rpm": -30.346,
+            "electrical_angle_rad": 235.908,
+            "electrical_angle_deg": 13516.532753372223,
+            "current_a": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "torque_nm": 0.0
+          },
+          "pads": {
+            "source_vns": 3299030148,
+            "state_age_ns": 969952,
+            "mask": 0,
+            "gate_enabled": false,
+            "gate_word": 14,
+            "on_pads": [],
+            "status": "SOURCE_TRANSITION_HELD_WITHIN_BOUNDED_WINDOW"
+          },
+          "pad_status": "OBSERVED"
+        },
+        "first_powered_pair": null,
+        "first_changed_pair": null,
+        "first_accepted_capture": null,
+        "timer_audit": null,
+        "negative_torque_samples": {},
+        "first_reversed_sample": null,
+        "mechanism": "NO_SIGNIFICANT_REVERSE_SAMPLE_IN_FIRST50MS;REFUSAL_IS_NOT_REACQUISITION",
+        "independent_second_demand": {
+          "coast": {
+            "end_virtual_ns": 3300000100,
+            "late_guest_motor_event_counts": {
+              "CAP1_ACK": 0,
+              "PWM_PAIR": 0,
+              "TIMG12_ACK": 0
+            },
+            "settle_ms": 200,
+            "start_virtual_ns": 3000000100,
+            "verified_complete_standstill": false
+          },
+          "demand_windows": [
+            {
+              "end_virtual_ns": 3000000100,
+              "negative_rotor_samples_below_minus_floor": 568,
+              "positive_rotor_observation_span_ms": 1497.00136,
+              "positive_rotor_samples_ge_50rpm": 821,
+              "profile_positive_rpm_floor": 50,
+              "rotor_samples": 1500,
+              "source_counts": {
+                "CAP1_ACK": 366,
+                "PWM_PAIR": 245,
+                "TIMG12_ACK": 244
+              },
+              "stage_index": 1,
+              "start_virtual_ns": 1500000100
+            },
+            {
+              "end_virtual_ns": 4800000100,
+              "negative_rotor_samples_below_minus_floor": 0,
+              "positive_rotor_observation_span_ms": 0.0,
+              "positive_rotor_samples_ge_50rpm": 0,
+              "profile_positive_rpm_floor": 50,
+              "rotor_samples": 1500,
+              "source_counts": {
+                "CAP1_ACK": 0,
+                "PWM_PAIR": 0,
+                "TIMG12_ACK": 0
+              },
+              "stage_index": 3,
+              "start_virtual_ns": 3300000100
+            }
+          ],
+          "failures": [
+            "SECOND_DEMAND_FIRST_SUSTAINED_POSITIVE_ROTOR_RESPONSE_MISSING",
+            "SECOND_DEMAND_FIRST_SIGNIFICANT_REVERSE_ROTATION",
+            "SECOND_DEMAND_REACQUISITION_GUEST_CLOSED_LOOP_NOT_PROVEN",
+            "SECOND_DEMAND_REACQUISITION_SUSTAINED_POSITIVE_ROTOR_RESPONSE_MISSING"
+          ],
+          "pass": false
+        },
+        "rotor_diagnostic": {
+          "classification": "SIM_ONLY_READ_ONLY_PLANT_DIAGNOSTIC_NOT_GUEST_ROTOR_SENSING",
+          "coast_duration_ms": 300,
+          "do_not_use_angle_or_torque_as_guest_input": true,
+          "first_20ms_min_model_torque_nm": 0.0,
+          "first_20ms_min_rpm": -30.346,
+          "first_20ms_negative_rpm_samples_le_minus50": 0,
+          "first_new_guest_cap1_ack_ms": null,
+          "first_post_demand_model_torque_negative": false,
+          "first_post_demand_model_torque_nm": 0.0,
+          "first_post_demand_sample_ms": 0.355396,
+          "hardware_qualified": false,
+          "has_guest_rotor_angle_measurement": false,
+          "p1_qualified": false,
+          "pre_demand_rpm": -30.369,
+          "pre_demand_unwrapped_electrical_angle_mrad": 235975,
+          "pre_demand_wrapped_electrical_angle_deg": 200.371571,
+          "rotor_model_samples_first_20ms": 20,
+          "schema": "e62.experimental.native-coast-phase-torque-audit.v1",
+          "second_demand_start_virtual_ns": 3300000100,
+          "source_dshot_frames": 5100
+        },
+        "strict_unwaived_failures": [
+          "ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN",
+          "STARTUP_SIGNIFICANT_DIRECTION_REVERSAL"
+        ],
+        "original_qualified": false,
+        "hardware_qualified": false,
+        "source_events_sha256": "66a6c4377ec4cd27661c60edd038f65c1d32badf2c79f0f92f7514b0587660b6"
+      }
+    },
+    {
+      "criterion": "H13 coast-negative-switch16 authorization",
+      "status": "PASS_NEW",
+      "reacquisition_status": "FAIL",
+      "evidence": {
+        "negative_authorization_result": "PASS_NEW",
+        "reference_pending_snapshot": {
+          "acquisition_epoch": 0,
+          "acquisition_tick": 52608,
+          "age_ticks": 10,
+          "codes": [
+            2047,
+            2047,
+            2047
+          ],
+          "completion_tick": 52608,
+          "controller_usable_not_inferred": true,
+          "current_epoch": 0,
+          "guest_tick": 52618,
+          "inside_age_bound": true,
+          "max_age_ticks": 32,
+          "sample": 3288,
+          "status": "PASSIVE_STABLE_SNAPSHOT",
+          "timestamp_domain": "GUEST_TICKS_NOT_SOURCE_VNS",
+          "valid_flag": 1
+        },
+        "case": "coast-phase-negatives--coast-negative-switch16",
+        "result": "FAIL",
+        "scope": "EXPERIMENTAL_SIM_ONLY_INDEPENDENT_SECOND_DEMAND_NOT_ORIGINAL_QUALIFICATION",
+        "selection": "Previously failed coast with discriminating H12 correction/control;90/offset dependency impacted by ADC-observer code and new ELF. No unchanged PASS rerun.",
+        "elf_sha256": "f61c7e2cf240bf79a0cdc2d65c88c06c03a52865122a0054d7a14fba55b22e08",
+        "qemu_sha256": "6f99975e319ada16af98050c66b1ee39fef690d8dca16ec08a6c59560f7faef8",
+        "scenario_sha256": "891b9b7503f0933d58310fbd8541139d6fec69f8c1b35212b34c88b6c4ffce20",
+        "guest_record": {
+          "acquisition_tick": 52608,
+          "coast_transitions": 62,
+          "decision": 2,
+          "first_capture_us": 0,
+          "guest_inferred_direction": 1,
+          "guest_tick": 52618,
+          "hardware_qualified": false,
+          "oldstep": 6,
+          "original_qualified": false,
+          "phase_pattern": 3,
+          "sample": 3288,
+          "second_capture_us": 0,
+          "selected_step": 0,
+          "stable_epochs": 1,
+          "status": "REFUSED_BEFORE_POWER_NOT_REACQUISITION",
+          "timestamp_domain": "GUEST_TICKS_NOT_SOURCE_VNS"
+        },
+        "source_boundary": {
+          "rotor_before": {
+            "vns": 3299357720,
+            "sample_age_ns": 642380,
+            "rpm": 95.347,
+            "electrical_angle_rad": 2873.561,
+            "electrical_angle_deg": 164642.91747339236,
+            "current_a": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "torque_nm": 0.0
+          },
+          "rotor_after": {
+            "vns": 3300357720,
+            "sample_age_ns": -357620,
+            "rpm": 95.274,
+            "electrical_angle_rad": 2873.771,
+            "electrical_angle_deg": 164654.94958709012,
+            "current_a": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "torque_nm": 0.0
+          },
+          "pads": {
+            "source_vns": 3299030148,
+            "state_age_ns": 969952,
+            "mask": 0,
+            "gate_enabled": false,
+            "gate_word": 14,
+            "on_pads": [],
+            "status": "SOURCE_TRANSITION_HELD_WITHIN_BOUNDED_WINDOW"
+          },
+          "pad_status": "OBSERVED"
+        },
+        "first_powered_pair": null,
+        "first_changed_pair": null,
+        "first_accepted_capture": null,
+        "timer_audit": null,
+        "negative_torque_samples": {},
+        "first_reversed_sample": null,
+        "mechanism": "NO_SIGNIFICANT_REVERSE_SAMPLE_IN_FIRST50MS;REFUSAL_IS_NOT_REACQUISITION",
+        "independent_second_demand": {
+          "coast": {
+            "end_virtual_ns": 3300000100,
+            "late_guest_motor_event_counts": {
+              "CAP1_ACK": 0,
+              "PWM_PAIR": 0,
+              "TIMG12_ACK": 0
+            },
+            "settle_ms": 200,
+            "start_virtual_ns": 3000000100,
+            "verified_complete_standstill": false
+          },
+          "demand_windows": [
+            {
+              "end_virtual_ns": 3000000100,
+              "negative_rotor_samples_below_minus_floor": 0,
+              "positive_rotor_observation_span_ms": 1498.002772,
+              "positive_rotor_samples_ge_50rpm": 1499,
+              "profile_positive_rpm_floor": 50,
+              "rotor_samples": 1500,
+              "source_counts": {
+                "CAP1_ACK": 5421,
+                "PWM_PAIR": 2669,
+                "TIMG12_ACK": 2668
+              },
+              "stage_index": 1,
+              "start_virtual_ns": 1500000100
+            },
+            {
+              "end_virtual_ns": 4800000100,
+              "negative_rotor_samples_below_minus_floor": 0,
+              "positive_rotor_observation_span_ms": 838.0,
+              "positive_rotor_samples_ge_50rpm": 839,
+              "profile_positive_rpm_floor": 50,
+              "rotor_samples": 1500,
+              "source_counts": {
+                "CAP1_ACK": 0,
+                "PWM_PAIR": 0,
+                "TIMG12_ACK": 0
+              },
+              "stage_index": 3,
+              "start_virtual_ns": 3300000100
+            }
+          ],
+          "failures": [
+            "SECOND_DEMAND_REACQUISITION_GUEST_CLOSED_LOOP_NOT_PROVEN",
+            "SECOND_DEMAND_REACQUISITION_SUSTAINED_POSITIVE_ROTOR_RESPONSE_MISSING"
+          ],
+          "pass": false
+        },
+        "rotor_diagnostic": {
+          "classification": "SIM_ONLY_READ_ONLY_PLANT_DIAGNOSTIC_NOT_GUEST_ROTOR_SENSING",
+          "coast_duration_ms": 300,
+          "do_not_use_angle_or_torque_as_guest_input": true,
+          "first_20ms_min_model_torque_nm": 0.0,
+          "first_20ms_min_rpm": 93.892,
+          "first_20ms_negative_rpm_samples_le_minus50": 0,
+          "first_new_guest_cap1_ack_ms": null,
+          "first_post_demand_model_torque_negative": false,
+          "first_post_demand_model_torque_nm": 0.0,
+          "first_post_demand_sample_ms": 0.35762,
+          "hardware_qualified": false,
+          "has_guest_rotor_angle_measurement": false,
+          "p1_qualified": false,
+          "pre_demand_rpm": 95.347,
+          "pre_demand_unwrapped_electrical_angle_mrad": 2873561,
+          "pre_demand_wrapped_electrical_angle_deg": 122.917473,
+          "rotor_model_samples_first_20ms": 20,
+          "schema": "e62.experimental.native-coast-phase-torque-audit.v1",
+          "second_demand_start_virtual_ns": 3300000100,
+          "source_dshot_frames": 5100
+        },
+        "strict_unwaived_failures": [
+          "ORIGINAL_GUEST_NATIVE_SOURCE_NOT_PROVEN"
+        ],
+        "original_qualified": false,
+        "hardware_qualified": false,
+        "source_events_sha256": "26dc90e4a766963444976a7f7e575ddac4f854a2bf02058c53ce4c9dbcb5c770"
+      }
+    },
+    {
+      "criterion": "Original Guest qualification on experimental candidate",
+      "status": "FAIL",
+      "evidence": "Unchanged Original identity gate rejects the experimental ELF; no waiver."
+    },
+    {
+      "criterion": "Cold90-degree startup and offset robustness",
+      "status": "FAIL",
+      "evidence": "V5 cold90 retained without repeating an unchanged failure; new signed-offset runs still fail first startup. Safe refusal is not qualification.",
+      "candidate_cold90_coverage": "INCOMPLETE: v5 FAIL retained, not rerun or claimed fixed for newELF; signed-offset new runs executed and fail."
+    },
+    {
+      "criterion": "Full phase/velocity/reverse/alias/brake/audio and post-authorized switching coverage",
+      "status": "INCOMPLETE",
+      "evidence": "Forward quiet-coast specific CFG only; sampled-direction alias and one-code noise limitations remain; switching case refused before exercising the vulnerable path."
+    },
+    {
+      "criterion": "Critical/release regression and production merge approval",
+      "status": "INCOMPLETE",
+      "evidence": "Focused real-Core/portable/active SC5 SDK results provided; no claim that motor qualification follows from build/unit results."
+    },
+    {
+      "criterion": "Physical analog/settling and traceable model correlation",
+      "status": "BLOCKED",
+      "evidence": "Board phase gains/offset/noise/aperture, independent rotor reference, true coast/brake eligibility and motor/load measurements unavailable."
+    }
+  ],
+  "selection_explanation": "Run new acquisition tests, failed-coast correction/shadow A/B and only dependency-impacted negatives. Preserve all earlier failures. Initial FP set and ignored selector were execution-selection mistakes, preserved and corrected; no invented justification of necessity.",
+  "cases_file": "artifacts/e62-v6/replay/case-matrix.json",
+  "quiet_source_proof": "artifacts/e62-v6/quiet-coast-source-proof.json",
+  "draft_prs": [
+    {
+      "repository": "cctsao1008/ESCape32",
+      "number": 15,
+      "url": "https://github.com/cctsao1008/ESCape32/pull/15",
+      "draft": true,
+      "state": "OPEN",
+      "head": "experiment/e62-coast-phase-acquisition",
+      "base": "test/e62-estimator-continuity-integration"
+    },
+    {
+      "repository": "cctsao1008/escape32-qemu",
+      "number": 17,
+      "url": "https://github.com/cctsao1008/escape32-qemu/pull/17",
+      "draft": true,
+      "state": "OPEN",
+      "head": "diag/e62-restart-rate-evidence",
+      "base": "diag/e62-first-sector-control"
+    }
+  ],
+  "active_source_equivalence": "artifacts/e62-v6/active-code-equivalence.json",
+  "validation_logs": [
+    "coast-phase-host.log",
+    "coast-new-capture-negatives.log",
+    "coast-phase-sdk.log",
+    "coast-reader.log",
+    "pending-reference-tests.log",
+    "adc-observability-tests.log",
+    "rate-integer-focused.log",
+    "core-gated.log"
+  ],
+  "validation": [
+    {
+      "result": "PASS_NEW",
+      "test": "portable phase sequence, actual-Core acquired sector and first/second captures",
+      "evidence": "execution/coast-phase-host.log",
+      "selection": "New controller behavior and new sequence/epoch/refusal requirements."
+    },
+    {
+      "result": "PASS_NEW",
+      "test": "zero/negative/overflow capture and invalid timing stop before timer",
+      "evidence": "execution/coast-new-capture-negatives.log",
+      "selection": "New acquired-capture path requires its own fatal-input safety checks; unchanged portable tests were not repeated."
+    },
+    {
+      "result": "PASS_NEW",
+      "test": "active SC5 SDK bridge and physical register fixtures",
+      "evidence": "execution/coast-phase-sdk.log",
+      "selection": "New ADC/reference hook and Core path need SDK integration. Inherited selector initially repeated unchanged fixtures; corrected selector prevents repetition."
+    },
+    {
+      "result": "PASS_NEW",
+      "test": "new passive decoders and coherent ADC observability, reference ABI",
+      "evidence": [
+        "execution/reader-focused-final.log",
+        "execution/adc-observability-tests.log",
+        "execution/coast-reader.log",
+        "execution/pending-reference-tests.log",
+        "execution/coast_abi.c"
+      ],
+      "selection": "New read-only behavior requires bounded missing/changing/epoch/refusal tests, without rerunning unchanged45analyzers."
+    },
+    {
+      "result": "PASS_REUSED",
+      "test": "prior functional/host/component passes at their original recorded identities",
+      "evidence": "docs/current/e62-engineering-evidence-v5.json",
+      "selection": "No relevant identity/dependency change for the recorded result; not a qualification of the new ELF. Overall Issue3 failures remain unchanged."
+    },
+    {
+      "result": "INCOMPLETE",
+      "test": "post-authorized switching, full phase/speed/reverse/eligibility and release gates",
+      "evidence": "Known limits in v6 report",
+      "selection": "No passing claim from a refused case or from unit/compile success."
+    }
+  ]
+}

@@ -16,10 +16,11 @@
     "title": "Observe SC5 acquisition and publication without changing policy",
     "body_file": "docs/review/ESCape32-diag-e62-sc5-acquisition.md",
     "draft": true,
-    "status": "DRAFT_CREATED_USER_CONFIRMED",
+    "status": "DRAFT_OPEN_API_VERIFIED",
     "compare_url": "https://github.com/cctsao1008/ESCape32/compare/am13e-port-v2...diag/e62-sc5-acquisition?expand=1",
     "pr_number": 6,
-    "pr_url": "https://github.com/cctsao1008/ESCape32/pull/6"
+    "pr_url": "https://github.com/cctsao1008/ESCape32/pull/6",
+    "remote_state": "OPEN"
   },
   {
     "repository": "cctsao1008/ESCape32",
@@ -28,10 +29,11 @@
     "title": "Experiment: refresh equivalent SC5 sample associations at ZERO",
     "body_file": "docs/review/ESCape32-experiment-e62-sc5-equivalent-refresh.md",
     "draft": true,
-    "status": "DRAFT_CREATED_USER_CONFIRMED",
+    "status": "DRAFT_OPEN_API_VERIFIED",
     "compare_url": "https://github.com/cctsao1008/ESCape32/compare/diag/e62-sc5-acquisition...experiment/e62-sc5-equivalent-refresh?expand=1",
     "pr_number": 7,
-    "pr_url": "https://github.com/cctsao1008/ESCape32/pull/7"
+    "pr_url": "https://github.com/cctsao1008/ESCape32/pull/7",
+    "remote_state": "OPEN"
   },
   {
     "repository": "cctsao1008/escape32-qemu",
@@ -50,10 +52,11 @@
     "title": "Prepare exact Issue3 robustness suite with immutable binary guards",
     "body_file": "docs/review/escape32-qemu-experiment-e62-cmpss-cloud-matrix.md",
     "draft": true,
-    "status": "DRAFT_CREATED_USER_CONFIRMED",
+    "status": "DRAFT_OPEN_API_VERIFIED",
     "compare_url": "https://github.com/cctsao1008/escape32-qemu/compare/main...experiment/e62-cmpss-cloud-matrix?expand=1",
     "pr_number": 12,
-    "pr_url": "https://github.com/cctsao1008/escape32-qemu/pull/12"
+    "pr_url": "https://github.com/cctsao1008/escape32-qemu/pull/12",
+    "remote_state": "OPEN"
   },
   {
     "repository": "cctsao1008/escape32-qemu",
@@ -92,10 +95,11 @@
     "title": "Restore strict Boot build and real-image flash host gates",
     "body_file": "docs/review/ESCape32-fix-e62-boot-release-gates.md",
     "draft": true,
-    "status": "DRAFT_CREATED_USER_CONFIRMED",
+    "status": "DRAFT_OPEN_API_VERIFIED",
     "compare_url": "https://github.com/cctsao1008/ESCape32/compare/am13e-port-v2...fix/e62-boot-release-gates?expand=1",
     "pr_number": 8,
-    "pr_url": "https://github.com/cctsao1008/ESCape32/pull/8"
+    "pr_url": "https://github.com/cctsao1008/ESCape32/pull/8",
+    "remote_state": "OPEN"
   },
   {
     "repository": "cctsao1008/escape32-qemu",
@@ -114,10 +118,11 @@
     "title": "Experiment: quarantine changed-code SC5 publication through native load and settling",
     "body_file": "docs/review/ESCape32-experiment-e62-sc5-changed-handover.md",
     "draft": true,
-    "status": "DRAFT_CREATED_USER_CONFIRMED",
+    "status": "DRAFT_OPEN_API_VERIFIED",
     "compare_url": "https://github.com/cctsao1008/ESCape32/compare/experiment/e62-sc5-equivalent-refresh...experiment/e62-sc5-changed-handover?expand=1",
     "pr_number": 9,
-    "pr_url": "https://github.com/cctsao1008/ESCape32/pull/9"
+    "pr_url": "https://github.com/cctsao1008/ESCape32/pull/9",
+    "remote_state": "OPEN"
   },
   {
     "repository": "cctsao1008/escape32-qemu",
@@ -136,10 +141,11 @@
     "title": "Observe DShot timer dispatch and source-clock timing without rescheduling",
     "body_file": "docs/review/escape32-qemu-diag-e62-source-clock-observer.md",
     "draft": true,
-    "status": "DRAFT_CREATED_USER_CONFIRMED",
+    "status": "DRAFT_OPEN_API_VERIFIED",
     "compare_url": "https://github.com/cctsao1008/escape32-qemu/compare/main...diag/e62-source-clock-observer?expand=1",
     "pr_number": 13,
-    "pr_url": "https://github.com/cctsao1008/escape32-qemu/pull/13"
+    "pr_url": "https://github.com/cctsao1008/escape32-qemu/pull/13",
+    "remote_state": "OPEN"
   },
   {
     "repository": "cctsao1008/escape32-qemu",
@@ -148,10 +154,11 @@
     "title": "Make host polling cadence an explicit diagnostic factor",
     "body_file": "docs/review/escape32-qemu-diag-e62-clock-poll-factor.md",
     "draft": true,
-    "status": "DRAFT_CREATED_USER_CONFIRMED",
+    "status": "DRAFT_OPEN_API_VERIFIED",
     "compare_url": "https://github.com/cctsao1008/escape32-qemu/compare/diag/e62-source-clock-observer...diag/e62-clock-poll-factor?expand=1",
     "pr_number": 14,
-    "pr_url": "https://github.com/cctsao1008/escape32-qemu/pull/14"
+    "pr_url": "https://github.com/cctsao1008/escape32-qemu/pull/14",
+    "remote_state": "OPEN"
   },
   {
     "repository": "cctsao1008/escape32-qemu",
@@ -160,10 +167,11 @@
     "title": "Validate native changing-VBUS reference handover and preserve startup failures",
     "body_file": "docs/review/escape32-qemu-experiment-e62-source-vbus-handover.md",
     "draft": true,
-    "status": "DRAFT_CREATED_USER_CONFIRMED",
+    "status": "DRAFT_OPEN_API_VERIFIED",
     "compare_url": "https://github.com/cctsao1008/escape32-qemu/compare/diag/e62-source-clock-observer...experiment/e62-source-vbus-handover?expand=1",
     "pr_number": 15,
-    "pr_url": "https://github.com/cctsao1008/escape32-qemu/pull/15"
+    "pr_url": "https://github.com/cctsao1008/escape32-qemu/pull/15",
+    "remote_state": "OPEN"
   },
   {
     "repository": "cctsao1008/ESCape32",
@@ -172,10 +180,11 @@
     "title": "Observe native changed-code publication with an explicit SIM_ONLY affine profile",
     "body_file": "docs/review/ESCape32-diag-e62-dynamic-handover-evidence.md",
     "draft": true,
-    "status": "DRAFT_CREATED_USER_CONFIRMED",
+    "status": "DRAFT_OPEN_API_VERIFIED",
     "compare_url": "https://github.com/cctsao1008/ESCape32/compare/experiment/e62-sc5-changed-handover...diag/e62-dynamic-handover-evidence?expand=1",
     "pr_number": 10,
-    "pr_url": "https://github.com/cctsao1008/ESCape32/pull/10"
+    "pr_url": "https://github.com/cctsao1008/ESCape32/pull/10",
+    "remote_state": "OPEN"
   },
   {
     "repository": "cctsao1008/escape32-qemu",
@@ -184,8 +193,11 @@
     "title": "Diagnose first-sector torque and native SC5 capture continuity",
     "body_file": "docs/review/escape32-qemu-diag-e62-first-sector-control.md",
     "draft": true,
-    "status": "BRANCH_PUBLISHED_DRAFT_PREPARED_API_FORBIDDEN",
-    "compare_url": "https://github.com/cctsao1008/escape32-qemu/compare/experiment/e62-source-vbus-handover...diag/e62-first-sector-control?expand=1"
+    "status": "DRAFT_OPEN_API_VERIFIED",
+    "compare_url": "https://github.com/cctsao1008/escape32-qemu/compare/experiment/e62-source-vbus-handover...diag/e62-first-sector-control?expand=1",
+    "pr_number": 16,
+    "pr_url": "https://github.com/cctsao1008/escape32-qemu/pull/16",
+    "remote_state": "OPEN"
   },
   {
     "repository": "cctsao1008/ESCape32",
@@ -194,8 +206,11 @@
     "title": "Preserve capture through coherent equivalent SC5 association",
     "body_file": "docs/review/ESCape32-fix-e62-equivalent-reference-continuity.md",
     "draft": true,
-    "status": "BRANCH_PUBLISHED_DRAFT_PREPARED_API_FORBIDDEN",
-    "compare_url": "https://github.com/cctsao1008/ESCape32/compare/diag/e62-dynamic-handover-evidence...fix/e62-equivalent-reference-continuity?expand=1"
+    "status": "DRAFT_OPEN_API_VERIFIED",
+    "compare_url": "https://github.com/cctsao1008/ESCape32/compare/diag/e62-dynamic-handover-evidence...fix/e62-equivalent-reference-continuity?expand=1",
+    "pr_number": 11,
+    "pr_url": "https://github.com/cctsao1008/ESCape32/pull/11",
+    "remote_state": "OPEN"
   },
   {
     "repository": "cctsao1008/ESCape32",
@@ -204,8 +219,11 @@
     "title": "Process complete SC5 samples promptly in existing PendSV",
     "body_file": "docs/review/ESCape32-fix-e62-sc5-prompt-producer.md",
     "draft": true,
-    "status": "BRANCH_PUBLISHED_DRAFT_PREPARED_API_FORBIDDEN",
-    "compare_url": "https://github.com/cctsao1008/ESCape32/compare/diag/e62-dynamic-handover-evidence...fix/e62-sc5-prompt-producer?expand=1"
+    "status": "DRAFT_OPEN_API_VERIFIED",
+    "compare_url": "https://github.com/cctsao1008/ESCape32/compare/diag/e62-dynamic-handover-evidence...fix/e62-sc5-prompt-producer?expand=1",
+    "pr_number": 12,
+    "pr_url": "https://github.com/cctsao1008/ESCape32/pull/12",
+    "remote_state": "OPEN"
   },
   {
     "repository": "cctsao1008/ESCape32",
@@ -214,8 +232,11 @@
     "title": "Preserve isolated failed acquisition-policy experiments and regressions",
     "body_file": "docs/review/ESCape32-experiment-e62-acquisition-estimator.md",
     "draft": true,
-    "status": "BRANCH_PUBLISHED_DRAFT_PREPARED_API_FORBIDDEN",
-    "compare_url": "https://github.com/cctsao1008/ESCape32/compare/diag/e62-dynamic-handover-evidence...experiment/e62-acquisition-estimator?expand=1"
+    "status": "DRAFT_OPEN_API_VERIFIED",
+    "compare_url": "https://github.com/cctsao1008/ESCape32/compare/diag/e62-dynamic-handover-evidence...experiment/e62-acquisition-estimator?expand=1",
+    "pr_number": 13,
+    "pr_url": "https://github.com/cctsao1008/ESCape32/pull/13",
+    "remote_state": "OPEN"
   },
   {
     "repository": "cctsao1008/ESCape32",
@@ -224,7 +245,36 @@
     "title": "Isolate native fresh-invalid failure with SIM_ONLY ADC fixture",
     "body_file": "docs/review/ESCape32-test-e62-sc5-invalid-fresh-native.md",
     "draft": true,
-    "status": "BRANCH_PUBLISHED_DRAFT_PREPARED_API_FORBIDDEN",
-    "compare_url": "https://github.com/cctsao1008/ESCape32/compare/diag/e62-dynamic-handover-evidence...test/e62-sc5-invalid-fresh-native?expand=1"
+    "status": "DRAFT_OPEN_API_VERIFIED",
+    "compare_url": "https://github.com/cctsao1008/ESCape32/compare/diag/e62-dynamic-handover-evidence...test/e62-sc5-invalid-fresh-native?expand=1",
+    "pr_number": 14,
+    "pr_url": "https://github.com/cctsao1008/ESCape32/pull/14",
+    "remote_state": "OPEN"
+  },
+  {
+    "repository": "cctsao1008/ESCape32",
+    "head": "experiment/e62-coast-phase-acquisition",
+    "base": "test/e62-estimator-continuity-integration",
+    "title": "SIM_ONLY: acquire flying-restart phase from coast ADC history",
+    "body_file": "docs/review/ESCape32-experiment-e62-coast-phase-acquisition.md",
+    "draft": true,
+    "status": "DRAFT_OPEN_API_VERIFIED",
+    "compare_url": "https://github.com/cctsao1008/ESCape32/compare/test/e62-estimator-continuity-integration...experiment/e62-coast-phase-acquisition?expand=1",
+    "pr_number": 15,
+    "pr_url": "https://github.com/cctsao1008/ESCape32/pull/15",
+    "remote_state": "OPEN"
+  },
+  {
+    "repository": "cctsao1008/escape32-qemu",
+    "head": "diag/e62-restart-rate-evidence",
+    "base": "diag/e62-first-sector-control",
+    "title": "Replay incremental flying-restart acquisition and preserve causal evidence",
+    "body_file": "docs/review/escape32-qemu-diag-e62-restart-rate-evidence.md",
+    "draft": true,
+    "status": "DRAFT_OPEN_API_VERIFIED",
+    "compare_url": "https://github.com/cctsao1008/escape32-qemu/compare/diag/e62-first-sector-control...diag/e62-restart-rate-evidence?expand=1",
+    "pr_number": 17,
+    "pr_url": "https://github.com/cctsao1008/escape32-qemu/pull/17",
+    "remote_state": "OPEN"
   }
 ]

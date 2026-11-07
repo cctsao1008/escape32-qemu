@@ -1,0 +1,11 @@
+The v5 restart policy restores a pre-coast sector and treats the first partial capture as a full-sector seed. Actual rotor phase has moved: this causes initial negative torque or a late first commutation despite fresh matched SC5 reference evidence.
+
+Add an isolated forward-only SIM_ONLY observer of real coherent coast phase-ADC history. It requires consistent forward pattern transitions, stable/fresh samples, matching calibration epoch/sample and the pre-crossing side of the selected comparator reference. It selects the upcoming sector without overwriting historical oldstep. The first two real CAP1 events establish timing through the existing native TIMG12; no QEMU rotor state, feedback injection, motor physics or P1 acceptance change is used. H9/H10 remain separate prerequisites.
+
+Validation: pinned candidatef61c7e2c passes independent experimental300/1500/3000ms second-demand gates: sustained positive rotation, no significant reversals, genuine CAP1/TIMG12 closed loop. All three same-observer oldstep shadow controls fail. Entry motor states are measured and differ, so the report does not assert identical physical A/B snapshots. New source-owned missing-EOC/invalid-reference cases refuse before power, including phase age26 while the reference is still inside32ticks. Signed offsets and switching stress remain failed qualifications with safe refusals, never successful reacquisition. Actual-Core, phase-sequence/epoch/polarity/timeout/invalid-capture negatives and active SC5 SDK checks are included.
+
+Known limits: ideal1LSB native coast signals; direction alias/physical noise/offset/bandwidth; generic brake/audio eligibility; broader phase/speed/reverse coverage; cold90° startup; post-authorized switching artifacts; full release qualification. Original Guest identity still fails for experimental ELF. No production or hardware approval.
+
+Build/commands/raw failures/acceptance matrix: QEMU report branch `report/e62-engineering-execution`, `docs/current/e62-issue5-restart-v6.md` and companion JSON/bundle manifest. Motor evidence identifies source20f169e; later HEAD changes are non-executable/test-only with documented active-source equivalence.
+
+Related to escape32-qemu #5/#4/#10. Draft only: do not merge or close issues automatically.
