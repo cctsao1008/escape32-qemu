@@ -730,7 +730,7 @@ def run(args):
                             raise TimeoutError(
                                 "DShot source progress stalled while QTest "
                                 "remained responsive: "+json.dumps(poll))
-                        time.sleep(.15)
+                        time.sleep(getattr(args,"diagnostic_poll_s",.15))
                     else:
                         raise TimeoutError(
                             "QEMU autonomous run exceeded wall timeout; "+
@@ -937,6 +937,7 @@ def run(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--diagnostic-poll-s",type=float,default=.15,choices=(.001,.01,.15),help="Host read-only polling factor; never simulation chronology")
     parser.add_argument("--qemu", type=Path, required=True)
     parser.add_argument("--elf", type=Path, required=True)
     parser.add_argument("--issue5-bemf-diag", action="store_true",
