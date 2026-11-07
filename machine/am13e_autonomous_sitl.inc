@@ -414,6 +414,7 @@ static void am13e_auto_dshot_event(void *opaque)
                      machine->trip.oc_input[a->p1_oc_channel],
                      machine->pwm4.reg[0xb0U/4U],machine->pwm4.irqs);
     }
+    am13e_vbus_apply_frame(a->machine,a->sent);
     unsigned previous_stage = a->current_stage;
     uint32_t target = am13e_auto_target_for_frame(a, a->sent);
     if (a->live_override_enabled) {

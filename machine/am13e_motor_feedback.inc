@@ -218,6 +218,9 @@ static void am13e_g10_pwm_sync(AM13ESimFeedback *f)
          * Physical PWM sync is frequent; it is not an analog transition. */
         if (f->cmp[0x0eU / 2U] != shadow) {
             f->cmp[0x0eU / 2U] = shadow;
+            if(f->machine->sim_vbus_plan_file)error_report("E62_DAC_ACTIVE vns=%" PRId64 " code=%u mux=%u cap_enabled=%u counter=%u zero=%u edge=%u",
+                qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL),shadow,f->machine->sim_mc_mux[0]&7U,
+                !!(f->ecctl1&0x100U),am13e_g10_count(f),f->machine->pwm4.zero_events+1U,f->ecctl1&1U);
             am13e_g10_cmp_evaluate(f);
             am13e_auto_route_changed(f->machine);
         }
@@ -452,6 +455,10 @@ static bool am13e_g10_cmp_write16(AM13ESimFeedback *f, hwaddr off,
     }
     bool filter_init = off == 0x30U && !!(v & 0x8000U);
     if (off == 0x30U) v &= 0x7fffU; /* FILINIT self-clears */
+    if(off==0x0cU && f->machine->sim_vbus_plan_file && f->cmp[off/2U]!=v)
+        error_report("E62_DAC_SHADOW vns=%" PRId64 " code=%u sample=%u acquisition=%" PRId64 " cap_enabled=%u counter=%u",
+           qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL),v,f->machine->adc[1].vbus_eoc_id,
+           f->machine->adc[1].vbus_eoc_acquisition_ns,!!(f->ecctl1&0x100U),am13e_g10_count(f));
     f->cmp[off / 2U] = v;
     if (off == 0x0cU && !(f->cmp[0x08U / 2U] & 0x80U)) {
         f->cmp[0x0eU / 2U] = v;

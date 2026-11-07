@@ -294,6 +294,8 @@ struct AM13ESimADC {
     uint32_t registers[AM13E_SIM_ADC_REG_SIZE / 4U];
     uint16_t results[16];
     uint16_t channel_samples[32];
+    uint32_t vbus_sample_id,vbus_pending_code,vbus_eoc_id;
+    int64_t vbus_acquisition_ns,vbus_eoc_acquisition_ns;
     uint32_t interrupt_flags;
     uint32_t interrupt_overflow;
     bool unmodeled_reported;
@@ -363,6 +365,7 @@ typedef struct AM13ENativeMotor {
     struct AM13EMachineState *machine;
     bool enabled, active, faulted, gate;
     uint32_t model_profile; /* default KV147=0, opt-in KV210=210 */
+    uint32_t bus_millivolts; /* explicit supply input, default24V */
     uint32_t phase_adc_publications[3]; /* EOC only, read-only observer */
     uint32_t phase_adc_nonmidscale[3]; /* dynamic modeled BEMF EOC */
     uint32_t phase_adc_guest_reads[3]; /* actual Guest ADCRESULT MMIO */
@@ -645,6 +648,9 @@ struct AM13EMachineState {
     AM13ESimADC adc[AM13E_SIM_ADC_COUNT];
     bool esc_sim_native_adc_bemf; /* opt-in native plant -> real ADC SOC */
     char *esc_sim_adc_fixture_file;
+    char *sim_vbus_plan_file;
+    uint32_t vbus_count,vbus_next,vbus_frame[16],vbus_mv[16],vbus_sensor[16];
+    bool vbus_sensor_open,vbus_adc_clock_stopped;
     AM13EPeripheralGPRCM peripheral_gprcm[AM13E_SIM_GPRCM_COUNT];
     AM13EGpioPort gpio[AM13E_GPIO_COUNT];
     MemoryRegion fri;
@@ -662,6 +668,7 @@ struct AM13EMachineState {
  * Event tags are observational; temporal adjacency alone does NOT prove
  * a complete closed-loop causal chain.
  */
+static void am13e_vbus_apply_frame(AM13EMachineState *, uint32_t);
 extern bool e62_timer_observation(QEMUTimer *, int64_t *, int64_t *);
 static void am13e_p0_event(AM13EMachineState *s, const char *kind,
                            int64_t a,int64_t b,int64_t c,
@@ -1889,6 +1896,10 @@ static void am13e_pwm4_zero_event(void *opaque)
     p->previous_carrier_valid=true;
     am13e_pwm4_shadow_load(p);
     am13e_g10_pwm_sync(&p->machine->feedback);
+    if(p->machine->sim_vbus_plan_file && p->machine->vbus_count>1U &&
+       p->machine->auto_sitl.sent+8U>=p->machine->vbus_frame[1] &&
+       p->machine->auto_sitl.sent<=p->machine->vbus_frame[p->machine->vbus_count-1U]+8U)
+        error_report("E62_VBUS_ZERO vns=%" PRId64 " zero=%u counter=%u",qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL),p->zero_events+1U,am13e_g10_count(&p->machine->feedback));
     ++p->zero_events;
     /* TI SDK dl_mcpwm.h: DL_MCPWM_EVT_DISABLED=0 and
      * DL_MCPWM_EVT_TBCTR_ZERO=2. ETSEL=0 must NEVER emit an IRQ.
@@ -3134,6 +3145,10 @@ static void am13e_sim_adc_complete(void *opaque)
         !(adc->registers[0] & AM13E_SIM_ADC_CTL1_PWR)) {
         return;
     }
+    if(adc->machine->sim_vbus_plan_file && adc->instance==1U && adc->machine->vbus_adc_clock_stopped){
+        error_report("E62_VBUS_ADC_CLOCK_STOP vns=%" PRId64 " last_eoc=%u busy=1",qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL),adc->vbus_eoc_id);
+        return; /* Explicit external conversion-clock loss: no EOC or IRQ. */
+    }
     seq = adc->registers[0x324U / 4U];
     if (!(seq & AM13E_SIM_ADC_SEQ_ENABLE)) {
         return;
@@ -3155,7 +3170,15 @@ static void am13e_sim_adc_complete(void *opaque)
         const unsigned phase_soc = adc->instance == 1U ? 2U : 1U;
         const unsigned phase_channel = adc->instance == 0U ? 12U :
                                        adc->instance == 1U ? 2U : 5U;
-        if (adc->machine->esc_sim_native_adc_bemf && i == phase_soc) {
+        if (adc->machine->sim_vbus_plan_file && adc->instance==1U && i==1U) {
+            if(channel!=12U)return;
+            adc->results[i]=adc->vbus_pending_code;
+            adc->vbus_eoc_id=adc->vbus_sample_id;
+            adc->vbus_eoc_acquisition_ns=adc->vbus_acquisition_ns;
+            error_report("E62_VBUS_EOC vns=%" PRId64 " sample=%u acquisition=%" PRId64
+                         " code=%u channel=%u soc=%u",qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL),
+                         adc->vbus_sample_id,adc->vbus_acquisition_ns,adc->results[i],channel,i);
+        } else if (adc->machine->esc_sim_native_adc_bemf && i == phase_soc) {
             AM13ENativeMotor *m = &adc->machine->native_motor;
             if (channel != phase_channel || m->faulted) {
                 error_report("E62_SIM_NATIVE_ADC_BEMF_FAIL_CLOSED "
@@ -3295,6 +3318,14 @@ static MemTxResult am13e_adc_write(void *opaque, hwaddr offset,
                 !adc->gprcm->powered || adc->busy) {
                 return am13e_adc_unmodeled(adc, offset, true, size);
             }
+            if(adc->machine->sim_vbus_plan_file && adc->instance==1U && !adc->machine->vbus_adc_clock_stopped){
+                adc->vbus_acquisition_ns=qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
+                ++adc->vbus_sample_id;
+                const uint64_t mv=adc->machine->native_motor.bus_millivolts;
+                adc->vbus_pending_code=adc->machine->vbus_sensor_open ? 0U :
+                    (uint32_t)((mv*4096U*11U+264000U)/528000U);
+                if(adc->vbus_pending_code>=4095U)return MEMTX_ERROR;
+            }
             adc->busy = true;
             adc->registers[0] |= AM13E_SIM_ADC_CTL1_BUSY;
             timer_mod(adc->timer, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL)
@@ -3324,6 +3355,9 @@ static MemTxResult am13e_adc_results_read(void *opaque, hwaddr offset,
     if (!adc->esc_sim || (offset & 1U) || (size != 2 && size != 4) ||
         idx >= 16U || (size == 4 && idx >= 15U)) {
         return MEMTX_ERROR;
+    }
+    if(adc->machine->sim_vbus_plan_file && adc->instance==1U && idx<=1U && 1U<idx+size/2U){
+        error_report("E62_VBUS_READ vns=%" PRId64 " sample=%u code=%u",qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL),adc->vbus_eoc_id,adc->results[1]);
     }
     *value = adc->results[idx];
     if (size == 4) {
@@ -3361,6 +3395,45 @@ static const MemoryRegionOps am13e_adc_results_ops = {
     .endianness = DEVICE_LITTLE_ENDIAN,
     .valid = { .min_access_size = 2, .max_access_size = 4 },
 };
+
+static char *am13e_get_vbus_plan(Object *obj, Error **errp)
+{ return g_strdup(AM13E_MACHINE(obj)->sim_vbus_plan_file ?: ""); }
+static void am13e_set_vbus_plan(Object *obj,const char *v,Error **errp)
+{ AM13E_MACHINE(obj)->sim_vbus_plan_file = *v ? g_strdup(v) : NULL; }
+static void am13e_vbus_load_plan(AM13EMachineState *s)
+{
+    if(!s->sim_vbus_plan_file)return;
+    gchar *data=NULL;gsize size=0;
+    if(!s->esc_sim_native_adc_bemf || !s->native_motor.enabled || s->esc_sim_adc_fixture_file ||
+       !g_file_get_contents(s->sim_vbus_plan_file,&data,&size,NULL) || size>4096U || size!=strlen(data)){
+        error_report("E62_VBUS_PLAN invalid prerequisites/file");exit(EXIT_FAILURE);
+    }
+    gchar **lines=g_strsplit(data,"\n",-1);
+    if(strcmp(lines[0],"E62_SIM_VBUS_V1")){error_report("E62_VBUS_PLAN version");exit(EXIT_FAILURE);}
+    for(unsigned i=1;lines[i];++i){
+        if(!*lines[i])continue;
+        unsigned frame,mv,sensor;char extra;
+        if(s->vbus_count==16U || sscanf(lines[i],"%u,%u,%u%c",&frame,&mv,&sensor,&extra)!=3 ||
+           frame>180000U || mv<18000U || mv>26000U || sensor>2U ||
+           (s->vbus_count && frame<=s->vbus_frame[s->vbus_count-1U])){
+            error_report("E62_VBUS_PLAN invalid bounded step");exit(EXIT_FAILURE);
+        }
+        unsigned n=s->vbus_count++;s->vbus_frame[n]=frame;s->vbus_mv[n]=mv;s->vbus_sensor[n]=sensor;
+    }
+    if(!s->vbus_count || s->vbus_frame[0]!=0U || s->vbus_mv[0]!=24000U){error_report("E62_VBUS_PLAN initial input");exit(EXIT_FAILURE);}
+    g_strfreev(lines);g_free(data);
+}
+static void am13e_vbus_apply_frame(AM13EMachineState *s,uint32_t frame)
+{
+    unsigned n=s->vbus_next;
+    if(!s->sim_vbus_plan_file || n>=s->vbus_count || frame!=s->vbus_frame[n])return;
+    int64_t now=qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
+    if(s->native_motor.active && !am13e_native_motor_advance(&s->native_motor,now)){
+        am13e_native_motor_fault(&s->native_motor,9U);return;
+    }
+    s->native_motor.bus_millivolts=s->vbus_mv[n];s->vbus_sensor_open=s->vbus_sensor[n]==1U;s->vbus_adc_clock_stopped=s->vbus_sensor[n]==2U;s->vbus_next++;
+    error_report("E62_VBUS_SOURCE vns=%" PRId64 " frame=%u mv=%u sensor_mode=%u",now,frame,s->vbus_mv[n],s->vbus_sensor[n]);
+}
 
 static void am13e_sim_adc_load_fixture(AM13EMachineState *s)
 {
@@ -3999,6 +4072,7 @@ static void am13e_handoff_reset(void *opaque)
     s->sim_pa26_dma_beats = 0U;
     s->sim_pa26_bad_reported = false;
     am13e_pa26_wave_reset(&s->pa26_wave);
+    s->native_motor.bus_millivolts=24000U;s->vbus_next=0U;s->vbus_sensor_open=false;s->vbus_adc_clock_stopped=false;
     am13e_auto_reset(&s->auto_sitl);
     am13e_dma0_reset(&s->dma0);
     am13e_sim_wwdt_reset(&s->wwdt);
@@ -4046,6 +4120,7 @@ static void am13e_init(MachineState *machine)
         error_report("esc-sim-reset-cause requires esc-sim=on");
         exit(EXIT_FAILURE);
     }
+    am13e_vbus_load_plan(s);
     if (s->esc_sim_native_adc_bemf &&
         (!s->esc_sim || !s->native_motor.enabled ||
          s->esc_sim_adc_fixture_file)) {
@@ -4671,6 +4746,7 @@ static void am13e_class_init(ObjectClass *oc, void *data)
     object_class_property_set_description(oc, "esc-sim-native-motor-profile",
         "EXPERIMENT ONLY: default ecx87-kv147 or opt-in ecx87-kv210; "
         "changes source motor R/L/Kt/Ke, never Guest startup policy/P1.");
+    object_class_property_add_str(oc,"esc-sim-vbus-plan",am13e_get_vbus_plan,am13e_set_vbus_plan);
     object_class_property_add_bool(oc, "esc-sim-native-adc-bemf",
                                    am13e_get_native_adc_bemf,
                                    am13e_set_native_adc_bemf);
