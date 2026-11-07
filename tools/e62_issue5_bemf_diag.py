@@ -51,9 +51,9 @@ def snapshot(read32, seq_address, ring_address, limit=64):
 def snapshot_first(read32, seq_address, first_address):
     """Read immutable first 64 callbacks even after rolling history wraps.
 
-    Must be sampled with the Guest halted; seq read-back prevents
-    concurrent writes. A count over 64 is reported, never treated as
-    complete startup history.
+    Before64, require a stable count across the read. At/after64 the
+    source-owned first array is immutable; a growing rolling count is safe.
+    Reset/decreasing count is rejected. A capped array is never complete.
     """
     before = read32(seq_address)
     count = min(before, DEPTH)
@@ -63,7 +63,9 @@ def snapshot_first(read32, seq_address, first_address):
         entries.append(decode_entry(
             [read32(addr + 4 * i) for i in range(WORDS_PER_ENTRY)], seq))
     after = read32(seq_address)
-    if after != before:
+    if after < before or (before < DEPTH and after != before):
         raise RuntimeError("BEMF first-history changed during read")
-    return {"seq_after": before, "first_history_capped": before > DEPTH,
+    return {"seq_before": before, "seq_after": after,
+            "snapshot_safety": "IMMUTABLE_FIRST_ARRAY" if before >= DEPTH else "STABLE_COMMITTED_PREFIX",
+            "first_history_capped": after > DEPTH,
             "entries": entries}

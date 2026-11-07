@@ -33,6 +33,19 @@ class RingTests(unittest.TestCase):
         self.assertEqual(result["entries"][0]["capture_us"], 400)
         self.assertEqual(result["entries"][63]["capture_us"], 463)
 
+    def test_frozen_first_array_allows_growing_count_but_not_reset(self):
+        def reader(counts):
+            it=iter(counts)
+            def read(addr):
+                if addr==0x100:return next(it)
+                return [10,500,10000,0,0,2][((addr-0x2000)//4)%6]
+            return read
+        r=snapshot_first(reader([64,67]),0x100,0x2000)
+        self.assertEqual(r['snapshot_safety'],'IMMUTABLE_FIRST_ARRAY')
+        self.assertEqual(len(r['entries']),64)
+        with self.assertRaises(RuntimeError):snapshot_first(reader([64,1]),0x100,0x2000)
+        with self.assertRaises(RuntimeError):snapshot_first(reader([63,64]),0x100,0x2000)
+
     def test_missing_first_history_word_fails(self):
         mem = {0x100: 1}
         with self.assertRaises(KeyError):
