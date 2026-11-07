@@ -1,9 +1,19 @@
 """Pinned diagnostic A/B. No experimental result qualifies Original or changes P1 gates."""
-import argparse,hashlib,json,os,subprocess,sys
+import argparse,hashlib,json,os,struct,subprocess,sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 def sha(p):return hashlib.sha256(p.read_bytes()).hexdigest()
+def validate_cfg_separation(elf,cfg):
+    data=elf.read_bytes()
+    if data[:6]!=b'\x7fELF\x01\x01':raise ValueError('Expected little-endian ELF32')
+    offset=struct.unpack_from('<I',data,28)[0];size,count=struct.unpack_from('<HH',data,42)
+    if size!=32 or offset+size*count>len(data):raise ValueError('Invalid ELF program table')
+    for i in range(count):
+        typ,off,virt,phys,file_size,mem_size,flags,align=struct.unpack_from('<8I',data,offset+i*size)
+        if typ==1 and mem_size and phys<0x4000+cfg.stat().st_size and phys+mem_size>0x4000:
+            raise ValueError('ELF PT_LOAD overlaps supplied CFG; use the matched4KiB linker page-size setting')
+
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     for n in ('qemu','baseline-elf','candidate-elf','isolation-elf','cfg','output'):p.add_argument('--'+n,type=Path,required=True)
@@ -12,6 +22,7 @@ def main():
     a=p.parse_args();root=Path(__file__).resolve().parents[1];a.output.mkdir(parents=True,exist_ok=True)
     for f,h in ((a.qemu,a.qemu_sha256),(a.baseline_elf,a.baseline_sha256),(a.candidate_elf,a.candidate_sha256),(a.isolation_elf,a.isolation_sha256)):
         if sha(f)!=h:raise SystemExit('Input hash mismatch: '+str(f))
+    for elf in (a.baseline_elf,a.candidate_elf,a.isolation_elf):validate_cfg_separation(elf,a.cfg)
     items=[];families=a.family or ('startup','restart','invalid')
     if 'startup' in families:
         for angle in (-30,90):
