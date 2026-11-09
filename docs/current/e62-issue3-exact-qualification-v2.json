@@ -1,0 +1,4536 @@
+{
+  "schema": "e62.exact-issue3-qualification.v2",
+  "review_date_taipei": "2026-11-07",
+  "status": "FAILED",
+  "completed_cases": 14,
+  "experimental_non_sha_passes": 7,
+  "failures": 7,
+  "cases": [
+    {
+      "artifacts": {
+        "events": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-00/e62-filter-source-smoke.p0.events.log",
+        "evidence": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-00/e62-filter-source-smoke.json",
+        "qemu_log": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-00/e62-filter-source-smoke.qemu.log",
+        "strict": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-00/e62-filter-source-smoke.strict-original-p1.json"
+      },
+      "case": "smoke",
+      "counts": {
+        "source_guest_cap1_w1c_ack": 1542,
+        "source_guest_closed_loop_pwm_pairs": 1542,
+        "source_guest_timg12_w1c_ack": 1541
+      },
+      "guest_elf_sha256": "5b90b200429333cef82b982b7a7f845f31fb885c7ea63fc7e783c75232fac8d1",
+      "hardware_qualified": false,
+      "motor_reversals": 0,
+      "non_sha_closed_loop_pass": true,
+      "non_sha_failures": [],
+      "original_p1_qualified": false,
+      "original_sha_guard_held": true,
+      "peak_abs_rpm": 883.448,
+      "probe_exit_code": 0,
+      "source_scenario_sha256": "120fdf49397a1c8f86868aba81aab46ecdebdcf792713bce7b1199d01fa97781",
+      "source_sha256": "3ea4e672c0770db10c936531e7b3420b09473b18",
+      "source_stress_events": 0,
+      "source_stress_proven": true,
+      "source_switching_noise_events": 0,
+      "speed_signs": [
+        1
+      ],
+      "status": "PASS_EXPERIMENTAL_ONLY",
+      "stress": "off",
+      "strict_p1_exit_code": 1,
+      "group": "group-00",
+      "startup_source_observations": {
+        "first_positive": {
+          "anchor": {
+            "seq": 10665,
+            "vns": 1506337556,
+            "kind": "DSHOT",
+            "data": [
+              1505,
+              1,
+              50,
+              0,
+              0,
+              0
+            ]
+          },
+          "rotor_before": {
+            "seq": 10660,
+            "vns": 1506255108,
+            "kind": "ROTOR",
+            "data": [
+              0,
+              -524,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "sample_age_ns": 82448,
+          "first_events": {
+            "PWM_PAIR": {
+              "seq": 10669,
+              "vns": 1506588340,
+              "kind": "PWM_PAIR",
+              "data": [
+                8,
+                24,
+                15,
+                -524,
+                301,
+                0
+              ]
+            },
+            "CMP_FILTER": {
+              "seq": 10815,
+              "vns": 1529197308,
+              "kind": "CMP_FILTER",
+              "data": [
+                0,
+                1,
+                2049,
+                2048,
+                0,
+                0
+              ]
+            },
+            "CAP1": {
+              "seq": 10816,
+              "vns": 1529197308,
+              "kind": "CAP1",
+              "data": [
+                79556725,
+                0,
+                3,
+                34,
+                0,
+                0
+              ]
+            },
+            "CAP1_ACK": {
+              "seq": 10817,
+              "vns": 1529197344,
+              "kind": "CAP1_ACK",
+              "data": [
+                2,
+                3,
+                79556725,
+                34,
+                0,
+                0
+              ]
+            },
+            "ECAP1_CAP1_READ": {
+              "seq": 10818,
+              "vns": 1529197448,
+              "kind": "ECAP1_CAP1_READ",
+              "data": [
+                79556725,
+                79556753,
+                0,
+                34,
+                144,
+                0
+              ]
+            },
+            "T12_LOAD": {
+              "seq": 10667,
+              "vns": 1506420360,
+              "kind": "T12_LOAD",
+              "data": [
+                6553499,
+                100000000,
+                0,
+                0,
+                0,
+                0
+              ]
+            },
+            "T12_START": {
+              "seq": 10668,
+              "vns": 1506420548,
+              "kind": "T12_START",
+              "data": [
+                6553499,
+                100000000,
+                6553499,
+                1,
+                1,
+                0
+              ]
+            },
+            "TIMG12": {
+              "seq": 10834,
+              "vns": 1531179728,
+              "kind": "TIMG12",
+              "data": [
+                1,
+                1,
+                198099,
+                0,
+                0,
+                0
+              ]
+            },
+            "TIMG12_ACK": {
+              "seq": 10835,
+              "vns": 1531179748,
+              "kind": "TIMG12_ACK",
+              "data": [
+                1,
+                1,
+                1,
+                198099,
+                0,
+                0
+              ]
+            }
+          },
+          "first_significant_negative_rotor": null
+        },
+        "first_20pct": {
+          "anchor": {
+            "seq": 26003,
+            "vns": 2501337556,
+            "kind": "DSHOT",
+            "data": [
+              2500,
+              2,
+              448,
+              0,
+              0,
+              0
+            ]
+          },
+          "rotor_before": {
+            "seq": 25989,
+            "vns": 2500837792,
+            "kind": "ROTOR",
+            "data": [
+              861365,
+              1033799,
+              0,
+              1895,
+              -1895,
+              120222
+            ]
+          },
+          "sample_age_ns": 499764,
+          "first_events": {
+            "PWM_PAIR": {
+              "seq": 26007,
+              "vns": 2501446084,
+              "kind": "PWM_PAIR",
+              "data": [
+                7,
+                18,
+                15,
+                1034951,
+                12471,
+                0
+              ]
+            },
+            "CMP_FILTER": {
+              "seq": 26008,
+              "vns": 2501827192,
+              "kind": "CMP_FILTER",
+              "data": [
+                1,
+                0,
+                2048,
+                2048,
+                0,
+                0
+              ]
+            },
+            "CAP1": {
+              "seq": 26009,
+              "vns": 2501827192,
+              "kind": "CAP1",
+              "data": [
+                274082353,
+                1,
+                3,
+                34,
+                0,
+                0
+              ]
+            },
+            "CAP1_ACK": {
+              "seq": 26010,
+              "vns": 2501827228,
+              "kind": "CAP1_ACK",
+              "data": [
+                2,
+                3,
+                274082353,
+                34,
+                0,
+                0
+              ]
+            },
+            "ECAP1_CAP1_READ": {
+              "seq": 26011,
+              "vns": 2501827332,
+              "kind": "ECAP1_CAP1_READ",
+              "data": [
+                274082353,
+                274082381,
+                0,
+                34,
+                144,
+                0
+              ]
+            },
+            "T12_LOAD": {
+              "seq": 26012,
+              "vns": 2501828168,
+              "kind": "T12_LOAD",
+              "data": [
+                13699,
+                100000000,
+                0,
+                0,
+                0,
+                0
+              ]
+            },
+            "T12_START": {
+              "seq": 26013,
+              "vns": 2501828356,
+              "kind": "T12_START",
+              "data": [
+                13699,
+                100000000,
+                13699,
+                1,
+                1,
+                0
+              ]
+            },
+            "TIMG12": {
+              "seq": 26005,
+              "vns": 2501426156,
+              "kind": "TIMG12",
+              "data": [
+                1,
+                1,
+                13799,
+                0,
+                0,
+                0
+              ]
+            },
+            "TIMG12_ACK": {
+              "seq": 26006,
+              "vns": 2501426176,
+              "kind": "TIMG12_ACK",
+              "data": [
+                1,
+                1,
+                1,
+                13799,
+                0,
+                0
+              ]
+            }
+          },
+          "first_significant_negative_rotor": null
+        }
+      },
+      "dshot_first_mismatch": null,
+      "dshot_max_dispatch_error_ns": 0,
+      "artifact_hashes": {
+        "events": {
+          "sha256": "9d658744d8092dabf29e49945526da91cd5e937d6924c1ce057882b43af56f9b",
+          "bytes": 3614331
+        },
+        "evidence": {
+          "sha256": "21f7c78c2abd184635baf95ae90e53865ab116c92823acf93ec4beaaecc2cfea",
+          "bytes": 15051
+        },
+        "qemu_log": {
+          "sha256": "4f9644dd7be6c5b946b996542d48bde0d0ad3f4703262c2517fe3dbe4cde2839",
+          "bytes": 3719901
+        },
+        "strict": {
+          "sha256": "f2875f8945fc2d5131d71c003dc3bf2633b033ef40c6c3ec4bfe843e0e27e5e2",
+          "bytes": 3469
+        }
+      }
+    },
+    {
+      "artifacts": {
+        "events": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-00/e62-filter-source-gentle.p0.events.log",
+        "evidence": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-00/e62-filter-source-gentle.json",
+        "qemu_log": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-00/e62-filter-source-gentle.qemu.log",
+        "strict": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-00/e62-filter-source-gentle.strict-original-p1.json"
+      },
+      "case": "gentle",
+      "counts": {
+        "source_guest_cap1_w1c_ack": 2255,
+        "source_guest_closed_loop_pwm_pairs": 2256,
+        "source_guest_timg12_w1c_ack": 2255
+      },
+      "guest_elf_sha256": "5b90b200429333cef82b982b7a7f845f31fb885c7ea63fc7e783c75232fac8d1",
+      "hardware_qualified": false,
+      "motor_reversals": 0,
+      "non_sha_closed_loop_pass": true,
+      "non_sha_failures": [],
+      "original_p1_qualified": false,
+      "original_sha_guard_held": true,
+      "peak_abs_rpm": 493.679,
+      "probe_exit_code": 0,
+      "source_scenario_sha256": "2531e1b3432e1cfd9e717bd1a3682d2c7bad0f394878b1403674809782020d28",
+      "source_sha256": "3ea4e672c0770db10c936531e7b3420b09473b18",
+      "source_stress_events": 0,
+      "source_stress_proven": true,
+      "source_switching_noise_events": 0,
+      "speed_signs": [
+        1
+      ],
+      "status": "PASS_EXPERIMENTAL_ONLY",
+      "stress": "off",
+      "strict_p1_exit_code": 1,
+      "group": "group-00",
+      "startup_source_observations": {
+        "first_positive": {
+          "anchor": {
+            "seq": 10763,
+            "vns": 1520000100,
+            "kind": "DSHOT",
+            "data": [
+              1520,
+              1,
+              50,
+              0,
+              0,
+              0
+            ]
+          },
+          "rotor_before": {
+            "seq": 10758,
+            "vns": 1519236344,
+            "kind": "ROTOR",
+            "data": [
+              0,
+              -524,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "sample_age_ns": 763756,
+          "first_events": {
+            "PWM_PAIR": {
+              "seq": 10772,
+              "vns": 1520247680,
+              "kind": "PWM_PAIR",
+              "data": [
+                8,
+                24,
+                15,
+                -524,
+                301,
+                0
+              ]
+            },
+            "CMP_FILTER": {
+              "seq": 10940,
+              "vns": 1544305564,
+              "kind": "CMP_FILTER",
+              "data": [
+                0,
+                1,
+                2049,
+                2048,
+                0,
+                0
+              ]
+            },
+            "CAP1": {
+              "seq": 10941,
+              "vns": 1544305564,
+              "kind": "CAP1",
+              "data": [
+                79843525,
+                0,
+                3,
+                34,
+                0,
+                0
+              ]
+            },
+            "CAP1_ACK": {
+              "seq": 10942,
+              "vns": 1544305600,
+              "kind": "CAP1_ACK",
+              "data": [
+                2,
+                3,
+                79843525,
+                34,
+                0,
+                0
+              ]
+            },
+            "ECAP1_CAP1_READ": {
+              "seq": 10943,
+              "vns": 1544305704,
+              "kind": "ECAP1_CAP1_READ",
+              "data": [
+                79843525,
+                79843553,
+                0,
+                34,
+                144,
+                0
+              ]
+            },
+            "T12_LOAD": {
+              "seq": 10765,
+              "vns": 1520079704,
+              "kind": "T12_LOAD",
+              "data": [
+                6553499,
+                100000000,
+                0,
+                0,
+                0,
+                0
+              ]
+            },
+            "T12_START": {
+              "seq": 10766,
+              "vns": 1520079892,
+              "kind": "T12_START",
+              "data": [
+                6553499,
+                100000000,
+                6553499,
+                1,
+                1,
+                0
+              ]
+            },
+            "TIMG12": {
+              "seq": 10961,
+              "vns": 1546377984,
+              "kind": "TIMG12",
+              "data": [
+                1,
+                1,
+                207099,
+                0,
+                0,
+                0
+              ]
+            },
+            "TIMG12_ACK": {
+              "seq": 10962,
+              "vns": 1546378004,
+              "kind": "TIMG12_ACK",
+              "data": [
+                1,
+                1,
+                1,
+                207099,
+                0,
+                0
+              ]
+            }
+          },
+          "first_significant_negative_rotor": null
+        },
+        "first_20pct": null
+      },
+      "dshot_first_mismatch": null,
+      "dshot_max_dispatch_error_ns": 2,
+      "artifact_hashes": {
+        "events": {
+          "sha256": "aba5fb3156cce92e0d1d6a11f03baba797fb9e22d6599542c6b70b109a8a1ef3",
+          "bytes": 5824966
+        },
+        "evidence": {
+          "sha256": "0e5d96652b202556a2d6ec82286a28c35287c49ab018a7f524f4e208965fd290",
+          "bytes": 15057
+        },
+        "qemu_log": {
+          "sha256": "1c5a6ad4e43b692061d208375ad20f1493449a0d42de955b4c4af782afadc99a",
+          "bytes": 5979601
+        },
+        "strict": {
+          "sha256": "ff90a58970ce522560bc5dda5c7aee8d601520859349293ef0d045ee071fb0e0",
+          "bytes": 3468
+        }
+      }
+    },
+    {
+      "artifacts": {
+        "events": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-01/e62-filter-source-direct20.p0.events.log",
+        "evidence": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-01/e62-filter-source-direct20.json",
+        "qemu_log": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-01/e62-filter-source-direct20.qemu.log",
+        "strict": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-01/e62-filter-source-direct20.strict-original-p1.json"
+      },
+      "case": "direct20",
+      "counts": {
+        "source_guest_cap1_w1c_ack": 2742,
+        "source_guest_closed_loop_pwm_pairs": 2743,
+        "source_guest_timg12_w1c_ack": 2742
+      },
+      "guest_elf_sha256": "5b90b200429333cef82b982b7a7f845f31fb885c7ea63fc7e783c75232fac8d1",
+      "hardware_qualified": false,
+      "motor_reversals": 0,
+      "non_sha_closed_loop_pass": true,
+      "non_sha_failures": [],
+      "original_p1_qualified": false,
+      "original_sha_guard_held": true,
+      "peak_abs_rpm": 884.007,
+      "probe_exit_code": 0,
+      "source_scenario_sha256": "bebbdadbf3d209ec13758be197add552f8c263ddc26229c96ba0afe4bbb7da92",
+      "source_sha256": "3ea4e672c0770db10c936531e7b3420b09473b18",
+      "source_stress_events": 0,
+      "source_stress_proven": true,
+      "source_switching_noise_events": 0,
+      "speed_signs": [
+        1
+      ],
+      "status": "PASS_EXPERIMENTAL_ONLY",
+      "stress": "off",
+      "strict_p1_exit_code": 1,
+      "group": "group-01",
+      "startup_source_observations": {
+        "first_positive": {
+          "anchor": {
+            "seq": 10630,
+            "vns": 1501337556,
+            "kind": "DSHOT",
+            "data": [
+              1500,
+              1,
+              448,
+              0,
+              0,
+              0
+            ]
+          },
+          "rotor_before": {
+            "seq": 10625,
+            "vns": 1501253124,
+            "kind": "ROTOR",
+            "data": [
+              0,
+              -524,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "sample_age_ns": 84432,
+          "first_events": {
+            "PWM_PAIR": {
+              "seq": 10634,
+              "vns": 1501588344,
+              "kind": "PWM_PAIR",
+              "data": [
+                8,
+                24,
+                15,
+                -524,
+                301,
+                0
+              ]
+            },
+            "CMP_FILTER": {
+              "seq": 10656,
+              "vns": 1504592080,
+              "kind": "CMP_FILTER",
+              "data": [
+                0,
+                1,
+                2049,
+                2048,
+                0,
+                0
+              ]
+            },
+            "CAP1": {
+              "seq": 10657,
+              "vns": 1504592080,
+              "kind": "CAP1",
+              "data": [
+                75635679,
+                0,
+                3,
+                34,
+                0,
+                0
+              ]
+            },
+            "CAP1_ACK": {
+              "seq": 10658,
+              "vns": 1504592116,
+              "kind": "CAP1_ACK",
+              "data": [
+                2,
+                3,
+                75635679,
+                34,
+                0,
+                0
+              ]
+            },
+            "ECAP1_CAP1_READ": {
+              "seq": 10659,
+              "vns": 1504592220,
+              "kind": "ECAP1_CAP1_READ",
+              "data": [
+                75635679,
+                75635707,
+                0,
+                34,
+                144,
+                0
+              ]
+            },
+            "T12_LOAD": {
+              "seq": 10632,
+              "vns": 1501420360,
+              "kind": "T12_LOAD",
+              "data": [
+                6553499,
+                100000000,
+                0,
+                0,
+                0,
+                0
+              ]
+            },
+            "T12_START": {
+              "seq": 10633,
+              "vns": 1501420548,
+              "kind": "T12_START",
+              "data": [
+                6553499,
+                100000000,
+                6553499,
+                1,
+                1,
+                0
+              ]
+            },
+            "TIMG12": {
+              "seq": 10669,
+              "vns": 1505348244,
+              "kind": "TIMG12",
+              "data": [
+                1,
+                1,
+                75499,
+                0,
+                0,
+                0
+              ]
+            },
+            "TIMG12_ACK": {
+              "seq": 10670,
+              "vns": 1505348264,
+              "kind": "TIMG12_ACK",
+              "data": [
+                1,
+                1,
+                1,
+                75499,
+                0,
+                0
+              ]
+            }
+          },
+          "first_significant_negative_rotor": null
+        },
+        "first_20pct": {
+          "anchor": {
+            "seq": 10630,
+            "vns": 1501337556,
+            "kind": "DSHOT",
+            "data": [
+              1500,
+              1,
+              448,
+              0,
+              0,
+              0
+            ]
+          },
+          "rotor_before": {
+            "seq": 10625,
+            "vns": 1501253124,
+            "kind": "ROTOR",
+            "data": [
+              0,
+              -524,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "sample_age_ns": 84432,
+          "first_events": {
+            "PWM_PAIR": {
+              "seq": 10634,
+              "vns": 1501588344,
+              "kind": "PWM_PAIR",
+              "data": [
+                8,
+                24,
+                15,
+                -524,
+                301,
+                0
+              ]
+            },
+            "CMP_FILTER": {
+              "seq": 10656,
+              "vns": 1504592080,
+              "kind": "CMP_FILTER",
+              "data": [
+                0,
+                1,
+                2049,
+                2048,
+                0,
+                0
+              ]
+            },
+            "CAP1": {
+              "seq": 10657,
+              "vns": 1504592080,
+              "kind": "CAP1",
+              "data": [
+                75635679,
+                0,
+                3,
+                34,
+                0,
+                0
+              ]
+            },
+            "CAP1_ACK": {
+              "seq": 10658,
+              "vns": 1504592116,
+              "kind": "CAP1_ACK",
+              "data": [
+                2,
+                3,
+                75635679,
+                34,
+                0,
+                0
+              ]
+            },
+            "ECAP1_CAP1_READ": {
+              "seq": 10659,
+              "vns": 1504592220,
+              "kind": "ECAP1_CAP1_READ",
+              "data": [
+                75635679,
+                75635707,
+                0,
+                34,
+                144,
+                0
+              ]
+            },
+            "T12_LOAD": {
+              "seq": 10632,
+              "vns": 1501420360,
+              "kind": "T12_LOAD",
+              "data": [
+                6553499,
+                100000000,
+                0,
+                0,
+                0,
+                0
+              ]
+            },
+            "T12_START": {
+              "seq": 10633,
+              "vns": 1501420548,
+              "kind": "T12_START",
+              "data": [
+                6553499,
+                100000000,
+                6553499,
+                1,
+                1,
+                0
+              ]
+            },
+            "TIMG12": {
+              "seq": 10669,
+              "vns": 1505348244,
+              "kind": "TIMG12",
+              "data": [
+                1,
+                1,
+                75499,
+                0,
+                0,
+                0
+              ]
+            },
+            "TIMG12_ACK": {
+              "seq": 10670,
+              "vns": 1505348264,
+              "kind": "TIMG12_ACK",
+              "data": [
+                1,
+                1,
+                1,
+                75499,
+                0,
+                0
+              ]
+            }
+          },
+          "first_significant_negative_rotor": null
+        }
+      },
+      "dshot_first_mismatch": null,
+      "dshot_max_dispatch_error_ns": 0,
+      "artifact_hashes": {
+        "events": {
+          "sha256": "d6a357d5875ff7e3731d1879750fa5a64c4ae651b1456b3e1cdd893246b54aec",
+          "bytes": 5013237
+        },
+        "evidence": {
+          "sha256": "8ded68402e489709b6262c3de70f5f6734ac80ff99adc8d1bd4c27030b77b892",
+          "bytes": 14950
+        },
+        "qemu_log": {
+          "sha256": "eb6cdf1ce1aaa9c63aae786e930882adbf411fd18b9cf927cf75753f5b62c636",
+          "bytes": 5129417
+        },
+        "strict": {
+          "sha256": "a70b2f093c93adb7e7ced17c26c61e26fa0a4621751ec3f26f6bcefe389404d6",
+          "bytes": 3169
+        }
+      }
+    },
+    {
+      "artifacts": {
+        "events": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-01/e62-filter-source-steps.p0.events.log",
+        "evidence": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-01/e62-filter-source-steps.json",
+        "qemu_log": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-01/e62-filter-source-steps.qemu.log",
+        "strict": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-01/e62-filter-source-steps.strict-original-p1.json"
+      },
+      "case": "steps",
+      "counts": {
+        "source_guest_cap1_w1c_ack": 2735,
+        "source_guest_closed_loop_pwm_pairs": 2736,
+        "source_guest_timg12_w1c_ack": 2735
+      },
+      "guest_elf_sha256": "5b90b200429333cef82b982b7a7f845f31fb885c7ea63fc7e783c75232fac8d1",
+      "hardware_qualified": false,
+      "motor_reversals": 0,
+      "non_sha_closed_loop_pass": true,
+      "non_sha_failures": [],
+      "original_p1_qualified": false,
+      "original_sha_guard_held": true,
+      "peak_abs_rpm": 1273.689,
+      "probe_exit_code": 0,
+      "source_scenario_sha256": "d7b4798b271205314ebd90e5ba4ae06e0c8723c9c5a2e909669fec04b59c41b2",
+      "source_sha256": "3ea4e672c0770db10c936531e7b3420b09473b18",
+      "source_stress_events": 0,
+      "source_stress_proven": true,
+      "source_switching_noise_events": 0,
+      "speed_signs": [
+        1
+      ],
+      "status": "PASS_EXPERIMENTAL_ONLY",
+      "stress": "off",
+      "strict_p1_exit_code": 1,
+      "group": "group-01",
+      "startup_source_observations": {
+        "first_positive": {
+          "anchor": {
+            "seq": 10631,
+            "vns": 1500289012,
+            "kind": "DSHOT",
+            "data": [
+              1500,
+              1,
+              248,
+              0,
+              0,
+              0
+            ]
+          },
+          "rotor_before": {
+            "seq": 10626,
+            "vns": 1500253672,
+            "kind": "ROTOR",
+            "data": [
+              0,
+              -524,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "sample_age_ns": 35340,
+          "first_events": {
+            "PWM_PAIR": {
+              "seq": 10635,
+              "vns": 1500534920,
+              "kind": "PWM_PAIR",
+              "data": [
+                8,
+                24,
+                15,
+                -524,
+                301,
+                0
+              ]
+            },
+            "CMP_FILTER": {
+              "seq": 10657,
+              "vns": 1504006900,
+              "kind": "CMP_FILTER",
+              "data": [
+                0,
+                1,
+                2049,
+                2048,
+                0,
+                0
+              ]
+            },
+            "CAP1": {
+              "seq": 10658,
+              "vns": 1504006900,
+              "kind": "CAP1",
+              "data": [
+                75726321,
+                0,
+                3,
+                34,
+                0,
+                0
+              ]
+            },
+            "CAP1_ACK": {
+              "seq": 10659,
+              "vns": 1504006936,
+              "kind": "CAP1_ACK",
+              "data": [
+                2,
+                3,
+                75726321,
+                34,
+                0,
+                0
+              ]
+            },
+            "ECAP1_CAP1_READ": {
+              "seq": 10660,
+              "vns": 1504007040,
+              "kind": "ECAP1_CAP1_READ",
+              "data": [
+                75726321,
+                75726349,
+                0,
+                34,
+                144,
+                0
+              ]
+            },
+            "T12_LOAD": {
+              "seq": 10633,
+              "vns": 1500366930,
+              "kind": "T12_LOAD",
+              "data": [
+                6553499,
+                100000000,
+                0,
+                0,
+                0,
+                0
+              ]
+            },
+            "T12_START": {
+              "seq": 10634,
+              "vns": 1500367118,
+              "kind": "T12_START",
+              "data": [
+                6553499,
+                100000000,
+                6553499,
+                1,
+                1,
+                0
+              ]
+            },
+            "TIMG12": {
+              "seq": 10671,
+              "vns": 1504793064,
+              "kind": "TIMG12",
+              "data": [
+                1,
+                1,
+                78499,
+                0,
+                0,
+                0
+              ]
+            },
+            "TIMG12_ACK": {
+              "seq": 10672,
+              "vns": 1504793084,
+              "kind": "TIMG12_ACK",
+              "data": [
+                1,
+                1,
+                1,
+                78499,
+                0,
+                0
+              ]
+            }
+          },
+          "first_significant_negative_rotor": null
+        },
+        "first_20pct": {
+          "anchor": {
+            "seq": 18646,
+            "vns": 2000289012,
+            "kind": "DSHOT",
+            "data": [
+              2000,
+              2,
+              448,
+              0,
+              0,
+              0
+            ]
+          },
+          "rotor_before": {
+            "seq": 18641,
+            "vns": 2000107700,
+            "kind": "ROTOR",
+            "data": [
+              491729,
+              527057,
+              1570,
+              -1070,
+              -500,
+              -45155
+            ]
+          },
+          "sample_age_ns": 181312,
+          "first_events": {
+            "PWM_PAIR": {
+              "seq": 18660,
+              "vns": 2001136444,
+              "kind": "PWM_PAIR",
+              "data": [
+                2,
+                9,
+                15,
+                528171,
+                6307,
+                0
+              ]
+            },
+            "CMP_FILTER": {
+              "seq": 18647,
+              "vns": 2000804900,
+              "kind": "CMP_FILTER",
+              "data": [
+                0,
+                1,
+                2049,
+                2048,
+                0,
+                0
+              ]
+            },
+            "CAP1": {
+              "seq": 18648,
+              "vns": 2000804900,
+              "kind": "CAP1",
+              "data": [
+                175085755,
+                0,
+                3,
+                34,
+                0,
+                0
+              ]
+            },
+            "CAP1_ACK": {
+              "seq": 18649,
+              "vns": 2000804936,
+              "kind": "CAP1_ACK",
+              "data": [
+                2,
+                3,
+                175085755,
+                34,
+                0,
+                0
+              ]
+            },
+            "ECAP1_CAP1_READ": {
+              "seq": 18650,
+              "vns": 2000805040,
+              "kind": "ECAP1_CAP1_READ",
+              "data": [
+                175085755,
+                175085783,
+                0,
+                34,
+                144,
+                0
+              ]
+            },
+            "T12_LOAD": {
+              "seq": 18651,
+              "vns": 2000805876,
+              "kind": "T12_LOAD",
+              "data": [
+                24299,
+                100000000,
+                0,
+                0,
+                0,
+                0
+              ]
+            },
+            "T12_START": {
+              "seq": 18652,
+              "vns": 2000806064,
+              "kind": "T12_START",
+              "data": [
+                24299,
+                100000000,
+                24299,
+                1,
+                1,
+                0
+              ]
+            },
+            "TIMG12": {
+              "seq": 18653,
+              "vns": 2001049064,
+              "kind": "TIMG12",
+              "data": [
+                1,
+                1,
+                24299,
+                0,
+                0,
+                0
+              ]
+            },
+            "TIMG12_ACK": {
+              "seq": 18654,
+              "vns": 2001049084,
+              "kind": "TIMG12_ACK",
+              "data": [
+                1,
+                1,
+                1,
+                24299,
+                0,
+                0
+              ]
+            }
+          },
+          "first_significant_negative_rotor": null
+        }
+      },
+      "dshot_first_mismatch": null,
+      "dshot_max_dispatch_error_ns": 2,
+      "artifact_hashes": {
+        "events": {
+          "sha256": "572a595799273cf72c7a50610b86822594747e004eb24619643001a3d2235757",
+          "bytes": 5006829
+        },
+        "evidence": {
+          "sha256": "74b7bf2f9008a87354558432ecb7b1d05e99a89f885a64105ce9280dd9293fb2",
+          "bytes": 15205
+        },
+        "qemu_log": {
+          "sha256": "614904f1d5e56679637804e57d5e49769a28bc6102b5d7abe74326db0c7cd5bc",
+          "bytes": 5097442
+        },
+        "strict": {
+          "sha256": "ba30b30e3f5586d1c1d2c5781a6d3e50e5583023b46a9e34d8d8a68256946581",
+          "bytes": 3778
+        }
+      }
+    },
+    {
+      "artifacts": {
+        "events": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-02/e62-filter-source-ramp20_100ms.p0.events.log",
+        "evidence": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-02/e62-filter-source-ramp20_100ms.json",
+        "qemu_log": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-02/e62-filter-source-ramp20_100ms.qemu.log",
+        "strict": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-02/e62-filter-source-ramp20_100ms.strict-original-p1.json"
+      },
+      "case": "ramp20_100ms",
+      "counts": {
+        "source_guest_cap1_w1c_ack": 1905,
+        "source_guest_closed_loop_pwm_pairs": 1906,
+        "source_guest_timg12_w1c_ack": 1905
+      },
+      "guest_elf_sha256": "5b90b200429333cef82b982b7a7f845f31fb885c7ea63fc7e783c75232fac8d1",
+      "hardware_qualified": false,
+      "motor_reversals": 0,
+      "non_sha_closed_loop_pass": true,
+      "non_sha_failures": [],
+      "original_p1_qualified": false,
+      "original_sha_guard_held": true,
+      "peak_abs_rpm": 884.604,
+      "probe_exit_code": 0,
+      "source_scenario_sha256": "f2688ee5fbcc13fc2cc10f6277456e2d20d896c7bc9d68c36e603d2e29c032ca",
+      "source_sha256": "3ea4e672c0770db10c936531e7b3420b09473b18",
+      "source_stress_events": 0,
+      "source_stress_proven": true,
+      "source_switching_noise_events": 0,
+      "speed_signs": [
+        1
+      ],
+      "status": "PASS_EXPERIMENTAL_ONLY",
+      "stress": "off",
+      "strict_p1_exit_code": 1,
+      "group": "group-02",
+      "startup_source_observations": {
+        "first_positive": {
+          "anchor": {
+            "seq": 10654,
+            "vns": 1505026872,
+            "kind": "DSHOT",
+            "data": [
+              1505,
+              1,
+              68,
+              0,
+              0,
+              0
+            ]
+          },
+          "rotor_before": {
+            "seq": 10649,
+            "vns": 1504237952,
+            "kind": "ROTOR",
+            "data": [
+              0,
+              -524,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "sample_age_ns": 788920,
+          "first_events": {
+            "PWM_PAIR": {
+              "seq": 10663,
+              "vns": 1505310180,
+              "kind": "PWM_PAIR",
+              "data": [
+                8,
+                24,
+                15,
+                -524,
+                301,
+                0
+              ]
+            },
+            "CMP_FILTER": {
+              "seq": 10761,
+              "vns": 1521086172,
+              "kind": "CMP_FILTER",
+              "data": [
+                0,
+                1,
+                2049,
+                2048,
+                0,
+                0
+              ]
+            },
+            "CAP1": {
+              "seq": 10762,
+              "vns": 1521086172,
+              "kind": "CAP1",
+              "data": [
+                78187154,
+                0,
+                3,
+                34,
+                0,
+                0
+              ]
+            },
+            "CAP1_ACK": {
+              "seq": 10763,
+              "vns": 1521086208,
+              "kind": "CAP1_ACK",
+              "data": [
+                2,
+                3,
+                78187154,
+                34,
+                0,
+                0
+              ]
+            },
+            "ECAP1_CAP1_READ": {
+              "seq": 10764,
+              "vns": 1521086312,
+              "kind": "ECAP1_CAP1_READ",
+              "data": [
+                78187154,
+                78187182,
+                0,
+                34,
+                144,
+                0
+              ]
+            },
+            "T12_LOAD": {
+              "seq": 10656,
+              "vns": 1505142204,
+              "kind": "T12_LOAD",
+              "data": [
+                6553499,
+                100000000,
+                0,
+                0,
+                0,
+                0
+              ]
+            },
+            "T12_START": {
+              "seq": 10657,
+              "vns": 1505142392,
+              "kind": "T12_START",
+              "data": [
+                6553499,
+                100000000,
+                6553499,
+                1,
+                1,
+                0
+              ]
+            },
+            "TIMG12": {
+              "seq": 10780,
+              "vns": 1522641360,
+              "kind": "TIMG12",
+              "data": [
+                1,
+                1,
+                155399,
+                0,
+                0,
+                0
+              ]
+            },
+            "TIMG12_ACK": {
+              "seq": 10781,
+              "vns": 1522641380,
+              "kind": "TIMG12_ACK",
+              "data": [
+                1,
+                1,
+                1,
+                155399,
+                0,
+                0
+              ]
+            }
+          },
+          "first_significant_negative_rotor": null
+        },
+        "first_20pct": {
+          "anchor": {
+            "seq": 11849,
+            "vns": 1600026872,
+            "kind": "DSHOT",
+            "data": [
+              1600,
+              2,
+              448,
+              0,
+              0,
+              0
+            ]
+          },
+          "rotor_before": {
+            "seq": 11835,
+            "vns": 1599341644,
+            "kind": "ROTOR",
+            "data": [
+              729875,
+              65516,
+              0,
+              4567,
+              -4567,
+              265783
+            ]
+          },
+          "sample_age_ns": 685228,
+          "first_events": {
+            "PWM_PAIR": {
+              "seq": 11864,
+              "vns": 1600495720,
+              "kind": "PWM_PAIR",
+              "data": [
+                7,
+                18,
+                15,
+                67375,
+                1443,
+                0
+              ]
+            },
+            "CMP_FILTER": {
+              "seq": 11851,
+              "vns": 1600289044,
+              "kind": "CMP_FILTER",
+              "data": [
+                2,
+                1,
+                2049,
+                2048,
+                0,
+                0
+              ]
+            },
+            "CAP1": {
+              "seq": 11852,
+              "vns": 1600289044,
+              "kind": "CAP1",
+              "data": [
+                94027703,
+                2,
+                3,
+                34,
+                0,
+                0
+              ]
+            },
+            "CAP1_ACK": {
+              "seq": 11853,
+              "vns": 1600289080,
+              "kind": "CAP1_ACK",
+              "data": [
+                2,
+                3,
+                94027703,
+                34,
+                0,
+                0
+              ]
+            },
+            "ECAP1_CAP1_READ": {
+              "seq": 11854,
+              "vns": 1600289184,
+              "kind": "ECAP1_CAP1_READ",
+              "data": [
+                94027703,
+                94027731,
+                0,
+                34,
+                144,
+                0
+              ]
+            },
+            "T12_LOAD": {
+              "seq": 11855,
+              "vns": 1600290020,
+              "kind": "T12_LOAD",
+              "data": [
+                16499,
+                100000000,
+                0,
+                0,
+                0,
+                0
+              ]
+            },
+            "T12_START": {
+              "seq": 11856,
+              "vns": 1600290208,
+              "kind": "T12_START",
+              "data": [
+                16499,
+                100000000,
+                16499,
+                1,
+                1,
+                0
+              ]
+            },
+            "TIMG12": {
+              "seq": 11862,
+              "vns": 1600455208,
+              "kind": "TIMG12",
+              "data": [
+                1,
+                1,
+                16499,
+                0,
+                0,
+                0
+              ]
+            },
+            "TIMG12_ACK": {
+              "seq": 11863,
+              "vns": 1600455228,
+              "kind": "TIMG12_ACK",
+              "data": [
+                1,
+                1,
+                1,
+                16499,
+                0,
+                0
+              ]
+            }
+          },
+          "first_significant_negative_rotor": null
+        }
+      },
+      "dshot_first_mismatch": null,
+      "dshot_max_dispatch_error_ns": 0,
+      "artifact_hashes": {
+        "events": {
+          "sha256": "2993eeba0b18e5cec0f04aa8aa8a6f2b1ebcd5469c8b5b64ddf567491c925490",
+          "bytes": 3847086
+        },
+        "evidence": {
+          "sha256": "9d0a32468cfa12f0a61c8c3da3a672fae8c02a3168d8165ef7b498f74ad89388",
+          "bytes": 15084
+        },
+        "qemu_log": {
+          "sha256": "076fe5bf1d0823d38ed6a3dbd7d35bb17f029fa69c64b2be068fedd935ee1b1b",
+          "bytes": 3948930
+        },
+        "strict": {
+          "sha256": "a0e80bd3aea2f4ad66ecb142205c8e26396db0c0b0bf92893c3ec663293e0d6e",
+          "bytes": 3467
+        }
+      }
+    },
+    {
+      "artifacts": {
+        "events": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-02/e62-filter-source-ramp20_500ms.p0.events.log",
+        "evidence": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-02/e62-filter-source-ramp20_500ms.json",
+        "qemu_log": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-02/e62-filter-source-ramp20_500ms.qemu.log",
+        "strict": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-02/e62-filter-source-ramp20_500ms.strict-original-p1.json"
+      },
+      "case": "ramp20_500ms",
+      "counts": {
+        "source_guest_cap1_w1c_ack": 2327,
+        "source_guest_closed_loop_pwm_pairs": 2328,
+        "source_guest_timg12_w1c_ack": 2327
+      },
+      "guest_elf_sha256": "5b90b200429333cef82b982b7a7f845f31fb885c7ea63fc7e783c75232fac8d1",
+      "hardware_qualified": false,
+      "motor_reversals": 0,
+      "non_sha_closed_loop_pass": true,
+      "non_sha_failures": [],
+      "original_p1_qualified": false,
+      "original_sha_guard_held": true,
+      "peak_abs_rpm": 883.467,
+      "probe_exit_code": 0,
+      "source_scenario_sha256": "b760302b95efd990260b6b26a90dc201ff4784b57ab7f4add96943bf0ff1b875",
+      "source_sha256": "3ea4e672c0770db10c936531e7b3420b09473b18",
+      "source_stress_events": 0,
+      "source_stress_proven": true,
+      "source_switching_noise_events": 0,
+      "speed_signs": [
+        1
+      ],
+      "status": "PASS_EXPERIMENTAL_ONLY",
+      "stress": "off",
+      "strict_p1_exit_code": 1,
+      "group": "group-02",
+      "startup_source_observations": {
+        "first_positive": {
+          "anchor": {
+            "seq": 10666,
+            "vns": 1505289012,
+            "kind": "DSHOT",
+            "data": [
+              1505,
+              1,
+              52,
+              0,
+              0,
+              0
+            ]
+          },
+          "rotor_before": {
+            "seq": 10661,
+            "vns": 1505253724,
+            "kind": "ROTOR",
+            "data": [
+              0,
+              -524,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "sample_age_ns": 35288,
+          "first_events": {
+            "PWM_PAIR": {
+              "seq": 10670,
+              "vns": 1505560460,
+              "kind": "PWM_PAIR",
+              "data": [
+                8,
+                24,
+                15,
+                -524,
+                301,
+                0
+              ]
+            },
+            "CMP_FILTER": {
+              "seq": 10810,
+              "vns": 1525614000,
+              "kind": "CMP_FILTER",
+              "data": [
+                0,
+                1,
+                2049,
+                2048,
+                0,
+                0
+              ]
+            },
+            "CAP1": {
+              "seq": 10811,
+              "vns": 1525614000,
+              "kind": "CAP1",
+              "data": [
+                79042633,
+                0,
+                3,
+                34,
+                0,
+                0
+              ]
+            },
+            "CAP1_ACK": {
+              "seq": 10812,
+              "vns": 1525614036,
+              "kind": "CAP1_ACK",
+              "data": [
+                2,
+                3,
+                79042633,
+                34,
+                0,
+                0
+              ]
+            },
+            "ECAP1_CAP1_READ": {
+              "seq": 10813,
+              "vns": 1525614140,
+              "kind": "ECAP1_CAP1_READ",
+              "data": [
+                79042633,
+                79042661,
+                0,
+                34,
+                144,
+                0
+              ]
+            },
+            "T12_LOAD": {
+              "seq": 10668,
+              "vns": 1505392468,
+              "kind": "T12_LOAD",
+              "data": [
+                6553499,
+                100000000,
+                0,
+                0,
+                0,
+                0
+              ]
+            },
+            "T12_START": {
+              "seq": 10669,
+              "vns": 1505392656,
+              "kind": "T12_START",
+              "data": [
+                6553499,
+                100000000,
+                6553499,
+                1,
+                1,
+                0
+              ]
+            },
+            "TIMG12": {
+              "seq": 10831,
+              "vns": 1527436188,
+              "kind": "TIMG12",
+              "data": [
+                1,
+                1,
+                182099,
+                0,
+                0,
+                0
+              ]
+            },
+            "TIMG12_ACK": {
+              "seq": 10832,
+              "vns": 1527436208,
+              "kind": "TIMG12_ACK",
+              "data": [
+                1,
+                1,
+                1,
+                182099,
+                0,
+                0
+              ]
+            }
+          },
+          "first_significant_negative_rotor": null
+        },
+        "first_20pct": {
+          "anchor": {
+            "seq": 18457,
+            "vns": 2000289012,
+            "kind": "DSHOT",
+            "data": [
+              2000,
+              2,
+              448,
+              0,
+              0,
+              0
+            ]
+          },
+          "rotor_before": {
+            "seq": 18452,
+            "vns": 1999990452,
+            "kind": "ROTOR",
+            "data": [
+              858176,
+              505225,
+              0,
+              1953,
+              -1953,
+              106611
+            ]
+          },
+          "sample_age_ns": 298560,
+          "first_events": {
+            "PWM_PAIR": {
+              "seq": 18466,
+              "vns": 2000442428,
+              "kind": "PWM_PAIR",
+              "data": [
+                4,
+                6,
+                15,
+                506079,
+                6343,
+                0
+              ]
+            },
+            "CMP_FILTER": {
+              "seq": 18458,
+              "vns": 2000290652,
+              "kind": "CMP_FILTER",
+              "data": [
+                0,
+                0,
+                2048,
+                2048,
+                0,
+                0
+              ]
+            },
+            "CAP1": {
+              "seq": 18459,
+              "vns": 2000290652,
+              "kind": "CAP1",
+              "data": [
+                173977803,
+                0,
+                3,
+                34,
+                0,
+                0
+              ]
+            },
+            "CAP1_ACK": {
+              "seq": 18460,
+              "vns": 2000290688,
+              "kind": "CAP1_ACK",
+              "data": [
+                2,
+                3,
+                173977803,
+                34,
+                0,
+                0
+              ]
+            },
+            "ECAP1_CAP1_READ": {
+              "seq": 18461,
+              "vns": 2000290792,
+              "kind": "ECAP1_CAP1_READ",
+              "data": [
+                173977803,
+                173977831,
+                0,
+                34,
+                144,
+                0
+              ]
+            },
+            "T12_LOAD": {
+              "seq": 18462,
+              "vns": 2000291628,
+              "kind": "T12_LOAD",
+              "data": [
+                13799,
+                100000000,
+                0,
+                0,
+                0,
+                0
+              ]
+            },
+            "T12_START": {
+              "seq": 18463,
+              "vns": 2000291816,
+              "kind": "T12_START",
+              "data": [
+                13799,
+                100000000,
+                13799,
+                1,
+                1,
+                0
+              ]
+            },
+            "TIMG12": {
+              "seq": 18464,
+              "vns": 2000429816,
+              "kind": "TIMG12",
+              "data": [
+                1,
+                1,
+                13799,
+                0,
+                0,
+                0
+              ]
+            },
+            "TIMG12_ACK": {
+              "seq": 18465,
+              "vns": 2000429836,
+              "kind": "TIMG12_ACK",
+              "data": [
+                1,
+                1,
+                1,
+                13799,
+                0,
+                0
+              ]
+            }
+          },
+          "first_significant_negative_rotor": null
+        }
+      },
+      "dshot_first_mismatch": null,
+      "dshot_max_dispatch_error_ns": 2,
+      "artifact_hashes": {
+        "events": {
+          "sha256": "8099d63669213377cd7af4b51374f660ec6dbac7a64ab6b1dd15c81195a12d25",
+          "bytes": 4549943
+        },
+        "evidence": {
+          "sha256": "914d02717ecbf9fdc3b292bb0946d6f66e6ff131b954a755d70720f9555c484b",
+          "bytes": 15090
+        },
+        "qemu_log": {
+          "sha256": "3a75faab2c70382bc535c4e334a914af972ddf5a97bf5ccb3219297794807fda",
+          "bytes": 4634192
+        },
+        "strict": {
+          "sha256": "522aae77ae95f9dc3ea101554702f48a811d7b7d552b9574127a882a8f3ebd30",
+          "bytes": 3470
+        }
+      }
+    },
+    {
+      "artifacts": {
+        "events": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-03/e62-filter-source-direct20.p0.events.log",
+        "evidence": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-03/e62-filter-source-direct20.json",
+        "qemu_log": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-03/e62-filter-source-direct20.qemu.log",
+        "strict": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-03/e62-filter-source-direct20.strict-original-p1.json"
+      },
+      "case": "direct20",
+      "counts": {
+        "source_guest_cap1_w1c_ack": 2742,
+        "source_guest_closed_loop_pwm_pairs": 2743,
+        "source_guest_timg12_w1c_ack": 2742
+      },
+      "guest_elf_sha256": "5b90b200429333cef82b982b7a7f845f31fb885c7ea63fc7e783c75232fac8d1",
+      "hardware_qualified": false,
+      "motor_reversals": 0,
+      "non_sha_closed_loop_pass": false,
+      "non_sha_failures": [
+        "DSHOT_VIRTUAL_CLOCK_OR_VALUE_MISMATCH"
+      ],
+      "original_p1_qualified": false,
+      "original_sha_guard_held": true,
+      "peak_abs_rpm": 884.821,
+      "probe_exit_code": 0,
+      "source_scenario_sha256": "bebbdadbf3d209ec13758be197add552f8c263ddc26229c96ba0afe4bbb7da92",
+      "source_sha256": "3ea4e672c0770db10c936531e7b3420b09473b18",
+      "source_stress_events": 36,
+      "source_stress_proven": true,
+      "source_switching_noise_events": 36,
+      "speed_signs": [
+        1
+      ],
+      "status": "FAIL_EXPERIMENT",
+      "stress": "0:16",
+      "strict_p1_exit_code": 1,
+      "group": "group-03",
+      "startup_source_observations": {
+        "first_positive": {
+          "anchor": {
+            "seq": 10630,
+            "vns": 1500551148,
+            "kind": "DSHOT",
+            "data": [
+              1500,
+              1,
+              448,
+              0,
+              0,
+              0
+            ]
+          },
+          "rotor_before": {
+            "seq": 10625,
+            "vns": 1500238088,
+            "kind": "ROTOR",
+            "data": [
+              0,
+              -524,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "sample_age_ns": 313060,
+          "first_events": {
+            "PWM_PAIR": {
+              "seq": 10634,
+              "vns": 1500810180,
+              "kind": "PWM_PAIR",
+              "data": [
+                8,
+                24,
+                15,
+                -524,
+                301,
+                0
+              ]
+            },
+            "CMP_FILTER": {
+              "seq": 10655,
+              "vns": 1503835288,
+              "kind": "CMP_FILTER",
+              "data": [
+                0,
+                1,
+                2049,
+                2048,
+                0,
+                0
+              ]
+            },
+            "CAP1": {
+              "seq": 10656,
+              "vns": 1503835288,
+              "kind": "CAP1",
+              "data": [
+                75636974,
+                0,
+                3,
+                34,
+                0,
+                0
+              ]
+            },
+            "CAP1_ACK": {
+              "seq": 10657,
+              "vns": 1503835324,
+              "kind": "CAP1_ACK",
+              "data": [
+                2,
+                3,
+                75636974,
+                34,
+                0,
+                0
+              ]
+            },
+            "ECAP1_CAP1_READ": {
+              "seq": 10658,
+              "vns": 1503835428,
+              "kind": "ECAP1_CAP1_READ",
+              "data": [
+                75636974,
+                75637002,
+                0,
+                34,
+                144,
+                0
+              ]
+            },
+            "T12_LOAD": {
+              "seq": 10632,
+              "vns": 1500642204,
+              "kind": "T12_LOAD",
+              "data": [
+                6553499,
+                100000000,
+                0,
+                0,
+                0,
+                0
+              ]
+            },
+            "T12_START": {
+              "seq": 10633,
+              "vns": 1500642392,
+              "kind": "T12_START",
+              "data": [
+                6553499,
+                100000000,
+                6553499,
+                1,
+                1,
+                0
+              ]
+            },
+            "TIMG12": {
+              "seq": 10668,
+              "vns": 1504593452,
+              "kind": "TIMG12",
+              "data": [
+                1,
+                1,
+                75699,
+                0,
+                0,
+                0
+              ]
+            },
+            "TIMG12_ACK": {
+              "seq": 10670,
+              "vns": 1504595308,
+              "kind": "TIMG12_ACK",
+              "data": [
+                1,
+                1,
+                1,
+                75699,
+                0,
+                0
+              ]
+            }
+          },
+          "first_significant_negative_rotor": null
+        },
+        "first_20pct": {
+          "anchor": {
+            "seq": 10630,
+            "vns": 1500551148,
+            "kind": "DSHOT",
+            "data": [
+              1500,
+              1,
+              448,
+              0,
+              0,
+              0
+            ]
+          },
+          "rotor_before": {
+            "seq": 10625,
+            "vns": 1500238088,
+            "kind": "ROTOR",
+            "data": [
+              0,
+              -524,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "sample_age_ns": 313060,
+          "first_events": {
+            "PWM_PAIR": {
+              "seq": 10634,
+              "vns": 1500810180,
+              "kind": "PWM_PAIR",
+              "data": [
+                8,
+                24,
+                15,
+                -524,
+                301,
+                0
+              ]
+            },
+            "CMP_FILTER": {
+              "seq": 10655,
+              "vns": 1503835288,
+              "kind": "CMP_FILTER",
+              "data": [
+                0,
+                1,
+                2049,
+                2048,
+                0,
+                0
+              ]
+            },
+            "CAP1": {
+              "seq": 10656,
+              "vns": 1503835288,
+              "kind": "CAP1",
+              "data": [
+                75636974,
+                0,
+                3,
+                34,
+                0,
+                0
+              ]
+            },
+            "CAP1_ACK": {
+              "seq": 10657,
+              "vns": 1503835324,
+              "kind": "CAP1_ACK",
+              "data": [
+                2,
+                3,
+                75636974,
+                34,
+                0,
+                0
+              ]
+            },
+            "ECAP1_CAP1_READ": {
+              "seq": 10658,
+              "vns": 1503835428,
+              "kind": "ECAP1_CAP1_READ",
+              "data": [
+                75636974,
+                75637002,
+                0,
+                34,
+                144,
+                0
+              ]
+            },
+            "T12_LOAD": {
+              "seq": 10632,
+              "vns": 1500642204,
+              "kind": "T12_LOAD",
+              "data": [
+                6553499,
+                100000000,
+                0,
+                0,
+                0,
+                0
+              ]
+            },
+            "T12_START": {
+              "seq": 10633,
+              "vns": 1500642392,
+              "kind": "T12_START",
+              "data": [
+                6553499,
+                100000000,
+                6553499,
+                1,
+                1,
+                0
+              ]
+            },
+            "TIMG12": {
+              "seq": 10668,
+              "vns": 1504593452,
+              "kind": "TIMG12",
+              "data": [
+                1,
+                1,
+                75699,
+                0,
+                0,
+                0
+              ]
+            },
+            "TIMG12_ACK": {
+              "seq": 10670,
+              "vns": 1504595308,
+              "kind": "TIMG12_ACK",
+              "data": [
+                1,
+                1,
+                1,
+                75699,
+                0,
+                0
+              ]
+            }
+          },
+          "first_significant_negative_rotor": null
+        }
+      },
+      "dshot_first_mismatch": {
+        "expected_deadline_virtual_ns": 549551148,
+        "expected_dshot_value": 0,
+        "expected_stage": 0,
+        "frame_index": 549,
+        "observed_dshot_value": 0,
+        "observed_stage": 0,
+        "observed_virtual_ns": 549551492,
+        "reason": "SOURCE_VIRTUAL_CLOCK"
+      },
+      "dshot_max_dispatch_error_ns": 344,
+      "artifact_hashes": {
+        "events": {
+          "sha256": "91aba2745442d67bb73862c0d4e1a1dcf4cab296f4ebb9135981af5c0dbf17c2",
+          "bytes": 5015348
+        },
+        "evidence": {
+          "sha256": "a933b851a9fa02eaa828c0823a75f4083aa907dfc08ec3329b26696c1976cba1",
+          "bytes": 14995
+        },
+        "qemu_log": {
+          "sha256": "9d63adbe1463a385f2f1993b348d226bab85a3be8351118b093750015479141c",
+          "bytes": 5135947
+        },
+        "strict": {
+          "sha256": "6d731722b91dfa080397287c7b3de95eb4a22d0c4ac3462c30e40dc1a9795ff3",
+          "bytes": 3474
+        }
+      }
+    },
+    {
+      "artifacts": {
+        "events": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-03/e62-filter-source-gentle.p0.events.log",
+        "evidence": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-03/e62-filter-source-gentle.json",
+        "qemu_log": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-03/e62-filter-source-gentle.qemu.log",
+        "strict": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-03/e62-filter-source-gentle.strict-original-p1.json"
+      },
+      "case": "gentle",
+      "counts": {
+        "source_guest_cap1_w1c_ack": 2255,
+        "source_guest_closed_loop_pwm_pairs": 2256,
+        "source_guest_timg12_w1c_ack": 2255
+      },
+      "guest_elf_sha256": "5b90b200429333cef82b982b7a7f845f31fb885c7ea63fc7e783c75232fac8d1",
+      "hardware_qualified": false,
+      "motor_reversals": 0,
+      "non_sha_closed_loop_pass": true,
+      "non_sha_failures": [],
+      "original_p1_qualified": false,
+      "original_sha_guard_held": true,
+      "peak_abs_rpm": 493.505,
+      "probe_exit_code": 0,
+      "source_scenario_sha256": "2531e1b3432e1cfd9e717bd1a3682d2c7bad0f394878b1403674809782020d28",
+      "source_sha256": "3ea4e672c0770db10c936531e7b3420b09473b18",
+      "source_stress_events": 36,
+      "source_stress_proven": true,
+      "source_switching_noise_events": 36,
+      "speed_signs": [
+        1
+      ],
+      "status": "PASS_EXPERIMENTAL_ONLY",
+      "stress": "0:16",
+      "strict_p1_exit_code": 1,
+      "group": "group-03",
+      "startup_source_observations": {
+        "first_positive": {
+          "anchor": {
+            "seq": 10763,
+            "vns": 1520000100,
+            "kind": "DSHOT",
+            "data": [
+              1520,
+              1,
+              50,
+              0,
+              0,
+              0
+            ]
+          },
+          "rotor_before": {
+            "seq": 10758,
+            "vns": 1519236188,
+            "kind": "ROTOR",
+            "data": [
+              0,
+              -524,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "sample_age_ns": 763912,
+          "first_events": {
+            "PWM_PAIR": {
+              "seq": 10772,
+              "vns": 1520247680,
+              "kind": "PWM_PAIR",
+              "data": [
+                8,
+                24,
+                15,
+                -524,
+                301,
+                0
+              ]
+            },
+            "CMP_FILTER": {
+              "seq": 10940,
+              "vns": 1544305408,
+              "kind": "CMP_FILTER",
+              "data": [
+                0,
+                1,
+                2049,
+                2048,
+                0,
+                0
+              ]
+            },
+            "CAP1": {
+              "seq": 10941,
+              "vns": 1544305408,
+              "kind": "CAP1",
+              "data": [
+                79843494,
+                0,
+                3,
+                34,
+                0,
+                0
+              ]
+            },
+            "CAP1_ACK": {
+              "seq": 10942,
+              "vns": 1544305444,
+              "kind": "CAP1_ACK",
+              "data": [
+                2,
+                3,
+                79843494,
+                34,
+                0,
+                0
+              ]
+            },
+            "ECAP1_CAP1_READ": {
+              "seq": 10943,
+              "vns": 1544305548,
+              "kind": "ECAP1_CAP1_READ",
+              "data": [
+                79843494,
+                79843522,
+                0,
+                34,
+                144,
+                0
+              ]
+            },
+            "T12_LOAD": {
+              "seq": 10765,
+              "vns": 1520079704,
+              "kind": "T12_LOAD",
+              "data": [
+                6553499,
+                100000000,
+                0,
+                0,
+                0,
+                0
+              ]
+            },
+            "T12_START": {
+              "seq": 10766,
+              "vns": 1520079892,
+              "kind": "T12_START",
+              "data": [
+                6553499,
+                100000000,
+                6553499,
+                1,
+                1,
+                0
+              ]
+            },
+            "TIMG12": {
+              "seq": 10961,
+              "vns": 1546377828,
+              "kind": "TIMG12",
+              "data": [
+                1,
+                1,
+                207099,
+                0,
+                0,
+                0
+              ]
+            },
+            "TIMG12_ACK": {
+              "seq": 10962,
+              "vns": 1546377848,
+              "kind": "TIMG12_ACK",
+              "data": [
+                1,
+                1,
+                1,
+                207099,
+                0,
+                0
+              ]
+            }
+          },
+          "first_significant_negative_rotor": null
+        },
+        "first_20pct": null
+      },
+      "dshot_first_mismatch": null,
+      "dshot_max_dispatch_error_ns": 2,
+      "artifact_hashes": {
+        "events": {
+          "sha256": "2dbe05e592cfe9143267e3e88dd8e9e9957613806b790dc0857f2ea9af3a8298",
+          "bytes": 5832875
+        },
+        "evidence": {
+          "sha256": "93710bad53bfe96d204ff07a3c1db4fd81ae17ab961eb88aab0dd722e79ed279",
+          "bytes": 15097
+        },
+        "qemu_log": {
+          "sha256": "7433ee18aabec02bb32b5619d803a9bc0a3ccdd943c5174cb929c3b988ce0134",
+          "bytes": 5991354
+        },
+        "strict": {
+          "sha256": "5ee0fc0998f0cac5e3eda1037384064620d247d53ac0cf47146ee0640c324647",
+          "bytes": 3470
+        }
+      }
+    },
+    {
+      "artifacts": {
+        "events": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-04/e62-filter-source-direct20.p0.events.log",
+        "evidence": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-04/e62-filter-source-direct20.json",
+        "qemu_log": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-04/e62-filter-source-direct20.qemu.log",
+        "strict": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-04/e62-filter-source-direct20.strict-original-p1.json"
+      },
+      "case": "direct20",
+      "counts": {
+        "source_guest_cap1_w1c_ack": 232,
+        "source_guest_closed_loop_pwm_pairs": 233,
+        "source_guest_timg12_w1c_ack": 232
+      },
+      "guest_elf_sha256": "5b90b200429333cef82b982b7a7f845f31fb885c7ea63fc7e783c75232fac8d1",
+      "hardware_qualified": false,
+      "motor_reversals": 233,
+      "non_sha_closed_loop_pass": false,
+      "non_sha_failures": [
+        "STARTUP_SIGNIFICANT_DIRECTION_REVERSAL"
+      ],
+      "original_p1_qualified": false,
+      "original_sha_guard_held": true,
+      "peak_abs_rpm": 443.508,
+      "probe_exit_code": 0,
+      "source_scenario_sha256": "bebbdadbf3d209ec13758be197add552f8c263ddc26229c96ba0afe4bbb7da92",
+      "source_sha256": "3ea4e672c0770db10c936531e7b3420b09473b18",
+      "source_stress_events": 3,
+      "source_stress_proven": true,
+      "source_switching_noise_events": 0,
+      "speed_signs": [
+        -1,
+        1
+      ],
+      "status": "FAIL_EXPERIMENT",
+      "stress": "16:0",
+      "strict_p1_exit_code": 1,
+      "group": "group-04",
+      "startup_source_observations": {
+        "first_positive": {
+          "anchor": {
+            "seq": 10630,
+            "vns": 1501075420,
+            "kind": "DSHOT",
+            "data": [
+              1500,
+              1,
+              448,
+              0,
+              0,
+              0
+            ]
+          },
+          "rotor_before": {
+            "seq": 10625,
+            "vns": 1500241612,
+            "kind": "ROTOR",
+            "data": [
+              0,
+              -524,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "sample_age_ns": 833808,
+          "first_events": {
+            "PWM_PAIR": {
+              "seq": 10639,
+              "vns": 1501372684,
+              "kind": "PWM_PAIR",
+              "data": [
+                8,
+                24,
+                15,
+                -524,
+                302,
+                0
+              ]
+            },
+            "CMP_FILTER": {
+              "seq": 10709,
+              "vns": 1511722812,
+              "kind": "CMP_FILTER",
+              "data": [
+                0,
+                0,
+                2048,
+                2048,
+                0,
+                0
+              ]
+            },
+            "CAP1": {
+              "seq": 10732,
+              "vns": 1514378812,
+              "kind": "CAP1",
+              "data": [
+                77633156,
+                0,
+                3,
+                34,
+                0,
+                0
+              ]
+            },
+            "CAP1_ACK": {
+              "seq": 10733,
+              "vns": 1514378848,
+              "kind": "CAP1_ACK",
+              "data": [
+                2,
+                3,
+                77633156,
+                34,
+                0,
+                0
+              ]
+            },
+            "ECAP1_CAP1_READ": {
+              "seq": 10734,
+              "vns": 1514378952,
+              "kind": "ECAP1_CAP1_READ",
+              "data": [
+                77633156,
+                77633184,
+                0,
+                34,
+                144,
+                0
+              ]
+            },
+            "T12_LOAD": {
+              "seq": 10632,
+              "vns": 1501204704,
+              "kind": "T12_LOAD",
+              "data": [
+                6553499,
+                100000000,
+                0,
+                0,
+                0,
+                0
+              ]
+            },
+            "T12_START": {
+              "seq": 10633,
+              "vns": 1501204892,
+              "kind": "T12_START",
+              "data": [
+                6553499,
+                100000000,
+                6553499,
+                1,
+                1,
+                0
+              ]
+            },
+            "TIMG12": {
+              "seq": 10745,
+              "vns": 1515760000,
+              "kind": "TIMG12",
+              "data": [
+                1,
+                1,
+                137999,
+                0,
+                0,
+                0
+              ]
+            },
+            "TIMG12_ACK": {
+              "seq": 10746,
+              "vns": 1515760020,
+              "kind": "TIMG12_ACK",
+              "data": [
+                1,
+                1,
+                1,
+                137999,
+                0,
+                0
+              ]
+            }
+          },
+          "first_significant_negative_rotor": {
+            "seq": 10697,
+            "vns": 1510241612,
+            "kind": "ROTOR",
+            "data": [
+              -75406,
+              2789,
+              0,
+              -27704,
+              27704,
+              -1687415
+            ]
+          }
+        },
+        "first_20pct": {
+          "anchor": {
+            "seq": 10630,
+            "vns": 1501075420,
+            "kind": "DSHOT",
+            "data": [
+              1500,
+              1,
+              448,
+              0,
+              0,
+              0
+            ]
+          },
+          "rotor_before": {
+            "seq": 10625,
+            "vns": 1500241612,
+            "kind": "ROTOR",
+            "data": [
+              0,
+              -524,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "sample_age_ns": 833808,
+          "first_events": {
+            "PWM_PAIR": {
+              "seq": 10639,
+              "vns": 1501372684,
+              "kind": "PWM_PAIR",
+              "data": [
+                8,
+                24,
+                15,
+                -524,
+                302,
+                0
+              ]
+            },
+            "CMP_FILTER": {
+              "seq": 10709,
+              "vns": 1511722812,
+              "kind": "CMP_FILTER",
+              "data": [
+                0,
+                0,
+                2048,
+                2048,
+                0,
+                0
+              ]
+            },
+            "CAP1": {
+              "seq": 10732,
+              "vns": 1514378812,
+              "kind": "CAP1",
+              "data": [
+                77633156,
+                0,
+                3,
+                34,
+                0,
+                0
+              ]
+            },
+            "CAP1_ACK": {
+              "seq": 10733,
+              "vns": 1514378848,
+              "kind": "CAP1_ACK",
+              "data": [
+                2,
+                3,
+                77633156,
+                34,
+                0,
+                0
+              ]
+            },
+            "ECAP1_CAP1_READ": {
+              "seq": 10734,
+              "vns": 1514378952,
+              "kind": "ECAP1_CAP1_READ",
+              "data": [
+                77633156,
+                77633184,
+                0,
+                34,
+                144,
+                0
+              ]
+            },
+            "T12_LOAD": {
+              "seq": 10632,
+              "vns": 1501204704,
+              "kind": "T12_LOAD",
+              "data": [
+                6553499,
+                100000000,
+                0,
+                0,
+                0,
+                0
+              ]
+            },
+            "T12_START": {
+              "seq": 10633,
+              "vns": 1501204892,
+              "kind": "T12_START",
+              "data": [
+                6553499,
+                100000000,
+                6553499,
+                1,
+                1,
+                0
+              ]
+            },
+            "TIMG12": {
+              "seq": 10745,
+              "vns": 1515760000,
+              "kind": "TIMG12",
+              "data": [
+                1,
+                1,
+                137999,
+                0,
+                0,
+                0
+              ]
+            },
+            "TIMG12_ACK": {
+              "seq": 10746,
+              "vns": 1515760020,
+              "kind": "TIMG12_ACK",
+              "data": [
+                1,
+                1,
+                1,
+                137999,
+                0,
+                0
+              ]
+            }
+          },
+          "first_significant_negative_rotor": {
+            "seq": 10697,
+            "vns": 1510241612,
+            "kind": "ROTOR",
+            "data": [
+              -75406,
+              2789,
+              0,
+              -27704,
+              27704,
+              -1687415
+            ]
+          }
+        }
+      },
+      "dshot_first_mismatch": null,
+      "dshot_max_dispatch_error_ns": 0,
+      "artifact_hashes": {
+        "events": {
+          "sha256": "a43b2d7b2a0df07783d9fd7c17d7a162bb0a9aa82f06aa1e4c630b69cd800f9b",
+          "bytes": 2678964
+        },
+        "evidence": {
+          "sha256": "24042c39d13856d26a0674892305d3d3ee122a37940fd7e6275105a2036cb84b",
+          "bytes": 14988
+        },
+        "qemu_log": {
+          "sha256": "2ea0a9ebd503b51a89c89ae88d84c6f82a170a36bce486a1381e44cdeb83ddad",
+          "bytes": 2809052
+        },
+        "strict": {
+          "sha256": "0c57b34278affbe9198988676fd5a9526cd6bd854a50fa837de3d6aa9cdb94c7",
+          "bytes": 4927
+        }
+      }
+    },
+    {
+      "artifacts": {
+        "events": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-04/e62-filter-source-steps.p0.events.log",
+        "evidence": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-04/e62-filter-source-steps.json",
+        "qemu_log": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-04/e62-filter-source-steps.qemu.log",
+        "strict": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-04/e62-filter-source-steps.strict-original-p1.json"
+      },
+      "case": "steps",
+      "counts": {
+        "source_guest_cap1_w1c_ack": 226,
+        "source_guest_closed_loop_pwm_pairs": 227,
+        "source_guest_timg12_w1c_ack": 226
+      },
+      "guest_elf_sha256": "5b90b200429333cef82b982b7a7f845f31fb885c7ea63fc7e783c75232fac8d1",
+      "hardware_qualified": false,
+      "motor_reversals": 227,
+      "non_sha_closed_loop_pass": false,
+      "non_sha_failures": [
+        "STARTUP_SIGNIFICANT_DIRECTION_REVERSAL"
+      ],
+      "original_p1_qualified": false,
+      "original_sha_guard_held": true,
+      "peak_abs_rpm": 586.049,
+      "probe_exit_code": 0,
+      "source_scenario_sha256": "d7b4798b271205314ebd90e5ba4ae06e0c8723c9c5a2e909669fec04b59c41b2",
+      "source_sha256": "3ea4e672c0770db10c936531e7b3420b09473b18",
+      "source_stress_events": 3,
+      "source_stress_proven": true,
+      "source_switching_noise_events": 0,
+      "speed_signs": [
+        -1,
+        1
+      ],
+      "status": "FAIL_EXPERIMENT",
+      "stress": "16:0",
+      "strict_p1_exit_code": 1,
+      "group": "group-04",
+      "startup_source_observations": {
+        "first_positive": {
+          "anchor": {
+            "seq": 10624,
+            "vns": 1500000100,
+            "kind": "DSHOT",
+            "data": [
+              1500,
+              1,
+              248,
+              0,
+              0,
+              0
+            ]
+          },
+          "rotor_before": {
+            "seq": 10619,
+            "vns": 1499237376,
+            "kind": "ROTOR",
+            "data": [
+              0,
+              -524,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "sample_age_ns": 762724,
+          "first_events": {
+            "PWM_PAIR": {
+              "seq": 10633,
+              "vns": 1500247200,
+              "kind": "PWM_PAIR",
+              "data": [
+                8,
+                24,
+                15,
+                -524,
+                301,
+                0
+              ]
+            },
+            "CMP_FILTER": {
+              "seq": 10720,
+              "vns": 1513182172,
+              "kind": "CMP_FILTER",
+              "data": [
+                0,
+                0,
+                2048,
+                2048,
+                0,
+                0
+              ]
+            },
+            "CAP1": {
+              "seq": 10740,
+              "vns": 1515384580,
+              "kind": "CAP1",
+              "data": [
+                78059424,
+                0,
+                3,
+                34,
+                0,
+                0
+              ]
+            },
+            "CAP1_ACK": {
+              "seq": 10741,
+              "vns": 1515384616,
+              "kind": "CAP1_ACK",
+              "data": [
+                2,
+                3,
+                78059424,
+                34,
+                0,
+                0
+              ]
+            },
+            "ECAP1_CAP1_READ": {
+              "seq": 10742,
+              "vns": 1515384720,
+              "kind": "ECAP1_CAP1_READ",
+              "data": [
+                78059424,
+                78059452,
+                0,
+                34,
+                144,
+                0
+              ]
+            },
+            "T12_LOAD": {
+              "seq": 10626,
+              "vns": 1500079222,
+              "kind": "T12_LOAD",
+              "data": [
+                6553499,
+                100000000,
+                0,
+                0,
+                0,
+                0
+              ]
+            },
+            "T12_START": {
+              "seq": 10627,
+              "vns": 1500079410,
+              "kind": "T12_START",
+              "data": [
+                6553499,
+                100000000,
+                6553499,
+                1,
+                1,
+                0
+              ]
+            },
+            "TIMG12": {
+              "seq": 10753,
+              "vns": 1516899768,
+              "kind": "TIMG12",
+              "data": [
+                1,
+                1,
+                151399,
+                0,
+                0,
+                0
+              ]
+            },
+            "TIMG12_ACK": {
+              "seq": 10754,
+              "vns": 1516899788,
+              "kind": "TIMG12_ACK",
+              "data": [
+                1,
+                1,
+                1,
+                151399,
+                0,
+                0
+              ]
+            }
+          },
+          "first_significant_negative_rotor": {
+            "seq": 10706,
+            "vns": 1511237380,
+            "kind": "ROTOR",
+            "data": [
+              -85176,
+              2623,
+              0,
+              -14800,
+              14800,
+              -834187
+            ]
+          }
+        },
+        "first_20pct": {
+          "anchor": {
+            "seq": 14602,
+            "vns": 2000000100,
+            "kind": "DSHOT",
+            "data": [
+              2000,
+              2,
+              448,
+              0,
+              0,
+              0
+            ]
+          },
+          "rotor_before": {
+            "seq": 14597,
+            "vns": 1999356664,
+            "kind": "ROTOR",
+            "data": [
+              -188536,
+              56046,
+              -17712,
+              17578,
+              134,
+              -16622
+            ]
+          },
+          "sample_age_ns": 643436,
+          "first_events": {
+            "PWM_PAIR": {
+              "seq": 14631,
+              "vns": 2002921424,
+              "kind": "PWM_PAIR",
+              "data": [
+                7,
+                18,
+                15,
+                55408,
+                6328,
+                0
+              ]
+            },
+            "CMP_FILTER": {
+              "seq": 14609,
+              "vns": 2000414864,
+              "kind": "CMP_FILTER",
+              "data": [
+                2,
+                1,
+                2049,
+                2048,
+                0,
+                0
+              ]
+            },
+            "CAP1": {
+              "seq": 14610,
+              "vns": 2000414864,
+              "kind": "CAP1",
+              "data": [
+                175065464,
+                2,
+                3,
+                34,
+                0,
+                0
+              ]
+            },
+            "CAP1_ACK": {
+              "seq": 14611,
+              "vns": 2000414900,
+              "kind": "CAP1_ACK",
+              "data": [
+                2,
+                3,
+                175065464,
+                34,
+                0,
+                0
+              ]
+            },
+            "ECAP1_CAP1_READ": {
+              "seq": 14612,
+              "vns": 2000415004,
+              "kind": "ECAP1_CAP1_READ",
+              "data": [
+                175065464,
+                175065492,
+                0,
+                34,
+                144,
+                0
+              ]
+            },
+            "T12_LOAD": {
+              "seq": 14613,
+              "vns": 2000415840,
+              "kind": "T12_LOAD",
+              "data": [
+                243099,
+                100000000,
+                0,
+                0,
+                0,
+                0
+              ]
+            },
+            "T12_START": {
+              "seq": 14614,
+              "vns": 2000416028,
+              "kind": "T12_START",
+              "data": [
+                243099,
+                100000000,
+                243099,
+                1,
+                1,
+                0
+              ]
+            },
+            "TIMG12": {
+              "seq": 14629,
+              "vns": 2002847028,
+              "kind": "TIMG12",
+              "data": [
+                1,
+                1,
+                243099,
+                0,
+                0,
+                0
+              ]
+            },
+            "TIMG12_ACK": {
+              "seq": 14630,
+              "vns": 2002847048,
+              "kind": "TIMG12_ACK",
+              "data": [
+                1,
+                1,
+                1,
+                243099,
+                0,
+                0
+              ]
+            }
+          },
+          "first_significant_negative_rotor": {
+            "seq": 14604,
+            "vns": 2000356664,
+            "kind": "ROTOR",
+            "data": [
+              -169714,
+              55644,
+              -25432,
+              25369,
+              63,
+              615325
+            ]
+          }
+        }
+      },
+      "dshot_first_mismatch": null,
+      "dshot_max_dispatch_error_ns": 0,
+      "artifact_hashes": {
+        "events": {
+          "sha256": "fb7b76ae24660edadba1b376258b59a77a6ddac3bf4bef6440e30e1ae3a43dfc",
+          "bytes": 2669206
+        },
+        "evidence": {
+          "sha256": "e81fe9f6bd777104747cc61616fd1196e8259dba233bd336e001938e4a45368b",
+          "bytes": 15246
+        },
+        "qemu_log": {
+          "sha256": "5c856a2831553b560985c7b79e7e214fb7c6a8615aba491693458e482036de48",
+          "bytes": 2784491
+        },
+        "strict": {
+          "sha256": "8656837006e6112f46ed4833429476c16c3873c838e72ba456a80bcd3eca38cc",
+          "bytes": 5525
+        }
+      }
+    },
+    {
+      "artifacts": {
+        "events": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-05/e62-filter-source-direct20.p0.events.log",
+        "evidence": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-05/e62-filter-source-direct20.json",
+        "qemu_log": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-05/e62-filter-source-direct20.qemu.log",
+        "strict": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-05/e62-filter-source-direct20.strict-original-p1.json"
+      },
+      "case": "direct20",
+      "counts": {
+        "source_guest_cap1_w1c_ack": 234,
+        "source_guest_closed_loop_pwm_pairs": 235,
+        "source_guest_timg12_w1c_ack": 234
+      },
+      "guest_elf_sha256": "5b90b200429333cef82b982b7a7f845f31fb885c7ea63fc7e783c75232fac8d1",
+      "hardware_qualified": false,
+      "motor_reversals": 234,
+      "non_sha_closed_loop_pass": false,
+      "non_sha_failures": [
+        "STARTUP_SIGNIFICANT_DIRECTION_REVERSAL"
+      ],
+      "original_p1_qualified": false,
+      "original_sha_guard_held": true,
+      "peak_abs_rpm": 422.531,
+      "probe_exit_code": 0,
+      "source_scenario_sha256": "bebbdadbf3d209ec13758be197add552f8c263ddc26229c96ba0afe4bbb7da92",
+      "source_sha256": "3ea4e672c0770db10c936531e7b3420b09473b18",
+      "source_stress_events": 3,
+      "source_stress_proven": true,
+      "source_switching_noise_events": 0,
+      "speed_signs": [
+        -1,
+        1
+      ],
+      "status": "FAIL_EXPERIMENT",
+      "stress": "-16:0",
+      "strict_p1_exit_code": 1,
+      "group": "group-05",
+      "startup_source_observations": {
+        "first_positive": {
+          "anchor": {
+            "seq": 10623,
+            "vns": 1500000100,
+            "kind": "DSHOT",
+            "data": [
+              1500,
+              1,
+              448,
+              0,
+              0,
+              0
+            ]
+          },
+          "rotor_before": {
+            "seq": 10618,
+            "vns": 1499239760,
+            "kind": "ROTOR",
+            "data": [
+              0,
+              -524,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "sample_age_ns": 760340,
+          "first_events": {
+            "PWM_PAIR": {
+              "seq": 10632,
+              "vns": 1500247680,
+              "kind": "PWM_PAIR",
+              "data": [
+                8,
+                24,
+                15,
+                -524,
+                301,
+                0
+              ]
+            },
+            "CMP_FILTER": {
+              "seq": 10661,
+              "vns": 1504335960,
+              "kind": "CMP_FILTER",
+              "data": [
+                0,
+                1,
+                2049,
+                2048,
+                0,
+                0
+              ]
+            },
+            "CAP1": {
+              "seq": 10662,
+              "vns": 1504335960,
+              "kind": "CAP1",
+              "data": [
+                75849604,
+                0,
+                3,
+                34,
+                0,
+                0
+              ]
+            },
+            "CAP1_ACK": {
+              "seq": 10663,
+              "vns": 1504335996,
+              "kind": "CAP1_ACK",
+              "data": [
+                2,
+                3,
+                75849604,
+                34,
+                0,
+                0
+              ]
+            },
+            "ECAP1_CAP1_READ": {
+              "seq": 10664,
+              "vns": 1504336100,
+              "kind": "ECAP1_CAP1_READ",
+              "data": [
+                75849604,
+                75849632,
+                0,
+                34,
+                144,
+                0
+              ]
+            },
+            "T12_LOAD": {
+              "seq": 10625,
+              "vns": 1500079704,
+              "kind": "T12_LOAD",
+              "data": [
+                6553499,
+                100000000,
+                0,
+                0,
+                0,
+                0
+              ]
+            },
+            "T12_START": {
+              "seq": 10626,
+              "vns": 1500079892,
+              "kind": "T12_START",
+              "data": [
+                6553499,
+                100000000,
+                6553499,
+                1,
+                1,
+                0
+              ]
+            },
+            "TIMG12": {
+              "seq": 10670,
+              "vns": 1505160124,
+              "kind": "TIMG12",
+              "data": [
+                1,
+                1,
+                82299,
+                0,
+                0,
+                0
+              ]
+            },
+            "TIMG12_ACK": {
+              "seq": 10671,
+              "vns": 1505160144,
+              "kind": "TIMG12_ACK",
+              "data": [
+                1,
+                1,
+                1,
+                82299,
+                0,
+                0
+              ]
+            }
+          },
+          "first_significant_negative_rotor": {
+            "seq": 10708,
+            "vns": 1510241960,
+            "kind": "ROTOR",
+            "data": [
+              -51303,
+              4006,
+              27018,
+              -27018,
+              0,
+              -1724223
+            ]
+          }
+        },
+        "first_20pct": {
+          "anchor": {
+            "seq": 10623,
+            "vns": 1500000100,
+            "kind": "DSHOT",
+            "data": [
+              1500,
+              1,
+              448,
+              0,
+              0,
+              0
+            ]
+          },
+          "rotor_before": {
+            "seq": 10618,
+            "vns": 1499239760,
+            "kind": "ROTOR",
+            "data": [
+              0,
+              -524,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "sample_age_ns": 760340,
+          "first_events": {
+            "PWM_PAIR": {
+              "seq": 10632,
+              "vns": 1500247680,
+              "kind": "PWM_PAIR",
+              "data": [
+                8,
+                24,
+                15,
+                -524,
+                301,
+                0
+              ]
+            },
+            "CMP_FILTER": {
+              "seq": 10661,
+              "vns": 1504335960,
+              "kind": "CMP_FILTER",
+              "data": [
+                0,
+                1,
+                2049,
+                2048,
+                0,
+                0
+              ]
+            },
+            "CAP1": {
+              "seq": 10662,
+              "vns": 1504335960,
+              "kind": "CAP1",
+              "data": [
+                75849604,
+                0,
+                3,
+                34,
+                0,
+                0
+              ]
+            },
+            "CAP1_ACK": {
+              "seq": 10663,
+              "vns": 1504335996,
+              "kind": "CAP1_ACK",
+              "data": [
+                2,
+                3,
+                75849604,
+                34,
+                0,
+                0
+              ]
+            },
+            "ECAP1_CAP1_READ": {
+              "seq": 10664,
+              "vns": 1504336100,
+              "kind": "ECAP1_CAP1_READ",
+              "data": [
+                75849604,
+                75849632,
+                0,
+                34,
+                144,
+                0
+              ]
+            },
+            "T12_LOAD": {
+              "seq": 10625,
+              "vns": 1500079704,
+              "kind": "T12_LOAD",
+              "data": [
+                6553499,
+                100000000,
+                0,
+                0,
+                0,
+                0
+              ]
+            },
+            "T12_START": {
+              "seq": 10626,
+              "vns": 1500079892,
+              "kind": "T12_START",
+              "data": [
+                6553499,
+                100000000,
+                6553499,
+                1,
+                1,
+                0
+              ]
+            },
+            "TIMG12": {
+              "seq": 10670,
+              "vns": 1505160124,
+              "kind": "TIMG12",
+              "data": [
+                1,
+                1,
+                82299,
+                0,
+                0,
+                0
+              ]
+            },
+            "TIMG12_ACK": {
+              "seq": 10671,
+              "vns": 1505160144,
+              "kind": "TIMG12_ACK",
+              "data": [
+                1,
+                1,
+                1,
+                82299,
+                0,
+                0
+              ]
+            }
+          },
+          "first_significant_negative_rotor": {
+            "seq": 10708,
+            "vns": 1510241960,
+            "kind": "ROTOR",
+            "data": [
+              -51303,
+              4006,
+              27018,
+              -27018,
+              0,
+              -1724223
+            ]
+          }
+        }
+      },
+      "dshot_first_mismatch": null,
+      "dshot_max_dispatch_error_ns": 0,
+      "artifact_hashes": {
+        "events": {
+          "sha256": "4ced02e476b1b21357027a198cb4ac489a5dc1277f53e0e3445ee3766c902f4f",
+          "bytes": 2678998
+        },
+        "evidence": {
+          "sha256": "7a8bdd03bf87cbdc985e3ed5af57a66fce5bb277ab114318e5b3affa7c1699e8",
+          "bytes": 14994
+        },
+        "qemu_log": {
+          "sha256": "75010985f37ca1d617c1f7e0cd8cd40fd690c869f2d0abf6a8353b07e727d058",
+          "bytes": 2802465
+        },
+        "strict": {
+          "sha256": "70d313cf8cdcabce0e056cf073ea03ee9947d914bb75841fa01f2310ff9ac1c0",
+          "bytes": 4922
+        }
+      }
+    },
+    {
+      "artifacts": {
+        "events": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-05/e62-filter-source-ramp20_100ms.p0.events.log",
+        "evidence": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-05/e62-filter-source-ramp20_100ms.json",
+        "qemu_log": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-05/e62-filter-source-ramp20_100ms.qemu.log",
+        "strict": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-05/e62-filter-source-ramp20_100ms.strict-original-p1.json"
+      },
+      "case": "ramp20_100ms",
+      "counts": {
+        "source_guest_cap1_w1c_ack": 0,
+        "source_guest_closed_loop_pwm_pairs": 1,
+        "source_guest_timg12_w1c_ack": 0
+      },
+      "guest_elf_sha256": "5b90b200429333cef82b982b7a7f845f31fb885c7ea63fc7e783c75232fac8d1",
+      "hardware_qualified": false,
+      "motor_reversals": 43,
+      "non_sha_closed_loop_pass": false,
+      "non_sha_failures": [
+        "STARTUP_SIGNIFICANT_DIRECTION_REVERSAL",
+        "INSUFFICIENT_ORIGINAL_GUEST_CLOSED_LOOP_AFTER_ARM",
+        "NO_ORIGINAL_BEMF_COMPARATOR_FILTER_TRANSITIONS"
+      ],
+      "original_p1_qualified": false,
+      "original_sha_guard_held": true,
+      "peak_abs_rpm": 99.587,
+      "probe_exit_code": 0,
+      "source_scenario_sha256": "f2688ee5fbcc13fc2cc10f6277456e2d20d896c7bc9d68c36e603d2e29c032ca",
+      "source_sha256": "3ea4e672c0770db10c936531e7b3420b09473b18",
+      "source_stress_events": 3,
+      "source_stress_proven": true,
+      "source_switching_noise_events": 0,
+      "speed_signs": [
+        -1,
+        1
+      ],
+      "status": "FAIL_EXPERIMENT",
+      "stress": "-16:0",
+      "strict_p1_exit_code": 1,
+      "group": "group-05",
+      "startup_source_observations": {
+        "first_positive": {
+          "anchor": {
+            "seq": 10664,
+            "vns": 1505551148,
+            "kind": "DSHOT",
+            "data": [
+              1505,
+              1,
+              68,
+              0,
+              0,
+              0
+            ]
+          },
+          "rotor_before": {
+            "seq": 10659,
+            "vns": 1505236108,
+            "kind": "ROTOR",
+            "data": [
+              0,
+              -524,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "sample_age_ns": 315040,
+          "first_events": {
+            "PWM_PAIR": {
+              "seq": 10668,
+              "vns": 1505810180,
+              "kind": "PWM_PAIR",
+              "data": [
+                8,
+                24,
+                15,
+                -524,
+                301,
+                0
+              ]
+            },
+            "CMP_FILTER": null,
+            "CAP1": null,
+            "CAP1_ACK": null,
+            "ECAP1_CAP1_READ": null,
+            "T12_LOAD": {
+              "seq": 10666,
+              "vns": 1505642204,
+              "kind": "T12_LOAD",
+              "data": [
+                6553499,
+                100000000,
+                0,
+                0,
+                0,
+                0
+              ]
+            },
+            "T12_START": {
+              "seq": 10667,
+              "vns": 1505642392,
+              "kind": "T12_START",
+              "data": [
+                6553499,
+                100000000,
+                6553499,
+                1,
+                1,
+                0
+              ]
+            },
+            "TIMG12": null,
+            "TIMG12_ACK": null
+          },
+          "first_significant_negative_rotor": {
+            "seq": 10864,
+            "vns": 1534236108,
+            "kind": "ROTOR",
+            "data": [
+              -51060,
+              2161,
+              0,
+              -8810,
+              8810,
+              -318273
+            ]
+          }
+        },
+        "first_20pct": {
+          "anchor": {
+            "seq": 11329,
+            "vns": 1600551148,
+            "kind": "DSHOT",
+            "data": [
+              1600,
+              2,
+              448,
+              0,
+              0,
+              0
+            ]
+          },
+          "rotor_before": {
+            "seq": 11324,
+            "vns": 1600236188,
+            "kind": "ROTOR",
+            "data": [
+              -41676,
+              1857,
+              0,
+              -25658,
+              25658,
+              -470409
+            ]
+          },
+          "sample_age_ns": 314960,
+          "first_events": {
+            "PWM_PAIR": null,
+            "CMP_FILTER": null,
+            "CAP1": null,
+            "CAP1_ACK": null,
+            "ECAP1_CAP1_READ": null,
+            "T12_LOAD": null,
+            "T12_START": null,
+            "TIMG12": null,
+            "TIMG12_ACK": null
+          },
+          "first_significant_negative_rotor": {
+            "seq": 11331,
+            "vns": 1601236188,
+            "kind": "ROTOR",
+            "data": [
+              -70861,
+              1730,
+              0,
+              -25356,
+              25356,
+              -261677
+            ]
+          }
+        }
+      },
+      "dshot_first_mismatch": null,
+      "dshot_max_dispatch_error_ns": 0,
+      "artifact_hashes": {
+        "events": {
+          "sha256": "6339e93009abdbb950b4c24cbbcbd9e465c829abf6a73c2b2ca796aa2353ce2f",
+          "bytes": 2053815
+        },
+        "evidence": {
+          "sha256": "8a79959a6bdfc21bda94f8b18a2ebd1d47351105464c2b8d72a26c1e830536c9",
+          "bytes": 15107
+        },
+        "qemu_log": {
+          "sha256": "8ac781ca17c3e73b56d5f47611bf4a471f69164b0d453ca425e1da759b423901",
+          "bytes": 2148663
+        },
+        "strict": {
+          "sha256": "98950d1dd0dbdde71565e4c84bc03aa0c97ea7bb482d5d7a9c7a954f33fde91a",
+          "bytes": 5309
+        }
+      }
+    },
+    {
+      "artifacts": {
+        "events": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-06/e62-filter-source-direct20.p0.events.log",
+        "evidence": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-06/e62-filter-source-direct20.json",
+        "qemu_log": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-06/e62-filter-source-direct20.qemu.log",
+        "strict": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-06/e62-filter-source-direct20.strict-original-p1.json"
+      },
+      "case": "direct20",
+      "counts": {
+        "source_guest_cap1_w1c_ack": 232,
+        "source_guest_closed_loop_pwm_pairs": 233,
+        "source_guest_timg12_w1c_ack": 232
+      },
+      "guest_elf_sha256": "5b90b200429333cef82b982b7a7f845f31fb885c7ea63fc7e783c75232fac8d1",
+      "hardware_qualified": false,
+      "motor_reversals": 233,
+      "non_sha_closed_loop_pass": false,
+      "non_sha_failures": [
+        "STARTUP_SIGNIFICANT_DIRECTION_REVERSAL"
+      ],
+      "original_p1_qualified": false,
+      "original_sha_guard_held": true,
+      "peak_abs_rpm": 443.636,
+      "probe_exit_code": 0,
+      "source_scenario_sha256": "bebbdadbf3d209ec13758be197add552f8c263ddc26229c96ba0afe4bbb7da92",
+      "source_sha256": "3ea4e672c0770db10c936531e7b3420b09473b18",
+      "source_stress_events": 36,
+      "source_stress_proven": true,
+      "source_switching_noise_events": 36,
+      "speed_signs": [
+        -1,
+        1
+      ],
+      "status": "FAIL_EXPERIMENT",
+      "stress": "16:20",
+      "strict_p1_exit_code": 1,
+      "group": "group-06",
+      "startup_source_observations": {
+        "first_positive": {
+          "anchor": {
+            "seq": 10624,
+            "vns": 1500000100,
+            "kind": "DSHOT",
+            "data": [
+              1500,
+              1,
+              448,
+              0,
+              0,
+              0
+            ]
+          },
+          "rotor_before": {
+            "seq": 10619,
+            "vns": 1499236616,
+            "kind": "ROTOR",
+            "data": [
+              0,
+              -524,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "sample_age_ns": 763484,
+          "first_events": {
+            "PWM_PAIR": {
+              "seq": 10633,
+              "vns": 1500247680,
+              "kind": "PWM_PAIR",
+              "data": [
+                8,
+                24,
+                15,
+                -524,
+                301,
+                0
+              ]
+            },
+            "CMP_FILTER": {
+              "seq": 10704,
+              "vns": 1510585908,
+              "kind": "CMP_FILTER",
+              "data": [
+                0,
+                0,
+                2048,
+                2048,
+                0,
+                0
+              ]
+            },
+            "CAP1": {
+              "seq": 10727,
+              "vns": 1513238816,
+              "kind": "CAP1",
+              "data": [
+                77630176,
+                0,
+                3,
+                34,
+                0,
+                0
+              ]
+            },
+            "CAP1_ACK": {
+              "seq": 10728,
+              "vns": 1513238852,
+              "kind": "CAP1_ACK",
+              "data": [
+                2,
+                3,
+                77630176,
+                34,
+                0,
+                0
+              ]
+            },
+            "ECAP1_CAP1_READ": {
+              "seq": 10729,
+              "vns": 1513238956,
+              "kind": "ECAP1_CAP1_READ",
+              "data": [
+                77630176,
+                77630204,
+                0,
+                34,
+                144,
+                0
+              ]
+            },
+            "T12_LOAD": {
+              "seq": 10626,
+              "vns": 1500079704,
+              "kind": "T12_LOAD",
+              "data": [
+                6553499,
+                100000000,
+                0,
+                0,
+                0,
+                0
+              ]
+            },
+            "T12_START": {
+              "seq": 10627,
+              "vns": 1500079892,
+              "kind": "T12_START",
+              "data": [
+                6553499,
+                100000000,
+                6553499,
+                1,
+                1,
+                0
+              ]
+            },
+            "TIMG12": {
+              "seq": 10739,
+              "vns": 1514619004,
+              "kind": "TIMG12",
+              "data": [
+                1,
+                1,
+                137899,
+                0,
+                0,
+                0
+              ]
+            },
+            "TIMG12_ACK": {
+              "seq": 10740,
+              "vns": 1514619024,
+              "kind": "TIMG12_ACK",
+              "data": [
+                1,
+                1,
+                1,
+                137899,
+                0,
+                0
+              ]
+            }
+          },
+          "first_significant_negative_rotor": {
+            "seq": 10692,
+            "vns": 1509236616,
+            "kind": "ROTOR",
+            "data": [
+              -91224,
+              2765,
+              0,
+              -24422,
+              24422,
+              -1473774
+            ]
+          }
+        },
+        "first_20pct": {
+          "anchor": {
+            "seq": 10624,
+            "vns": 1500000100,
+            "kind": "DSHOT",
+            "data": [
+              1500,
+              1,
+              448,
+              0,
+              0,
+              0
+            ]
+          },
+          "rotor_before": {
+            "seq": 10619,
+            "vns": 1499236616,
+            "kind": "ROTOR",
+            "data": [
+              0,
+              -524,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "sample_age_ns": 763484,
+          "first_events": {
+            "PWM_PAIR": {
+              "seq": 10633,
+              "vns": 1500247680,
+              "kind": "PWM_PAIR",
+              "data": [
+                8,
+                24,
+                15,
+                -524,
+                301,
+                0
+              ]
+            },
+            "CMP_FILTER": {
+              "seq": 10704,
+              "vns": 1510585908,
+              "kind": "CMP_FILTER",
+              "data": [
+                0,
+                0,
+                2048,
+                2048,
+                0,
+                0
+              ]
+            },
+            "CAP1": {
+              "seq": 10727,
+              "vns": 1513238816,
+              "kind": "CAP1",
+              "data": [
+                77630176,
+                0,
+                3,
+                34,
+                0,
+                0
+              ]
+            },
+            "CAP1_ACK": {
+              "seq": 10728,
+              "vns": 1513238852,
+              "kind": "CAP1_ACK",
+              "data": [
+                2,
+                3,
+                77630176,
+                34,
+                0,
+                0
+              ]
+            },
+            "ECAP1_CAP1_READ": {
+              "seq": 10729,
+              "vns": 1513238956,
+              "kind": "ECAP1_CAP1_READ",
+              "data": [
+                77630176,
+                77630204,
+                0,
+                34,
+                144,
+                0
+              ]
+            },
+            "T12_LOAD": {
+              "seq": 10626,
+              "vns": 1500079704,
+              "kind": "T12_LOAD",
+              "data": [
+                6553499,
+                100000000,
+                0,
+                0,
+                0,
+                0
+              ]
+            },
+            "T12_START": {
+              "seq": 10627,
+              "vns": 1500079892,
+              "kind": "T12_START",
+              "data": [
+                6553499,
+                100000000,
+                6553499,
+                1,
+                1,
+                0
+              ]
+            },
+            "TIMG12": {
+              "seq": 10739,
+              "vns": 1514619004,
+              "kind": "TIMG12",
+              "data": [
+                1,
+                1,
+                137899,
+                0,
+                0,
+                0
+              ]
+            },
+            "TIMG12_ACK": {
+              "seq": 10740,
+              "vns": 1514619024,
+              "kind": "TIMG12_ACK",
+              "data": [
+                1,
+                1,
+                1,
+                137899,
+                0,
+                0
+              ]
+            }
+          },
+          "first_significant_negative_rotor": {
+            "seq": 10692,
+            "vns": 1509236616,
+            "kind": "ROTOR",
+            "data": [
+              -91224,
+              2765,
+              0,
+              -24422,
+              24422,
+              -1473774
+            ]
+          }
+        }
+      },
+      "dshot_first_mismatch": null,
+      "dshot_max_dispatch_error_ns": 0,
+      "artifact_hashes": {
+        "events": {
+          "sha256": "f905cd9e737835f588dca0ebaad1fd4304ac5def535757377df84d06da01dae3",
+          "bytes": 2679931
+        },
+        "evidence": {
+          "sha256": "ab8dc4b1cc9fe2ea4665832d39a6f27b50693cd55e2c7b1412c4d9613bcebdbb",
+          "bytes": 14993
+        },
+        "qemu_log": {
+          "sha256": "04989db569fb3e501338dad058a5079974b882d58189f886c65a1c6c874ffcb8",
+          "bytes": 2798910
+        },
+        "strict": {
+          "sha256": "efa71ad4f03e9b52c6ea10e8b9bf95957a89846ae73480e19dbcf0aea8aa4df2",
+          "bytes": 4923
+        }
+      }
+    },
+    {
+      "artifacts": {
+        "events": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-06/e62-filter-source-ramp20_500ms.p0.events.log",
+        "evidence": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-06/e62-filter-source-ramp20_500ms.json",
+        "qemu_log": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-06/e62-filter-source-ramp20_500ms.qemu.log",
+        "strict": "/workspace/escape32-qemu/artifacts/issue3-exact/qualification-executed-v1/group-06/e62-filter-source-ramp20_500ms.strict-original-p1.json"
+      },
+      "case": "ramp20_500ms",
+      "counts": {
+        "source_guest_cap1_w1c_ack": 0,
+        "source_guest_closed_loop_pwm_pairs": 1,
+        "source_guest_timg12_w1c_ack": 0
+      },
+      "guest_elf_sha256": "5b90b200429333cef82b982b7a7f845f31fb885c7ea63fc7e783c75232fac8d1",
+      "hardware_qualified": false,
+      "motor_reversals": 0,
+      "non_sha_closed_loop_pass": false,
+      "non_sha_failures": [
+        "INSUFFICIENT_ORIGINAL_GUEST_CLOSED_LOOP_AFTER_ARM",
+        "NO_ORIGINAL_BEMF_COMPARATOR_FILTER_TRANSITIONS"
+      ],
+      "original_p1_qualified": false,
+      "original_sha_guard_held": true,
+      "peak_abs_rpm": 56.385,
+      "probe_exit_code": 0,
+      "source_scenario_sha256": "b760302b95efd990260b6b26a90dc201ff4784b57ab7f4add96943bf0ff1b875",
+      "source_sha256": "3ea4e672c0770db10c936531e7b3420b09473b18",
+      "source_stress_events": 36,
+      "source_stress_proven": true,
+      "source_switching_noise_events": 36,
+      "speed_signs": [
+        1
+      ],
+      "status": "FAIL_EXPERIMENT",
+      "stress": "16:20",
+      "strict_p1_exit_code": 1,
+      "group": "group-06",
+      "startup_source_observations": {
+        "first_positive": {
+          "anchor": {
+            "seq": 10666,
+            "vns": 1505289012,
+            "kind": "DSHOT",
+            "data": [
+              1505,
+              1,
+              52,
+              0,
+              0,
+              0
+            ]
+          },
+          "rotor_before": {
+            "seq": 10661,
+            "vns": 1505254848,
+            "kind": "ROTOR",
+            "data": [
+              0,
+              -524,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "sample_age_ns": 34164,
+          "first_events": {
+            "PWM_PAIR": {
+              "seq": 10670,
+              "vns": 1505560460,
+              "kind": "PWM_PAIR",
+              "data": [
+                8,
+                24,
+                15,
+                -524,
+                301,
+                0
+              ]
+            },
+            "CMP_FILTER": null,
+            "CAP1": null,
+            "CAP1_ACK": null,
+            "ECAP1_CAP1_READ": null,
+            "T12_LOAD": {
+              "seq": 10668,
+              "vns": 1505392468,
+              "kind": "T12_LOAD",
+              "data": [
+                6553499,
+                100000000,
+                0,
+                0,
+                0,
+                0
+              ]
+            },
+            "T12_START": {
+              "seq": 10669,
+              "vns": 1505392656,
+              "kind": "T12_START",
+              "data": [
+                6553499,
+                100000000,
+                6553499,
+                1,
+                1,
+                0
+              ]
+            },
+            "TIMG12": null,
+            "TIMG12_ACK": null
+          },
+          "first_significant_negative_rotor": null
+        },
+        "first_20pct": {
+          "anchor": {
+            "seq": 14115,
+            "vns": 2000289012,
+            "kind": "DSHOT",
+            "data": [
+              2000,
+              2,
+              448,
+              0,
+              0,
+              0
+            ]
+          },
+          "rotor_before": {
+            "seq": 14110,
+            "vns": 2000255592,
+            "kind": "ROTOR",
+            "data": [
+              -32162,
+              1582,
+              0,
+              -29260,
+              29260,
+              -21090
+            ]
+          },
+          "sample_age_ns": 33420,
+          "first_events": {
+            "PWM_PAIR": null,
+            "CMP_FILTER": null,
+            "CAP1": null,
+            "CAP1_ACK": null,
+            "ECAP1_CAP1_READ": null,
+            "T12_LOAD": null,
+            "T12_START": null,
+            "TIMG12": null,
+            "TIMG12_ACK": null
+          },
+          "first_significant_negative_rotor": null
+        }
+      },
+      "dshot_first_mismatch": null,
+      "dshot_max_dispatch_error_ns": 2,
+      "artifact_hashes": {
+        "events": {
+          "sha256": "e1caabc11060d891644182709139ef98c0733c8443b85663e4c958421233e89b",
+          "bytes": 2355730
+        },
+        "evidence": {
+          "sha256": "94e7459d39a9b083afed125f6d813105c00ce1827616ec55b6396670110fc2da",
+          "bytes": 15117
+        },
+        "qemu_log": {
+          "sha256": "6f9659a7ae1ac90005c457be44e8ba9b36fb9bd6e4c26e9382c8cf195e5ecac0",
+          "bytes": 2468239
+        },
+        "strict": {
+          "sha256": "2f131a11e8a7f54a119a1cab23baa1c410585c28c0713f76ef377de2b60e106a",
+          "bytes": 3564
+        }
+      }
+    }
+  ],
+  "clock_failure_repeat": {
+    "all_non_sha_cases_pass": true,
+    "candidate_sha256": "5b90b200429333cef82b982b7a7f845f31fb885c7ea63fc7e783c75232fac8d1",
+    "cases": [
+      {
+        "artifacts": {
+          "events": "/workspace/escape32-qemu/artifacts/issue3-exact/clock-failure-repeat-v1/e62-filter-source-direct20.p0.events.log",
+          "evidence": "/workspace/escape32-qemu/artifacts/issue3-exact/clock-failure-repeat-v1/e62-filter-source-direct20.json",
+          "qemu_log": "/workspace/escape32-qemu/artifacts/issue3-exact/clock-failure-repeat-v1/e62-filter-source-direct20.qemu.log",
+          "strict": "/workspace/escape32-qemu/artifacts/issue3-exact/clock-failure-repeat-v1/e62-filter-source-direct20.strict-original-p1.json"
+        },
+        "case": "direct20",
+        "counts": {
+          "source_guest_cap1_w1c_ack": 2741,
+          "source_guest_closed_loop_pwm_pairs": 2741,
+          "source_guest_timg12_w1c_ack": 2740
+        },
+        "guest_elf_sha256": "5b90b200429333cef82b982b7a7f845f31fb885c7ea63fc7e783c75232fac8d1",
+        "hardware_qualified": false,
+        "motor_reversals": 0,
+        "non_sha_closed_loop_pass": true,
+        "non_sha_failures": [],
+        "original_p1_qualified": false,
+        "original_sha_guard_held": true,
+        "peak_abs_rpm": 883.741,
+        "probe_exit_code": 0,
+        "source_scenario_sha256": "bebbdadbf3d209ec13758be197add552f8c263ddc26229c96ba0afe4bbb7da92",
+        "source_sha256": "3ea4e672c0770db10c936531e7b3420b09473b18",
+        "source_stress_events": 36,
+        "source_stress_proven": true,
+        "source_switching_noise_events": 36,
+        "speed_signs": [
+          1
+        ],
+        "status": "PASS_EXPERIMENTAL_ONLY",
+        "stress": "0:16",
+        "strict_p1_exit_code": 1
+      }
+    ],
+    "classification": "EXPERIMENTAL_NOT_ORIGINAL_P1_OR_HARDWARE",
+    "formal_original_p1_qualified": false,
+    "hardware_qualified": false,
+    "original_sha256": "05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0",
+    "schema": "e62.source-built.stable-filter.matrix.v1",
+    "source_commit": "3ea4e672c0770db10c936531e7b3420b09473b18",
+    "stress": "0:16",
+    "unmodified_strict_p1_analyzer": true
+  },
+  "original_p1_qualified": false,
+  "hardware_qualified": false,
+  "thresholds_changed": false,
+  "source_sha": "3ea4e672c0770db10c936531e7b3420b09473b18",
+  "qemu_source_sha": "44f28df24767cf9dca1ddc9b23157737c4cbb645",
+  "qemu_sha256": "d5f4f5102469bb6dc4012682f4d7101d01b7c26fe7c3b29cd01a8c685ba7b943",
+  "elf_sha256": "5b90b200429333cef82b982b7a7f845f31fb885c7ea63fc7e783c75232fac8d1",
+  "cfg_sha256": "ab144c4b281ec53feb399b45c758b1de72b2c16f252e6ff64980f263b3a51702",
+  "upload_zip_sha256": "687d2a713f0d037de843e9717a8a82639b68aa0c233f587036486ac933c84139",
+  "historical_artifact_run_id": 40865298408,
+  "historical_artifact_id": 12894011805,
+  "current_execution": "Codex cloud; not a new GitHub Actions run",
+  "runner_commit": "6ab039ad8c583351ec19fb151c8727497d608706"
+}
