@@ -1,0 +1,2046 @@
+{
+  "comparison": {
+    "a": {
+      "data": [
+        530,
+        48,
+        0,
+        0,
+        0,
+        0
+      ],
+      "kind": "WWDT_FEED",
+      "seq": 7409,
+      "vns": 563043228
+    },
+    "b": {
+      "data": [
+        530,
+        48,
+        0,
+        0,
+        0,
+        0
+      ],
+      "kind": "WWDT_FEED",
+      "seq": 7409,
+      "vns": 563043260
+    },
+    "causal_attribution": "NOT_ESTABLISHED",
+    "index": 7408,
+    "status": "SOURCE_DIVERGENCE"
+  },
+  "firmware_source_review": "53953c04f7d857f3b402b3a19870605ed0471d8f",
+  "host_regression_groups_passed": 107,
+  "issue4_qualified": false,
+  "p1_qualified": false,
+  "qemu_repo_base": "3f1ed18e53e115d13b5bad2450d4e315a3d5cea0",
+  "reference_register_contract": "PASS_HOST_REGISTER_NOT_NATIVE_QEMU",
+  "runs": [
+    {
+      "boundaries": [
+        {
+          "clock_before": null,
+          "command_permille": 0,
+          "electrical_displacement_from_first_sample_rad": null,
+          "frame_index": 0,
+          "gate_active": null,
+          "lifecycle": "not_observable",
+          "lifecycle_provenance": "not_observable",
+          "observed_rotor_origin": {
+            "currents_a": [
+              0.301,
+              -0.301,
+              0.0
+            ],
+            "electrical_angle_deg": 329.97701153514487,
+            "electrical_angle_unwrapped_rad": -0.524,
+            "offset_ns": 19235044,
+            "provenance": "source_observed_model_state",
+            "rpm": 0.0,
+            "seq": 78,
+            "torque_nm": 0.0,
+            "vns": 19235144
+          },
+          "pwm_pad_mask": null,
+          "relative_ns": 0,
+          "rotor_after": {
+            "currents_a": [
+              0.301,
+              -0.301,
+              0.0
+            ],
+            "electrical_angle_deg": 329.97701153514487,
+            "electrical_angle_unwrapped_rad": -0.524,
+            "offset_ns": 19235044,
+            "provenance": "source_observed_model_state",
+            "rpm": 0.0,
+            "seq": 78,
+            "torque_nm": 0.0,
+            "vns": 19235144
+          },
+          "rotor_age_ns": null,
+          "rotor_before": null,
+          "rotor_status": "INCOMPLETE",
+          "seq": 1,
+          "stage": 0,
+          "switch_age_ns": null,
+          "switch_before": null,
+          "switch_status": "INCOMPLETE",
+          "vns": 100
+        },
+        {
+          "clock_before": null,
+          "command_permille": 200,
+          "electrical_displacement_from_first_sample_rad": 0.0,
+          "frame_index": 1500,
+          "gate_active": null,
+          "lifecycle": "not_observable",
+          "lifecycle_provenance": "not_observable",
+          "observed_rotor_origin": {
+            "currents_a": [
+              0.301,
+              -0.301,
+              0.0
+            ],
+            "electrical_angle_deg": 329.97701153514487,
+            "electrical_angle_unwrapped_rad": -0.524,
+            "offset_ns": -1480764956,
+            "provenance": "source_observed_model_state",
+            "rpm": 0.0,
+            "seq": 78,
+            "torque_nm": 0.0,
+            "vns": 19235144
+          },
+          "pwm_pad_mask": null,
+          "relative_ns": 1500000000,
+          "rotor_after": {
+            "currents_a": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "electrical_angle_deg": 329.97701153514487,
+            "electrical_angle_unwrapped_rad": -0.524,
+            "offset_ns": 235060,
+            "provenance": "source_observed_model_state",
+            "rpm": 0.0,
+            "seq": 19555,
+            "torque_nm": 0.0,
+            "vns": 1500235160
+          },
+          "rotor_age_ns": 764940,
+          "rotor_before": {
+            "currents_a": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "electrical_angle_deg": 329.97701153514487,
+            "electrical_angle_unwrapped_rad": -0.524,
+            "offset_ns": -764940,
+            "provenance": "source_observed_model_state",
+            "rpm": 0.0,
+            "seq": 19540,
+            "torque_nm": 0.0,
+            "vns": 1499235160
+          },
+          "rotor_status": "OBSERVED",
+          "seq": 19551,
+          "stage": 1,
+          "switch_age_ns": 1363544136,
+          "switch_before": {
+            "data": [
+              10,
+              0,
+              14,
+              118537,
+              0,
+              0
+            ],
+            "kind": "SWITCH",
+            "seq": 1885,
+            "vns": 136455964
+          },
+          "switch_status": "INCOMPLETE",
+          "vns": 1500000100
+        },
+        {
+          "clock_before": null,
+          "command_permille": 0,
+          "electrical_displacement_from_first_sample_rad": 138.513,
+          "frame_index": 3000,
+          "gate_active": null,
+          "lifecycle": "not_observable",
+          "lifecycle_provenance": "not_observable",
+          "observed_rotor_origin": {
+            "currents_a": [
+              0.301,
+              -0.301,
+              0.0
+            ],
+            "electrical_angle_deg": 329.97701153514487,
+            "electrical_angle_unwrapped_rad": -0.524,
+            "offset_ns": -2980764956,
+            "provenance": "source_observed_model_state",
+            "rpm": 0.0,
+            "seq": 78,
+            "torque_nm": 0.0,
+            "vns": 19235144
+          },
+          "pwm_pad_mask": null,
+          "relative_ns": 3000000000,
+          "rotor_after": {
+            "currents_a": [
+              -34.065,
+              1.369,
+              32.696
+            ],
+            "electrical_angle_deg": 17.699997962910857,
+            "electrical_angle_unwrapped_rad": 138.539,
+            "offset_ns": 235088,
+            "provenance": "source_observed_model_state",
+            "rpm": 276.733,
+            "seq": 40439,
+            "torque_nm": 0.387731,
+            "vns": 3000235188
+          },
+          "rotor_age_ns": 764912,
+          "rotor_before": {
+            "currents_a": [
+              -43.219,
+              43.219,
+              0.0
+            ],
+            "electrical_angle_deg": 346.18731923071664,
+            "electrical_angle_unwrapped_rad": 137.989,
+            "offset_ns": -764912,
+            "provenance": "source_observed_model_state",
+            "rpm": 231.669,
+            "seq": 40425,
+            "torque_nm": -0.781385,
+            "vns": 2999235188
+          },
+          "rotor_status": "OBSERVED",
+          "seq": 40437,
+          "stage": 2,
+          "switch_age_ns": 2863544136,
+          "switch_before": {
+            "data": [
+              10,
+              0,
+              14,
+              118537,
+              0,
+              0
+            ],
+            "kind": "SWITCH",
+            "seq": 1885,
+            "vns": 136455964
+          },
+          "switch_status": "INCOMPLETE",
+          "vns": 3000000100
+        },
+        {
+          "clock_before": null,
+          "command_permille": 200,
+          "electrical_displacement_from_first_sample_rad": 156.123,
+          "frame_index": 3300,
+          "gate_active": null,
+          "lifecycle": "not_observable",
+          "lifecycle_provenance": "not_observable",
+          "observed_rotor_origin": {
+            "currents_a": [
+              0.301,
+              -0.301,
+              0.0
+            ],
+            "electrical_angle_deg": 329.97701153514487,
+            "electrical_angle_unwrapped_rad": -0.524,
+            "offset_ns": -3280764956,
+            "provenance": "source_observed_model_state",
+            "rpm": 0.0,
+            "seq": 78,
+            "torque_nm": 0.0,
+            "vns": 19235144
+          },
+          "pwm_pad_mask": null,
+          "relative_ns": 3300000000,
+          "rotor_after": {
+            "currents_a": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "electrical_angle_deg": 277.2286445185673,
+            "electrical_angle_unwrapped_rad": 155.635,
+            "offset_ns": 235092,
+            "provenance": "source_observed_model_state",
+            "rpm": 16.353,
+            "seq": 44351,
+            "torque_nm": 0.0,
+            "vns": 3300235192
+          },
+          "rotor_age_ns": 764908,
+          "rotor_before": {
+            "currents_a": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "electrical_angle_deg": 275.16599645609494,
+            "electrical_angle_unwrapped_rad": 155.599,
+            "offset_ns": -764908,
+            "provenance": "source_observed_model_state",
+            "rpm": 16.366,
+            "seq": 44336,
+            "torque_nm": 0.0,
+            "vns": 3299235192
+          },
+          "rotor_status": "OBSERVED",
+          "seq": 44347,
+          "stage": 3,
+          "switch_age_ns": 3163544136,
+          "switch_before": {
+            "data": [
+              10,
+              0,
+              14,
+              118537,
+              0,
+              0
+            ],
+            "kind": "SWITCH",
+            "seq": 1885,
+            "vns": 136455964
+          },
+          "switch_status": "INCOMPLETE",
+          "vns": 3300000100
+        },
+        {
+          "clock_before": null,
+          "command_permille": 0,
+          "electrical_displacement_from_first_sample_rad": 292.13,
+          "frame_index": 4800,
+          "gate_active": null,
+          "lifecycle": "not_observable",
+          "lifecycle_provenance": "not_observable",
+          "observed_rotor_origin": {
+            "currents_a": [
+              0.301,
+              -0.301,
+              0.0
+            ],
+            "electrical_angle_deg": 329.97701153514487,
+            "electrical_angle_unwrapped_rad": -0.524,
+            "offset_ns": -4780764956,
+            "provenance": "source_observed_model_state",
+            "rpm": 0.0,
+            "seq": 78,
+            "torque_nm": 0.0,
+            "vns": 19235144
+          },
+          "pwm_pad_mask": null,
+          "relative_ns": 4800000000,
+          "rotor_after": {
+            "currents_a": [
+              45.906,
+              -45.906,
+              0.0
+            ],
+            "electrical_angle_deg": 117.77009222702691,
+            "electrical_angle_unwrapped_rad": 291.082,
+            "offset_ns": 235120,
+            "provenance": "source_observed_model_state",
+            "rpm": -194.339,
+            "seq": 65230,
+            "torque_nm": 1.588728,
+            "vns": 4800235220
+          },
+          "rotor_age_ns": 764880,
+          "rotor_before": {
+            "currents_a": [
+              39.587,
+              -39.587,
+              0.0
+            ],
+            "electrical_angle_deg": 147.79308069188482,
+            "electrical_angle_unwrapped_rad": 291.606,
+            "offset_ns": -764880,
+            "provenance": "source_observed_model_state",
+            "rpm": -262.487,
+            "seq": 65217,
+            "torque_nm": 0.098281,
+            "vns": 4799235220
+          },
+          "rotor_status": "OBSERVED",
+          "seq": 65228,
+          "stage": 4,
+          "switch_age_ns": 4663544136,
+          "switch_before": {
+            "data": [
+              10,
+              0,
+              14,
+              118537,
+              0,
+              0
+            ],
+            "kind": "SWITCH",
+            "seq": 1885,
+            "vns": 136455964
+          },
+          "switch_status": "INCOMPLETE",
+          "vns": 4800000100
+        }
+      ],
+      "case": "repeat01",
+      "model_fault": 0,
+      "p1_failures": [
+        "STARTUP_SIGNIFICANT_DIRECTION_REVERSAL"
+      ],
+      "p1_status": "FAIL_P1_SIM_ONLY_OBSERVABILITY",
+      "probe_status": "PASS_NATIVE_AUTONOMOUS_WIRING_SMOKE_SIM_ONLY_STRICT_STABILITY_STILL_OPEN",
+      "provenance": {
+        "cfg_sha256": "ab144c4b281ec53feb399b45c758b1de72b2c16f252e6ff64980f263b3a51702",
+        "effective_parameters": {
+          "bus_millivolts": 24000,
+          "configured_initial_electrical_mdeg": -30000,
+          "kv_rpm_per_v": 147,
+          "phase_inductance_nanohenry": 24000,
+          "phase_resistance_microohm": 53000,
+          "terminal_kt_micro_nm_per_a": 64900
+        },
+        "elf_sha256": "05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0",
+        "events_sha256": "d43e0c2d4b4756c52fa274da470df2f40d89ecef50568183e493198af1c4c6f2",
+        "evidence_sha256": "9660635f2f079f8296580578ac06cae8f51d41a8761fee6b148c51967c1e911d",
+        "experiment_contract": {
+          "bemf_waveform": "PINNED_MAIN_DEFAULT",
+          "clock_provenance": "PINNED_MAIN_SOURCE_CONSTANT",
+          "initial_angle_deg": -30,
+          "mcpwm_root_clock_hz": 100000000,
+          "native_adc_bemf": true,
+          "robustness_injection": null,
+          "switch_focus_window_ms": null,
+          "sync_start": true
+        },
+        "firmware_class": "original_rel17_3",
+        "firmware_commit": "b0204670515d2de0b2480b52273038f1ee13d30a",
+        "host_guest_register_writes": false,
+        "profile_id": "ecx87-kv147",
+        "qemu_commit": "44f28df24767cf9dca1ddc9b23157737c4cbb645",
+        "qemu_sha256": "d5f4f5102469bb6dc4012682f4d7101d01b7c26fe7c3b29cd01a8c685ba7b943",
+        "rotor_max_age_ns": 1000000,
+        "scenario_sha256": "891b9b7503f0933d58310fbd8541139d6fec69f8c1b35212b34c88b6c4ffce20",
+        "switch_max_age_ns": 2000000,
+        "timebase": "QEMU_CLOCK_VIRTUAL"
+      },
+      "raw_archive_availability": "CURRENT_CLOUD_IGNORED_ARTIFACTS_NOT_PUBLISHED",
+      "report_sha256": "6ae57207c2ba71dd933aa569cbb4f82e4fae243d72acade323f99faa9aa057be",
+      "source_frames": 5100,
+      "stage_dynamics": [
+        {
+          "command_end_permille": 0,
+          "command_start_permille": 0,
+          "duration_ms": 1500,
+          "maximum_rpm": 0.0,
+          "minimum_rpm": 0.0,
+          "original_guest_pwm_pairs": 1,
+          "rotor_samples": 1481,
+          "significant_direction_changes": 0,
+          "stage_index": 0
+        },
+        {
+          "command_end_permille": 200,
+          "command_start_permille": 200,
+          "duration_ms": 1500,
+          "maximum_rpm": 354.643,
+          "minimum_rpm": -279.26,
+          "original_guest_pwm_pairs": 132,
+          "rotor_samples": 1500,
+          "significant_direction_changes": 262,
+          "stage_index": 1
+        },
+        {
+          "command_end_permille": 0,
+          "command_start_permille": 0,
+          "duration_ms": 300,
+          "maximum_rpm": 276.733,
+          "minimum_rpm": 16.366,
+          "original_guest_pwm_pairs": 0,
+          "rotor_samples": 300,
+          "significant_direction_changes": 0,
+          "stage_index": 2
+        },
+        {
+          "command_end_permille": 200,
+          "command_start_permille": 200,
+          "duration_ms": 1500,
+          "maximum_rpm": 314.075,
+          "minimum_rpm": -279.541,
+          "original_guest_pwm_pairs": 132,
+          "rotor_samples": 1500,
+          "significant_direction_changes": 262,
+          "stage_index": 3
+        },
+        {
+          "command_end_permille": 0,
+          "command_start_permille": 0,
+          "duration_ms": 300,
+          "maximum_rpm": -7.882,
+          "minimum_rpm": -194.339,
+          "original_guest_pwm_pairs": 0,
+          "rotor_samples": 300,
+          "significant_direction_changes": 0,
+          "stage_index": 4
+        }
+      ],
+      "stage_events": [
+        {
+          "first_comparator": null,
+          "first_events": {
+            "CAP1": null,
+            "CAP1_ACK": null,
+            "CMP_FILTER": null,
+            "ECAP1_CAP1_READ": null,
+            "PWM_PAIR": {
+              "data": [
+                2,
+                9,
+                15,
+                -524,
+                2,
+                0
+              ],
+              "kind": "PWM_PAIR",
+              "seq": 63,
+              "vns": 18235144
+            },
+            "T12_LOAD": null,
+            "T12_START": null,
+            "TIMG12": null,
+            "TIMG12_ACK": null
+          },
+          "first_negative_sample": null,
+          "last_recorded_vns": 1499383016,
+          "stage": 0
+        },
+        {
+          "first_comparator": {
+            "active_dac_code": 2048,
+            "filtered_level": 1,
+            "mux_phase_index": 0,
+            "phase_code": 2049,
+            "polarity": "NOT_OBSERVABLE",
+            "publication_identity": "NOT_OBSERVABLE",
+            "seq": 19594,
+            "vns": 1503028400
+          },
+          "first_events": {
+            "CAP1": {
+              "data": [
+                75587883,
+                0,
+                3,
+                34,
+                0,
+                0
+              ],
+              "kind": "CAP1",
+              "seq": 19595,
+              "vns": 1503028400
+            },
+            "CAP1_ACK": {
+              "data": [
+                2,
+                3,
+                75587883,
+                34,
+                0,
+                0
+              ],
+              "kind": "CAP1_ACK",
+              "seq": 19596,
+              "vns": 1503029088
+            },
+            "CMP_FILTER": {
+              "data": [
+                0,
+                1,
+                2049,
+                2048,
+                0,
+                0
+              ],
+              "kind": "CMP_FILTER",
+              "seq": 19594,
+              "vns": 1503028400
+            },
+            "ECAP1_CAP1_READ": {
+              "data": [
+                75587883,
+                75588044,
+                0,
+                34,
+                144,
+                0
+              ],
+              "kind": "ECAP1_CAP1_READ",
+              "seq": 19597,
+              "vns": 1503029204
+            },
+            "PWM_PAIR": {
+              "data": [
+                8,
+                24,
+                15,
+                -524,
+                301,
+                0
+              ],
+              "kind": "PWM_PAIR",
+              "seq": 19560,
+              "vns": 1500247032
+            },
+            "T12_LOAD": {
+              "data": [
+                6553499,
+                100000000,
+                0,
+                0,
+                0,
+                0
+              ],
+              "kind": "T12_LOAD",
+              "seq": 19553,
+              "vns": 1500079368
+            },
+            "T12_START": {
+              "data": [
+                6553499,
+                100000000,
+                6553499,
+                1,
+                1,
+                0
+              ],
+              "kind": "T12_START",
+              "seq": 19554,
+              "vns": 1500079552
+            },
+            "TIMG12": {
+              "data": [
+                1,
+                1,
+                274099,
+                0,
+                0,
+                0
+              ],
+              "kind": "TIMG12",
+              "seq": 19786,
+              "vns": 1516771200
+            },
+            "TIMG12_ACK": {
+              "data": [
+                1,
+                1,
+                1,
+                274099,
+                0,
+                0
+              ],
+              "kind": "TIMG12_ACK",
+              "seq": 19787,
+              "vns": 1516771220
+            }
+          },
+          "first_negative_sample": {
+            "currents_a": [
+              0.0,
+              -32.029,
+              32.029
+            ],
+            "electrical_angle_deg": 164.0378167459547,
+            "electrical_angle_unwrapped_rad": 2.863,
+            "offset_ns": 8235060,
+            "provenance": "source_observed_model_state",
+            "rpm": -41.491,
+            "seq": 19665,
+            "torque_nm": -1.998566,
+            "vns": 1508235160
+          },
+          "last_recorded_vns": 2999383052,
+          "stage": 1
+        },
+        {
+          "first_comparator": {
+            "active_dac_code": 2048,
+            "filtered_level": 1,
+            "mux_phase_index": 1,
+            "phase_code": 2049,
+            "polarity": "NOT_OBSERVABLE",
+            "publication_identity": "NOT_OBSERVABLE",
+            "seq": 40491,
+            "vns": 3004234428
+          },
+          "first_events": {
+            "CAP1": {
+              "data": [
+                379823855,
+                1,
+                3,
+                34,
+                0,
+                0
+              ],
+              "kind": "CAP1",
+              "seq": 40753,
+              "vns": 3024208428
+            },
+            "CAP1_ACK": {
+              "data": [
+                2,
+                3,
+                379823855,
+                34,
+                0,
+                0
+              ],
+              "kind": "CAP1_ACK",
+              "seq": 40754,
+              "vns": 3024208468
+            },
+            "CMP_FILTER": {
+              "data": [
+                1,
+                1,
+                2049,
+                2048,
+                0,
+                0
+              ],
+              "kind": "CMP_FILTER",
+              "seq": 40491,
+              "vns": 3004234428
+            },
+            "ECAP1_CAP1_READ": {
+              "data": [
+                379823855,
+                379823886,
+                0,
+                34,
+                144,
+                0
+              ],
+              "kind": "ECAP1_CAP1_READ",
+              "seq": 40755,
+              "vns": 3024208584
+            },
+            "PWM_PAIR": null,
+            "T12_LOAD": {
+              "data": [
+                386399,
+                100000000,
+                0,
+                0,
+                0,
+                0
+              ],
+              "kind": "T12_LOAD",
+              "seq": 40756,
+              "vns": 3024209628
+            },
+            "T12_START": {
+              "data": [
+                386399,
+                100000000,
+                386399,
+                1,
+                1,
+                0
+              ],
+              "kind": "T12_START",
+              "seq": 40757,
+              "vns": 3024209812
+            },
+            "TIMG12": {
+              "data": [
+                1,
+                1,
+                386399,
+                0,
+                0,
+                0
+              ],
+              "kind": "TIMG12",
+              "seq": 40810,
+              "vns": 3028073812
+            },
+            "TIMG12_ACK": {
+              "data": [
+                1,
+                1,
+                1,
+                386399,
+                0,
+                0
+              ],
+              "kind": "TIMG12_ACK",
+              "seq": 40811,
+              "vns": 3028073832
+            }
+          },
+          "first_negative_sample": null,
+          "last_recorded_vns": 3299383016,
+          "stage": 2
+        },
+        {
+          "first_comparator": {
+            "active_dac_code": 2048,
+            "filtered_level": 1,
+            "mux_phase_index": 1,
+            "phase_code": 2049,
+            "polarity": "NOT_OBSERVABLE",
+            "publication_identity": "NOT_OBSERVABLE",
+            "seq": 44443,
+            "vns": 3307172432
+          },
+          "first_events": {
+            "CAP1": {
+              "data": [
+                390856469,
+                1,
+                3,
+                34,
+                0,
+                0
+              ],
+              "kind": "CAP1",
+              "seq": 44444,
+              "vns": 3307172432
+            },
+            "CAP1_ACK": {
+              "data": [
+                2,
+                3,
+                390856469,
+                34,
+                0,
+                0
+              ],
+              "kind": "CAP1_ACK",
+              "seq": 44445,
+              "vns": 3307172472
+            },
+            "CMP_FILTER": {
+              "data": [
+                1,
+                1,
+                2049,
+                2048,
+                0,
+                0
+              ],
+              "kind": "CMP_FILTER",
+              "seq": 44443,
+              "vns": 3307172432
+            },
+            "ECAP1_CAP1_READ": {
+              "data": [
+                390856469,
+                390856500,
+                0,
+                34,
+                144,
+                0
+              ],
+              "kind": "ECAP1_CAP1_READ",
+              "seq": 44446,
+              "vns": 3307172588
+            },
+            "PWM_PAIR": {
+              "data": [
+                3,
+                33,
+                15,
+                155636,
+                19159,
+                0
+              ],
+              "kind": "PWM_PAIR",
+              "seq": 44356,
+              "vns": 3300247092
+            },
+            "T12_LOAD": {
+              "data": [
+                6553499,
+                100000000,
+                0,
+                0,
+                0,
+                0
+              ],
+              "kind": "T12_LOAD",
+              "seq": 44349,
+              "vns": 3300079432
+            },
+            "T12_START": {
+              "data": [
+                6553499,
+                100000000,
+                6553499,
+                1,
+                1,
+                0
+              ],
+              "kind": "T12_START",
+              "seq": 44350,
+              "vns": 3300079616
+            },
+            "TIMG12": {
+              "data": [
+                1,
+                1,
+                231299,
+                0,
+                0,
+                0
+              ],
+              "kind": "TIMG12",
+              "seq": 44487,
+              "vns": 3309486600
+            },
+            "TIMG12_ACK": {
+              "data": [
+                1,
+                1,
+                1,
+                231299,
+                0,
+                0
+              ],
+              "kind": "TIMG12_ACK",
+              "seq": 44488,
+              "vns": 3309487360
+            }
+          },
+          "first_negative_sample": {
+            "currents_a": [
+              19.456,
+              0.0,
+              -19.456
+            ],
+            "electrical_angle_deg": 277.51512341613125,
+            "electrical_angle_unwrapped_rad": 155.64,
+            "offset_ns": 1235092,
+            "provenance": "source_observed_model_state",
+            "rpm": -27.863,
+            "seq": 44365,
+            "torque_nm": -1.166751,
+            "vns": 3301235192
+          },
+          "last_recorded_vns": 4799383052,
+          "stage": 3
+        },
+        {
+          "first_comparator": {
+            "active_dac_code": 2048,
+            "filtered_level": 0,
+            "mux_phase_index": 2,
+            "phase_code": 2048,
+            "polarity": "NOT_OBSERVABLE",
+            "publication_identity": "NOT_OBSERVABLE",
+            "seq": 65267,
+            "vns": 4802725460
+          },
+          "first_events": {
+            "CAP1": {
+              "data": [
+                689967050,
+                2,
+                3,
+                34,
+                0,
+                0
+              ],
+              "kind": "CAP1",
+              "seq": 65268,
+              "vns": 4802725460
+            },
+            "CAP1_ACK": {
+              "data": [
+                2,
+                3,
+                689967050,
+                34,
+                0,
+                0
+              ],
+              "kind": "CAP1_ACK",
+              "seq": 65269,
+              "vns": 4802725500
+            },
+            "CMP_FILTER": {
+              "data": [
+                2,
+                0,
+                2048,
+                2048,
+                0,
+                0
+              ],
+              "kind": "CMP_FILTER",
+              "seq": 65267,
+              "vns": 4802725460
+            },
+            "ECAP1_CAP1_READ": {
+              "data": [
+                689967050,
+                689967081,
+                0,
+                34,
+                144,
+                0
+              ],
+              "kind": "ECAP1_CAP1_READ",
+              "seq": 65270,
+              "vns": 4802725616
+            },
+            "PWM_PAIR": null,
+            "T12_LOAD": {
+              "data": [
+                290299,
+                100000000,
+                0,
+                0,
+                0,
+                0
+              ],
+              "kind": "T12_LOAD",
+              "seq": 65271,
+              "vns": 4802726428
+            },
+            "T12_START": {
+              "data": [
+                290299,
+                100000000,
+                290299,
+                1,
+                1,
+                0
+              ],
+              "kind": "T12_START",
+              "seq": 65272,
+              "vns": 4802726612
+            },
+            "TIMG12": {
+              "data": [
+                1,
+                1,
+                290299,
+                0,
+                0,
+                0
+              ],
+              "kind": "TIMG12",
+              "seq": 65312,
+              "vns": 4805629612
+            },
+            "TIMG12_ACK": {
+              "data": [
+                1,
+                1,
+                1,
+                290299,
+                0,
+                0
+              ],
+              "kind": "TIMG12_ACK",
+              "seq": 65313,
+              "vns": 4805629632
+            }
+          },
+          "first_negative_sample": {
+            "currents_a": [
+              45.906,
+              -45.906,
+              0.0
+            ],
+            "electrical_angle_deg": 117.77009222702691,
+            "electrical_angle_unwrapped_rad": 291.082,
+            "offset_ns": 235120,
+            "provenance": "source_observed_model_state",
+            "rpm": -194.339,
+            "seq": 65230,
+            "torque_nm": 1.588728,
+            "vns": 4800235220
+          },
+          "last_recorded_vns": 5099383028,
+          "stage": 4
+        }
+      ]
+    },
+    {
+      "boundaries": [
+        {
+          "clock_before": null,
+          "command_permille": 0,
+          "electrical_displacement_from_first_sample_rad": null,
+          "frame_index": 0,
+          "gate_active": null,
+          "lifecycle": "not_observable",
+          "lifecycle_provenance": "not_observable",
+          "observed_rotor_origin": {
+            "currents_a": [
+              0.301,
+              -0.301,
+              0.0
+            ],
+            "electrical_angle_deg": 329.97701153514487,
+            "electrical_angle_unwrapped_rad": -0.524,
+            "offset_ns": 19235044,
+            "provenance": "source_observed_model_state",
+            "rpm": 0.0,
+            "seq": 78,
+            "torque_nm": 0.0,
+            "vns": 19235144
+          },
+          "pwm_pad_mask": null,
+          "relative_ns": 0,
+          "rotor_after": {
+            "currents_a": [
+              0.301,
+              -0.301,
+              0.0
+            ],
+            "electrical_angle_deg": 329.97701153514487,
+            "electrical_angle_unwrapped_rad": -0.524,
+            "offset_ns": 19235044,
+            "provenance": "source_observed_model_state",
+            "rpm": 0.0,
+            "seq": 78,
+            "torque_nm": 0.0,
+            "vns": 19235144
+          },
+          "rotor_age_ns": null,
+          "rotor_before": null,
+          "rotor_status": "INCOMPLETE",
+          "seq": 1,
+          "stage": 0,
+          "switch_age_ns": null,
+          "switch_before": null,
+          "switch_status": "INCOMPLETE",
+          "vns": 100
+        },
+        {
+          "clock_before": null,
+          "command_permille": 200,
+          "electrical_displacement_from_first_sample_rad": 0.0,
+          "frame_index": 1500,
+          "gate_active": null,
+          "lifecycle": "not_observable",
+          "lifecycle_provenance": "not_observable",
+          "observed_rotor_origin": {
+            "currents_a": [
+              0.301,
+              -0.301,
+              0.0
+            ],
+            "electrical_angle_deg": 329.97701153514487,
+            "electrical_angle_unwrapped_rad": -0.524,
+            "offset_ns": -1480764956,
+            "provenance": "source_observed_model_state",
+            "rpm": 0.0,
+            "seq": 78,
+            "torque_nm": 0.0,
+            "vns": 19235144
+          },
+          "pwm_pad_mask": null,
+          "relative_ns": 1500000000,
+          "rotor_after": {
+            "currents_a": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "electrical_angle_deg": 329.97701153514487,
+            "electrical_angle_unwrapped_rad": -0.524,
+            "offset_ns": 235592,
+            "provenance": "source_observed_model_state",
+            "rpm": 0.0,
+            "seq": 19555,
+            "torque_nm": 0.0,
+            "vns": 1500235692
+          },
+          "rotor_age_ns": 764408,
+          "rotor_before": {
+            "currents_a": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "electrical_angle_deg": 329.97701153514487,
+            "electrical_angle_unwrapped_rad": -0.524,
+            "offset_ns": -764408,
+            "provenance": "source_observed_model_state",
+            "rpm": 0.0,
+            "seq": 19540,
+            "torque_nm": 0.0,
+            "vns": 1499235692
+          },
+          "rotor_status": "OBSERVED",
+          "seq": 19551,
+          "stage": 1,
+          "switch_age_ns": 1363544136,
+          "switch_before": {
+            "data": [
+              10,
+              0,
+              14,
+              118537,
+              0,
+              0
+            ],
+            "kind": "SWITCH",
+            "seq": 1885,
+            "vns": 136455964
+          },
+          "switch_status": "INCOMPLETE",
+          "vns": 1500000100
+        },
+        {
+          "clock_before": null,
+          "command_permille": 0,
+          "electrical_displacement_from_first_sample_rad": 137.906,
+          "frame_index": 3000,
+          "gate_active": null,
+          "lifecycle": "not_observable",
+          "lifecycle_provenance": "not_observable",
+          "observed_rotor_origin": {
+            "currents_a": [
+              0.301,
+              -0.301,
+              0.0
+            ],
+            "electrical_angle_deg": 329.97701153514487,
+            "electrical_angle_unwrapped_rad": -0.524,
+            "offset_ns": -2980764956,
+            "provenance": "source_observed_model_state",
+            "rpm": 0.0,
+            "seq": 78,
+            "torque_nm": 0.0,
+            "vns": 19235144
+          },
+          "pwm_pad_mask": null,
+          "relative_ns": 3000000000,
+          "rotor_after": {
+            "currents_a": [
+              -41.111,
+              41.111,
+              0.0
+            ],
+            "electrical_angle_deg": 342.06202310577464,
+            "electrical_angle_unwrapped_rad": 137.917,
+            "offset_ns": 235620,
+            "provenance": "source_observed_model_state",
+            "rpm": 240.086,
+            "seq": 40436,
+            "torque_nm": -0.557251,
+            "vns": 3000235720
+          },
+          "rotor_age_ns": 764380,
+          "rotor_before": {
+            "currents_a": [
+              -36.806,
+              36.806,
+              0.0
+            ],
+            "electrical_angle_deg": 311.4087810662759,
+            "electrical_angle_unwrapped_rad": 137.382,
+            "offset_ns": -764380,
+            "provenance": "source_observed_model_state",
+            "rpm": 229.778,
+            "seq": 40423,
+            "torque_nm": 0.763487,
+            "vns": 2999235720
+          },
+          "rotor_status": "OBSERVED",
+          "seq": 40434,
+          "stage": 2,
+          "switch_age_ns": 2863544136,
+          "switch_before": {
+            "data": [
+              10,
+              0,
+              14,
+              118537,
+              0,
+              0
+            ],
+            "kind": "SWITCH",
+            "seq": 1885,
+            "vns": 136455964
+          },
+          "switch_status": "INCOMPLETE",
+          "vns": 3000000100
+        },
+        {
+          "clock_before": null,
+          "command_permille": 200,
+          "electrical_displacement_from_first_sample_rad": 153.829,
+          "frame_index": 3300,
+          "gate_active": null,
+          "lifecycle": "not_observable",
+          "lifecycle_provenance": "not_observable",
+          "observed_rotor_origin": {
+            "currents_a": [
+              0.301,
+              -0.301,
+              0.0
+            ],
+            "electrical_angle_deg": 329.97701153514487,
+            "electrical_angle_unwrapped_rad": -0.524,
+            "offset_ns": -3280764956,
+            "provenance": "source_observed_model_state",
+            "rpm": 0.0,
+            "seq": 78,
+            "torque_nm": 0.0,
+            "vns": 19235144
+          },
+          "pwm_pad_mask": null,
+          "relative_ns": 3300000000,
+          "rotor_after": {
+            "currents_a": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "electrical_angle_deg": 145.33376007945117,
+            "electrical_angle_unwrapped_rad": 153.333,
+            "offset_ns": 235628,
+            "provenance": "source_observed_model_state",
+            "rpm": 13.009,
+            "seq": 44351,
+            "torque_nm": 0.0,
+            "vns": 3300235728
+          },
+          "rotor_age_ns": 764372,
+          "rotor_before": {
+            "currents_a": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "electrical_angle_deg": 143.7294782530862,
+            "electrical_angle_unwrapped_rad": 153.305,
+            "offset_ns": -764372,
+            "provenance": "source_observed_model_state",
+            "rpm": 13.019,
+            "seq": 44336,
+            "torque_nm": 0.0,
+            "vns": 3299235728
+          },
+          "rotor_status": "OBSERVED",
+          "seq": 44347,
+          "stage": 3,
+          "switch_age_ns": 3163544136,
+          "switch_before": {
+            "data": [
+              10,
+              0,
+              14,
+              118537,
+              0,
+              0
+            ],
+            "kind": "SWITCH",
+            "seq": 1885,
+            "vns": 136455964
+          },
+          "switch_status": "INCOMPLETE",
+          "vns": 3300000100
+        },
+        {
+          "clock_before": null,
+          "command_permille": 0,
+          "electrical_displacement_from_first_sample_rad": 291.805,
+          "frame_index": 4800,
+          "gate_active": null,
+          "lifecycle": "not_observable",
+          "lifecycle_provenance": "not_observable",
+          "observed_rotor_origin": {
+            "currents_a": [
+              0.301,
+              -0.301,
+              0.0
+            ],
+            "electrical_angle_deg": 329.97701153514487,
+            "electrical_angle_unwrapped_rad": -0.524,
+            "offset_ns": -4780764956,
+            "provenance": "source_observed_model_state",
+            "rpm": 0.0,
+            "seq": 78,
+            "torque_nm": 0.0,
+            "vns": 19235144
+          },
+          "pwm_pad_mask": null,
+          "relative_ns": 4800000000,
+          "rotor_after": {
+            "currents_a": [
+              40.221,
+              -41.568,
+              1.347
+            ],
+            "electrical_angle_deg": 164.17967363262505,
+            "electrical_angle_unwrapped_rad": 291.892,
+            "offset_ns": 235660,
+            "provenance": "source_observed_model_state",
+            "rpm": 271.337,
+            "seq": 65234,
+            "torque_nm": -0.720837,
+            "vns": 4800235760
+          },
+          "rotor_age_ns": 764340,
+          "rotor_before": {
+            "currents_a": [
+              31.601,
+              -32.734,
+              1.133
+            ],
+            "electrical_angle_deg": 129.17195235013423,
+            "electrical_angle_unwrapped_rad": 291.281,
+            "offset_ns": -764340,
+            "provenance": "source_observed_model_state",
+            "rpm": 265.47,
+            "seq": 65221,
+            "torque_nm": 0.684352,
+            "vns": 4799235760
+          },
+          "rotor_status": "OBSERVED",
+          "seq": 65232,
+          "stage": 4,
+          "switch_age_ns": 4663544136,
+          "switch_before": {
+            "data": [
+              10,
+              0,
+              14,
+              118537,
+              0,
+              0
+            ],
+            "kind": "SWITCH",
+            "seq": 1885,
+            "vns": 136455964
+          },
+          "switch_status": "INCOMPLETE",
+          "vns": 4800000100
+        }
+      ],
+      "case": "repeat02",
+      "model_fault": 0,
+      "p1_failures": [
+        "STARTUP_SIGNIFICANT_DIRECTION_REVERSAL"
+      ],
+      "p1_status": "FAIL_P1_SIM_ONLY_OBSERVABILITY",
+      "probe_status": "PASS_NATIVE_AUTONOMOUS_WIRING_SMOKE_SIM_ONLY_STRICT_STABILITY_STILL_OPEN",
+      "provenance": {
+        "cfg_sha256": "ab144c4b281ec53feb399b45c758b1de72b2c16f252e6ff64980f263b3a51702",
+        "effective_parameters": {
+          "bus_millivolts": 24000,
+          "configured_initial_electrical_mdeg": -30000,
+          "kv_rpm_per_v": 147,
+          "phase_inductance_nanohenry": 24000,
+          "phase_resistance_microohm": 53000,
+          "terminal_kt_micro_nm_per_a": 64900
+        },
+        "elf_sha256": "05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0",
+        "events_sha256": "a180b13aaf2eaeabb830e8b2eeaeb516aaf1145abed2602a47d0cb4d142f6f8a",
+        "evidence_sha256": "4b25f4252d11756be9d2f30f9c3382c35b7b378d4e9a3bef1a25d5e613a345b6",
+        "experiment_contract": {
+          "bemf_waveform": "PINNED_MAIN_DEFAULT",
+          "clock_provenance": "PINNED_MAIN_SOURCE_CONSTANT",
+          "initial_angle_deg": -30,
+          "mcpwm_root_clock_hz": 100000000,
+          "native_adc_bemf": true,
+          "robustness_injection": null,
+          "switch_focus_window_ms": null,
+          "sync_start": true
+        },
+        "firmware_class": "original_rel17_3",
+        "firmware_commit": "b0204670515d2de0b2480b52273038f1ee13d30a",
+        "host_guest_register_writes": false,
+        "profile_id": "ecx87-kv147",
+        "qemu_commit": "44f28df24767cf9dca1ddc9b23157737c4cbb645",
+        "qemu_sha256": "d5f4f5102469bb6dc4012682f4d7101d01b7c26fe7c3b29cd01a8c685ba7b943",
+        "rotor_max_age_ns": 1000000,
+        "scenario_sha256": "891b9b7503f0933d58310fbd8541139d6fec69f8c1b35212b34c88b6c4ffce20",
+        "switch_max_age_ns": 2000000,
+        "timebase": "QEMU_CLOCK_VIRTUAL"
+      },
+      "raw_archive_availability": "CURRENT_CLOUD_IGNORED_ARTIFACTS_NOT_PUBLISHED",
+      "report_sha256": "468784535a9a1909686caa0413581f82098267421bd6861b8eb89a73c6df0879",
+      "source_frames": 5100,
+      "stage_dynamics": [
+        {
+          "command_end_permille": 0,
+          "command_start_permille": 0,
+          "duration_ms": 1500,
+          "maximum_rpm": 0.0,
+          "minimum_rpm": 0.0,
+          "original_guest_pwm_pairs": 1,
+          "rotor_samples": 1481,
+          "significant_direction_changes": 0,
+          "stage_index": 0
+        },
+        {
+          "command_end_permille": 200,
+          "command_start_permille": 200,
+          "duration_ms": 1500,
+          "maximum_rpm": 354.645,
+          "minimum_rpm": -279.257,
+          "original_guest_pwm_pairs": 131,
+          "rotor_samples": 1500,
+          "significant_direction_changes": 262,
+          "stage_index": 1
+        },
+        {
+          "command_end_permille": 0,
+          "command_start_permille": 0,
+          "duration_ms": 300,
+          "maximum_rpm": 240.807,
+          "minimum_rpm": 13.019,
+          "original_guest_pwm_pairs": 1,
+          "rotor_samples": 300,
+          "significant_direction_changes": 0,
+          "stage_index": 2
+        },
+        {
+          "command_end_permille": 200,
+          "command_start_permille": 200,
+          "duration_ms": 1500,
+          "maximum_rpm": 314.75,
+          "minimum_rpm": -278.681,
+          "original_guest_pwm_pairs": 132,
+          "rotor_samples": 1500,
+          "significant_direction_changes": 262,
+          "stage_index": 3
+        },
+        {
+          "command_end_permille": 0,
+          "command_start_permille": 0,
+          "duration_ms": 300,
+          "maximum_rpm": 271.337,
+          "minimum_rpm": 26.948,
+          "original_guest_pwm_pairs": 0,
+          "rotor_samples": 300,
+          "significant_direction_changes": 0,
+          "stage_index": 4
+        }
+      ],
+      "stage_events": [
+        {
+          "first_comparator": null,
+          "first_events": {
+            "CAP1": null,
+            "CAP1_ACK": null,
+            "CMP_FILTER": null,
+            "ECAP1_CAP1_READ": null,
+            "PWM_PAIR": {
+              "data": [
+                2,
+                9,
+                15,
+                -524,
+                2,
+                0
+              ],
+              "kind": "PWM_PAIR",
+              "seq": 63,
+              "vns": 18235144
+            },
+            "T12_LOAD": null,
+            "T12_START": null,
+            "TIMG12": null,
+            "TIMG12_ACK": null
+          },
+          "first_negative_sample": null,
+          "last_recorded_vns": 1499383016,
+          "stage": 0
+        },
+        {
+          "first_comparator": {
+            "active_dac_code": 2048,
+            "filtered_level": 1,
+            "mux_phase_index": 0,
+            "phase_code": 2049,
+            "polarity": "NOT_OBSERVABLE",
+            "publication_identity": "NOT_OBSERVABLE",
+            "seq": 19594,
+            "vns": 1503027932
+          },
+          "first_events": {
+            "CAP1": {
+              "data": [
+                75587790,
+                0,
+                3,
+                34,
+                0,
+                0
+              ],
+              "kind": "CAP1",
+              "seq": 19595,
+              "vns": 1503027932
+            },
+            "CAP1_ACK": {
+              "data": [
+                2,
+                3,
+                75587790,
+                34,
+                0,
+                0
+              ],
+              "kind": "CAP1_ACK",
+              "seq": 19596,
+              "vns": 1503029088
+            },
+            "CMP_FILTER": {
+              "data": [
+                0,
+                1,
+                2049,
+                2048,
+                0,
+                0
+              ],
+              "kind": "CMP_FILTER",
+              "seq": 19594,
+              "vns": 1503027932
+            },
+            "ECAP1_CAP1_READ": {
+              "data": [
+                75587790,
+                75588044,
+                0,
+                34,
+                144,
+                0
+              ],
+              "kind": "ECAP1_CAP1_READ",
+              "seq": 19597,
+              "vns": 1503029204
+            },
+            "PWM_PAIR": {
+              "data": [
+                8,
+                24,
+                15,
+                -524,
+                301,
+                0
+              ],
+              "kind": "PWM_PAIR",
+              "seq": 19560,
+              "vns": 1500247032
+            },
+            "T12_LOAD": {
+              "data": [
+                6553499,
+                100000000,
+                0,
+                0,
+                0,
+                0
+              ],
+              "kind": "T12_LOAD",
+              "seq": 19553,
+              "vns": 1500079368
+            },
+            "T12_START": {
+              "data": [
+                6553499,
+                100000000,
+                6553499,
+                1,
+                1,
+                0
+              ],
+              "kind": "T12_START",
+              "seq": 19554,
+              "vns": 1500079552
+            },
+            "TIMG12": {
+              "data": [
+                1,
+                1,
+                274099,
+                0,
+                0,
+                0
+              ],
+              "kind": "TIMG12",
+              "seq": 19786,
+              "vns": 1516771200
+            },
+            "TIMG12_ACK": {
+              "data": [
+                1,
+                1,
+                1,
+                274099,
+                0,
+                0
+              ],
+              "kind": "TIMG12_ACK",
+              "seq": 19787,
+              "vns": 1516771220
+            }
+          },
+          "first_negative_sample": {
+            "currents_a": [
+              0.0,
+              -31.988,
+              31.988
+            ],
+            "electrical_angle_deg": 164.0378167459547,
+            "electrical_angle_unwrapped_rad": 2.863,
+            "offset_ns": 8235592,
+            "provenance": "source_observed_model_state",
+            "rpm": -41.569,
+            "seq": 19665,
+            "torque_nm": -1.996009,
+            "vns": 1508235692
+          },
+          "last_recorded_vns": 2999383016,
+          "stage": 1
+        },
+        {
+          "first_comparator": {
+            "active_dac_code": 2048,
+            "filtered_level": 1,
+            "mux_phase_index": 1,
+            "phase_code": 2049,
+            "polarity": "NOT_OBSERVABLE",
+            "publication_identity": "NOT_OBSERVABLE",
+            "seq": 40515,
+            "vns": 3005960960
+          },
+          "first_events": {
+            "CAP1": {
+              "data": [
+                380532370,
+                1,
+                3,
+                34,
+                0,
+                0
+              ],
+              "kind": "CAP1",
+              "seq": 40803,
+              "vns": 3027750960
+            },
+            "CAP1_ACK": {
+              "data": [
+                2,
+                3,
+                380532370,
+                34,
+                0,
+                0
+              ],
+              "kind": "CAP1_ACK",
+              "seq": 40804,
+              "vns": 3027751000
+            },
+            "CMP_FILTER": {
+              "data": [
+                1,
+                1,
+                2049,
+                2048,
+                0,
+                0
+              ],
+              "kind": "CMP_FILTER",
+              "seq": 40515,
+              "vns": 3005960960
+            },
+            "ECAP1_CAP1_READ": {
+              "data": [
+                380532370,
+                380532401,
+                0,
+                34,
+                144,
+                0
+              ],
+              "kind": "ECAP1_CAP1_READ",
+              "seq": 40805,
+              "vns": 3027751116
+            },
+            "PWM_PAIR": {
+              "data": [
+                7,
+                18,
+                15,
+                138008,
+                18295,
+                0
+              ],
+              "kind": "PWM_PAIR",
+              "seq": 40449,
+              "vns": 3000409784
+            },
+            "T12_LOAD": {
+              "data": [
+                401999,
+                100000000,
+                0,
+                0,
+                0,
+                0
+              ],
+              "kind": "T12_LOAD",
+              "seq": 40806,
+              "vns": 3027752160
+            },
+            "T12_START": {
+              "data": [
+                401999,
+                100000000,
+                401999,
+                1,
+                1,
+                0
+              ],
+              "kind": "T12_START",
+              "seq": 40807,
+              "vns": 3027752344
+            },
+            "TIMG12": {
+              "data": [
+                1,
+                1,
+                283799,
+                0,
+                0,
+                0
+              ],
+              "kind": "TIMG12",
+              "seq": 40441,
+              "vns": 3000328112
+            },
+            "TIMG12_ACK": {
+              "data": [
+                1,
+                1,
+                1,
+                283799,
+                0,
+                0
+              ],
+              "kind": "TIMG12_ACK",
+              "seq": 40442,
+              "vns": 3000328132
+            }
+          },
+          "first_negative_sample": null,
+          "last_recorded_vns": 3299383016,
+          "stage": 2
+        },
+        {
+          "first_comparator": {
+            "active_dac_code": 2048,
+            "filtered_level": 1,
+            "mux_phase_index": 1,
+            "phase_code": 2049,
+            "polarity": "NOT_OBSERVABLE",
+            "publication_identity": "NOT_OBSERVABLE",
+            "seq": 44363,
+            "vns": 3300775968
+          },
+          "first_events": {
+            "CAP1": {
+              "data": [
+                390864685,
+                1,
+                3,
+                34,
+                0,
+                0
+              ],
+              "kind": "CAP1",
+              "seq": 44364,
+              "vns": 3300775968
+            },
+            "CAP1_ACK": {
+              "data": [
+                2,
+                3,
+                390864685,
+                34,
+                0,
+                0
+              ],
+              "kind": "CAP1_ACK",
+              "seq": 44365,
+              "vns": 3300776008
+            },
+            "CMP_FILTER": {
+              "data": [
+                1,
+                1,
+                2049,
+                2048,
+                0,
+                0
+              ],
+              "kind": "CMP_FILTER",
+              "seq": 44363,
+              "vns": 3300775968
+            },
+            "ECAP1_CAP1_READ": {
+              "data": [
+                390864685,
+                390864716,
+                0,
+                34,
+                144,
+                0
+              ],
+              "kind": "ECAP1_CAP1_READ",
+              "seq": 44366,
+              "vns": 3300776124
+            },
+            "PWM_PAIR": {
+              "data": [
+                3,
+                33,
+                15,
+                153334,
+                19237,
+                0
+              ],
+              "kind": "PWM_PAIR",
+              "seq": 44356,
+              "vns": 3300247092
+            },
+            "T12_LOAD": {
+              "data": [
+                6553499,
+                100000000,
+                0,
+                0,
+                0,
+                0
+              ],
+              "kind": "T12_LOAD",
+              "seq": 44349,
+              "vns": 3300079432
+            },
+            "T12_START": {
+              "data": [
+                6553499,
+                100000000,
+                6553499,
+                1,
+                1,
+                0
+              ],
+              "kind": "T12_START",
+              "seq": 44350,
+              "vns": 3300079616
+            },
+            "TIMG12": {
+              "data": [
+                1,
+                1,
+                264799,
+                0,
+                0,
+                0
+              ],
+              "kind": "TIMG12",
+              "seq": 44558,
+              "vns": 3315188120
+            },
+            "TIMG12_ACK": {
+              "data": [
+                1,
+                1,
+                1,
+                264799,
+                0,
+                0
+              ],
+              "kind": "TIMG12_ACK",
+              "seq": 44559,
+              "vns": 3315188140
+            }
+          },
+          "first_negative_sample": {
+            "currents_a": [
+              29.969,
+              0.0,
+              -29.969
+            ],
+            "electrical_angle_deg": 259.9826148851298,
+            "electrical_angle_unwrapped_rad": 155.334,
+            "offset_ns": 7235628,
+            "provenance": "source_observed_model_state",
+            "rpm": -57.069,
+            "seq": 44448,
+            "torque_nm": -1.490241,
+            "vns": 3307235728
+          },
+          "last_recorded_vns": 4799383052,
+          "stage": 3
+        },
+        {
+          "first_comparator": {
+            "active_dac_code": 2048,
+            "filtered_level": 1,
+            "mux_phase_index": 2,
+            "phase_code": 2049,
+            "polarity": "NOT_OBSERVABLE",
+            "publication_identity": "NOT_OBSERVABLE",
+            "seq": 65323,
+            "vns": 4806439000
+          },
+          "first_events": {
+            "CAP1": null,
+            "CAP1_ACK": null,
+            "CMP_FILTER": {
+              "data": [
+                2,
+                1,
+                2049,
+                2048,
+                0,
+                0
+              ],
+              "kind": "CMP_FILTER",
+              "seq": 65323,
+              "vns": 4806439000
+            },
+            "ECAP1_CAP1_READ": null,
+            "PWM_PAIR": null,
+            "T12_LOAD": null,
+            "T12_START": null,
+            "TIMG12": null,
+            "TIMG12_ACK": null
+          },
+          "first_negative_sample": null,
+          "last_recorded_vns": 5099383028,
+          "stage": 4
+        }
+      ]
+    }
+  ],
+  "schema": "e62.acquisition-evidence-summary.v1",
+  "scope": "SIM_ONLY_ORIGINAL_LEGACY_REFERENCE_NOT_DYNAMIC_SC5",
+  "sdk_commit": "b872469ceef18de5e39a1d3acb0821ec158b44c7"
+}
