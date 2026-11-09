@@ -1,0 +1,966 @@
+{
+  "schema": "e62.incremental.acceptance.v7",
+  "date_taipei": "2026-11-10",
+  "status_vocabulary": [
+    "PASS_NEW",
+    "PASS_REUSED",
+    "FAIL",
+    "INCOMPLETE",
+    "BLOCKED"
+  ],
+  "original_qualified": false,
+  "hardware_qualified": false,
+  "production_merge_performed": false,
+  "issues_closed": false,
+  "p1_thresholds_changed": false,
+  "motor_physics_changed": false,
+  "compatibility": {
+    "schema": "e62.sim-only-cross-repository.v7",
+    "development_only": true,
+    "production_qualified": false,
+    "hardware_qualified": false,
+    "firmware_branch": "integration/e62-sim-only-v7",
+    "firmware_commit": "af7eb7c410532e6ae39cb512cb83cd5abd38cfd2",
+    "firmware_pr": "https://github.com/cctsao1008/ESCape32/pull/16",
+    "firmware_build": {
+      "firmware_source_commit": "3c6264a80f6e8f00233b89d53d1f39032ee8706d",
+      "sdk_commit": "b872469ceef18de5e39a1d3acb0821ec158b44c7",
+      "profile": "/workspace/e62-firmware-integration/mcu/_support/AM13E/cmake/test_profiles/e62_sc5_coast_phase.cmake",
+      "configure_command": [
+        "cmake",
+        "-S",
+        "/workspace/e62-firmware-integration",
+        "-B",
+        "/workspace/escape32-qemu/.build/mission-fw-v7-coast-evidence",
+        "-DESCAPE32_BUILD_AM13E=ON",
+        "-DAM13E_MOTOR_RUNTIME_ENABLED=ON",
+        "-DAM13E_SDK_ROOT=/tmp/e62-issues/sdk",
+        "-DE62_QEMU_ROOT=/workspace/escape32-qemu",
+        "-DCMAKE_EXE_LINKER_FLAGS=-Wl,-z,max-page-size=0x1000",
+        "-DG13B2_SIM_ONLY_OPT_IN=ON",
+        "-DG13B2_SIM_ONLY_IDEAL_BEMF_REFERENCE=OFF",
+        "-DAM13E_BOARD_BOARD_PROFILE_FILE=/workspace/e62-firmware-integration/mcu/_support/AM13E/cmake/test_profiles/e62_sc5_coast_phase.cmake"
+      ],
+      "build_command": [
+        "cmake",
+        "--build",
+        "/workspace/escape32-qemu/.build/mission-fw-v7-coast-evidence",
+        "--target",
+        "AM13E-rev17.3.elf",
+        "-j2"
+      ],
+      "compiler": "/workspace/setup-escape32/sysroot/usr/bin/arm-none-eabi-gcc",
+      "compiler_sha256": "9b369e040fa0889790fc1aaf673ed3099436f360cd022265f8e7c97d61ed00ec",
+      "compiler_version": "arm-none-eabi-gcc (15:14.2.rel1-1) 14.2.1 20241119",
+      "identity": "EXPERIMENTAL_NOT_ORIGINAL_OR_PRODUCTION_ROOT_FIXES",
+      "configure_rc": 0,
+      "configure_log": "/workspace/escape32-qemu/artifacts/e62-v7/coast-candidate.build-provenance.configure.log",
+      "build_rc": 0,
+      "build_log": "/workspace/escape32-qemu/artifacts/e62-v7/coast-candidate.build-provenance.build.log",
+      "elf_path": "/workspace/escape32-qemu/.build/mission-fw-v7-coast-evidence/AM13E-rev17.3.elf",
+      "elf_sha256": "2c5d655b78af53049b73d87553429807cb867ec07985d4b3c76df9bb06c0fd6c"
+    },
+    "qemu_diagnostics_branch": "integration/e62-sim-only-v7",
+    "qemu_diagnostics_commit": "2dfa9f221df1c1256180de3e13064bfc1d8deed5",
+    "qemu_pr": "https://github.com/cctsao1008/escape32-qemu/pull/18",
+    "effective_qemu_binary": "/workspace/escape32-qemu/artifacts/e62-v4/dynamic-vbus-qemu-system-arm",
+    "effective_qemu_sha256": "6f99975e319ada16af98050c66b1ee39fef690d8dca16ec08a6c59560f7faef8",
+    "reported_binary_source_identity": "experiment/e62-source-vbus-handover@8178dd2 (v4/v5 provenance, not falsely relabeled current integration HEAD)",
+    "upstream_qemu_commit": "44f28df24767cf9dca1ddc9b23157737c4cbb645",
+    "runtime_machine_build_diff_from_v6": "",
+    "selected_firmware_prs": [
+      6,
+      7,
+      9,
+      10,
+      11,
+      12,
+      13,
+      15,
+      16
+    ],
+    "selected_qemu_prs": [
+      11,
+      12,
+      13,
+      15,
+      16,
+      17,
+      18
+    ],
+    "excluded_optional_qemu_prs": [
+      14
+    ],
+    "h9_h10_preserved_as_separate_prs": [
+      11,
+      12
+    ],
+    "original_elf": {
+      "identity": "ORIGINAL_REL17_3",
+      "sha256": "05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0"
+    },
+    "production_root_fixes_elf": {
+      "identity": "PRODUCTION_ROOT_FIXES_NOT_ORIGINAL",
+      "historical_sha256_prefix": "c49a7485",
+      "used_in_new_runs": false
+    },
+    "cfg": {
+      "path": "/workspace/escape32-qemu/artifacts/mission-sc5/sc5-g13b3-cfg-flash.bin",
+      "sha256": "ab144c4b281ec53feb399b45c758b1de72b2c16f252e6ff64980f263b3a51702"
+    },
+    "source_inputs": {
+      "scenarios/e62-v4/vbus-constant.csv": "75cc780ad11052563dcc7954dc8dee3b31e59d30c0a1fc99a8a34a72681b686e"
+    },
+    "scenarios": {
+      "/workspace/escape32-qemu/scenarios/e62-experimental-two-demand-coast-short300.json": "891b9b7503f0933d58310fbd8541139d6fec69f8c1b35212b34c88b6c4ffce20",
+      "/workspace/escape32-qemu/scenarios/e62-experimental-two-demand-coast-reacquire.json": "e6c782b194948fbda79a82d2f5f29a61640b8e0a6d510c1c54f43231818da008",
+      "/workspace/escape32-qemu/scenarios/e62-experimental-two-demand-coast-long3000.json": "fe3ba96a3bf68a44c105b57e41bc1d01ec85126e3ed417e86c8cfa88adecbfb4"
+    },
+    "test_sources": {
+      "tests/e62_autonomous_native_motor_probe.py": "3a7fad1dc877995d9d25b785a33f32cb993d9ba7be257c94d0782737d3dc9cf4",
+      "tools/e62_restart_phase_sweep_verdict.py": "73546ced50496fa42efeb55d7b53a177dbbe728f493fdab05cf384dea6d950dc",
+      "tools/e62_experimental_second_demand_oracle.py": "a04a771dd3c031e88d22de3b02d54eb6fcf30c853dd92d081c58eb7b139a12b1",
+      "tools/native_p1_qualification.py": "f14c0acde0cdc263c2ee733c32e9fad3df290e816ef0eab66c4a511ae548cc59",
+      "tools/native_p0_strict.py": "3d64dbb9c13365f119f31afe8e0e8e16df06e7a241b7ee4d85b33c115d53d0ad",
+      "configs/e62-startup-second-demand-oracle-v1.json": "1f0313fc25cbcfa8dbe003c8931992333e02cb7f767448113d7f8c8e71ae9eab"
+    },
+    "model": "ecx87-kv147, unchanged6f executable and24V/R53000uOhm/L24000nH/Kt64900uNm/A; initial pose only declared input difference",
+    "external_dependencies": [
+      "Official SDK b872469ceef18de5e39a1d3acb0821ec158b44c7",
+      "Published exact QEMU executable6f99975e, not regenerated from new diagnostic HEAD",
+      "Measured phase ADC noise/offset/bandwidth and analog settling",
+      "Motor/propeller R/L/BEMF/inertia/friction/load/thrust/thermal/protection data",
+      "Release image-integrity/update policy where still unspecified"
+    ]
+  },
+  "criteria": [
+    {
+      "issue": 5,
+      "criterion": "Unknown phase or contradictory same-identity payload/time must revoke history",
+      "status": "PASS_NEW",
+      "evidence": "uncertainty-before cases0/1/2 exit134; uncertainty-after all0; firmware3c6264a",
+      "test_selection": "New causal negative tests, not an unchanged-PASS rerun"
+    },
+    {
+      "issue": 5,
+      "criterion": "Exact duplicate epoch idempotence",
+      "status": "PASS_NEW",
+      "evidence": "uncertainty-before and after case3 exit0",
+      "test_selection": "Required counterexample control for identity invalidation"
+    },
+    {
+      "issue": 5,
+      "criterion": "Changed acquisition Core/SC5 critical regression",
+      "status": "PASS_NEW",
+      "evidence": "coast-impact-host.log, coast-impact-sdk.log, critical-sdk-full.log (107 groups)",
+      "test_selection": "Safety-critical acquisition authorization changed; full applicable SDK host/register gates required"
+    },
+    {
+      "issue": 5,
+      "criterion": "Timeout after first real capture requests shutdown without another timer",
+      "status": "PASS_NEW",
+      "evidence": "core-interrupted-only.log at test-only af7eb7c",
+      "test_selection": "Previously incomplete interruption stage, only new case executed"
+    },
+    {
+      "issue": 5,
+      "criterion": "impact-coast1500",
+      "status": "PASS_NEW",
+      "evidence": {
+        "case": "impact-coast1500",
+        "verdict": "PASS_NEW",
+        "failures": [],
+        "first_window": {
+          "end_virtual_ns": 3000000100,
+          "negative_rotor_samples_below_minus_floor": 0,
+          "positive_rotor_observation_span_ms": 1497.0005,
+          "positive_rotor_samples_ge_50rpm": 1498,
+          "profile_positive_rpm_floor": 50,
+          "rotor_samples": 1500,
+          "source_counts": {
+            "CAP1_ACK": 2595,
+            "PWM_PAIR": 2596,
+            "TIMG12_ACK": 2595
+          },
+          "stage_index": 1,
+          "start_virtual_ns": 1500000100
+        },
+        "second_window": {
+          "end_virtual_ns": 6000000100,
+          "negative_rotor_samples_below_minus_floor": 0,
+          "positive_rotor_observation_span_ms": 1497.000908,
+          "positive_rotor_samples_ge_50rpm": 1498,
+          "profile_positive_rpm_floor": 50,
+          "rotor_samples": 1500,
+          "source_counts": {
+            "CAP1_ACK": 2595,
+            "PWM_PAIR": 2596,
+            "TIMG12_ACK": 2595
+          },
+          "stage_index": 3,
+          "start_virtual_ns": 4500000100
+        },
+        "boundary_prior_rotor": {
+          "vns": 4499351744,
+          "sample_age_ns": 648356,
+          "rpm": 2.817,
+          "electrical_angle_rad": 2750.329,
+          "electrical_angle_deg": 157582.2439724362,
+          "current_a": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "torque_nm": 0.0
+        },
+        "boundary_wrapped_angle_deg": 262.2439724362048,
+        "guest_record": {
+          "acquisition_tick": 71808,
+          "coast_transitions": 15,
+          "decision": 4,
+          "first_capture_us": 3139,
+          "guest_inferred_direction": 1,
+          "guest_tick": 71818,
+          "hardware_qualified": false,
+          "oldstep": 3,
+          "original_qualified": false,
+          "phase_pattern": 6,
+          "sample": 4488,
+          "second_capture_us": 1636,
+          "selected_step": 6,
+          "stable_epochs": 62,
+          "status": "TWO_CAPTURES_NOT_ROTOR_QUALIFICATION",
+          "timestamp_domain": "GUEST_TICKS_NOT_SOURCE_VNS"
+        },
+        "first_reacquisition_timer": {
+          "source_load": {
+            "seq": 83448,
+            "vns": 4503362840,
+            "kind": "T12_LOAD",
+            "a": 99,
+            "b": 100000000,
+            "c": 0,
+            "d": 0,
+            "e": 0,
+            "f": 0
+          },
+          "source_start_vns": 4503363024,
+          "source_irq_vns": 4503364024,
+          "source_programmed_period_ns": 1000,
+          "actual_start_to_irq_ns": 1000,
+          "observed_error_ns": 0,
+          "replaced_before_irq": false
+        },
+        "first_start_reverse": null,
+        "raw_evidence": "artifacts/e62-v7/native-authorized/impact-coast1500.json",
+        "source_events": "artifacts/e62-v7/native-authorized/impact-coast1500.p0.events.log",
+        "source_clock_verdict": null,
+        "original_qualified": false
+      },
+      "test_selection": "Critical dependency impacted nominal gate"
+    },
+    {
+      "issue": 5,
+      "criterion": "impact-coast300",
+      "status": "PASS_NEW",
+      "evidence": {
+        "case": "impact-coast300",
+        "verdict": "PASS_NEW",
+        "failures": [],
+        "first_window": {
+          "end_virtual_ns": 3000000100,
+          "negative_rotor_samples_below_minus_floor": 0,
+          "positive_rotor_observation_span_ms": 1497.000652,
+          "positive_rotor_samples_ge_50rpm": 1498,
+          "profile_positive_rpm_floor": 50,
+          "rotor_samples": 1500,
+          "source_counts": {
+            "CAP1_ACK": 2597,
+            "PWM_PAIR": 2598,
+            "TIMG12_ACK": 2597
+          },
+          "stage_index": 1,
+          "start_virtual_ns": 1500000100
+        },
+        "second_window": {
+          "end_virtual_ns": 4800000100,
+          "negative_rotor_samples_below_minus_floor": 0,
+          "positive_rotor_observation_span_ms": 1497.00056,
+          "positive_rotor_samples_ge_50rpm": 1498,
+          "profile_positive_rpm_floor": 50,
+          "rotor_samples": 1500,
+          "source_counts": {
+            "CAP1_ACK": 2597,
+            "PWM_PAIR": 2597,
+            "TIMG12_ACK": 2596
+          },
+          "stage_index": 3,
+          "start_virtual_ns": 3300000100
+        },
+        "boundary_prior_rotor": {
+          "vns": 3299350312,
+          "sample_age_ns": 649788,
+          "rpm": 5.879,
+          "electrical_angle_rad": 2739.327,
+          "electrical_angle_deg": 156951.87580623326,
+          "current_a": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "torque_nm": 0.0
+        },
+        "boundary_wrapped_angle_deg": 351.8758062332636,
+        "guest_record": {
+          "acquisition_tick": 52608,
+          "coast_transitions": 2,
+          "decision": 4,
+          "first_capture_us": 1649,
+          "guest_inferred_direction": 1,
+          "guest_tick": 52618,
+          "hardware_qualified": false,
+          "oldstep": 5,
+          "original_qualified": false,
+          "phase_pattern": 4,
+          "sample": 3288,
+          "second_capture_us": 2415,
+          "selected_step": 1,
+          "stable_epochs": 69,
+          "status": "TWO_CAPTURES_NOT_ROTOR_QUALIFICATION",
+          "timestamp_domain": "GUEST_TICKS_NOT_SOURCE_VNS"
+        },
+        "first_reacquisition_timer": {
+          "source_load": {
+            "seq": 67821,
+            "vns": 3301872408,
+            "kind": "T12_LOAD",
+            "a": 99,
+            "b": 100000000,
+            "c": 0,
+            "d": 0,
+            "e": 0,
+            "f": 0
+          },
+          "source_start_vns": 3301872592,
+          "source_irq_vns": 3301873592,
+          "source_programmed_period_ns": 1000,
+          "actual_start_to_irq_ns": 1000,
+          "observed_error_ns": 0,
+          "replaced_before_irq": false
+        },
+        "first_start_reverse": null,
+        "raw_evidence": "artifacts/e62-v7/native-authorized/impact-coast300.json",
+        "source_events": "artifacts/e62-v7/native-authorized/impact-coast300.p0.events.log",
+        "source_clock_verdict": null,
+        "original_qualified": false
+      },
+      "test_selection": "Critical dependency impacted nominal gate"
+    },
+    {
+      "issue": 5,
+      "criterion": "impact-coast3000",
+      "status": "PASS_NEW",
+      "evidence": {
+        "case": "impact-coast3000",
+        "verdict": "PASS_NEW",
+        "failures": [],
+        "first_window": {
+          "end_virtual_ns": 3000000100,
+          "negative_rotor_samples_below_minus_floor": 0,
+          "positive_rotor_observation_span_ms": 1497.000324,
+          "positive_rotor_samples_ge_50rpm": 1498,
+          "profile_positive_rpm_floor": 50,
+          "rotor_samples": 1500,
+          "source_counts": {
+            "CAP1_ACK": 2598,
+            "PWM_PAIR": 2599,
+            "TIMG12_ACK": 2598
+          },
+          "stage_index": 1,
+          "start_virtual_ns": 1500000100
+        },
+        "second_window": {
+          "end_virtual_ns": 7500000100,
+          "negative_rotor_samples_below_minus_floor": 0,
+          "positive_rotor_observation_span_ms": 1497.0004,
+          "positive_rotor_samples_ge_50rpm": 1498,
+          "profile_positive_rpm_floor": 50,
+          "rotor_samples": 1500,
+          "source_counts": {
+            "CAP1_ACK": 2596,
+            "PWM_PAIR": 2595,
+            "TIMG12_ACK": 2595
+          },
+          "stage_index": 3,
+          "start_virtual_ns": 6000000100
+        },
+        "boundary_prior_rotor": {
+          "vns": 5999352500,
+          "sample_age_ns": 647600,
+          "rpm": 0.682,
+          "electrical_angle_rad": 2753.671,
+          "electrical_angle_deg": 157773.7264675689,
+          "current_a": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "torque_nm": 0.0
+        },
+        "boundary_wrapped_angle_deg": 93.72646756889299,
+        "guest_record": {
+          "acquisition_tick": 95808,
+          "coast_transitions": 15,
+          "decision": 4,
+          "first_capture_us": 2659,
+          "guest_inferred_direction": 1,
+          "guest_tick": 95817,
+          "hardware_qualified": false,
+          "oldstep": 6,
+          "original_qualified": false,
+          "phase_pattern": 1,
+          "sample": 5988,
+          "second_capture_us": 1766,
+          "selected_step": 3,
+          "stable_epochs": 343,
+          "status": "TWO_CAPTURES_NOT_ROTOR_QUALIFICATION",
+          "timestamp_domain": "GUEST_TICKS_NOT_SOURCE_VNS"
+        },
+        "first_reacquisition_timer": {
+          "source_load": {
+            "seq": 102883,
+            "vns": 6002859756,
+            "kind": "T12_LOAD",
+            "a": 99,
+            "b": 100000000,
+            "c": 0,
+            "d": 0,
+            "e": 0,
+            "f": 0
+          },
+          "source_start_vns": 6002859940,
+          "source_irq_vns": 6002860940,
+          "source_programmed_period_ns": 1000,
+          "actual_start_to_irq_ns": 1000,
+          "observed_error_ns": 0,
+          "replaced_before_irq": false
+        },
+        "first_start_reverse": null,
+        "raw_evidence": "artifacts/e62-v7/native-authorized/impact-coast3000.json",
+        "source_events": "artifacts/e62-v7/native-authorized/impact-coast3000.p0.events.log",
+        "source_clock_verdict": null,
+        "original_qualified": false
+      },
+      "test_selection": "Critical dependency impacted nominal gate"
+    },
+    {
+      "issue": 5,
+      "criterion": "new-pose150-coast1500",
+      "status": "FAIL",
+      "evidence": {
+        "case": "new-pose150-coast1500",
+        "verdict": "FAIL",
+        "failures": [
+          "SECOND_DEMAND_FIRST_SUSTAINED_POSITIVE_ROTOR_RESPONSE_MISSING",
+          "SECOND_DEMAND_FIRST_SIGNIFICANT_REVERSE_ROTATION"
+        ],
+        "first_window": {
+          "end_virtual_ns": 3000000100,
+          "negative_rotor_samples_below_minus_floor": 558,
+          "positive_rotor_observation_span_ms": 1488.000036,
+          "positive_rotor_samples_ge_50rpm": 790,
+          "profile_positive_rpm_floor": 50,
+          "rotor_samples": 1500,
+          "source_counts": {
+            "CAP1_ACK": 196,
+            "PWM_PAIR": 132,
+            "TIMG12_ACK": 131
+          },
+          "stage_index": 1,
+          "start_virtual_ns": 1500000100
+        },
+        "second_window": {
+          "end_virtual_ns": 6000000100,
+          "negative_rotor_samples_below_minus_floor": 0,
+          "positive_rotor_observation_span_ms": 1497.000492,
+          "positive_rotor_samples_ge_50rpm": 1498,
+          "profile_positive_rpm_floor": 50,
+          "rotor_samples": 1500,
+          "source_counts": {
+            "CAP1_ACK": 2596,
+            "PWM_PAIR": 2597,
+            "TIMG12_ACK": 2596
+          },
+          "stage_index": 3,
+          "start_virtual_ns": 4500000100
+        },
+        "boundary_prior_rotor": {
+          "vns": 4499349824,
+          "sample_age_ns": 650276,
+          "rpm": 7.474,
+          "electrical_angle_rad": 184.404,
+          "electrical_angle_deg": 10565.570925330434,
+          "current_a": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "torque_nm": 0.0
+        },
+        "boundary_wrapped_angle_deg": 125.57092533043397,
+        "guest_record": {
+          "acquisition_tick": 71808,
+          "coast_transitions": 43,
+          "decision": 4,
+          "first_capture_us": 3806,
+          "guest_inferred_direction": 1,
+          "guest_tick": 71818,
+          "hardware_qualified": false,
+          "oldstep": 1,
+          "original_qualified": false,
+          "phase_pattern": 3,
+          "sample": 4488,
+          "second_capture_us": 1501,
+          "selected_step": 4,
+          "stable_epochs": 7,
+          "status": "TWO_CAPTURES_NOT_ROTOR_QUALIFICATION",
+          "timestamp_domain": "GUEST_TICKS_NOT_SOURCE_VNS"
+        },
+        "first_reacquisition_timer": {
+          "source_load": {
+            "seq": 60139,
+            "vns": 4504030844,
+            "kind": "T12_LOAD",
+            "a": 99,
+            "b": 100000000,
+            "c": 0,
+            "d": 0,
+            "e": 0,
+            "f": 0
+          },
+          "source_start_vns": 4504031028,
+          "source_irq_vns": 4504032028,
+          "source_programmed_period_ns": 1000,
+          "actual_start_to_irq_ns": 1000,
+          "observed_error_ns": 0,
+          "replaced_before_irq": false
+        },
+        "first_start_reverse": {
+          "vns": 1502349748,
+          "sample_age_ns": null,
+          "rpm": -141.202,
+          "electrical_angle_rad": 2.38,
+          "electrical_angle_deg": 136.36395524113593,
+          "current_a": [
+            0.0,
+            -25.843,
+            25.843
+          ],
+          "torque_nm": -1.214096,
+          "after_demand_ns": 2349648,
+          "feedback_phase": "BEFORE_ACCEPTED_CAPTURE",
+          "physical_first_sector": true
+        },
+        "raw_evidence": "artifacts/e62-v7/native-authorized/new-pose150-coast1500.json",
+        "source_events": "artifacts/e62-v7/native-authorized/new-pose150-coast1500.p0.events.log",
+        "source_clock_verdict": null,
+        "original_qualified": false
+      },
+      "test_selection": "Previously untested initial pose; first and second demand classified independently"
+    },
+    {
+      "issue": 5,
+      "criterion": "new-pose30-coast300",
+      "status": "FAIL",
+      "evidence": {
+        "case": "new-pose30-coast300",
+        "verdict": "FAIL",
+        "failures": [
+          "SECOND_DEMAND_FIRST_SUSTAINED_POSITIVE_ROTOR_RESPONSE_MISSING",
+          "SECOND_DEMAND_FIRST_SIGNIFICANT_REVERSE_ROTATION"
+        ],
+        "first_window": {
+          "end_virtual_ns": 3000000100,
+          "negative_rotor_samples_below_minus_floor": 561,
+          "positive_rotor_observation_span_ms": 1488.00004,
+          "positive_rotor_samples_ge_50rpm": 790,
+          "profile_positive_rpm_floor": 50,
+          "rotor_samples": 1500,
+          "source_counts": {
+            "CAP1_ACK": 196,
+            "PWM_PAIR": 132,
+            "TIMG12_ACK": 131
+          },
+          "stage_index": 1,
+          "start_virtual_ns": 1500000100
+        },
+        "second_window": {
+          "end_virtual_ns": 4800000100,
+          "negative_rotor_samples_below_minus_floor": 0,
+          "positive_rotor_observation_span_ms": 1498.000572,
+          "positive_rotor_samples_ge_50rpm": 1499,
+          "profile_positive_rpm_floor": 50,
+          "rotor_samples": 1500,
+          "source_counts": {
+            "CAP1_ACK": 2597,
+            "PWM_PAIR": 2598,
+            "TIMG12_ACK": 2597
+          },
+          "stage_index": 3,
+          "start_virtual_ns": 3300000100
+        },
+        "boundary_prior_rotor": {
+          "vns": 3299350356,
+          "sample_age_ns": 649744,
+          "rpm": 18.044,
+          "electrical_angle_rad": 145.148,
+          "electrical_angle_deg": 8316.367804764874,
+          "current_a": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "torque_nm": 0.0
+        },
+        "boundary_wrapped_angle_deg": 36.367804764873654,
+        "guest_record": {
+          "acquisition_tick": 52608,
+          "coast_transitions": 11,
+          "decision": 4,
+          "first_capture_us": 2300,
+          "guest_inferred_direction": 1,
+          "guest_tick": 52618,
+          "hardware_qualified": false,
+          "oldstep": 1,
+          "original_qualified": false,
+          "phase_pattern": 5,
+          "sample": 3288,
+          "second_capture_us": 1926,
+          "selected_step": 2,
+          "stable_epochs": 17,
+          "status": "TWO_CAPTURES_NOT_ROTOR_QUALIFICATION",
+          "timestamp_domain": "GUEST_TICKS_NOT_SOURCE_VNS"
+        },
+        "first_reacquisition_timer": {
+          "source_load": {
+            "seq": 44499,
+            "vns": 3302523452,
+            "kind": "T12_LOAD",
+            "a": 99,
+            "b": 100000000,
+            "c": 0,
+            "d": 0,
+            "e": 0,
+            "f": 0
+          },
+          "source_start_vns": 3302523636,
+          "source_irq_vns": 3302524636,
+          "source_programmed_period_ns": 1000,
+          "actual_start_to_irq_ns": 1000,
+          "observed_error_ns": 0,
+          "replaced_before_irq": false
+        },
+        "first_start_reverse": {
+          "vns": 1501350308,
+          "sample_age_ns": null,
+          "rpm": -51.094,
+          "electrical_angle_rad": -3.569,
+          "electrical_angle_deg": -204.4886370821908,
+          "current_a": [
+            0.0,
+            -21.524,
+            21.524
+          ],
+          "torque_nm": -1.271263,
+          "after_demand_ns": 1350208,
+          "feedback_phase": "BEFORE_ACCEPTED_CAPTURE",
+          "physical_first_sector": true
+        },
+        "raw_evidence": "artifacts/e62-v7/native-authorized/new-pose30-coast300.json",
+        "source_events": "artifacts/e62-v7/native-authorized/new-pose30-coast300.p0.events.log",
+        "source_clock_verdict": null,
+        "original_qualified": false
+      },
+      "test_selection": "Previously untested initial pose; first and second demand classified independently"
+    },
+    {
+      "issue": 5,
+      "criterion": "Sampled alias/noise can be ruled out as false direction",
+      "status": "INCOMPLETE",
+      "evidence": "alias-witness.json; identical sampled patterns for k and\u22125k sectors",
+      "test_selection": "New mathematical UNIT counterexample; no native feedback injection or physical calibration claim"
+    },
+    {
+      "issue": 5,
+      "criterion": "Native reverse-wind/noisy/contradictory/generic audio-brake eligibility",
+      "status": "INCOMPLETE",
+      "evidence": "v6 prior refusals retained only for their original identities; new UNIT negatives do not replace native qualification",
+      "test_selection": "No verified admission uncertainty/speed bounds or native full matrix; do not fake measurements"
+    },
+    {
+      "issue": 5,
+      "criterion": "Pending1us timer cancellation and target ISR worst-case budget",
+      "status": "INCOMPLETE",
+      "evidence": "interruption-audit.json limits; first timer already expired before fault",
+      "test_selection": "Current experiment discriminates after-first-capture invalidity, not pending-timer cancellation"
+    },
+    {
+      "issue": 5,
+      "criterion": "Original Rel17.3 and arbitrary90-degree cold startup",
+      "status": "FAIL",
+      "evidence": "v5 prompt-campaign/startup-prompt-angle90; stress-replay/v5-cold90.chronology.json",
+      "test_selection": "New narrow causal separation of preserved failure, no simulation repeat; experimental SHA guard remains"
+    },
+    {
+      "issue": 4,
+      "criterion": "Native invalid reference after first CAP1 while last-good sample fresh",
+      "status": "PASS_NEW",
+      "evidence": {
+        "schema": "e62.native-interrupted-acquisition.v7",
+        "authorization_safety_status": "PASS_NEW",
+        "reacquisition_status": "FAIL",
+        "first_capture": {
+          "seq": 67907,
+          "vns": 3303481792,
+          "kind": "CAP1",
+          "a": 403743407,
+          "b": 1,
+          "c": 3,
+          "d": 34,
+          "e": 0,
+          "f": 0
+        },
+        "cap1_ack": {
+          "seq": 67910,
+          "vns": 3303483424,
+          "kind": "CAP1_ACK",
+          "a": 2,
+          "b": 3,
+          "c": 403743407,
+          "d": 34,
+          "e": 0,
+          "f": 0
+        },
+        "first_irq": {
+          "seq": 67915,
+          "vns": 3303486424,
+          "kind": "TIMG12",
+          "a": 1,
+          "b": 1,
+          "c": 99,
+          "d": 0,
+          "e": 0,
+          "f": 0
+        },
+        "invalid_source_eoc_vns": 3303499464,
+        "all_off": {
+          "seq": 67929,
+          "vns": 3303605364,
+          "kind": "SWITCH_FOCUS",
+          "a": 0,
+          "b": 0,
+          "c": 14,
+          "d": 5230262,
+          "e": 22901,
+          "f": 1967927
+        },
+        "invalid_eoc_to_sampled_all_off_ns": 105900,
+        "post_off_motor_or_timer_events": 0,
+        "source_last_event_vns": 5099350420,
+        "reference_snapshot": {
+          "acquisition_epoch": 0,
+          "acquisition_tick": 52656,
+          "age_ticks": 18,
+          "codes": [
+            2047,
+            2047,
+            2047
+          ],
+          "completion_tick": 52656,
+          "controller_usable_not_inferred": true,
+          "current_epoch": 0,
+          "guest_tick": 52674,
+          "inside_age_bound": true,
+          "max_age_ticks": 32,
+          "sample": 3291,
+          "status": "PASSIVE_STABLE_SNAPSHOT",
+          "timestamp_domain": "GUEST_TICKS_NOT_SOURCE_VNS",
+          "valid_flag": 0
+        },
+        "guest_record": {
+          "acquisition_tick": 52608,
+          "coast_transitions": 2,
+          "decision": 3,
+          "first_capture_us": 3260,
+          "guest_inferred_direction": 1,
+          "guest_tick": 52618,
+          "hardware_qualified": false,
+          "oldstep": 4,
+          "original_qualified": false,
+          "phase_pattern": 6,
+          "sample": 3288,
+          "second_capture_us": 0,
+          "selected_step": 6,
+          "stable_epochs": 30,
+          "status": "FIRST_REAL_CAPTURE_NOT_LOCKED",
+          "timestamp_domain": "GUEST_TICKS_NOT_SOURCE_VNS"
+        },
+        "pads_snapshot": {
+          "actual_clocked_journal": true,
+          "dropped_events": 142874,
+          "evaluator_valid": true,
+          "instantaneous_six_pad_mask": 0,
+          "last_journal_gate_word": 14,
+          "last_journal_level_valid": true,
+          "last_journal_trip_bits": 0,
+          "native_pwm_invalid_level_events": 0,
+          "native_pwm_zero_callbacks": 22901,
+          "records_retained": 128,
+          "ring_dropped": true,
+          "running": false,
+          "total_events": 143002
+        },
+        "limits": [
+          "Sensor mode changes at sourceframe3303; actual invalid conversion arrives after the first real CAP1 and its1us timer IRQ, before a second CAP1.",
+          "A physical pair commit occurs after invalid EOC but before fail-closed shutdown; no source timestamp of reference invalidation or latency acceptance bound is claimed.",
+          "This does not test cancellation of a still-pending1us commutation timer: that timer already fired.",
+          "Pad history is bounded SWITCH_FOCUS plus final clocked evaluator; event absence alone is not continuous pad measurement.",
+          "No successful restart, physical settling, production approval or Original qualification."
+        ],
+        "source_evidence_sha256": "2cc2a649fb64c4aa71d3c44d0f8503c355be0a2426121f9037e1326dd33eff1a"
+      },
+      "test_selection": "Previously incomplete post-authorization fault; new source frame3303 invalid ADC, unchanged24V"
+    },
+    {
+      "issue": 5,
+      "criterion": "Successful reacquisition under the deliberate invalid-reference fault",
+      "status": "FAIL",
+      "evidence": "native-authorized/interrupt-after-first.restart.json; decisionFIRST_REAL_CAPTURE_NOT_LOCKED",
+      "test_selection": "Negative authorization check is not motor reacquisition"
+    },
+    {
+      "issue": 4,
+      "criterion": "Signed-offset and switching stress qualification",
+      "status": "FAIL",
+      "evidence": "stress-replay/summary.json plus immutable v6 raw logs",
+      "test_selection": "New pre/post-feedback causal replay only; no repetition of already evidenced native failures without correction"
+    },
+    {
+      "issue": 4,
+      "criterion": "Existing native changed-code publication and fresh-invalid gates",
+      "status": "PASS_REUSED",
+      "evidence": "docs/current/e62-engineering-evidence-v5.json; existing exact ELF/QEMU/input identities",
+      "test_selection": "No shared handover runtime change in this phase; not transferred to new ELF as native qualification"
+    },
+    {
+      "issue": 3,
+      "criterion": "Exact14-case CMPSS qualification",
+      "status": "FAIL",
+      "evidence": "experiment/e62-cmpss-cloud-matrix and integration/e62-sim-only-v7: docs/current/e62-issue3-exact-qualification-v2.json; exact ELF5b90b200429333cef82b982b7a7f845f31fb885c7ea63fc7e783c75232fac8d1",
+      "test_selection": "Reuse7 experimental non-SHA passes and7failures; Original identity requirement and100ns preserved"
+    },
+    {
+      "issue": 10,
+      "criterion": "Saved source deadlines within unchanged100ns",
+      "status": "FAIL",
+      "evidence": "v2/v3 saved344\u2013532ns failures; no new timing fix",
+      "test_selection": "No discriminating new dispatch/clock hypothesis; no broad campaign"
+    },
+    {
+      "issue": 6,
+      "criterion": "Unchanged numerical software/model checks",
+      "status": "PASS_REUSED",
+      "evidence": "e62-engineering-status-v3.md and e62-engineering-status-v5.md numerical evidence",
+      "test_selection": "No model or numerical implementation change, do not repeat historical PASS"
+    },
+    {
+      "issue": 6,
+      "criterion": "Measured motor-propeller model correlation",
+      "status": "BLOCKED",
+      "evidence": "Measured phaseR/L vs temperature, phaseBEMF waveform, inertia/friction, torque/speed/thrust/load transients and uncertainty required",
+      "test_selection": "Physical evidence unavailable; source model predictions are not measurements"
+    },
+    {
+      "issue": 8,
+      "criterion": "Boot/Flash build and host integrity-negative prerequisites",
+      "status": "PASS_REUSED",
+      "evidence": "Firmware PR8 b2dea0aa5c90; versioned release-gates report and v1/v5 evidence",
+      "test_selection": "Exact unchanged source; not a hardware release or unspecifiedCRC/rollback guarantee"
+    },
+    {
+      "issue": 8,
+      "criterion": "Undefined full-image/update release requirements",
+      "status": "BLOCKED",
+      "evidence": "Need approved integrity/atomicity/retry/rollback contract and interfaces",
+      "test_selection": "Do not invent release policy or implement an unrequested interface"
+    },
+    {
+      "issue": 8,
+      "criterion": "Physical production release approval",
+      "status": "BLOCKED",
+      "evidence": "Board programming/protection/current/thermal/thrust and physical calibration measurements",
+      "test_selection": "SIM_ONLY qualification is separate from hardware approval"
+    },
+    {
+      "issue": 5,
+      "criterion": "v6 nominal first-start/restart historical evidence",
+      "status": "PASS_REUSED",
+      "evidence": "ELFf61c7e2cf240bf79a0cdc2d65c88c06c03a52865122a0054d7a14fba55b22e08; v6 verified bundle27360c958eba7c29d501b7189ad6d1f6e55129a69616c47f33ec814be32d26fb",
+      "test_selection": "Reused only for v6 identity; new2c5d ELF independently tested when dependency impacted"
+    },
+    {
+      "issue": 10,
+      "criterion": "Diagnostic timeout CI import and integration tooling",
+      "status": "PASS_NEW",
+      "evidence": "225d288; failed-ci-local-reproduction.log; failed-ci-integration-after-fix.log35tests; offline-integration-impact.log38tests",
+      "test_selection": "Failed CI command reproduced; syntax-only repair and integration-impact gates"
+    }
+  ],
+  "native_executions": {
+    "completed": 6,
+    "blocked_preflight": 1,
+    "identities": "one new experimental firmware2c5d655b; exact restored QEMU6f99975e; five nominal/pose cases plus one deliberate interruption"
+  },
+  "pr_inventory": "docs/review/e62-pr-inventory-v7.json",
+  "integration": {
+    "qemu": "https://github.com/cctsao1008/escape32-qemu/pull/18",
+    "firmware": "https://github.com/cctsao1008/ESCape32/pull/16",
+    "diagnostic_repair": "https://github.com/cctsao1008/escape32-qemu/pull/17"
+  },
+  "not_reexecuted": [
+    "T01",
+    "QEMU full host audit",
+    "exact Issue3 full matrix",
+    "broad timing campaign"
+  ],
+  "remaining_software_gates": [
+    "arbitrary-pose first startup including saved90degree failure",
+    "independent anti-alias/uncertainty admission contract",
+    "native reverse wind/noise and generic audio/brake eligibility",
+    "post-authorization switching/offset control robustness",
+    "pending timer interruption and targetISR timing/interleavings",
+    "full independent final candidate qualification before any production approval"
+  ],
+  "published_branch_heads": {
+    "qemu_integration": "81de1446ff02f8b97b3e3f565c5ecb738aea9096",
+    "firmware_integration": "af7eb7c410532e6ae39cb512cb83cd5abd38cfd2",
+    "qemu_diagnostics_pr17": "225d2886d7cf6268d3ff804831730326e1c1b368"
+  },
+  "default_branches_unchanged": {
+    "main": "3f1ed18e53e115d13b5bad2450d4e315a3d5cea0",
+    "am13e-port-v2": "53953c04f7d857f3b402b3a19870605ed0471d8f"
+  },
+  "remote_ci": {
+    "pr18": {
+      "head": "81de1446ff02f8b97b3e3f565c5ecb738aea9096",
+      "offline-diagnostics": "success",
+      "existing-firmware-reference-contract": "success"
+    },
+    "pr16": {
+      "head": "af7eb7c410532e6ae39cb512cb83cd5abd38cfd2",
+      "check_runs": 0,
+      "review_approvals": 0
+    },
+    "note": "Remote CI success does not imply Original P1 or motor qualification; no approval or READY_TO_MERGE claim"
+  }
+}

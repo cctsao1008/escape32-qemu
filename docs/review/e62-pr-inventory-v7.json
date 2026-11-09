@@ -1,0 +1,2417 @@
+{
+  "schema": "e62.pr-integration-inventory.v7",
+  "date_taipei": "2026-11-10",
+  "source": "GitHub API pull/files/reviews/check-runs metadata, raw archived under artifacts/e62-v7/execution; git source review",
+  "no_ready_to_merge_without_review_and_gates": true,
+  "production_merges": [],
+  "issues_closed": [],
+  "prs": [
+    {
+      "repository": "cctsao1008/ESCape32",
+      "pr": 1,
+      "url": "https://github.com/cctsao1008/ESCape32/pull/1",
+      "classification": "SUPERSEDED",
+      "head": "experiment/e62-issue5-pinned-first-cross-20261101",
+      "head_commit": "bae1ada4c4c9d9d0d0098b1d75cf8a70312eaa3e",
+      "base": "am13e-port-v2",
+      "base_commit": "b0204670515d2de0b2480b52273038f1ee13d30a",
+      "draft": true,
+      "runtime_behavior": true,
+      "motor_or_safety_critical": true,
+      "functional_scope": "Historical fixed first-cross startup experiment.",
+      "changed_files": [
+        {
+          "filename": "src/main.c",
+          "status": "modified",
+          "additions": 22,
+          "deletions": 0
+        }
+      ],
+      "acceptance_blockers": "Superseded as current development baseline by separately identified H8/H9/H10/H13 work; recommend retain evidence and manual disposition, never automatic closure.",
+      "existing_tests_provenance": {
+        "versioned_files": [],
+        "checks": [],
+        "reviews": [],
+        "historical_evidence": "report/e62-engineering-execution at c2b7801; exact manifests v2\u2013v6, no new full matrix rerun"
+      },
+      "upstream": [],
+      "downstream": [],
+      "overlap": [
+        {
+          "pr": 13,
+          "files": [
+            "src/main.c"
+          ]
+        },
+        {
+          "pr": 14,
+          "files": [
+            "src/main.c"
+          ]
+        },
+        {
+          "pr": 15,
+          "files": [
+            "src/main.c"
+          ]
+        },
+        {
+          "pr": 3,
+          "files": [
+            "src/main.c"
+          ]
+        }
+      ],
+      "superseded": true,
+      "recommended_action": "Retain evidence; manual superseded disposition"
+    },
+    {
+      "repository": "cctsao1008/ESCape32",
+      "pr": 10,
+      "url": "https://github.com/cctsao1008/ESCape32/pull/10",
+      "classification": "READY_FOR_REVIEW",
+      "head": "diag/e62-dynamic-handover-evidence",
+      "head_commit": "757c0d703a501ae7c11962156e2d47f803f0dd3a",
+      "base": "experiment/e62-sc5-changed-handover",
+      "base_commit": "76e435cbe376b0a467ec378a517853ad1ea0d0b4",
+      "draft": true,
+      "runtime_behavior": true,
+      "motor_or_safety_critical": true,
+      "functional_scope": "Opt-in dynamic reference/decision diagnostic journal plus virtual-affine SIM_ONLY profile.",
+      "changed_files": [
+        {
+          "filename": "mcu/AM13E/hal/motor_bemf.c",
+          "status": "modified",
+          "additions": 5,
+          "deletions": 0
+        },
+        {
+          "filename": "mcu/_support/AM13E/cmake/test_profiles/e62_sc5_dynamic_affine.cmake",
+          "status": "added",
+          "additions": 7,
+          "deletions": 0
+        },
+        {
+          "filename": "mcu/_support/AM13E/reports/e62-dynamic-source-handover-v4.md",
+          "status": "added",
+          "additions": 20,
+          "deletions": 0
+        }
+      ],
+      "acceptance_blockers": "Default-off diagnostics; downstream experimental handover prerequisites unqualified; review IRQ/journal timing.",
+      "existing_tests_provenance": {
+        "versioned_files": [
+          "mcu/_support/AM13E/reports/e62-dynamic-source-handover-v4.md"
+        ],
+        "checks": [],
+        "reviews": [],
+        "historical_evidence": "report/e62-engineering-execution at c2b7801; exact manifests v2\u2013v6, no new full matrix rerun"
+      },
+      "upstream": [
+        {
+          "pr": 9,
+          "head_commit": "76e435cbe376b0a467ec378a517853ad1ea0d0b4"
+        }
+      ],
+      "downstream": [
+        11,
+        12,
+        13,
+        14
+      ],
+      "overlap": [
+        {
+          "pr": 11,
+          "files": [
+            "mcu/AM13E/hal/motor_bemf.c"
+          ]
+        },
+        {
+          "pr": 3,
+          "files": [
+            "mcu/AM13E/hal/motor_bemf.c"
+          ]
+        },
+        {
+          "pr": 6,
+          "files": [
+            "mcu/AM13E/hal/motor_bemf.c"
+          ]
+        },
+        {
+          "pr": 7,
+          "files": [
+            "mcu/AM13E/hal/motor_bemf.c"
+          ]
+        },
+        {
+          "pr": 9,
+          "files": [
+            "mcu/AM13E/hal/motor_bemf.c"
+          ]
+        }
+      ],
+      "superseded": false,
+      "recommended_action": "Review independently; no default merge"
+    },
+    {
+      "repository": "cctsao1008/ESCape32",
+      "pr": 11,
+      "url": "https://github.com/cctsao1008/ESCape32/pull/11",
+      "classification": "NOT_READY",
+      "head": "fix/e62-equivalent-reference-continuity",
+      "head_commit": "6c9dba3749d46d482a5838adaaf18c6b78732d29",
+      "base": "diag/e62-dynamic-handover-evidence",
+      "base_commit": "757c0d703a501ae7c11962156e2d47f803f0dd3a",
+      "draft": true,
+      "runtime_behavior": true,
+      "motor_or_safety_critical": true,
+      "functional_scope": "H9 continuous capture for fresh equivalent references. Separately reviewable.",
+      "changed_files": [
+        {
+          "filename": "mcu/AM13E/hal/motor_bemf.c",
+          "status": "modified",
+          "additions": 81,
+          "deletions": 0
+        },
+        {
+          "filename": "mcu/_support/AM13E/cmake/test_profiles/e62_sc5_continuous_equivalent.cmake",
+          "status": "added",
+          "additions": 3,
+          "deletions": 0
+        },
+        {
+          "filename": "mcu/_support/AM13E/tests/hal/motor_physical_host_test.c",
+          "status": "modified",
+          "additions": 108,
+          "deletions": 1
+        },
+        {
+          "filename": "mcu/_support/AM13E/tools/run_sc5_continuous_equivalent_regression.sh",
+          "status": "added",
+          "additions": 23,
+          "deletions": 0
+        }
+      ],
+      "acceptance_blockers": "Focused latched-edge/timer/freshness negatives passed historically; complete priority interleaving and target ISR budget remain incomplete; no production approval.",
+      "existing_tests_provenance": {
+        "versioned_files": [
+          "mcu/_support/AM13E/tests/hal/motor_physical_host_test.c"
+        ],
+        "checks": [],
+        "reviews": [],
+        "historical_evidence": "report/e62-engineering-execution at c2b7801; exact manifests v2\u2013v6, no new full matrix rerun"
+      },
+      "upstream": [
+        {
+          "pr": 10,
+          "head_commit": "757c0d703a501ae7c11962156e2d47f803f0dd3a"
+        }
+      ],
+      "downstream": [],
+      "overlap": [
+        {
+          "pr": 10,
+          "files": [
+            "mcu/AM13E/hal/motor_bemf.c"
+          ]
+        },
+        {
+          "pr": 12,
+          "files": [
+            "mcu/_support/AM13E/tests/hal/motor_physical_host_test.c"
+          ]
+        },
+        {
+          "pr": 3,
+          "files": [
+            "mcu/AM13E/hal/motor_bemf.c"
+          ]
+        },
+        {
+          "pr": 6,
+          "files": [
+            "mcu/AM13E/hal/motor_bemf.c"
+          ]
+        },
+        {
+          "pr": 7,
+          "files": [
+            "mcu/AM13E/hal/motor_bemf.c",
+            "mcu/_support/AM13E/tests/hal/motor_physical_host_test.c"
+          ]
+        },
+        {
+          "pr": 9,
+          "files": [
+            "mcu/AM13E/hal/motor_bemf.c",
+            "mcu/_support/AM13E/tests/hal/motor_physical_host_test.c"
+          ]
+        }
+      ],
+      "superseded": false,
+      "recommended_action": "Keep isolated; satisfy listed gates"
+    },
+    {
+      "repository": "cctsao1008/ESCape32",
+      "pr": 12,
+      "url": "https://github.com/cctsao1008/ESCape32/pull/12",
+      "classification": "NOT_READY",
+      "head": "fix/e62-sc5-prompt-producer",
+      "head_commit": "2d112b0d420382dc68fb6087ba2ae4013bbb2251",
+      "base": "diag/e62-dynamic-handover-evidence",
+      "base_commit": "757c0d703a501ae7c11962156e2d47f803f0dd3a",
+      "draft": true,
+      "runtime_behavior": true,
+      "motor_or_safety_critical": true,
+      "functional_scope": "H10 prompt producer in existing PendSV without new ADC requests. Separately reviewable.",
+      "changed_files": [
+        {
+          "filename": "mcu/AM13E/hal/analog_runtime.c",
+          "status": "modified",
+          "additions": 17,
+          "deletions": 3
+        },
+        {
+          "filename": "mcu/AM13E/hal/analog_runtime.h",
+          "status": "modified",
+          "additions": 4,
+          "deletions": 0
+        },
+        {
+          "filename": "mcu/AM13E/hal/irq_vectors.c",
+          "status": "modified",
+          "additions": 6,
+          "deletions": 0
+        },
+        {
+          "filename": "mcu/_support/AM13E/cmake/test_profiles/e62_sc5_prompt_producer.cmake",
+          "status": "added",
+          "additions": 3,
+          "deletions": 0
+        },
+        {
+          "filename": "mcu/_support/AM13E/tests/app/prompt_pendsv_host_test.c",
+          "status": "added",
+          "additions": 19,
+          "deletions": 0
+        },
+        {
+          "filename": "mcu/_support/AM13E/tests/hal/motor_physical_host_test.c",
+          "status": "modified",
+          "additions": 35,
+          "deletions": 1
+        },
+        {
+          "filename": "mcu/_support/AM13E/tools/run_prompt_pendsv_regression.sh",
+          "status": "added",
+          "additions": 20,
+          "deletions": 0
+        },
+        {
+          "filename": "mcu/_support/AM13E/tools/run_sc5_prompt_producer_regression.sh",
+          "status": "added",
+          "additions": 23,
+          "deletions": 0
+        }
+      ],
+      "acceptance_blockers": "Coherent epoch/partial-scan host evidence exists; worst-case16kHz service budget, blackout and preemption audit incomplete; no production approval.",
+      "existing_tests_provenance": {
+        "versioned_files": [
+          "mcu/_support/AM13E/tests/app/prompt_pendsv_host_test.c",
+          "mcu/_support/AM13E/tests/hal/motor_physical_host_test.c"
+        ],
+        "checks": [],
+        "reviews": [],
+        "historical_evidence": "report/e62-engineering-execution at c2b7801; exact manifests v2\u2013v6, no new full matrix rerun"
+      },
+      "upstream": [
+        {
+          "pr": 10,
+          "head_commit": "757c0d703a501ae7c11962156e2d47f803f0dd3a"
+        }
+      ],
+      "downstream": [],
+      "overlap": [
+        {
+          "pr": 11,
+          "files": [
+            "mcu/_support/AM13E/tests/hal/motor_physical_host_test.c"
+          ]
+        },
+        {
+          "pr": 15,
+          "files": [
+            "mcu/AM13E/hal/analog_runtime.c",
+            "mcu/AM13E/hal/analog_runtime.h"
+          ]
+        },
+        {
+          "pr": 7,
+          "files": [
+            "mcu/AM13E/hal/analog_runtime.c",
+            "mcu/_support/AM13E/tests/hal/motor_physical_host_test.c"
+          ]
+        },
+        {
+          "pr": 9,
+          "files": [
+            "mcu/_support/AM13E/tests/hal/motor_physical_host_test.c"
+          ]
+        }
+      ],
+      "superseded": false,
+      "recommended_action": "Keep isolated; satisfy listed gates"
+    },
+    {
+      "repository": "cctsao1008/ESCape32",
+      "pr": 13,
+      "url": "https://github.com/cctsao1008/ESCape32/pull/13",
+      "classification": "NOT_READY",
+      "head": "experiment/e62-acquisition-estimator",
+      "head_commit": "5a1d01e443ad6b478ed974aa98aea370ba40b313",
+      "base": "diag/e62-dynamic-handover-evidence",
+      "base_commit": "757c0d703a501ae7c11962156e2d47f803f0dd3a",
+      "draft": true,
+      "runtime_behavior": true,
+      "motor_or_safety_critical": true,
+      "functional_scope": "H8 acquisition estimator and historical failed policies.",
+      "changed_files": [
+        {
+          "filename": "mcu/_support/AM13E/cmake/test_profiles/e62_sc5_acquisition_estimator.cmake",
+          "status": "added",
+          "additions": 3,
+          "deletions": 0
+        },
+        {
+          "filename": "mcu/_support/AM13E/cmake/test_profiles/e62_sc5_acquisition_window.cmake",
+          "status": "added",
+          "additions": 3,
+          "deletions": 0
+        },
+        {
+          "filename": "mcu/_support/AM13E/cmake/test_profiles/e62_sc5_first_edge_quarter.cmake",
+          "status": "added",
+          "additions": 3,
+          "deletions": 0
+        },
+        {
+          "filename": "mcu/_support/AM13E/cmake/test_profiles/e62_sc5_first_edge_seed.cmake",
+          "status": "added",
+          "additions": 3,
+          "deletions": 0
+        },
+        {
+          "filename": "mcu/_support/AM13E/tests/app/motor_source_host_test.c",
+          "status": "modified",
+          "additions": 73,
+          "deletions": 2
+        },
+        {
+          "filename": "mcu/_support/AM13E/tools/run_first_edge_policy_regression.sh",
+          "status": "added",
+          "additions": 28,
+          "deletions": 0
+        },
+        {
+          "filename": "src/main.c",
+          "status": "modified",
+          "additions": 50,
+          "deletions": 1
+        }
+      ],
+      "acceptance_blockers": "H8 is selected prerequisite, not all contents superseded; cold90 and offset failures remain, no general rotor qualification.",
+      "existing_tests_provenance": {
+        "versioned_files": [
+          "mcu/_support/AM13E/tests/app/motor_source_host_test.c"
+        ],
+        "checks": [],
+        "reviews": [],
+        "historical_evidence": "report/e62-engineering-execution at c2b7801; exact manifests v2\u2013v6, no new full matrix rerun"
+      },
+      "upstream": [
+        {
+          "pr": 10,
+          "head_commit": "757c0d703a501ae7c11962156e2d47f803f0dd3a"
+        }
+      ],
+      "downstream": [],
+      "overlap": [
+        {
+          "pr": 1,
+          "files": [
+            "src/main.c"
+          ]
+        },
+        {
+          "pr": 14,
+          "files": [
+            "src/main.c"
+          ]
+        },
+        {
+          "pr": 15,
+          "files": [
+            "mcu/_support/AM13E/tests/app/motor_source_host_test.c",
+            "src/main.c"
+          ]
+        },
+        {
+          "pr": 16,
+          "files": [
+            "mcu/_support/AM13E/tests/app/motor_source_host_test.c"
+          ]
+        },
+        {
+          "pr": 3,
+          "files": [
+            "src/main.c"
+          ]
+        }
+      ],
+      "superseded": false,
+      "recommended_action": "Keep isolated; satisfy listed gates"
+    },
+    {
+      "repository": "cctsao1008/ESCape32",
+      "pr": 14,
+      "url": "https://github.com/cctsao1008/ESCape32/pull/14",
+      "classification": "READY_FOR_REVIEW",
+      "head": "test/e62-sc5-invalid-fresh-native",
+      "head_commit": "f1bcc994a8cb51ab2ab6e7cf4bb3c638694e94de",
+      "base": "diag/e62-dynamic-handover-evidence",
+      "base_commit": "757c0d703a501ae7c11962156e2d47f803f0dd3a",
+      "draft": true,
+      "runtime_behavior": true,
+      "motor_or_safety_critical": true,
+      "functional_scope": "Explicit SIM_ONLY2kHz acquisition fault-isolation profile/worker, not default production cadence.",
+      "changed_files": [
+        {
+          "filename": "mcu/_support/AM13E/cmake/test_profiles/e62_sc5_adc2k_fault_isolation.cmake",
+          "status": "added",
+          "additions": 3,
+          "deletions": 0
+        },
+        {
+          "filename": "mcu/_support/AM13E/tests/app/adc_interleave_source_host_test.c",
+          "status": "added",
+          "additions": 19,
+          "deletions": 0
+        },
+        {
+          "filename": "mcu/_support/AM13E/tools/run_adc_interleave_regression.sh",
+          "status": "added",
+          "additions": 19,
+          "deletions": 0
+        },
+        {
+          "filename": "src/main.c",
+          "status": "modified",
+          "additions": 9,
+          "deletions": 0
+        }
+      ],
+      "acceptance_blockers": "Native fresh-invalid refusal evidence is separate from successful restart; full physical protection not covered.",
+      "existing_tests_provenance": {
+        "versioned_files": [
+          "mcu/_support/AM13E/tests/app/adc_interleave_source_host_test.c"
+        ],
+        "checks": [],
+        "reviews": [],
+        "historical_evidence": "report/e62-engineering-execution at c2b7801; exact manifests v2\u2013v6, no new full matrix rerun"
+      },
+      "upstream": [
+        {
+          "pr": 10,
+          "head_commit": "757c0d703a501ae7c11962156e2d47f803f0dd3a"
+        }
+      ],
+      "downstream": [],
+      "overlap": [
+        {
+          "pr": 1,
+          "files": [
+            "src/main.c"
+          ]
+        },
+        {
+          "pr": 13,
+          "files": [
+            "src/main.c"
+          ]
+        },
+        {
+          "pr": 15,
+          "files": [
+            "src/main.c"
+          ]
+        },
+        {
+          "pr": 3,
+          "files": [
+            "src/main.c"
+          ]
+        }
+      ],
+      "superseded": false,
+      "recommended_action": "Review independently; no default merge"
+    },
+    {
+      "repository": "cctsao1008/ESCape32",
+      "pr": 15,
+      "url": "https://github.com/cctsao1008/ESCape32/pull/15",
+      "classification": "NOT_READY",
+      "head": "experiment/e62-coast-phase-acquisition",
+      "head_commit": "28346d4606d31fc385dfd5058b3ce7789526fbbd",
+      "base": "test/e62-estimator-continuity-integration",
+      "base_commit": "afe321a42aeebb6c8d449f8c9be34fb7f561a4df",
+      "draft": true,
+      "runtime_behavior": true,
+      "motor_or_safety_critical": true,
+      "functional_scope": "H13 coast phase observer and first-two-real-capture restart.",
+      "changed_files": [
+        {
+          "filename": "mcu/AM13E/config.cmake",
+          "status": "modified",
+          "additions": 1,
+          "deletions": 0
+        },
+        {
+          "filename": "mcu/AM13E/hal/analog_runtime.c",
+          "status": "modified",
+          "additions": 23,
+          "deletions": 0
+        },
+        {
+          "filename": "mcu/AM13E/hal/analog_runtime.h",
+          "status": "modified",
+          "additions": 6,
+          "deletions": 0
+        },
+        {
+          "filename": "mcu/AM13E/hal/coast_phase_plan.c",
+          "status": "added",
+          "additions": 60,
+          "deletions": 0
+        },
+        {
+          "filename": "mcu/AM13E/hal/coast_phase_plan.h",
+          "status": "added",
+          "additions": 12,
+          "deletions": 0
+        },
+        {
+          "filename": "mcu/_support/AM13E/cmake/test_profiles/e62_sc5_coast_phase.cmake",
+          "status": "added",
+          "additions": 3,
+          "deletions": 0
+        },
+        {
+          "filename": "mcu/_support/AM13E/cmake/test_profiles/e62_sc5_coast_phase_shadow.cmake",
+          "status": "added",
+          "additions": 2,
+          "deletions": 0
+        },
+        {
+          "filename": "mcu/_support/AM13E/tests/app/motor_source_host_test.c",
+          "status": "modified",
+          "additions": 49,
+          "deletions": 0
+        },
+        {
+          "filename": "mcu/_support/AM13E/tests/hal/coast_phase_plan_host_test.c",
+          "status": "added",
+          "additions": 36,
+          "deletions": 0
+        },
+        {
+          "filename": "mcu/_support/AM13E/tools/run_coast_phase_regression.sh",
+          "status": "added",
+          "additions": 14,
+          "deletions": 0
+        },
+        {
+          "filename": "mcu/_support/AM13E/tools/run_coast_phase_sdk_regression.sh",
+          "status": "added",
+          "additions": 30,
+          "deletions": 0
+        },
+        {
+          "filename": "mcu/_support/AM13E/tools/run_motor_register_regression.sh",
+          "status": "modified",
+          "additions": 3,
+          "deletions": 1
+        },
+        {
+          "filename": "src/main.c",
+          "status": "modified",
+          "additions": 57,
+          "deletions": 1
+        }
+      ],
+      "acceptance_blockers": "V6 nominal3passes historical; unknown/contradictory sample authorization defects reproduced and isolated on integration. Alias/noise/phase/speed/reverse/90degree and full qualification incomplete.",
+      "existing_tests_provenance": {
+        "versioned_files": [
+          "mcu/_support/AM13E/tests/app/motor_source_host_test.c",
+          "mcu/_support/AM13E/tests/hal/coast_phase_plan_host_test.c"
+        ],
+        "checks": [],
+        "reviews": [],
+        "historical_evidence": "report/e62-engineering-execution at c2b7801; exact manifests v2\u2013v6, no new full matrix rerun"
+      },
+      "upstream": [
+        {
+          "non_pr_branch": "test/e62-estimator-continuity-integration",
+          "commit": "afe321a42aeebb6c8d449f8c9be34fb7f561a4df",
+          "notes": "Published integration branch, not an invented PR"
+        }
+      ],
+      "downstream": [
+        16
+      ],
+      "overlap": [
+        {
+          "pr": 1,
+          "files": [
+            "src/main.c"
+          ]
+        },
+        {
+          "pr": 12,
+          "files": [
+            "mcu/AM13E/hal/analog_runtime.c",
+            "mcu/AM13E/hal/analog_runtime.h"
+          ]
+        },
+        {
+          "pr": 13,
+          "files": [
+            "mcu/_support/AM13E/tests/app/motor_source_host_test.c",
+            "src/main.c"
+          ]
+        },
+        {
+          "pr": 14,
+          "files": [
+            "src/main.c"
+          ]
+        },
+        {
+          "pr": 16,
+          "files": [
+            "mcu/AM13E/hal/coast_phase_plan.c",
+            "mcu/_support/AM13E/tests/app/motor_source_host_test.c",
+            "mcu/_support/AM13E/tools/run_coast_phase_regression.sh"
+          ]
+        },
+        {
+          "pr": 3,
+          "files": [
+            "src/main.c"
+          ]
+        },
+        {
+          "pr": 7,
+          "files": [
+            "mcu/AM13E/hal/analog_runtime.c"
+          ]
+        }
+      ],
+      "superseded": false,
+      "recommended_action": "Keep isolated; satisfy listed gates"
+    },
+    {
+      "repository": "cctsao1008/ESCape32",
+      "pr": 16,
+      "url": "https://github.com/cctsao1008/ESCape32/pull/16",
+      "classification": "NOT_READY",
+      "head": "integration/e62-sim-only-v7",
+      "head_commit": "af7eb7c410532e6ae39cb512cb83cd5abd38cfd2",
+      "base": "experiment/e62-coast-phase-acquisition",
+      "base_commit": "28346d4606d31fc385dfd5058b3ce7789526fbbd",
+      "draft": true,
+      "runtime_behavior": true,
+      "motor_or_safety_critical": true,
+      "functional_scope": "Conservative H13 unknown/contradictory epoch invalidation, isolated SIM_ONLY integration baseline.",
+      "changed_files": [
+        {
+          "filename": "mcu/AM13E/hal/coast_phase_plan.c",
+          "status": "modified",
+          "additions": 13,
+          "deletions": 4
+        },
+        {
+          "filename": "mcu/_support/AM13E/tests/app/motor_source_host_test.c",
+          "status": "modified",
+          "additions": 12,
+          "deletions": 0
+        },
+        {
+          "filename": "mcu/_support/AM13E/tests/hal/coast_phase_uncertainty_host_test.c",
+          "status": "added",
+          "additions": 37,
+          "deletions": 0
+        },
+        {
+          "filename": "mcu/_support/AM13E/tools/run_coast_phase_regression.sh",
+          "status": "modified",
+          "additions": 2,
+          "deletions": 2
+        },
+        {
+          "filename": "mcu/_support/AM13E/tools/run_coast_phase_uncertainty_regression.sh",
+          "status": "added",
+          "additions": 9,
+          "deletions": 0
+        }
+      ],
+      "acceptance_blockers": "Three pre-fix counterexamples reproduced; focused/full SDK pass; three impacted nominal gates pass; two new-pose first-start failures and physical alias/noise/direction bounds remain unresolved.",
+      "existing_tests_provenance": {
+        "versioned_files": [
+          "mcu/_support/AM13E/tests/app/motor_source_host_test.c",
+          "mcu/_support/AM13E/tests/hal/coast_phase_uncertainty_host_test.c"
+        ],
+        "checks": [],
+        "reviews": [],
+        "historical_evidence": "report/e62-engineering-execution at c2b7801; exact manifests v2\u2013v6, no new full matrix rerun"
+      },
+      "upstream": [
+        {
+          "pr": 15,
+          "head_commit": "28346d4606d31fc385dfd5058b3ce7789526fbbd"
+        }
+      ],
+      "downstream": [],
+      "overlap": [
+        {
+          "pr": 13,
+          "files": [
+            "mcu/_support/AM13E/tests/app/motor_source_host_test.c"
+          ]
+        },
+        {
+          "pr": 15,
+          "files": [
+            "mcu/AM13E/hal/coast_phase_plan.c",
+            "mcu/_support/AM13E/tests/app/motor_source_host_test.c",
+            "mcu/_support/AM13E/tools/run_coast_phase_regression.sh"
+          ]
+        }
+      ],
+      "superseded": false,
+      "recommended_action": "Keep isolated; satisfy listed gates"
+    },
+    {
+      "repository": "cctsao1008/ESCape32",
+      "pr": 3,
+      "url": "https://github.com/cctsao1008/ESCape32/pull/3",
+      "classification": "NOT_READY",
+      "head": "cleanup/e62-issue5-production-root-fixes-20261104",
+      "head_commit": "06f5aed31d281e1095407ef6710c69652dd8e147",
+      "base": "am13e-port-v2",
+      "base_commit": "53953c04f7d857f3b402b3a19870605ed0471d8f",
+      "draft": true,
+      "runtime_behavior": true,
+      "motor_or_safety_critical": true,
+      "functional_scope": "Production Root Fixes controller/capture changes; distinct from Original Rel17.3.",
+      "changed_files": [
+        {
+          "filename": "mcu/AM13E/hal/motor_bemf.c",
+          "status": "modified",
+          "additions": 26,
+          "deletions": 10
+        },
+        {
+          "filename": "src/main.c",
+          "status": "modified",
+          "additions": 10,
+          "deletions": 0
+        }
+      ],
+      "acceptance_blockers": "Independent startup/restart and full critical/safety qualification unresolved; do not relabel original or merge based on experimental passes.",
+      "existing_tests_provenance": {
+        "versioned_files": [],
+        "checks": [],
+        "reviews": [],
+        "historical_evidence": "report/e62-engineering-execution at c2b7801; exact manifests v2\u2013v6, no new full matrix rerun"
+      },
+      "upstream": [],
+      "downstream": [],
+      "overlap": [
+        {
+          "pr": 1,
+          "files": [
+            "src/main.c"
+          ]
+        },
+        {
+          "pr": 10,
+          "files": [
+            "mcu/AM13E/hal/motor_bemf.c"
+          ]
+        },
+        {
+          "pr": 11,
+          "files": [
+            "mcu/AM13E/hal/motor_bemf.c"
+          ]
+        },
+        {
+          "pr": 13,
+          "files": [
+            "src/main.c"
+          ]
+        },
+        {
+          "pr": 14,
+          "files": [
+            "src/main.c"
+          ]
+        },
+        {
+          "pr": 15,
+          "files": [
+            "src/main.c"
+          ]
+        },
+        {
+          "pr": 6,
+          "files": [
+            "mcu/AM13E/hal/motor_bemf.c"
+          ]
+        },
+        {
+          "pr": 7,
+          "files": [
+            "mcu/AM13E/hal/motor_bemf.c"
+          ]
+        },
+        {
+          "pr": 9,
+          "files": [
+            "mcu/AM13E/hal/motor_bemf.c"
+          ]
+        }
+      ],
+      "superseded": false,
+      "recommended_action": "Keep isolated; satisfy listed gates"
+    },
+    {
+      "repository": "cctsao1008/ESCape32",
+      "pr": 6,
+      "url": "https://github.com/cctsao1008/ESCape32/pull/6",
+      "classification": "READY_FOR_REVIEW",
+      "head": "diag/e62-sc5-acquisition",
+      "head_commit": "783252d1333d012f59d9e17f899e7bd7289240b7",
+      "base": "am13e-port-v2",
+      "base_commit": "53953c04f7d857f3b402b3a19870605ed0471d8f",
+      "draft": true,
+      "runtime_behavior": true,
+      "motor_or_safety_critical": true,
+      "functional_scope": "Opt-in passive SC5 diagnostic journal and explicit SIM_ONLY profile.",
+      "changed_files": [
+        {
+          "filename": "mcu/AM13E/hal/motor_bemf.c",
+          "status": "modified",
+          "additions": 46,
+          "deletions": 2
+        },
+        {
+          "filename": "mcu/_support/AM13E/cmake/test_profiles/e62_sc5_virtual_reference.cmake",
+          "status": "added",
+          "additions": 20,
+          "deletions": 0
+        },
+        {
+          "filename": "mcu/_support/AM13E/reports/e62-reference-diagnostic-contract-v1.md",
+          "status": "added",
+          "additions": 22,
+          "deletions": 0
+        }
+      ],
+      "acceptance_blockers": "No review/CI on head; ISR overhead and opt-in scope need approval; no production calibration claim.",
+      "existing_tests_provenance": {
+        "versioned_files": [
+          "mcu/_support/AM13E/reports/e62-reference-diagnostic-contract-v1.md"
+        ],
+        "checks": [],
+        "reviews": [],
+        "historical_evidence": "report/e62-engineering-execution at c2b7801; exact manifests v2\u2013v6, no new full matrix rerun"
+      },
+      "upstream": [],
+      "downstream": [
+        7
+      ],
+      "overlap": [
+        {
+          "pr": 10,
+          "files": [
+            "mcu/AM13E/hal/motor_bemf.c"
+          ]
+        },
+        {
+          "pr": 11,
+          "files": [
+            "mcu/AM13E/hal/motor_bemf.c"
+          ]
+        },
+        {
+          "pr": 3,
+          "files": [
+            "mcu/AM13E/hal/motor_bemf.c"
+          ]
+        },
+        {
+          "pr": 7,
+          "files": [
+            "mcu/AM13E/hal/motor_bemf.c"
+          ]
+        },
+        {
+          "pr": 9,
+          "files": [
+            "mcu/AM13E/hal/motor_bemf.c"
+          ]
+        }
+      ],
+      "superseded": false,
+      "recommended_action": "Review independently; no default merge"
+    },
+    {
+      "repository": "cctsao1008/ESCape32",
+      "pr": 7,
+      "url": "https://github.com/cctsao1008/ESCape32/pull/7",
+      "classification": "NOT_READY",
+      "head": "experiment/e62-sc5-equivalent-refresh",
+      "head_commit": "cd35a13771fe3847730040663588157312f7cf83",
+      "base": "diag/e62-sc5-acquisition",
+      "base_commit": "783252d1333d012f59d9e17f899e7bd7289240b7",
+      "draft": true,
+      "runtime_behavior": true,
+      "motor_or_safety_critical": true,
+      "functional_scope": "Equivalent-code refresh with capture quarantine.",
+      "changed_files": [
+        {
+          "filename": "mcu/AM13E/hal/analog_runtime.c",
+          "status": "modified",
+          "additions": 6,
+          "deletions": 0
+        },
+        {
+          "filename": "mcu/AM13E/hal/motor_bemf.c",
+          "status": "modified",
+          "additions": 101,
+          "deletions": 1
+        },
+        {
+          "filename": "mcu/AM13E/hal/motor_bemf.h",
+          "status": "modified",
+          "additions": 4,
+          "deletions": 0
+        },
+        {
+          "filename": "mcu/_support/AM13E/cmake/test_profiles/e62_sc5_equivalent_refresh.cmake",
+          "status": "added",
+          "additions": 3,
+          "deletions": 0
+        },
+        {
+          "filename": "mcu/_support/AM13E/cmake/test_profiles/e62_sc5_equivalent_refresh_no_journal.cmake",
+          "status": "added",
+          "additions": 3,
+          "deletions": 0
+        },
+        {
+          "filename": "mcu/_support/AM13E/reports/e62-sc5-equivalent-refresh-v1.md",
+          "status": "added",
+          "additions": 72,
+          "deletions": 0
+        },
+        {
+          "filename": "mcu/_support/AM13E/tests/hal/motor_physical_host_test.c",
+          "status": "modified",
+          "additions": 41,
+          "deletions": 0
+        },
+        {
+          "filename": "mcu/_support/AM13E/tools/run_sc5_equivalent_refresh_regression.sh",
+          "status": "added",
+          "additions": 23,
+          "deletions": 0
+        }
+      ],
+      "acceptance_blockers": "H9 identifies continuity defect in equivalent refresh; retain prerequisite definitions/history; do not independently deploy this intermediate behavior.",
+      "existing_tests_provenance": {
+        "versioned_files": [
+          "mcu/_support/AM13E/reports/e62-sc5-equivalent-refresh-v1.md",
+          "mcu/_support/AM13E/tests/hal/motor_physical_host_test.c"
+        ],
+        "checks": [],
+        "reviews": [],
+        "historical_evidence": "report/e62-engineering-execution at c2b7801; exact manifests v2\u2013v6, no new full matrix rerun"
+      },
+      "upstream": [
+        {
+          "pr": 6,
+          "head_commit": "783252d1333d012f59d9e17f899e7bd7289240b7"
+        }
+      ],
+      "downstream": [
+        9
+      ],
+      "overlap": [
+        {
+          "pr": 10,
+          "files": [
+            "mcu/AM13E/hal/motor_bemf.c"
+          ]
+        },
+        {
+          "pr": 11,
+          "files": [
+            "mcu/AM13E/hal/motor_bemf.c",
+            "mcu/_support/AM13E/tests/hal/motor_physical_host_test.c"
+          ]
+        },
+        {
+          "pr": 12,
+          "files": [
+            "mcu/AM13E/hal/analog_runtime.c",
+            "mcu/_support/AM13E/tests/hal/motor_physical_host_test.c"
+          ]
+        },
+        {
+          "pr": 15,
+          "files": [
+            "mcu/AM13E/hal/analog_runtime.c"
+          ]
+        },
+        {
+          "pr": 3,
+          "files": [
+            "mcu/AM13E/hal/motor_bemf.c"
+          ]
+        },
+        {
+          "pr": 6,
+          "files": [
+            "mcu/AM13E/hal/motor_bemf.c"
+          ]
+        },
+        {
+          "pr": 9,
+          "files": [
+            "mcu/AM13E/hal/motor_bemf.c",
+            "mcu/_support/AM13E/tests/hal/motor_physical_host_test.c"
+          ]
+        }
+      ],
+      "superseded": false,
+      "recommended_action": "Keep isolated; satisfy listed gates"
+    },
+    {
+      "repository": "cctsao1008/ESCape32",
+      "pr": 8,
+      "url": "https://github.com/cctsao1008/ESCape32/pull/8",
+      "classification": "READY_FOR_REVIEW",
+      "head": "fix/e62-boot-release-gates",
+      "head_commit": "b2dea0aa5c9017e7869a4f31e4b126d783ec2f3b",
+      "base": "am13e-port-v2",
+      "base_commit": "53953c04f7d857f3b402b3a19870605ed0471d8f",
+      "draft": true,
+      "runtime_behavior": false,
+      "motor_or_safety_critical": true,
+      "functional_scope": "Boot case-block C scope and Flash host build/link inputs. No motor runtime change.",
+      "changed_files": [
+        {
+          "filename": "boot/src/main.c",
+          "status": "modified",
+          "additions": 2,
+          "deletions": 0
+        },
+        {
+          "filename": "mcu/_support/AM13E/reports/e62-release-gates-v1.md",
+          "status": "added",
+          "additions": 49,
+          "deletions": 0
+        },
+        {
+          "filename": "mcu/_support/AM13E/tests/boot/run_am13e_flash_host_tests.sh",
+          "status": "modified",
+          "additions": 2,
+          "deletions": 0
+        }
+      ],
+      "acceptance_blockers": "Prior official SDK/image/Flash evidence reused for exact source; no approvals/CI; no CRC/atomic-update/rollback or physical release guarantee.",
+      "existing_tests_provenance": {
+        "versioned_files": [
+          "mcu/_support/AM13E/reports/e62-release-gates-v1.md",
+          "mcu/_support/AM13E/tests/boot/run_am13e_flash_host_tests.sh"
+        ],
+        "checks": [],
+        "reviews": [],
+        "historical_evidence": "report/e62-engineering-execution at c2b7801; exact manifests v2\u2013v6, no new full matrix rerun"
+      },
+      "upstream": [],
+      "downstream": [],
+      "overlap": [],
+      "superseded": false,
+      "recommended_action": "Review independently; no default merge"
+    },
+    {
+      "repository": "cctsao1008/ESCape32",
+      "pr": 9,
+      "url": "https://github.com/cctsao1008/ESCape32/pull/9",
+      "classification": "NOT_READY",
+      "head": "experiment/e62-sc5-changed-handover",
+      "head_commit": "76e435cbe376b0a467ec378a517853ad1ea0d0b4",
+      "base": "experiment/e62-sc5-equivalent-refresh",
+      "base_commit": "cd35a13771fe3847730040663588157312f7cf83",
+      "draft": true,
+      "runtime_behavior": true,
+      "motor_or_safety_critical": true,
+      "functional_scope": "Guarded changed-code native ZERO publication and settling-count experiment.",
+      "changed_files": [
+        {
+          "filename": "mcu/AM13E/hal/motor_bemf.c",
+          "status": "modified",
+          "additions": 59,
+          "deletions": 4
+        },
+        {
+          "filename": "mcu/_support/AM13E/cmake/test_profiles/e62_sc5_changed_handover.cmake",
+          "status": "added",
+          "additions": 5,
+          "deletions": 0
+        },
+        {
+          "filename": "mcu/_support/AM13E/cmake/test_profiles/e62_sc5_changed_handover_no_journal.cmake",
+          "status": "added",
+          "additions": 2,
+          "deletions": 0
+        },
+        {
+          "filename": "mcu/_support/AM13E/reports/e62-sc5-changed-handover-v1.md",
+          "status": "added",
+          "additions": 48,
+          "deletions": 0
+        },
+        {
+          "filename": "mcu/_support/AM13E/tests/hal/motor_physical_host_test.c",
+          "status": "modified",
+          "additions": 110,
+          "deletions": 0
+        },
+        {
+          "filename": "mcu/_support/AM13E/tools/run_sc5_changed_handover_regression.sh",
+          "status": "added",
+          "additions": 23,
+          "deletions": 0
+        }
+      ],
+      "acceptance_blockers": "No measured physical settling; offset/noise/motor qualification unresolved; exact source timing and epoch safety required.",
+      "existing_tests_provenance": {
+        "versioned_files": [
+          "mcu/_support/AM13E/reports/e62-sc5-changed-handover-v1.md",
+          "mcu/_support/AM13E/tests/hal/motor_physical_host_test.c"
+        ],
+        "checks": [],
+        "reviews": [],
+        "historical_evidence": "report/e62-engineering-execution at c2b7801; exact manifests v2\u2013v6, no new full matrix rerun"
+      },
+      "upstream": [
+        {
+          "pr": 7,
+          "head_commit": "cd35a13771fe3847730040663588157312f7cf83"
+        }
+      ],
+      "downstream": [
+        10
+      ],
+      "overlap": [
+        {
+          "pr": 10,
+          "files": [
+            "mcu/AM13E/hal/motor_bemf.c"
+          ]
+        },
+        {
+          "pr": 11,
+          "files": [
+            "mcu/AM13E/hal/motor_bemf.c",
+            "mcu/_support/AM13E/tests/hal/motor_physical_host_test.c"
+          ]
+        },
+        {
+          "pr": 12,
+          "files": [
+            "mcu/_support/AM13E/tests/hal/motor_physical_host_test.c"
+          ]
+        },
+        {
+          "pr": 3,
+          "files": [
+            "mcu/AM13E/hal/motor_bemf.c"
+          ]
+        },
+        {
+          "pr": 6,
+          "files": [
+            "mcu/AM13E/hal/motor_bemf.c"
+          ]
+        },
+        {
+          "pr": 7,
+          "files": [
+            "mcu/AM13E/hal/motor_bemf.c",
+            "mcu/_support/AM13E/tests/hal/motor_physical_host_test.c"
+          ]
+        }
+      ],
+      "superseded": false,
+      "recommended_action": "Keep isolated; satisfy listed gates"
+    },
+    {
+      "repository": "cctsao1008/escape32-qemu",
+      "pr": 11,
+      "url": "https://github.com/cctsao1008/escape32-qemu/pull/11",
+      "classification": "READY_FOR_REVIEW",
+      "head": "diag/e62-reference-startup-evidence",
+      "head_commit": "2d32146a3f4094a1789fed918cf3fe0bd9d856ea",
+      "base": "main",
+      "base_commit": "3f1ed18e53e115d13b5bad2450d4e315a3d5cea0",
+      "draft": true,
+      "runtime_behavior": false,
+      "motor_or_safety_critical": false,
+      "functional_scope": "Offline ADC/timeline/upload inventory and pinned reference CI. CI green; no approvals.",
+      "changed_files": [
+        {
+          "filename": ".github/workflows/e62-acquisition-diagnostics.yml",
+          "status": "added",
+          "additions": 31,
+          "deletions": 0
+        },
+        {
+          "filename": "docs/current/e62-acquisition-evidence-v1.json",
+          "status": "added",
+          "additions": 2046,
+          "deletions": 0
+        },
+        {
+          "filename": "docs/current/e62-acquisition-rca-v1.md",
+          "status": "added",
+          "additions": 350,
+          "deletions": 0
+        },
+        {
+          "filename": "docs/current/e62-cloud-lifecycle-replay-v1.json",
+          "status": "added",
+          "additions": 1546,
+          "deletions": 0
+        },
+        {
+          "filename": "docs/current/e62-wsl-upload-replay-v2.json",
+          "status": "added",
+          "additions": 21655,
+          "deletions": 0
+        },
+        {
+          "filename": "docs/current/e62-wsl-upload-replay-v2.md",
+          "status": "added",
+          "additions": 84,
+          "deletions": 0
+        },
+        {
+          "filename": "tests/test_e62_acquisition_timeline.py",
+          "status": "added",
+          "additions": 158,
+          "deletions": 0
+        },
+        {
+          "filename": "tests/test_e62_lifecycle_alignment.py",
+          "status": "added",
+          "additions": 44,
+          "deletions": 0
+        },
+        {
+          "filename": "tests/test_e62_uploaded_trace_inventory.py",
+          "status": "added",
+          "additions": 72,
+          "deletions": 0
+        },
+        {
+          "filename": "tools/ci/check_e62_reference_contract.sh",
+          "status": "added",
+          "additions": 15,
+          "deletions": 0
+        },
+        {
+          "filename": "tools/e62_acquisition_timeline.py",
+          "status": "added",
+          "additions": 259,
+          "deletions": 0
+        },
+        {
+          "filename": "tools/e62_lifecycle_alignment.py",
+          "status": "added",
+          "additions": 86,
+          "deletions": 0
+        },
+        {
+          "filename": "tools/e62_uploaded_trace_inventory.py",
+          "status": "added",
+          "additions": 117,
+          "deletions": 0
+        }
+      ],
+      "acceptance_blockers": "Review missing-data semantics and bounded-event limitations; independent approval still required.",
+      "existing_tests_provenance": {
+        "versioned_files": [
+          ".github/workflows/e62-acquisition-diagnostics.yml",
+          "docs/current/e62-acquisition-evidence-v1.json",
+          "docs/current/e62-acquisition-rca-v1.md",
+          "docs/current/e62-cloud-lifecycle-replay-v1.json",
+          "docs/current/e62-wsl-upload-replay-v2.json",
+          "docs/current/e62-wsl-upload-replay-v2.md",
+          "tests/test_e62_acquisition_timeline.py",
+          "tests/test_e62_lifecycle_alignment.py",
+          "tests/test_e62_uploaded_trace_inventory.py"
+        ],
+        "checks": [
+          {
+            "name": "offline-diagnostics",
+            "status": "completed",
+            "conclusion": "success",
+            "head_sha": "2d32146a3f4094a1789fed918cf3fe0bd9d856ea",
+            "details_url": "https://github.com/cctsao1008/escape32-qemu/actions/runs/42260914955/job/128040286970"
+          },
+          {
+            "name": "existing-firmware-reference-contract",
+            "status": "completed",
+            "conclusion": "success",
+            "head_sha": "2d32146a3f4094a1789fed918cf3fe0bd9d856ea",
+            "details_url": "https://github.com/cctsao1008/escape32-qemu/actions/runs/42260914955/job/128040286136"
+          }
+        ],
+        "reviews": [],
+        "historical_evidence": "report/e62-engineering-execution at c2b7801; exact manifests v2\u2013v6, no new full matrix rerun"
+      },
+      "upstream": [],
+      "downstream": [],
+      "overlap": [
+        {
+          "pr": 18,
+          "files": [
+            ".github/workflows/e62-acquisition-diagnostics.yml",
+            "docs/current/e62-acquisition-evidence-v1.json",
+            "docs/current/e62-acquisition-rca-v1.md",
+            "docs/current/e62-cloud-lifecycle-replay-v1.json",
+            "docs/current/e62-wsl-upload-replay-v2.json",
+            "docs/current/e62-wsl-upload-replay-v2.md",
+            "tests/test_e62_acquisition_timeline.py",
+            "tests/test_e62_lifecycle_alignment.py",
+            "tests/test_e62_uploaded_trace_inventory.py",
+            "tools/ci/check_e62_reference_contract.sh",
+            "tools/e62_acquisition_timeline.py",
+            "tools/e62_lifecycle_alignment.py",
+            "tools/e62_uploaded_trace_inventory.py"
+          ]
+        }
+      ],
+      "superseded": false,
+      "recommended_action": "Review independently; no default merge"
+    },
+    {
+      "repository": "cctsao1008/escape32-qemu",
+      "pr": 12,
+      "url": "https://github.com/cctsao1008/escape32-qemu/pull/12",
+      "classification": "READY_FOR_REVIEW",
+      "head": "experiment/e62-cmpss-cloud-matrix",
+      "head_commit": "b4ca2889351ba9d2496782d4d62ff3b9bc8932be",
+      "base": "main",
+      "base_commit": "3f1ed18e53e115d13b5bad2450d4e315a3d5cea0",
+      "draft": true,
+      "runtime_behavior": false,
+      "motor_or_safety_critical": false,
+      "functional_scope": "Exact ELF identity guard and 14-case qualification runner.",
+      "changed_files": [
+        {
+          "filename": "docs/current/e62-issue3-exact-qualification-v2.json",
+          "status": "added",
+          "additions": 4536,
+          "deletions": 0
+        },
+        {
+          "filename": "docs/current/e62-issue3-exact-qualification-v2.md",
+          "status": "added",
+          "additions": 67,
+          "deletions": 0
+        },
+        {
+          "filename": "docs/current/e62-issue3-exact-replay-v1.md",
+          "status": "added",
+          "additions": 38,
+          "deletions": 0
+        },
+        {
+          "filename": "tests/test_e62_exact_cmpss_suite.py",
+          "status": "added",
+          "additions": 22,
+          "deletions": 0
+        },
+        {
+          "filename": "tools/e62_exact_cmpss_suite.py",
+          "status": "added",
+          "additions": 75,
+          "deletions": 0
+        },
+        {
+          "filename": "tools/experimental_e62_source_bemf_filter_matrix.py",
+          "status": "added",
+          "additions": 196,
+          "deletions": 0
+        }
+      ],
+      "acceptance_blockers": "Runner readiness is separate from 7/14 failed qualification; no CI or approvals on head.",
+      "existing_tests_provenance": {
+        "versioned_files": [
+          "docs/current/e62-issue3-exact-qualification-v2.json",
+          "docs/current/e62-issue3-exact-qualification-v2.md",
+          "docs/current/e62-issue3-exact-replay-v1.md",
+          "tests/test_e62_exact_cmpss_suite.py"
+        ],
+        "checks": [],
+        "reviews": [],
+        "historical_evidence": "report/e62-engineering-execution at c2b7801; exact manifests v2\u2013v6, no new full matrix rerun"
+      },
+      "upstream": [],
+      "downstream": [],
+      "overlap": [
+        {
+          "pr": 18,
+          "files": [
+            "docs/current/e62-issue3-exact-qualification-v2.json",
+            "docs/current/e62-issue3-exact-qualification-v2.md",
+            "docs/current/e62-issue3-exact-replay-v1.md",
+            "tests/test_e62_exact_cmpss_suite.py",
+            "tools/e62_exact_cmpss_suite.py",
+            "tools/experimental_e62_source_bemf_filter_matrix.py"
+          ]
+        }
+      ],
+      "superseded": false,
+      "recommended_action": "Review independently; no default merge"
+    },
+    {
+      "repository": "cctsao1008/escape32-qemu",
+      "pr": 13,
+      "url": "https://github.com/cctsao1008/escape32-qemu/pull/13",
+      "classification": "NOT_READY",
+      "head": "diag/e62-source-clock-observer",
+      "head_commit": "3494f23bc072b39d2931c9375a94e4fb9f113bf3",
+      "base": "main",
+      "base_commit": "3f1ed18e53e115d13b5bad2450d4e315a3d5cea0",
+      "draft": true,
+      "runtime_behavior": true,
+      "motor_or_safety_critical": false,
+      "functional_scope": "Unconditional timer-context storage/build patch plus opt-in logging. Never classify the complete patch as default-off.",
+      "changed_files": [
+        {
+          "filename": "build.sh",
+          "status": "modified",
+          "additions": 1,
+          "deletions": 0
+        },
+        {
+          "filename": "machine/am13e23019.c",
+          "status": "modified",
+          "additions": 13,
+          "deletions": 1
+        },
+        {
+          "filename": "machine/am13e_autonomous_sitl.inc",
+          "status": "modified",
+          "additions": 3,
+          "deletions": 2
+        },
+        {
+          "filename": "machine/am13e_pa26_waveform.inc",
+          "status": "modified",
+          "additions": 8,
+          "deletions": 0
+        },
+        {
+          "filename": "tests/test_e62_dshot_dispatch_audit.py",
+          "status": "added",
+          "additions": 16,
+          "deletions": 0
+        },
+        {
+          "filename": "tools/ci/prepare_e62_timer_observer.py",
+          "status": "added",
+          "additions": 43,
+          "deletions": 0
+        },
+        {
+          "filename": "tools/e62_dshot_dispatch_audit.py",
+          "status": "added",
+          "additions": 55,
+          "deletions": 0
+        }
+      ],
+      "acceptance_blockers": "Original-rotor CI fails; saved100ns deadline failures unresolved; verify critical timer effects and regression before default integration.",
+      "existing_tests_provenance": {
+        "versioned_files": [
+          "tests/test_e62_dshot_dispatch_audit.py"
+        ],
+        "checks": [
+          {
+            "name": "original-guest-current-coupled-rotor",
+            "status": "completed",
+            "conclusion": "failure",
+            "head_sha": "3494f23bc072b39d2931c9375a94e4fb9f113bf3",
+            "details_url": "https://github.com/cctsao1008/escape32-qemu/actions/runs/42351490743/job/128340442181"
+          },
+          {
+            "name": "host-source-boundary",
+            "status": "completed",
+            "conclusion": "success",
+            "head_sha": "3494f23bc072b39d2931c9375a94e4fb9f113bf3",
+            "details_url": "https://github.com/cctsao1008/escape32-qemu/actions/runs/42351490743/job/128340413765"
+          }
+        ],
+        "reviews": [],
+        "historical_evidence": "report/e62-engineering-execution at c2b7801; exact manifests v2\u2013v6, no new full matrix rerun"
+      },
+      "upstream": [],
+      "downstream": [
+        14,
+        15
+      ],
+      "overlap": [
+        {
+          "pr": 15,
+          "files": [
+            "machine/am13e23019.c",
+            "machine/am13e_autonomous_sitl.inc"
+          ]
+        },
+        {
+          "pr": 16,
+          "files": [
+            "machine/am13e23019.c"
+          ]
+        }
+      ],
+      "superseded": false,
+      "recommended_action": "Keep isolated; satisfy listed gates"
+    },
+    {
+      "repository": "cctsao1008/escape32-qemu",
+      "pr": 14,
+      "url": "https://github.com/cctsao1008/escape32-qemu/pull/14",
+      "classification": "NOT_READY",
+      "head": "diag/e62-clock-poll-factor",
+      "head_commit": "e42969b932d66521e2f05d5736610bf231af6795",
+      "base": "diag/e62-source-clock-observer",
+      "base_commit": "3494f23bc072b39d2931c9375a94e4fb9f113bf3",
+      "draft": true,
+      "runtime_behavior": false,
+      "motor_or_safety_critical": false,
+      "functional_scope": "Optional harness polling factor; outside selected integration, no QEMU event scheduling fix.",
+      "changed_files": [
+        {
+          "filename": "tests/e62_autonomous_native_motor_probe.py",
+          "status": "modified",
+          "additions": 2,
+          "deletions": 1
+        }
+      ],
+      "acceptance_blockers": "No independent timing qualification, no CI; not proof of resolution of saved344\u2013532ns failures.",
+      "existing_tests_provenance": {
+        "versioned_files": [
+          "tests/e62_autonomous_native_motor_probe.py"
+        ],
+        "checks": [],
+        "reviews": [],
+        "historical_evidence": "report/e62-engineering-execution at c2b7801; exact manifests v2\u2013v6, no new full matrix rerun"
+      },
+      "upstream": [
+        {
+          "pr": 13,
+          "head_commit": "3494f23bc072b39d2931c9375a94e4fb9f113bf3"
+        }
+      ],
+      "downstream": [],
+      "overlap": [
+        {
+          "pr": 15,
+          "files": [
+            "tests/e62_autonomous_native_motor_probe.py"
+          ]
+        },
+        {
+          "pr": 17,
+          "files": [
+            "tests/e62_autonomous_native_motor_probe.py"
+          ]
+        }
+      ],
+      "superseded": false,
+      "recommended_action": "Keep isolated; satisfy listed gates"
+    },
+    {
+      "repository": "cctsao1008/escape32-qemu",
+      "pr": 15,
+      "url": "https://github.com/cctsao1008/escape32-qemu/pull/15",
+      "classification": "NOT_READY",
+      "head": "experiment/e62-source-vbus-handover",
+      "head_commit": "8178dd2ec3c37d1769d06f801593ecb0f83c2fa6",
+      "base": "diag/e62-source-clock-observer",
+      "base_commit": "3494f23bc072b39d2931c9375a94e4fb9f113bf3",
+      "draft": true,
+      "runtime_behavior": true,
+      "motor_or_safety_critical": false,
+      "functional_scope": "Native source-owned VBUS/fault inputs and runtime analog observations; selected SIM_ONLY prerequisite.",
+      "changed_files": [
+        {
+          "filename": "docs/current/e62-native-vbus-integration-v4.md",
+          "status": "added",
+          "additions": 15,
+          "deletions": 0
+        },
+        {
+          "filename": "docs/current/e62-sc5-observer-v1.md",
+          "status": "added",
+          "additions": 55,
+          "deletions": 0
+        },
+        {
+          "filename": "machine/am13e23019.c",
+          "status": "modified",
+          "additions": 77,
+          "deletions": 1
+        },
+        {
+          "filename": "machine/am13e_autonomous_sitl.inc",
+          "status": "modified",
+          "additions": 1,
+          "deletions": 0
+        },
+        {
+          "filename": "machine/am13e_motor_feedback.inc",
+          "status": "modified",
+          "additions": 7,
+          "deletions": 0
+        },
+        {
+          "filename": "machine/am13e_native_analog_frontend.inc",
+          "status": "modified",
+          "additions": 1,
+          "deletions": 0
+        },
+        {
+          "filename": "machine/am13e_native_motor_plant.inc",
+          "status": "modified",
+          "additions": 1,
+          "deletions": 1
+        },
+        {
+          "filename": "scenarios/e62-v4/handover-drive.json",
+          "status": "added",
+          "additions": 25,
+          "deletions": 0
+        },
+        {
+          "filename": "scenarios/e62-v4/vbus-constant.csv",
+          "status": "added",
+          "additions": 2,
+          "deletions": 0
+        },
+        {
+          "filename": "scenarios/e62-v4/vbus-invalid-reference.csv",
+          "status": "added",
+          "additions": 3,
+          "deletions": 0
+        },
+        {
+          "filename": "scenarios/e62-v4/vbus-stale-reference.csv",
+          "status": "added",
+          "additions": 3,
+          "deletions": 0
+        },
+        {
+          "filename": "scenarios/e62-v4/vbus-up-down.csv",
+          "status": "added",
+          "additions": 4,
+          "deletions": 0
+        },
+        {
+          "filename": "tests/e62_autonomous_native_motor_probe.py",
+          "status": "modified",
+          "additions": 23,
+          "deletions": 0
+        },
+        {
+          "filename": "tests/test_e62_reference_bulk.py",
+          "status": "added",
+          "additions": 20,
+          "deletions": 0
+        },
+        {
+          "filename": "tests/test_e62_reference_observer.py",
+          "status": "added",
+          "additions": 42,
+          "deletions": 0
+        },
+        {
+          "filename": "tests/test_e62_startup_reference_audit.py",
+          "status": "added",
+          "additions": 21,
+          "deletions": 0
+        },
+        {
+          "filename": "tests/test_e62_vbus_handover_audit.py",
+          "status": "added",
+          "additions": 38,
+          "deletions": 0
+        },
+        {
+          "filename": "tools/e62_reference_observer.py",
+          "status": "added",
+          "additions": 88,
+          "deletions": 0
+        },
+        {
+          "filename": "tools/e62_run_vbus_campaign.py",
+          "status": "added",
+          "additions": 27,
+          "deletions": 0
+        },
+        {
+          "filename": "tools/e62_startup_reference_audit.py",
+          "status": "added",
+          "additions": 49,
+          "deletions": 0
+        },
+        {
+          "filename": "tools/e62_vbus_handover_audit.py",
+          "status": "added",
+          "additions": 90,
+          "deletions": 0
+        },
+        {
+          "filename": "tools/e62_vbus_plan_smoke.py",
+          "status": "added",
+          "additions": 24,
+          "deletions": 0
+        }
+      ],
+      "acceptance_blockers": "Original-rotor CI fails; physical calibration/settling and complete native robustness remain open.",
+      "existing_tests_provenance": {
+        "versioned_files": [
+          "docs/current/e62-native-vbus-integration-v4.md",
+          "docs/current/e62-sc5-observer-v1.md",
+          "tests/e62_autonomous_native_motor_probe.py",
+          "tests/test_e62_reference_bulk.py",
+          "tests/test_e62_reference_observer.py",
+          "tests/test_e62_startup_reference_audit.py",
+          "tests/test_e62_vbus_handover_audit.py"
+        ],
+        "checks": [
+          {
+            "name": "original-guest-current-coupled-rotor",
+            "status": "completed",
+            "conclusion": "failure",
+            "head_sha": "8178dd2ec3c37d1769d06f801593ecb0f83c2fa6",
+            "details_url": "https://github.com/cctsao1008/escape32-qemu/actions/runs/42351496883/job/128340455729"
+          },
+          {
+            "name": "host-source-boundary",
+            "status": "completed",
+            "conclusion": "success",
+            "head_sha": "8178dd2ec3c37d1769d06f801593ecb0f83c2fa6",
+            "details_url": "https://github.com/cctsao1008/escape32-qemu/actions/runs/42351496883/job/128340432419"
+          }
+        ],
+        "reviews": [],
+        "historical_evidence": "report/e62-engineering-execution at c2b7801; exact manifests v2\u2013v6, no new full matrix rerun"
+      },
+      "upstream": [
+        {
+          "pr": 13,
+          "head_commit": "3494f23bc072b39d2931c9375a94e4fb9f113bf3"
+        }
+      ],
+      "downstream": [
+        16
+      ],
+      "overlap": [
+        {
+          "pr": 13,
+          "files": [
+            "machine/am13e23019.c",
+            "machine/am13e_autonomous_sitl.inc"
+          ]
+        },
+        {
+          "pr": 14,
+          "files": [
+            "tests/e62_autonomous_native_motor_probe.py"
+          ]
+        },
+        {
+          "pr": 16,
+          "files": [
+            "machine/am13e23019.c",
+            "machine/am13e_motor_feedback.inc",
+            "tests/test_e62_vbus_handover_audit.py",
+            "tools/e62_vbus_handover_audit.py"
+          ]
+        },
+        {
+          "pr": 17,
+          "files": [
+            "tests/e62_autonomous_native_motor_probe.py"
+          ]
+        }
+      ],
+      "superseded": false,
+      "recommended_action": "Keep isolated; satisfy listed gates"
+    },
+    {
+      "repository": "cctsao1008/escape32-qemu",
+      "pr": 16,
+      "url": "https://github.com/cctsao1008/escape32-qemu/pull/16",
+      "classification": "NOT_READY",
+      "head": "diag/e62-first-sector-control",
+      "head_commit": "c464c6ee02be4f0c879f6dff51f9f989fb566749",
+      "base": "experiment/e62-source-vbus-handover",
+      "base_commit": "8178dd2ec3c37d1769d06f801593ecb0f83c2fa6",
+      "draft": true,
+      "runtime_behavior": true,
+      "motor_or_safety_critical": false,
+      "functional_scope": "Passive comparator/ADC source instrumentation plus schema and offline replay.",
+      "changed_files": [
+        {
+          "filename": "docs/current/e62-passive-trace-schema-v1.md",
+          "status": "added",
+          "additions": 20,
+          "deletions": 0
+        },
+        {
+          "filename": "machine/am13e23019.c",
+          "status": "modified",
+          "additions": 1,
+          "deletions": 0
+        },
+        {
+          "filename": "machine/am13e_motor_feedback.inc",
+          "status": "modified",
+          "additions": 16,
+          "deletions": 0
+        },
+        {
+          "filename": "tests/test_e62_bemf_acquisition_audit.py",
+          "status": "added",
+          "additions": 18,
+          "deletions": 0
+        },
+        {
+          "filename": "tests/test_e62_first_sector_chronology.py",
+          "status": "added",
+          "additions": 53,
+          "deletions": 0
+        },
+        {
+          "filename": "tests/test_e62_issue5_bemf_diag.py",
+          "status": "modified",
+          "additions": 13,
+          "deletions": 0
+        },
+        {
+          "filename": "tests/test_e62_passive_trace_schema.py",
+          "status": "added",
+          "additions": 22,
+          "deletions": 0
+        },
+        {
+          "filename": "tests/test_e62_vbus_handover_audit.py",
+          "status": "modified",
+          "additions": 19,
+          "deletions": 0
+        },
+        {
+          "filename": "tools/e62_acquisition_candidate_campaign.py",
+          "status": "added",
+          "additions": 56,
+          "deletions": 0
+        },
+        {
+          "filename": "tools/e62_bemf_acquisition_audit.py",
+          "status": "added",
+          "additions": 27,
+          "deletions": 0
+        },
+        {
+          "filename": "tools/e62_build_campaign_firmware.py",
+          "status": "added",
+          "additions": 25,
+          "deletions": 0
+        },
+        {
+          "filename": "tools/e62_first_sector_campaign.py",
+          "status": "added",
+          "additions": 59,
+          "deletions": 0
+        },
+        {
+          "filename": "tools/e62_first_sector_chronology.py",
+          "status": "added",
+          "additions": 108,
+          "deletions": 0
+        },
+        {
+          "filename": "tools/e62_first_sector_plot.py",
+          "status": "added",
+          "additions": 26,
+          "deletions": 0
+        },
+        {
+          "filename": "tools/e62_issue5_bemf_diag.py",
+          "status": "modified",
+          "additions": 7,
+          "deletions": 5
+        },
+        {
+          "filename": "tools/e62_vbus_handover_audit.py",
+          "status": "modified",
+          "additions": 34,
+          "deletions": 2
+        },
+        {
+          "filename": "tools/native_p0_strict.py",
+          "status": "modified",
+          "additions": 5,
+          "deletions": 1
+        }
+      ],
+      "acceptance_blockers": "Original-rotor CI fails; timeout job has inherited import syntax defect reproduced and repaired on PR17/integration; the unmodified PR16 job remains failed; downstream local35-test repair is not retroactive CI success.",
+      "existing_tests_provenance": {
+        "versioned_files": [
+          "docs/current/e62-passive-trace-schema-v1.md",
+          "tests/test_e62_bemf_acquisition_audit.py",
+          "tests/test_e62_first_sector_chronology.py",
+          "tests/test_e62_issue5_bemf_diag.py",
+          "tests/test_e62_passive_trace_schema.py",
+          "tests/test_e62_vbus_handover_audit.py"
+        ],
+        "checks": [
+          {
+            "name": "original-guest-current-coupled-rotor",
+            "status": "completed",
+            "conclusion": "failure",
+            "head_sha": "c464c6ee02be4f0c879f6dff51f9f989fb566749",
+            "details_url": "https://github.com/cctsao1008/escape32-qemu/actions/runs/42389823646/job/128454896415"
+          },
+          {
+            "name": "host-source-boundary",
+            "status": "completed",
+            "conclusion": "success",
+            "head_sha": "c464c6ee02be4f0c879f6dff51f9f989fb566749",
+            "details_url": "https://github.com/cctsao1008/escape32-qemu/actions/runs/42389823646/job/128454864065"
+          },
+          {
+            "name": "timeout-oracle-unit",
+            "status": "completed",
+            "conclusion": "failure",
+            "head_sha": "c464c6ee02be4f0c879f6dff51f9f989fb566749",
+            "details_url": "https://github.com/cctsao1008/escape32-qemu/actions/runs/42389823636/job/128454863944"
+          }
+        ],
+        "reviews": [],
+        "historical_evidence": "report/e62-engineering-execution at c2b7801; exact manifests v2\u2013v6, no new full matrix rerun"
+      },
+      "upstream": [
+        {
+          "pr": 15,
+          "head_commit": "8178dd2ec3c37d1769d06f801593ecb0f83c2fa6"
+        }
+      ],
+      "downstream": [
+        17
+      ],
+      "overlap": [
+        {
+          "pr": 13,
+          "files": [
+            "machine/am13e23019.c"
+          ]
+        },
+        {
+          "pr": 15,
+          "files": [
+            "machine/am13e23019.c",
+            "machine/am13e_motor_feedback.inc",
+            "tests/test_e62_vbus_handover_audit.py",
+            "tools/e62_vbus_handover_audit.py"
+          ]
+        }
+      ],
+      "superseded": false,
+      "recommended_action": "Keep isolated; satisfy listed gates"
+    },
+    {
+      "repository": "cctsao1008/escape32-qemu",
+      "pr": 17,
+      "url": "https://github.com/cctsao1008/escape32-qemu/pull/17",
+      "classification": "READY_FOR_REVIEW",
+      "head": "diag/e62-restart-rate-evidence",
+      "head_commit": "225d2886d7cf6268d3ff804831730326e1c1b368",
+      "base": "diag/e62-first-sector-control",
+      "base_commit": "c464c6ee02be4f0c879f6dff51f9f989fb566749",
+      "draft": true,
+      "runtime_behavior": false,
+      "motor_or_safety_critical": false,
+      "functional_scope": "Read-only acquisition SRAM decoders, runners and offline replay; new timeout-verdict syntax repair.",
+      "changed_files": [
+        {
+          "filename": "scenarios/e62-v6/coast300-clock-stop.csv",
+          "status": "added",
+          "additions": 3,
+          "deletions": 0
+        },
+        {
+          "filename": "scenarios/e62-v6/coast300-invalid-reference.csv",
+          "status": "added",
+          "additions": 3,
+          "deletions": 0
+        },
+        {
+          "filename": "tests/e62_autonomous_native_motor_probe.py",
+          "status": "modified",
+          "additions": 27,
+          "deletions": 0
+        },
+        {
+          "filename": "tests/test_e62_coast_acquire_diag.py",
+          "status": "added",
+          "additions": 22,
+          "deletions": 0
+        },
+        {
+          "filename": "tests/test_e62_restart_adc_observability.py",
+          "status": "added",
+          "additions": 14,
+          "deletions": 0
+        },
+        {
+          "filename": "tests/test_e62_restart_seed_diag.py",
+          "status": "added",
+          "additions": 13,
+          "deletions": 0
+        },
+        {
+          "filename": "tools/e62_coast_acquire_diag.py",
+          "status": "added",
+          "additions": 36,
+          "deletions": 0
+        },
+        {
+          "filename": "tools/e62_issue5_native_timeout_verdict.py",
+          "status": "modified",
+          "additions": 2,
+          "deletions": 1
+        },
+        {
+          "filename": "tools/e62_restart_adc_observability.py",
+          "status": "added",
+          "additions": 27,
+          "deletions": 0
+        },
+        {
+          "filename": "tools/e62_restart_rate_campaign.py",
+          "status": "added",
+          "additions": 64,
+          "deletions": 0
+        },
+        {
+          "filename": "tools/e62_restart_seed_diag.py",
+          "status": "added",
+          "additions": 17,
+          "deletions": 0
+        }
+      ],
+      "acceptance_blockers": "Experimental candidate acceptance is not tooling approval; no check-runs reported on updated head; native negative/stress failures preserved.",
+      "existing_tests_provenance": {
+        "versioned_files": [
+          "tests/e62_autonomous_native_motor_probe.py",
+          "tests/test_e62_coast_acquire_diag.py",
+          "tests/test_e62_restart_adc_observability.py",
+          "tests/test_e62_restart_seed_diag.py"
+        ],
+        "checks": [],
+        "reviews": [],
+        "historical_evidence": "report/e62-engineering-execution at c2b7801; exact manifests v2\u2013v6, no new full matrix rerun"
+      },
+      "upstream": [
+        {
+          "pr": 16,
+          "head_commit": "c464c6ee02be4f0c879f6dff51f9f989fb566749"
+        }
+      ],
+      "downstream": [
+        18
+      ],
+      "overlap": [
+        {
+          "pr": 14,
+          "files": [
+            "tests/e62_autonomous_native_motor_probe.py"
+          ]
+        },
+        {
+          "pr": 15,
+          "files": [
+            "tests/e62_autonomous_native_motor_probe.py"
+          ]
+        }
+      ],
+      "superseded": false,
+      "recommended_action": "Review independently; no default merge"
+    },
+    {
+      "repository": "cctsao1008/escape32-qemu",
+      "pr": 18,
+      "url": "https://github.com/cctsao1008/escape32-qemu/pull/18",
+      "classification": "READY_FOR_REVIEW",
+      "head": "integration/e62-sim-only-v7",
+      "head_commit": "81de1446ff02f8b97b3e3f565c5ecb738aea9096",
+      "base": "diag/e62-restart-rate-evidence",
+      "base_commit": "225d2886d7cf6268d3ff804831730326e1c1b368",
+      "draft": true,
+      "runtime_behavior": false,
+      "motor_or_safety_critical": false,
+      "functional_scope": "Isolated SIM_ONLY merge of offline PR11/12 onto17 with preserved history; no machine/build changes in integration delta.",
+      "changed_files": [
+        {
+          "filename": ".github/workflows/e62-acquisition-diagnostics.yml",
+          "status": "added",
+          "additions": 31,
+          "deletions": 0
+        },
+        {
+          "filename": "docs/current/e62-acquisition-evidence-v1.json",
+          "status": "added",
+          "additions": 2046,
+          "deletions": 0
+        },
+        {
+          "filename": "docs/current/e62-acquisition-rca-v1.md",
+          "status": "added",
+          "additions": 350,
+          "deletions": 0
+        },
+        {
+          "filename": "docs/current/e62-cloud-lifecycle-replay-v1.json",
+          "status": "added",
+          "additions": 1546,
+          "deletions": 0
+        },
+        {
+          "filename": "docs/current/e62-issue3-exact-qualification-v2.json",
+          "status": "added",
+          "additions": 4536,
+          "deletions": 0
+        },
+        {
+          "filename": "docs/current/e62-issue3-exact-qualification-v2.md",
+          "status": "added",
+          "additions": 67,
+          "deletions": 0
+        },
+        {
+          "filename": "docs/current/e62-issue3-exact-replay-v1.md",
+          "status": "added",
+          "additions": 38,
+          "deletions": 0
+        },
+        {
+          "filename": "docs/current/e62-sim-only-integration-v7.json",
+          "status": "added",
+          "additions": 119,
+          "deletions": 0
+        },
+        {
+          "filename": "docs/current/e62-wsl-upload-replay-v2.json",
+          "status": "added",
+          "additions": 21655,
+          "deletions": 0
+        },
+        {
+          "filename": "docs/current/e62-wsl-upload-replay-v2.md",
+          "status": "added",
+          "additions": 84,
+          "deletions": 0
+        },
+        {
+          "filename": "scenarios/e62-v7/coast300-invalid-after-first.csv",
+          "status": "added",
+          "additions": 3,
+          "deletions": 0
+        },
+        {
+          "filename": "tests/test_e62_acquisition_timeline.py",
+          "status": "added",
+          "additions": 158,
+          "deletions": 0
+        },
+        {
+          "filename": "tests/test_e62_exact_cmpss_suite.py",
+          "status": "added",
+          "additions": 22,
+          "deletions": 0
+        },
+        {
+          "filename": "tests/test_e62_lifecycle_alignment.py",
+          "status": "added",
+          "additions": 44,
+          "deletions": 0
+        },
+        {
+          "filename": "tests/test_e62_uploaded_trace_inventory.py",
+          "status": "added",
+          "additions": 72,
+          "deletions": 0
+        },
+        {
+          "filename": "tools/ci/check_e62_reference_contract.sh",
+          "status": "added",
+          "additions": 15,
+          "deletions": 0
+        },
+        {
+          "filename": "tools/e62_acquisition_timeline.py",
+          "status": "added",
+          "additions": 259,
+          "deletions": 0
+        },
+        {
+          "filename": "tools/e62_exact_cmpss_suite.py",
+          "status": "added",
+          "additions": 75,
+          "deletions": 0
+        },
+        {
+          "filename": "tools/e62_lifecycle_alignment.py",
+          "status": "added",
+          "additions": 86,
+          "deletions": 0
+        },
+        {
+          "filename": "tools/e62_uploaded_trace_inventory.py",
+          "status": "added",
+          "additions": 117,
+          "deletions": 0
+        },
+        {
+          "filename": "tools/experimental_e62_source_bemf_filter_matrix.py",
+          "status": "added",
+          "additions": 196,
+          "deletions": 0
+        }
+      ],
+      "acceptance_blockers": "Companion firmware16 remains experimental; review integration graph and compatibility pins, no default target.",
+      "existing_tests_provenance": {
+        "versioned_files": [
+          ".github/workflows/e62-acquisition-diagnostics.yml",
+          "docs/current/e62-acquisition-evidence-v1.json",
+          "docs/current/e62-acquisition-rca-v1.md",
+          "docs/current/e62-cloud-lifecycle-replay-v1.json",
+          "docs/current/e62-issue3-exact-qualification-v2.json",
+          "docs/current/e62-issue3-exact-qualification-v2.md",
+          "docs/current/e62-issue3-exact-replay-v1.md",
+          "docs/current/e62-sim-only-integration-v7.json",
+          "docs/current/e62-wsl-upload-replay-v2.json",
+          "docs/current/e62-wsl-upload-replay-v2.md",
+          "tests/test_e62_acquisition_timeline.py",
+          "tests/test_e62_exact_cmpss_suite.py",
+          "tests/test_e62_lifecycle_alignment.py",
+          "tests/test_e62_uploaded_trace_inventory.py"
+        ],
+        "checks": [
+          {
+            "name": "offline-diagnostics",
+            "status": "completed",
+            "conclusion": "success",
+            "head_sha": "81de1446ff02f8b97b3e3f565c5ecb738aea9096",
+            "details_url": "https://github.com/cctsao1008/escape32-qemu/actions/runs/42657786360/job/129300852904"
+          },
+          {
+            "name": "existing-firmware-reference-contract",
+            "status": "completed",
+            "conclusion": "success",
+            "head_sha": "81de1446ff02f8b97b3e3f565c5ecb738aea9096",
+            "details_url": "https://github.com/cctsao1008/escape32-qemu/actions/runs/42657786360/job/129300852287"
+          }
+        ],
+        "reviews": [],
+        "historical_evidence": "report/e62-engineering-execution at c2b7801; exact manifests v2\u2013v6, no new full matrix rerun"
+      },
+      "upstream": [
+        {
+          "pr": 17,
+          "head_commit": "225d2886d7cf6268d3ff804831730326e1c1b368"
+        }
+      ],
+      "downstream": [],
+      "overlap": [
+        {
+          "pr": 11,
+          "files": [
+            ".github/workflows/e62-acquisition-diagnostics.yml",
+            "docs/current/e62-acquisition-evidence-v1.json",
+            "docs/current/e62-acquisition-rca-v1.md",
+            "docs/current/e62-cloud-lifecycle-replay-v1.json",
+            "docs/current/e62-wsl-upload-replay-v2.json",
+            "docs/current/e62-wsl-upload-replay-v2.md",
+            "tests/test_e62_acquisition_timeline.py",
+            "tests/test_e62_lifecycle_alignment.py",
+            "tests/test_e62_uploaded_trace_inventory.py",
+            "tools/ci/check_e62_reference_contract.sh",
+            "tools/e62_acquisition_timeline.py",
+            "tools/e62_lifecycle_alignment.py",
+            "tools/e62_uploaded_trace_inventory.py"
+          ]
+        },
+        {
+          "pr": 12,
+          "files": [
+            "docs/current/e62-issue3-exact-qualification-v2.json",
+            "docs/current/e62-issue3-exact-qualification-v2.md",
+            "docs/current/e62-issue3-exact-replay-v1.md",
+            "tests/test_e62_exact_cmpss_suite.py",
+            "tools/e62_exact_cmpss_suite.py",
+            "tools/experimental_e62_source_bemf_filter_matrix.py"
+          ]
+        }
+      ],
+      "superseded": false,
+      "recommended_action": "Review independently; no default merge"
+    }
+  ],
+  "valid_order": {
+    "qemu": [
+      "11 and12 are independent offline additions; selected isolated SIM_ONLY merge performed",
+      "13 ->15 ->16 ->17 runtime/source observer dependency chain, unqualified for default",
+      "14 optional polling not selected"
+    ],
+    "firmware": [
+      "6 ->7 ->9 ->10 experimental prerequisites",
+      "11(H9),12(H10),13(H8) independently based on10; published test/e62-estimator-continuity-integration combines exact isolated changes",
+      "15(H13) -> integration/e62-sim-only-v7 ambiguity correction",
+      "8 independent Boot/Flash review; production changes require explicit approval",
+      "1 and3 remain separate historical identities"
+    ]
+  }
+}
