@@ -67,7 +67,8 @@ def verdict(artifact):
         if report.get("post_timeout_all_samples_six_off") is not True:
             failures.append("POST_TIMEOUT_ALL_SIX_OFF_NOT_PROVEN")
     return {
-        "timeout_observed": bool(report.get("original_wfi_visits")) and\n                            report.get("simulator_feedback_injected") is False,
+        "timeout_observed": (bool(report.get("original_wfi_visits")) and
+                             report.get("simulator_feedback_injected") is False),
         "safe_off_observed": not failures,
         "failures": failures,
         "scope": "48_WFI_SNAPSHOTS_AT_LEAST_1MS_NOT_CONTINUOUS_TIME_PROOF",
