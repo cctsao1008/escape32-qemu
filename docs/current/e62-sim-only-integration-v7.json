@@ -1,0 +1,119 @@
+{
+  "schema": "e62.sim-only-cross-repository.v7",
+  "development_only": true,
+  "production_qualified": false,
+  "hardware_qualified": false,
+  "firmware_branch": "integration/e62-sim-only-v7",
+  "firmware_commit": "af7eb7c410532e6ae39cb512cb83cd5abd38cfd2",
+  "firmware_pr": "https://github.com/cctsao1008/ESCape32/pull/16",
+  "firmware_build": {
+    "firmware_source_commit": "3c6264a80f6e8f00233b89d53d1f39032ee8706d",
+    "sdk_commit": "b872469ceef18de5e39a1d3acb0821ec158b44c7",
+    "profile": "/workspace/e62-firmware-integration/mcu/_support/AM13E/cmake/test_profiles/e62_sc5_coast_phase.cmake",
+    "configure_command": [
+      "cmake",
+      "-S",
+      "/workspace/e62-firmware-integration",
+      "-B",
+      "/workspace/escape32-qemu/.build/mission-fw-v7-coast-evidence",
+      "-DESCAPE32_BUILD_AM13E=ON",
+      "-DAM13E_MOTOR_RUNTIME_ENABLED=ON",
+      "-DAM13E_SDK_ROOT=/tmp/e62-issues/sdk",
+      "-DE62_QEMU_ROOT=/workspace/escape32-qemu",
+      "-DCMAKE_EXE_LINKER_FLAGS=-Wl,-z,max-page-size=0x1000",
+      "-DG13B2_SIM_ONLY_OPT_IN=ON",
+      "-DG13B2_SIM_ONLY_IDEAL_BEMF_REFERENCE=OFF",
+      "-DAM13E_BOARD_BOARD_PROFILE_FILE=/workspace/e62-firmware-integration/mcu/_support/AM13E/cmake/test_profiles/e62_sc5_coast_phase.cmake"
+    ],
+    "build_command": [
+      "cmake",
+      "--build",
+      "/workspace/escape32-qemu/.build/mission-fw-v7-coast-evidence",
+      "--target",
+      "AM13E-rev17.3.elf",
+      "-j2"
+    ],
+    "compiler": "/workspace/setup-escape32/sysroot/usr/bin/arm-none-eabi-gcc",
+    "compiler_sha256": "9b369e040fa0889790fc1aaf673ed3099436f360cd022265f8e7c97d61ed00ec",
+    "compiler_version": "arm-none-eabi-gcc (15:14.2.rel1-1) 14.2.1 20241119",
+    "identity": "EXPERIMENTAL_NOT_ORIGINAL_OR_PRODUCTION_ROOT_FIXES",
+    "configure_rc": 0,
+    "configure_log": "/workspace/escape32-qemu/artifacts/e62-v7/coast-candidate.build-provenance.configure.log",
+    "build_rc": 0,
+    "build_log": "/workspace/escape32-qemu/artifacts/e62-v7/coast-candidate.build-provenance.build.log",
+    "elf_path": "/workspace/escape32-qemu/.build/mission-fw-v7-coast-evidence/AM13E-rev17.3.elf",
+    "elf_sha256": "2c5d655b78af53049b73d87553429807cb867ec07985d4b3c76df9bb06c0fd6c"
+  },
+  "qemu_diagnostics_branch": "integration/e62-sim-only-v7",
+  "qemu_diagnostics_commit": "2dfa9f221df1c1256180de3e13064bfc1d8deed5",
+  "qemu_pr": "https://github.com/cctsao1008/escape32-qemu/pull/18",
+  "effective_qemu_binary": "/workspace/escape32-qemu/artifacts/e62-v4/dynamic-vbus-qemu-system-arm",
+  "effective_qemu_sha256": "6f99975e319ada16af98050c66b1ee39fef690d8dca16ec08a6c59560f7faef8",
+  "reported_binary_source_identity": "experiment/e62-source-vbus-handover@8178dd2 (v4/v5 provenance, not falsely relabeled current integration HEAD)",
+  "upstream_qemu_commit": "44f28df24767cf9dca1ddc9b23157737c4cbb645",
+  "runtime_machine_build_diff_from_v6": "",
+  "selected_firmware_prs": [
+    6,
+    7,
+    9,
+    10,
+    11,
+    12,
+    13,
+    15,
+    16
+  ],
+  "selected_qemu_prs": [
+    11,
+    12,
+    13,
+    15,
+    16,
+    17,
+    18
+  ],
+  "excluded_optional_qemu_prs": [
+    14
+  ],
+  "h9_h10_preserved_as_separate_prs": [
+    11,
+    12
+  ],
+  "original_elf": {
+    "identity": "ORIGINAL_REL17_3",
+    "sha256": "05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0"
+  },
+  "production_root_fixes_elf": {
+    "identity": "PRODUCTION_ROOT_FIXES_NOT_ORIGINAL",
+    "historical_sha256_prefix": "c49a7485",
+    "used_in_new_runs": false
+  },
+  "cfg": {
+    "path": "/workspace/escape32-qemu/artifacts/mission-sc5/sc5-g13b3-cfg-flash.bin",
+    "sha256": "ab144c4b281ec53feb399b45c758b1de72b2c16f252e6ff64980f263b3a51702"
+  },
+  "source_inputs": {
+    "scenarios/e62-v4/vbus-constant.csv": "75cc780ad11052563dcc7954dc8dee3b31e59d30c0a1fc99a8a34a72681b686e"
+  },
+  "scenarios": {
+    "/workspace/escape32-qemu/scenarios/e62-experimental-two-demand-coast-short300.json": "891b9b7503f0933d58310fbd8541139d6fec69f8c1b35212b34c88b6c4ffce20",
+    "/workspace/escape32-qemu/scenarios/e62-experimental-two-demand-coast-reacquire.json": "e6c782b194948fbda79a82d2f5f29a61640b8e0a6d510c1c54f43231818da008",
+    "/workspace/escape32-qemu/scenarios/e62-experimental-two-demand-coast-long3000.json": "fe3ba96a3bf68a44c105b57e41bc1d01ec85126e3ed417e86c8cfa88adecbfb4"
+  },
+  "test_sources": {
+    "tests/e62_autonomous_native_motor_probe.py": "3a7fad1dc877995d9d25b785a33f32cb993d9ba7be257c94d0782737d3dc9cf4",
+    "tools/e62_restart_phase_sweep_verdict.py": "73546ced50496fa42efeb55d7b53a177dbbe728f493fdab05cf384dea6d950dc",
+    "tools/e62_experimental_second_demand_oracle.py": "a04a771dd3c031e88d22de3b02d54eb6fcf30c853dd92d081c58eb7b139a12b1",
+    "tools/native_p1_qualification.py": "f14c0acde0cdc263c2ee733c32e9fad3df290e816ef0eab66c4a511ae548cc59",
+    "tools/native_p0_strict.py": "3d64dbb9c13365f119f31afe8e0e8e16df06e7a241b7ee4d85b33c115d53d0ad",
+    "configs/e62-startup-second-demand-oracle-v1.json": "1f0313fc25cbcfa8dbe003c8931992333e02cb7f767448113d7f8c8e71ae9eab"
+  },
+  "model": "ecx87-kv147, unchanged6f executable and24V/R53000uOhm/L24000nH/Kt64900uNm/A; initial pose only declared input difference",
+  "external_dependencies": [
+    "Official SDK b872469ceef18de5e39a1d3acb0821ec158b44c7",
+    "Published exact QEMU executable6f99975e, not regenerated from new diagnostic HEAD",
+    "Measured phase ADC noise/offset/bandwidth and analog settling",
+    "Motor/propeller R/L/BEMF/inertia/friction/load/thrust/thermal/protection data",
+    "Release image-integrity/update policy where still unspecified"
+  ]
+}
