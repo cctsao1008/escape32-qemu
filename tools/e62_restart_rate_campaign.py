@@ -5,6 +5,23 @@ from concurrent.futures import ThreadPoolExecutor
 from tools.e62_first_sector_campaign import validate_cfg_separation
 ROOT=Path(__file__).resolve().parents[1]
 def sha(p):return hashlib.sha256(p.read_bytes()).hexdigest()
+def reserve_evidence(target):
+    """A failed attempt can have logs and metadata without a result JSON.
+    Preserve those files too, and exclude concurrent attempts atomically.
+    Reservation files deliberately survive failures; use a new output path.
+    """
+    target=Path(target)
+    previous=[p for p in target.parent.iterdir() if p.name.startswith(target.stem+'.')]
+    if previous:raise ValueError('Refusing to overwrite complete or partial evidence: '+str(previous[0]))
+    marker=target.with_suffix('.reservation.json')
+    try:
+        with marker.open('x') as stream:
+            json.dump(dict(case=target.stem,artifact=str(target),reservation=True,qualification=False),stream)
+            stream.write('\n')
+    except FileExistsError as exc:
+        raise ValueError('Another attempt already reserved evidence: '+str(marker)) from exc
+    return marker
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--diagnostic-kind',choices=('rate','coast'),default='rate')
@@ -16,6 +33,7 @@ def main():
     parser.add_argument('--include-startup-stress',action='store_true')
     parser.add_argument('--negative-manifest',type=Path)
     opt=parser.parse_args();output=opt.output.resolve();output.mkdir(parents=True,exist_ok=True)
+    reserve_evidence(output/'execution-result.json')
     cases=[(f'{mode}-coast{c}',mode,f'restart-prompt-coast{c}',None) for mode in ('candidate','control') for c in (300,1500,3000)]
     if opt.selection=='screen':cases=[c for c in cases if c[0]==f'candidate-coast{opt.screen_coast}']
     if opt.selection=='remaining':cases=[c for c in cases if c[0]!=f'candidate-coast{opt.screen_coast}']
@@ -39,7 +57,7 @@ def main():
         qemu=Path(cmd[cmd.index('--qemu')+1]);assert sha(qemu)=='6f99975e319ada16af98050c66b1ee39fef690d8dca16ec08a6c59560f7faef8'
         validate_cfg_separation(elf,Path(cmd[cmd.index('--cfg-flash')+1]))
         target=output/(name+'.json');
-        if target.exists():raise ValueError('Refusing to overwrite existing evidence: '+str(target))
+        reserve_evidence(target)
         cmd[cmd.index('--elf')+1]=str(elf);cmd[cmd.index('--experimental-candidate-sha256')+1]=build['elf_sha256'];cmd[cmd.index('--artifact')+1]=str(target);cmd+=['--coast-phase-diagnostics' if opt.diagnostic_kind=='coast' else '--restart-rate-diagnostics']
         if stress:cmd+=['--experimental-bemf-robustness='+stress]
         spec=extra_specs.get(name)
