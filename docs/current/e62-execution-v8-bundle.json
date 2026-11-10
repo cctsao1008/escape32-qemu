@@ -1,0 +1,19 @@
+{
+  "schema": "e62.evidence-bundle.v8",
+  "archive": "/workspace/escape32-qemu/artifacts/e62-execution-v8-evidence.tar.gz",
+  "bytes": 24882524,
+  "sha256": "59089c3d5e56ed6a67aa69f88f3599742da67dc6c76967c26e35d1649038564d",
+  "verified_files": 197,
+  "all_member_hashes_verified": true,
+  "PRs": [
+    "https://github.com/cctsao1008/ESCape32/pull/16",
+    "https://github.com/cctsao1008/escape32-qemu/pull/17",
+    "https://github.com/cctsao1008/escape32-qemu/pull/18"
+  ],
+  "external_qemu": {
+    "path": "/workspace/escape32-qemu/artifacts/e62-v4/dynamic-vbus-qemu-system-arm",
+    "sha256": "6f99975e319ada16af98050c66b1ee39fef690d8dca16ec08a6c59560f7faef8",
+    "substitution_permitted": false
+  },
+  "parts": []
+}

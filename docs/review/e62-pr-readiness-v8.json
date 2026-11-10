@@ -1,0 +1,422 @@
+{
+  "schema": "e62.pr-review-supplement.v8",
+  "date_taipei": "2026-11-10",
+  "prior_complete_inventory": "docs/review/e62-pr-inventory-v7.json@79735ea",
+  "scope": "Only three changed existing Drafts refreshed; no redundant full audit or new PR",
+  "prs": [
+    {
+      "repository": "cctsao1008/escape32-qemu",
+      "pr": 17,
+      "url": "https://github.com/cctsao1008/escape32-qemu/pull/17",
+      "head": "diag/e62-restart-rate-evidence",
+      "head_commit": "464c1b3a5725baef267e7dd6cbdab0a76fd53fac",
+      "base": "diag/e62-first-sector-control",
+      "base_commit": "c464c6ee02be4f0c879f6dff51f9f989fb566749",
+      "draft": true,
+      "classification": "READY_FOR_REVIEW",
+      "runtime_control_delta": false,
+      "safety_critical": false,
+      "changed_files": [
+        {
+          "path": ".github/workflows/e62-campaign-evidence.yml",
+          "status": "added",
+          "additions": 17,
+          "deletions": 0
+        },
+        {
+          "path": "scenarios/e62-v6/coast300-clock-stop.csv",
+          "status": "added",
+          "additions": 3,
+          "deletions": 0
+        },
+        {
+          "path": "scenarios/e62-v6/coast300-invalid-reference.csv",
+          "status": "added",
+          "additions": 3,
+          "deletions": 0
+        },
+        {
+          "path": "tests/e62_autonomous_native_motor_probe.py",
+          "status": "modified",
+          "additions": 27,
+          "deletions": 0
+        },
+        {
+          "path": "tests/test_e62_campaign_evidence_reservation.py",
+          "status": "added",
+          "additions": 40,
+          "deletions": 0
+        },
+        {
+          "path": "tests/test_e62_coast_acquire_diag.py",
+          "status": "added",
+          "additions": 22,
+          "deletions": 0
+        },
+        {
+          "path": "tests/test_e62_restart_adc_observability.py",
+          "status": "added",
+          "additions": 14,
+          "deletions": 0
+        },
+        {
+          "path": "tests/test_e62_restart_seed_diag.py",
+          "status": "added",
+          "additions": 13,
+          "deletions": 0
+        },
+        {
+          "path": "tools/e62_coast_acquire_diag.py",
+          "status": "added",
+          "additions": 36,
+          "deletions": 0
+        },
+        {
+          "path": "tools/e62_issue5_native_timeout_verdict.py",
+          "status": "modified",
+          "additions": 2,
+          "deletions": 1
+        },
+        {
+          "path": "tools/e62_restart_adc_observability.py",
+          "status": "added",
+          "additions": 27,
+          "deletions": 0
+        },
+        {
+          "path": "tools/e62_restart_rate_campaign.py",
+          "status": "added",
+          "additions": 82,
+          "deletions": 0
+        },
+        {
+          "path": "tools/e62_restart_seed_diag.py",
+          "status": "added",
+          "additions": 17,
+          "deletions": 0
+        }
+      ],
+      "checks": [
+        {
+          "name": "evidence-retention-unit",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "464c1b3a5725baef267e7dd6cbdab0a76fd53fac",
+          "url": "https://github.com/cctsao1008/escape32-qemu/actions/runs/42725935408/job/129531445747"
+        }
+      ],
+      "reviews": [],
+      "local_evidence": "6evidence-retention UNIT cases; old35timeout casesPASS_REUSED",
+      "remaining_blockers": "Base16 runtime stack remains unqualified; independent approval required",
+      "recommended_action": "Review independently; no default merge"
+    },
+    {
+      "repository": "cctsao1008/escape32-qemu",
+      "pr": 18,
+      "url": "https://github.com/cctsao1008/escape32-qemu/pull/18",
+      "head": "integration/e62-sim-only-v7",
+      "head_commit": "6b4e42a6f176ac099df671702b8056eec6c8519b",
+      "base": "diag/e62-restart-rate-evidence",
+      "base_commit": "464c1b3a5725baef267e7dd6cbdab0a76fd53fac",
+      "draft": true,
+      "classification": "READY_FOR_REVIEW",
+      "runtime_control_delta": false,
+      "safety_critical": false,
+      "changed_files": [
+        {
+          "path": ".github/workflows/e62-acquisition-diagnostics.yml",
+          "status": "added",
+          "additions": 31,
+          "deletions": 0
+        },
+        {
+          "path": ".github/workflows/e62-pending-timer-evidence.yml",
+          "status": "added",
+          "additions": 18,
+          "deletions": 0
+        },
+        {
+          "path": "docs/current/e62-acquisition-evidence-v1.json",
+          "status": "added",
+          "additions": 2046,
+          "deletions": 0
+        },
+        {
+          "path": "docs/current/e62-acquisition-rca-v1.md",
+          "status": "added",
+          "additions": 350,
+          "deletions": 0
+        },
+        {
+          "path": "docs/current/e62-cloud-lifecycle-replay-v1.json",
+          "status": "added",
+          "additions": 1546,
+          "deletions": 0
+        },
+        {
+          "path": "docs/current/e62-issue3-exact-qualification-v2.json",
+          "status": "added",
+          "additions": 4536,
+          "deletions": 0
+        },
+        {
+          "path": "docs/current/e62-issue3-exact-qualification-v2.md",
+          "status": "added",
+          "additions": 67,
+          "deletions": 0
+        },
+        {
+          "path": "docs/current/e62-issue3-exact-replay-v1.md",
+          "status": "added",
+          "additions": 38,
+          "deletions": 0
+        },
+        {
+          "path": "docs/current/e62-sim-only-integration-v7.json",
+          "status": "added",
+          "additions": 119,
+          "deletions": 0
+        },
+        {
+          "path": "docs/current/e62-wsl-upload-replay-v2.json",
+          "status": "added",
+          "additions": 21655,
+          "deletions": 0
+        },
+        {
+          "path": "docs/current/e62-wsl-upload-replay-v2.md",
+          "status": "added",
+          "additions": 84,
+          "deletions": 0
+        },
+        {
+          "path": "scenarios/e62-v7/coast300-invalid-after-first.csv",
+          "status": "added",
+          "additions": 3,
+          "deletions": 0
+        },
+        {
+          "path": "scenarios/e62-v8/invalid-frame1507.csv",
+          "status": "added",
+          "additions": 3,
+          "deletions": 0
+        },
+        {
+          "path": "scenarios/e62-v8/invalid-frame1508.csv",
+          "status": "added",
+          "additions": 3,
+          "deletions": 0
+        },
+        {
+          "path": "scenarios/e62-v8/invalid-frame1509.csv",
+          "status": "added",
+          "additions": 3,
+          "deletions": 0
+        },
+        {
+          "path": "scenarios/e62-v8/pending-timer-window.json",
+          "status": "added",
+          "additions": 25,
+          "deletions": 0
+        },
+        {
+          "path": "scenarios/e62-v8/sine-entry-screen.json",
+          "status": "added",
+          "additions": 30,
+          "deletions": 0
+        },
+        {
+          "path": "tests/test_e62_acquisition_timeline.py",
+          "status": "added",
+          "additions": 158,
+          "deletions": 0
+        },
+        {
+          "path": "tests/test_e62_exact_cmpss_suite.py",
+          "status": "added",
+          "additions": 22,
+          "deletions": 0
+        },
+        {
+          "path": "tests/test_e62_lifecycle_alignment.py",
+          "status": "added",
+          "additions": 44,
+          "deletions": 0
+        },
+        {
+          "path": "tests/test_e62_pending_timer_fault_audit.py",
+          "status": "added",
+          "additions": 35,
+          "deletions": 0
+        },
+        {
+          "path": "tests/test_e62_uploaded_trace_inventory.py",
+          "status": "added",
+          "additions": 72,
+          "deletions": 0
+        },
+        {
+          "path": "tools/ci/check_e62_reference_contract.sh",
+          "status": "added",
+          "additions": 15,
+          "deletions": 0
+        },
+        {
+          "path": "tools/e62_acquisition_timeline.py",
+          "status": "added",
+          "additions": 259,
+          "deletions": 0
+        },
+        {
+          "path": "tools/e62_exact_cmpss_suite.py",
+          "status": "added",
+          "additions": 75,
+          "deletions": 0
+        },
+        {
+          "path": "tools/e62_lifecycle_alignment.py",
+          "status": "added",
+          "additions": 86,
+          "deletions": 0
+        },
+        {
+          "path": "tools/e62_pending_timer_fault_audit.py",
+          "status": "added",
+          "additions": 70,
+          "deletions": 0
+        },
+        {
+          "path": "tools/e62_uploaded_trace_inventory.py",
+          "status": "added",
+          "additions": 117,
+          "deletions": 0
+        },
+        {
+          "path": "tools/experimental_e62_source_bemf_filter_matrix.py",
+          "status": "added",
+          "additions": 196,
+          "deletions": 0
+        }
+      ],
+      "checks": [
+        {
+          "name": "pending-timer-evidence-unit",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "6b4e42a6f176ac099df671702b8056eec6c8519b",
+          "url": "https://github.com/cctsao1008/escape32-qemu/actions/runs/42725937359/job/129531451356"
+        },
+        {
+          "name": "offline-diagnostics",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "6b4e42a6f176ac099df671702b8056eec6c8519b",
+          "url": "https://github.com/cctsao1008/escape32-qemu/actions/runs/42725936810/job/129531449287"
+        },
+        {
+          "name": "existing-firmware-reference-contract",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "6b4e42a6f176ac099df671702b8056eec6c8519b",
+          "url": "https://github.com/cctsao1008/escape32-qemu/actions/runs/42725936810/job/129531448804"
+        }
+      ],
+      "reviews": [],
+      "local_evidence": "8newpending-audit UNIT cases plus source replay; old offline passes reused",
+      "remaining_blockers": "Inherited13/15/16runtime stack not production-approved; review diagnostic delta only",
+      "recommended_action": "Review independently; no default merge"
+    },
+    {
+      "repository": "cctsao1008/ESCape32",
+      "pr": 16,
+      "url": "https://github.com/cctsao1008/ESCape32/pull/16",
+      "head": "integration/e62-sim-only-v7",
+      "head_commit": "bb8e4dc2eb3b1ecc5543cbe4adf2c96a45b83a03",
+      "base": "experiment/e62-coast-phase-acquisition",
+      "base_commit": "28346d4606d31fc385dfd5058b3ce7789526fbbd",
+      "draft": true,
+      "classification": "NOT_READY",
+      "runtime_control_delta": true,
+      "safety_critical": true,
+      "changed_files": [
+        {
+          "path": "mcu/AM13E/hal/coast_phase_plan.c",
+          "status": "modified",
+          "additions": 13,
+          "deletions": 4
+        },
+        {
+          "path": "mcu/AM13E/hal/motor_event_timer.c",
+          "status": "modified",
+          "additions": 13,
+          "deletions": 0
+        },
+        {
+          "path": "mcu/_support/AM13E/cmake/test_profiles/e62_sc5_coast_phase_admission.cmake",
+          "status": "added",
+          "additions": 3,
+          "deletions": 0
+        },
+        {
+          "path": "mcu/_support/AM13E/tests/app/motor_source_host_test.c",
+          "status": "modified",
+          "additions": 12,
+          "deletions": 0
+        },
+        {
+          "path": "mcu/_support/AM13E/tests/hal/coast_phase_ambiguity_witness.c",
+          "status": "added",
+          "additions": 34,
+          "deletions": 0
+        },
+        {
+          "path": "mcu/_support/AM13E/tests/hal/coast_phase_uncertainty_host_test.c",
+          "status": "added",
+          "additions": 37,
+          "deletions": 0
+        },
+        {
+          "path": "mcu/_support/AM13E/tests/hal/motor_physical_host_test.c",
+          "status": "modified",
+          "additions": 57,
+          "deletions": 0
+        },
+        {
+          "path": "mcu/_support/AM13E/tools/run_coast_phase_ambiguity_witness.sh",
+          "status": "added",
+          "additions": 8,
+          "deletions": 0
+        },
+        {
+          "path": "mcu/_support/AM13E/tools/run_coast_phase_regression.sh",
+          "status": "modified",
+          "additions": 2,
+          "deletions": 2
+        },
+        {
+          "path": "mcu/_support/AM13E/tools/run_coast_phase_sdk_regression.sh",
+          "status": "modified",
+          "additions": 1,
+          "deletions": 0
+        },
+        {
+          "path": "mcu/_support/AM13E/tools/run_coast_phase_uncertainty_regression.sh",
+          "status": "added",
+          "additions": 9,
+          "deletions": 0
+        }
+      ],
+      "checks": [],
+      "reviews": [],
+      "local_evidence": "4negative ordering cases, validpartialADCcontrol,107criticalSDKgroups,3nominal newELFcoasts and2fault controls",
+      "remaining_blockers": "Arbitrary-pose/90cold startup FAILED; targetIRQbudget and exactnativepreemptiongap, H13noise/alias/reverse and full independent physical/production qualification incomplete",
+      "recommended_action": "Keep opt-in SIM_ONLY and review separate commits; no default merge"
+    }
+  ],
+  "production_merges": [],
+  "new_PRs": [],
+  "issues_closed": [],
+  "current_integration_branches": "integration/e62-sim-only-v7",
+  "unmerged_runtime_ancestors": "QEMU13\u219215\u219216\u219217; default merge requires independent gates/user approval",
+  "retained_fw_prerequisites": "H8/H9/H10/H13 remain separate reviewable commits and source identities"
+}
