@@ -11,7 +11,7 @@ def reserve_evidence(target):
     Reservation files deliberately survive failures; use a new output path.
     """
     target=Path(target)
-    previous=list(target.parent.glob(target.stem+'.*'))
+    previous=[p for p in target.parent.iterdir() if p.name.startswith(target.stem+'.')]
     if previous:raise ValueError('Refusing to overwrite complete or partial evidence: '+str(previous[0]))
     marker=target.with_suffix('.reservation.json')
     try:

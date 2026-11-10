@@ -11,6 +11,11 @@ class EvidenceReservationTests(unittest.TestCase):
                 with self.assertRaises(ValueError):reserve_evidence(target)
                 self.assertEqual(old.read_text(),'previous failed evidence')
                 self.assertEqual(list(Path(td).iterdir()),[old])
+    def test_literal_case_names_do_not_expand_glob_patterns(self):
+        with tempfile.TemporaryDirectory() as td:
+            target=Path(td)/'failed[0].json';old=target.with_suffix('.qemu.log');old.write_text('failure')
+            with self.assertRaises(ValueError):reserve_evidence(target)
+            self.assertEqual(old.read_text(),'failure')
     def test_failed_reservation_is_sticky(self):
         with tempfile.TemporaryDirectory() as td:
             target=Path(td)/'attempt.json';marker=reserve_evidence(target);before=marker.read_bytes()
