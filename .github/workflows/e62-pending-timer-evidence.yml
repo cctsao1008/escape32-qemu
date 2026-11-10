@@ -1,0 +1,18 @@
+name: E62 pending timer evidence
+'on':
+  pull_request:
+    paths:
+      - '.github/workflows/e62-pending-timer-evidence.yml'
+      - 'tools/e62_pending_timer_fault_audit.py'
+      - 'tools/e62_issue5_cap1_timer_audit.py'
+      - 'tests/test_e62_pending_timer_fault_audit.py'
+permissions:
+  contents: read
+jobs:
+  pending-timer-evidence-unit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Source anchors and negative evidence gates (UNIT only)
+        run: python3 -m unittest -v tests.test_e62_pending_timer_fault_audit

@@ -1,0 +1,30 @@
+{
+  "schema": "e62.native.dshot.v1",
+  "name": "SIM_ONLY original sine admission A/B at failed+150pose:4percent entry then20percent, not Flying Restart",
+  "target_elf_sha256": "05563b6931b58aaba1df5105313c36c9de2d5797a0a3b190c86777c5773f13c0",
+  "protocol": "DSHOT600",
+  "frame_period_ns": 1000000,
+  "guest_ready_gating": false,
+  "stages": [
+    {
+      "kind": "hold",
+      "duration_ms": 1500,
+      "permille": 0
+    },
+    {
+      "kind": "hold",
+      "duration_ms": 300,
+      "permille": 40
+    },
+    {
+      "kind": "hold",
+      "duration_ms": 1500,
+      "permille": 200
+    },
+    {
+      "kind": "hold",
+      "duration_ms": 300,
+      "permille": 0
+    }
+  ]
+}
