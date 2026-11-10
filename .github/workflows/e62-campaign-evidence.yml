@@ -1,0 +1,17 @@
+name: E62 campaign evidence retention
+'on':
+  pull_request:
+    paths:
+      - '.github/workflows/e62-campaign-evidence.yml'
+      - 'tools/e62_restart_rate_campaign.py'
+      - 'tests/test_e62_campaign_evidence_reservation.py'
+permissions:
+  contents: read
+jobs:
+  evidence-retention-unit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Preserve partial and concurrently reserved evidence (UNIT only)
+        run: python3 -m unittest -v tests.test_e62_campaign_evidence_reservation
